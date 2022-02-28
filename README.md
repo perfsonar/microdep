@@ -6,11 +6,15 @@ A script to set up firewall rules (applying "ufw") is also available.
 
 To build container run
 
-    docker build -t testing/perfsonar .
+    docker build -t perfsonar-testpoint .
 
-To run stuff
+To run container with systemd operative in none-priviledge mode (may not work...)
 
-    docker run --net=host -it testing/perfsonar /bin/bash
+    docker run -d --tmpfs /tmp --tmpfs /run -v /sys/fs/cgroup:/sys/fs/cgroup:ro --net=host --name perfsonar-testpoint --rm -p 80:8099 perfsonar-testpoint 
+
+ ... or in privilede-mode
+
+    docker run -d --privileged --net=host --name perfsonar-testpoint --rm -p 80:8099 perfsonar-testpoint
 	
 ... and then apply perfsonar tools
 
