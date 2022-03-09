@@ -20,7 +20,7 @@ MAINTAINER Otto J Wittner <wittner@uninett.no>
 # Install management packages
 ENV DEBIAN_FRONTEND=noninteractive
 RUN ln -fs /usr/share/zoneinfo/Europe/Oslo /etc/localtime  # To install tzdata quietly 
-RUN apt-get update && apt-get -y upgrade && apt-get install -y apt-utils nano git openssh-client net-tools iputils-ping traceroute curl bind9-host unzip gnupg software-properties-common man-db
+RUN apt-get update && apt-get -y upgrade && apt-get install -y apt-utils nano git openssh-client net-tools iputils-ping traceroute tcpdump curl bind9-host unzip gnupg software-properties-common man-db
 
 # Add perfsonar repository
 RUN curl -s -o /etc/apt/sources.list.d/perfsonar-release.list http://downloads.perfsonar.net/debian/perfsonar-release.list
@@ -40,5 +40,6 @@ RUN apt-get --no-install-recommends -y install perfsonar-testpoint
 EXPOSE 80
 # Start container with systemd
 RUN apt-get install -y systemd
+
 STOPSIGNAL SIGRTMIN+3
 CMD [ "/sbin/init" ]
