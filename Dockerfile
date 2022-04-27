@@ -22,7 +22,10 @@
 #
 
 
-FROM ubuntu:bionic
+#FROM ubuntu:bionic
+# Ref: https://github.com/dhoppeIT/docker-ubuntu-systemd/blob/master/ubuntu-18.04.Dockerfile
+FROM  dhoppeit/docker-ubuntu-systemd:18.04
+FROM docker-ubuntu-systemd:latest 
 MAINTAINER Otto J Wittner <wittner@uninett.no>
 
 # Install management packages
@@ -55,9 +58,9 @@ EXPOSE 80
 #CMD [ "/bin/sleep", "365d" ]
 
 # Start container with systemd
-RUN apt-get install -y systemd
-STOPSIGNAL SIGRTMIN+3
-CMD [ "/sbin/init" ]
+#RUN apt-get install -y systemd
+#STOPSIGNAL SIGRTMIN+3
+#CMD [ "/sbin/init" ]
 
 # Add systemd replacement script
 #WORKDIR /root
@@ -65,3 +68,6 @@ CMD [ "/sbin/init" ]
 #RUN cp docker-systemctl-replacement/files/docker/systemctl3.py /usr/bin/systemctl
 #RUN chmod 777 /var /run
 #CMD [ "/usr/bin/systemctl" ]
+
+# Run systemd as in "mother"-image
+CMD ["/lib/systemd/systemd"]

@@ -9,21 +9,15 @@ version: "3.7"
 
 services:
   toolkit:
+    depends_on:
+      - systemd-image
     build:
       context: .
       dockerfile: Dockerfile
       args:
         TYPE: toolkit 
-    privileged: true
-#    cap_add:
-#      - SYS_ADMIN
     volumes:
        - /sys/fs/cgroup:/sys/fs/cgroup:ro
-    tmpfs:
-      - /tmp
-      - /run
-#    environment:
-#      - container=docker
     ports:
       - 8085:80
     networks:
@@ -32,23 +26,26 @@ services:
 
   testpoint:
     depends_on:
+      - systemd-image
       - toolkit
     build:
       context: .
       dockerfile: Dockerfile
       args:
         TYPE: testpoint 
-#    privileged: true
-    cap_add:
-      - SYS_ADMIN
     volumes:
        - /sys/fs/cgroup:/sys/fs/cgroup:ro
-    tmpfs:
-      - /tmp
-      - /run
     networks:
       - perfsonar-net
-    #stop_grace_period: 20s
+
+  systemd-image:
+    build:
+      context: .
+      dockerfile: Dockerfile-systemd
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+    networks:
+      - perfsonar-net
 
 networks:
   perfsonar-net:      
