@@ -19,11 +19,13 @@ services:
         TYPE: toolkit 
     volumes:
        - /sys/fs/cgroup:/sys/fs/cgroup:ro
-    #ports:
-    #  - 8085:80
+    ports:
+      - 8085:80
+      #- 80:80
+      #- 443:443
     networks:
-    #  - perfsonar-net
-      - dhcp
+      - perfsonar-net
+    #  - dhcp
     #stop_grace_period: 20s
 
   testpoint:
@@ -39,8 +41,8 @@ services:
     volumes:
        - /sys/fs/cgroup:/sys/fs/cgroup:ro
     networks:
-      #- perfsonar-net
-      - dhcp
+      - perfsonar-net
+      #- dhcp
       
   systemd-image:
     build:

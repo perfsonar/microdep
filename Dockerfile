@@ -56,6 +56,7 @@ RUN apt-get --no-install-recommends -y install perfsonar-$TYPE
 RUN if [ "$TYPE" = "toolkit" ]; then htpasswd -b /etc/perfsonar/toolkit/psadmin.htpasswd admin notadminnono ; fi
 COPY etc/perfsonar-$TYPE/lsregistrationdaemon.conf /etc/perfsonar/lsregistrationdaemon.conf
 EXPOSE 80
+EXPOSE 443
 
 # Start container with sleep as init-process
 #CMD [ "/bin/sleep", "365d" ]
