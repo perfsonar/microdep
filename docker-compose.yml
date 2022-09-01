@@ -9,6 +9,7 @@ version: "3.7"
 
 services:
   toolkit:
+    hostname: ps-toolkit
     depends_on:
       - systemd-image
     build:
@@ -18,13 +19,15 @@ services:
         TYPE: toolkit 
     volumes:
        - /sys/fs/cgroup:/sys/fs/cgroup:ro
-    ports:
-      - 8085:80
+    #ports:
+    #  - 8085:80
     networks:
-      - perfsonar-net
+    #  - perfsonar-net
+      - dhcp
     #stop_grace_period: 20s
 
   testpoint:
+    hostname: ps-testpoint
     depends_on:
       - systemd-image
       - toolkit
@@ -36,8 +39,9 @@ services:
     volumes:
        - /sys/fs/cgroup:/sys/fs/cgroup:ro
     networks:
-      - perfsonar-net
-
+      #- perfsonar-net
+      - dhcp
+      
   systemd-image:
     build:
       context: .
@@ -49,3 +53,14 @@ services:
 
 networks:
   perfsonar-net:      
+  dhcp:
+    #driver: ghcr.io/devplayer0/docker-net-dhcp:release-linux-amd64
+    driver: ghcr.io/devplayer0/docker-net-dhcp:golang
+    driver_opts:
+      bridge: ps-bridge
+      #ipv6: 'true'
+      ignore_conflicts: 'false'
+      skip_routes: 'false'
+      #lease_timeout: '60s'
+    ipam:
+      driver: 'null'

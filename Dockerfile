@@ -24,8 +24,9 @@
 
 #FROM ubuntu:bionic
 # Ref: https://github.com/dhoppeIT/docker-ubuntu-systemd/blob/master/ubuntu-18.04.Dockerfile
-FROM  dhoppeit/docker-ubuntu-systemd:18.04
-FROM docker-ubuntu-systemd:latest 
+#FROM  dhoppeit/docker-ubuntu-systemd:18.04
+#FROM docker-ubuntu-systemd:latest 
+FROM perfsonar-in-container_systemd-image:latest
 MAINTAINER Otto J Wittner <wittner@uninett.no>
 
 # Install management packages
@@ -51,6 +52,8 @@ RUN apt-get --download-only --no-install-recommends -y install perfsonar-$TYPE
 RUN mkdir -p /usr/share/doc/perfsonar-lsregistrationdaemon/examples/
 RUN curl -s -o /usr/share/doc/perfsonar-lsregistrationdaemon/examples/lsregistrationdaemon.conf https://raw.githubusercontent.com/perfsonar/ls-registration-daemon/master/etc/lsregistrationdaemon.conf
 RUN apt-get --no-install-recommends -y install perfsonar-$TYPE
+# Set management gui user/password to admin/notadminnono
+RUN if [ "$TYPE" = "toolkit" ]; then htpasswd -b /etc/perfsonar/toolkit/psadmin.htpasswd admin notadminnono ; fi
 COPY etc/perfsonar-$TYPE/lsregistrationdaemon.conf /etc/perfsonar/lsregistrationdaemon.conf
 EXPOSE 80
 
