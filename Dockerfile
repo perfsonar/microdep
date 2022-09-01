@@ -52,9 +52,11 @@ RUN apt-get --download-only --no-install-recommends -y install perfsonar-$TYPE
 RUN mkdir -p /usr/share/doc/perfsonar-lsregistrationdaemon/examples/
 RUN curl -s -o /usr/share/doc/perfsonar-lsregistrationdaemon/examples/lsregistrationdaemon.conf https://raw.githubusercontent.com/perfsonar/ls-registration-daemon/master/etc/lsregistrationdaemon.conf
 RUN apt-get --no-install-recommends -y install perfsonar-$TYPE
+COPY etc/perfsonar-$TYPE/lsregistrationdaemon.conf /etc/perfsonar/lsregistrationdaemon.conf
 # Set management gui user/password to admin/notadminnono
 RUN if [ "$TYPE" = "toolkit" ]; then htpasswd -b /etc/perfsonar/toolkit/psadmin.htpasswd admin notadminnono ; fi
-COPY etc/perfsonar-$TYPE/lsregistrationdaemon.conf /etc/perfsonar/lsregistrationdaemon.conf
+# Fix missing python package for applied by pscheduler
+RUN apt-get -y install python3-cryptography
 EXPOSE 80
 EXPOSE 443
 

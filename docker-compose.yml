@@ -20,9 +20,9 @@ services:
     volumes:
        - /sys/fs/cgroup:/sys/fs/cgroup:ro
     ports:
-      - 8085:80
-      #- 80:80
-      #- 443:443
+      #- 8085:80
+      - 80:80
+      - 443:443
     networks:
       - perfsonar-net
     #  - dhcp
