@@ -63,5 +63,5 @@ VOLUME ["/run", "/run/lock"]
 
 STOPSIGNAL SIGRTMIN+3
 
-# Make the image just "died" since it is only a basis for other containers
-#ENTRYPOINT ["/lib/systemd/systemd"]
+# Might want to make the image just "died" since it is ment to be a "parent" for other containers
+ENTRYPOINT ["/lib/systemd/systemd"]

@@ -5,7 +5,7 @@
 #
 # where <node-variant> may be "testpoint" og "toolkit" 
 #
-# To run container with systemd operative in none-priviledge mode (may not work...)
+# To run container with systemd operative in none-priviledge mode (may not work...)  
 #   docker run -d --tmpfs /tmp --tmpfs /run -v /sys/fs/cgroup:/sys/fs/cgroup:ro --net=host --name perfsonar-testpoint --rm perfsonar-testpoint
 #   docker run -d --tmpfs /tmp --tmpfs /run -v /sys/fs/cgroup:/sys/fs/cgroup:ro --net=host --name perfsonar-toolkit --rm perfsonar-toolkit
 #
@@ -60,20 +60,5 @@ RUN apt-get -y install python3-cryptography
 EXPOSE 80
 EXPOSE 443
 
-# Start container with sleep as init-process
-#CMD [ "/bin/sleep", "365d" ]
-
-# Start container with systemd
-#RUN apt-get install -y systemd
-#STOPSIGNAL SIGRTMIN+3
-#CMD [ "/sbin/init" ]
-
-# Add systemd replacement script
-#WORKDIR /root
-#RUN git clone https://github.com/gdraheim/docker-systemctl-replacement
-#RUN cp docker-systemctl-replacement/files/docker/systemctl3.py /usr/bin/systemctl
-#RUN chmod 777 /var /run
-#CMD [ "/usr/bin/systemctl" ]
-
-# Run systemd as in "mother"-image
+# Run systemd as in "parent"-image
 CMD ["/lib/systemd/systemd"]

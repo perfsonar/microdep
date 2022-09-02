@@ -2,8 +2,12 @@
 # Docker compose config building perfsonar test environment
 # with minimum one toolkit-server and one testpoint.
 #
-# No of probe nodes my be scaled up via 'docker-compose up --scale testpoint=<num>'
-#
+#   - No of probe nodes my be scaled up via 'docker-compose up --scale testpoint=<num>'
+#   - DHCP ips may be activated by setting PSNET=dhcp, assuming a "ps-bridge" to external network is avaiable (setup-ps-bridge.sh). 
+#     Note: The docker-net-dhcp docker network driver is required to be installed (https://github.com/devplayer0/docker-net-dhcp) 
+#     
+# Author: Otto J Wittner <otto.wittner@sikt.no>
+# Date: 2022-09-02
 
 version: "3.7"
 
@@ -19,13 +23,12 @@ services:
         TYPE: toolkit 
     volumes:
        - /sys/fs/cgroup:/sys/fs/cgroup:ro
-    ports:
+    #ports:
       #- 8085:80
-      - 80:80
-      - 443:443
+      #- 80:80
+      #- 443:443
     networks:
-      - perfsonar-net
-    #  - dhcp
+      - ${PSNET:-psinternal}
     #stop_grace_period: 20s
 
   testpoint:
@@ -41,8 +44,7 @@ services:
     volumes:
        - /sys/fs/cgroup:/sys/fs/cgroup:ro
     networks:
-      - perfsonar-net
-      #- dhcp
+      - ${PSNET:-psinternal}
       
   systemd-image:
     build:
@@ -50,13 +52,13 @@ services:
       dockerfile: Dockerfile-systemd
     volumes:
       - /sys/fs/cgroup:/sys/fs/cgroup:ro
-    networks:
-      - perfsonar-net
+    # Just make image "die" as it is only a parent image  
+    command: true  
+
 
 networks:
-  perfsonar-net:      
+  psinternal:      
   dhcp:
-    #driver: ghcr.io/devplayer0/docker-net-dhcp:release-linux-amd64
     driver: ghcr.io/devplayer0/docker-net-dhcp:golang
     driver_opts:
       bridge: ps-bridge
