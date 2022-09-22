@@ -1,0 +1,103 @@
+{
+   "_meta" : {
+      "psconfig-translation" : {
+         "source-format" : "mesh-config-tasks-conf",
+         "time-translated" : "2022-09-13T14:39:46+00:00"
+      }
+   },
+   "addresses" : {
+      "172.26.0.2" : {
+         "address" : "172.26.0.2"
+      },
+      "172.26.0.3" : {
+         "address" : "172.26.0.3",
+         "no-agent" : true
+      }
+   },
+   "groups" : {
+      "One-way-delay_0_0_172.26.0.2" : {
+         "a-addresses" : [
+            {
+               "name" : "172.26.0.2"
+            }
+         ],
+         "b-addresses" : [
+            {
+               "name" : "172.26.0.3"
+            }
+         ],
+         "type" : "disjoint"
+      },
+      "perfSONAR_Toolkit_Default_Traceroute_Test_0_0_172.26.0.2" : {
+         "a-addresses" : [
+            {
+               "name" : "172.26.0.2"
+            }
+         ],
+         "b-addresses" : [
+            {
+               "name" : "172.26.0.3"
+            }
+         ],
+         "excludes" : [
+            {
+               "local-address" : {
+                  "name" : "172.26.0.3"
+               },
+               "target-addresses" : [
+                  {
+                     "name" : "172.26.0.2"
+                  }
+               ]
+            }
+         ],
+         "type" : "disjoint"
+      }
+   },
+   "schedules" : {
+      "perfSONAR_Toolkit_Default_Traceroute_Test_0" : {
+         "repeat" : "PT600S",
+         "slip" : "PT600S",
+         "sliprand" : true
+      }
+   },
+   "tasks" : {
+      "One-way-delay_0_0" : {
+         "_meta" : {
+            "display-name" : "One-way-delay"
+         },
+         "group" : "One-way-delay_0_0_172.26.0.2",
+         "test" : "One-way-delay_0_0"
+      },
+      "perfSONAR_Toolkit_Default_Traceroute_Test_0_0" : {
+         "_meta" : {
+            "display-name" : "perfSONAR Toolkit Default Traceroute Test"
+         },
+         "group" : "perfSONAR_Toolkit_Default_Traceroute_Test_0_0_172.26.0.2",
+         "schedule" : "perfSONAR_Toolkit_Default_Traceroute_Test_0",
+         "test" : "perfSONAR_Toolkit_Default_Traceroute_Test_0_0"
+      }
+   },
+   "tests" : {
+      "One-way-delay_0_0" : {
+         "spec" : {
+            "dest" : "{% address[1] %}",
+            "dest-node" : "{% pscheduler_address[1] %}",
+            "flip" : "{% flip %}",
+            "ip-version" : 4,
+            "source" : "{% address[0] %}",
+            "source-node" : "{% pscheduler_address[0] %}"
+         },
+         "type" : "latencybg"
+      },
+      "perfSONAR_Toolkit_Default_Traceroute_Test_0_0" : {
+         "spec" : {
+            "dest" : "{% address[1] %}",
+            "ip-version" : 4,
+            "source" : "{% address[0] %}",
+            "source-node" : "{% pscheduler_address[0] %}"
+         },
+         "type" : "trace"
+      }
+   }
+}

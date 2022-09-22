@@ -23,10 +23,14 @@ services:
         TYPE: toolkit 
     volumes:
        - /sys/fs/cgroup:/sys/fs/cgroup:ro
-    #ports:
+    ports:
       #- 8085:80
-      #- 80:80
-      #- 443:443
+      - 80:80
+      - 443:443
+    # Enable use of tc for adding simulated delay and loss  
+    #cap_add:
+    #  - NET_ADMIN
+    #privileged: true
     networks:
       - ${PSNET:-psinternal}
     #stop_grace_period: 20s
@@ -43,6 +47,9 @@ services:
         TYPE: testpoint 
     volumes:
        - /sys/fs/cgroup:/sys/fs/cgroup:ro
+    # Enable use of tc for adding simulated delay and loss  
+    cap_add:
+      - NET_ADMIN
     networks:
       - ${PSNET:-psinternal}
       
@@ -53,7 +60,7 @@ services:
     volumes:
       - /sys/fs/cgroup:/sys/fs/cgroup:ro
     # Just make image "die" as it is only a parent image  
-    command: true  
+    command: "true"  
 
 
 networks:

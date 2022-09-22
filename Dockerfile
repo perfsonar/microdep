@@ -47,7 +47,6 @@ RUN apt-get update
 # Install full perfsonar suit
 ARG TYPE
 RUN apt-get --download-only --no-install-recommends -y install perfsonar-$TYPE
-#RUN apt-get --download-only -y install perfsonar-testpoint
 # Fix missing example conf file in perfsonar-lsregistrationdaemon package
 RUN mkdir -p /usr/share/doc/perfsonar-lsregistrationdaemon/examples/
 RUN curl -s -o /usr/share/doc/perfsonar-lsregistrationdaemon/examples/lsregistrationdaemon.conf https://raw.githubusercontent.com/perfsonar/ls-registration-daemon/master/etc/lsregistrationdaemon.conf
@@ -57,8 +56,19 @@ COPY etc/perfsonar-$TYPE/lsregistrationdaemon.conf /etc/perfsonar/lsregistration
 RUN if [ "$TYPE" = "toolkit" ]; then htpasswd -b /etc/perfsonar/toolkit/psadmin.htpasswd admin notadminnono ; fi
 # Fix missing python package for applied by pscheduler
 RUN apt-get -y install python3-cryptography
+# Prepare for feeding measurement via Rabbit message queue server
+RUN apt-get -y install rabbitmq-server 
+#COPY etc/rabbitmq.json /etc/pscheduler/default-archives/rabbitmq.json
+COPY etc/rabbitmq.json /etc/perfsonar/psconfig/archives.d/
+# Add default tests
+COPY empty-file-do-not-remove *etc/perfsonar-$TYPE/psconfig/pscheduler.d/toolkit-webui.json /etc/perfsonar/psconfig/pscheduler.d/
+COPY empty-file-do-not-remove *etc/perfsonar-$TYPE/psconfig/pscheduler.d/toolkit-webui.json /etc/perfsonar/psconfig/pscheduler.d/
+
 EXPOSE 80
 EXPOSE 443
+
+# Add tool for adding transmission delay and loss
+COPY bin/delay-loss-setup.sh /usr/local/bin
 
 # Run systemd as in "parent"-image
 CMD ["/lib/systemd/systemd"]
