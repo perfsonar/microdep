@@ -1,0 +1,84 @@
+#
+# Docker compose config building perfsonar test environment
+# with minimum one toolkit-server and one testpoint.
+#
+#   - No of probe nodes my be scaled up via 'docker-compose up --scale testpoint=<num>'
+#   - DHCP ips may be activated by setting PSNET=dhcp, assuming a "ps-bridge" to external network is avaiable (setup-ps-bridge.sh). 
+#     Note: The docker-net-dhcp docker network driver is required to be installed (https://github.com/devplayer0/docker-net-dhcp) 
+#     
+# Author: Otto J Wittner <otto.wittner@sikt.no>
+# Date: 2022-09-02
+
+version: "3.7"
+
+services:
+  toolkit:
+    hostname: ps-toolkit
+    depends_on:
+      - systemd-image
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        TYPE: toolkit 
+    volumes:
+       - /sys/fs/cgroup:/sys/fs/cgroup:ro
+       - .:/root/ps-dev
+    ports:
+      - 8085:80
+      - 4435:443
+    # Enable use of tc for adding simulated delay and loss  
+    #cap_add:
+    #  - NET_ADMIN
+    #privileged: true
+    networks:
+      - ${PSNET:-psinternal}
+    #stop_grace_period: 20s
+
+  testpoint:
+    hostname: ps-testpoint
+    depends_on:
+      - systemd-image
+      - toolkit
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        TYPE: testpoint 
+    volumes:
+       - /sys/fs/cgroup:/sys/fs/cgroup:ro
+       - .:/root/ps-dev
+    # Enable use of tc for adding simulated delay and loss  
+    cap_add:
+      - NET_ADMIN
+    networks:
+      - ${PSNET:-psinternal}
+      
+  systemd-image:
+    build:
+      context: .
+      dockerfile: Dockerfile-systemd
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+    # Just make image "die" as it is only a parent image  
+    command: "true"  
+
+
+networks:
+  psinternal:
+    ipam:
+      driver: default
+      config:
+        # To match ips given in psconfig files
+        - subnet: 172.26.0.0/24
+
+  dhcp:
+    driver: ghcr.io/devplayer0/docker-net-dhcp:golang
+    driver_opts:
+      bridge: ps-bridge
+      #ipv6: 'true'
+      ignore_conflicts: 'false'
+      skip_routes: 'false'
+      #lease_timeout: '60s'
+    ipam:
+      driver: 'null'
