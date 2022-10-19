@@ -1,12 +1,14 @@
 {
     "archiver": "rabbitmq",
     "data": {
+        "schema": 2,
         "_url": "amqp://guest:guest@localhost//",
         "routing-key": "gap-ana",
+        "connection-expires": "PT10S",
         "retry-policy": [
-            { "attempts": 5,  "wait": "PT1S" },
-            { "attempts": 5,  "wait": "PT3S" }
+            { "attempts": 5,  "wait": "PT5S" }
         ]
-    }
+    },
+    "ttl": "PT1H"
 }
 

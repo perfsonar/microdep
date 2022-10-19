@@ -1,0 +1,3 @@
+[submodule "microdep"]
+	path = microdep
+	url = git@gitlab.sikt.no:iou/microdep.git

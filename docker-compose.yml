@@ -3,7 +3,8 @@
 # with minimum one toolkit-server and one testpoint.
 #
 #   - No of probe nodes my be scaled up via 'docker-compose up --scale testpoint=<num>'
-#   - DHCP ips may be activated by setting PSNET=dhcp, assuming a "ps-bridge" to external network is avaiable (setup-ps-bridge.sh). 
+#   - OS distribution may be change by setting OS=centos (e.g. 'OS=centos docker-compose build')
+#   - DHCP ips may be activated by setting 'PSNET=dhcp', assuming a "ps-bridge" to external network is avaiable (setup-ps-bridge.sh). 
 #     Note: The docker-net-dhcp docker network driver is required to be installed (https://github.com/devplayer0/docker-net-dhcp) 
 #     
 # Author: Otto J Wittner <otto.wittner@sikt.no>
@@ -18,15 +19,15 @@ services:
       - systemd-image
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: ${OS:-ubuntu}/Dockerfile
       args:
         TYPE: toolkit 
     volumes:
        - /sys/fs/cgroup:/sys/fs/cgroup:ro
+       - .:/root/ps-dev
     ports:
-      #- 8085:80
-      - 80:80
-      - 443:443
+      - 8085:80
+      - 4435:443
     # Enable use of tc for adding simulated delay and loss  
     #cap_add:
     #  - NET_ADMIN
@@ -42,11 +43,12 @@ services:
       - toolkit
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: ${OS:-ubuntu}/Dockerfile
       args:
         TYPE: testpoint 
     volumes:
        - /sys/fs/cgroup:/sys/fs/cgroup:ro
+       - .:/root/ps-dev
     # Enable use of tc for adding simulated delay and loss  
     cap_add:
       - NET_ADMIN
@@ -56,7 +58,7 @@ services:
   systemd-image:
     build:
       context: .
-      dockerfile: Dockerfile-systemd
+      dockerfile: ${OS:-ubuntu}/Dockerfile-systemd
     volumes:
       - /sys/fs/cgroup:/sys/fs/cgroup:ro
     # Just make image "die" as it is only a parent image  
@@ -64,7 +66,13 @@ services:
 
 
 networks:
-  psinternal:      
+  psinternal:
+    ipam:
+      driver: default
+      config:
+        # To match ips given in psconfig files
+        - subnet: 172.26.0.0/24
+
   dhcp:
     driver: ghcr.io/devplayer0/docker-net-dhcp:golang
     driver_opts:

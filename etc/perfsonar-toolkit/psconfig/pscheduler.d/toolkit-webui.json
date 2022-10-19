@@ -12,6 +12,42 @@
       "172.26.0.3" : {
          "address" : "172.26.0.3",
          "no-agent" : true
+      },
+      "172.26.0.4" : {
+         "address" : "172.26.0.4",
+         "no-agent" : true
+      },
+      "172.26.0.5" : {
+         "address" : "172.26.0.5",
+         "no-agent" : true
+      },
+      "172.26.0.6" : {
+         "address" : "172.26.0.6",
+         "no-agent" : true
+      },
+      "172.26.0.7" : {
+         "address" : "172.26.0.7",
+         "no-agent" : true
+      },
+      "172.26.0.8" : {
+         "address" : "172.26.0.8",
+         "no-agent" : true
+      },
+      "172.26.0.9" : {
+         "address" : "172.26.0.9",
+         "no-agent" : true
+      },
+      "172.26.0.10" : {
+         "address" : "172.26.0.10",
+         "no-agent" : true
+      },
+      "172.26.0.11" : {
+         "address" : "172.26.0.11",
+         "no-agent" : true
+      },
+      "172.26.0.12" : {
+         "address" : "172.26.0.12",
+         "no-agent" : true
       }
    },
    "groups" : {
@@ -24,6 +60,33 @@
          "b-addresses" : [
             {
                "name" : "172.26.0.3"
+            },
+            {
+               "name" : "172.26.0.4"
+            },
+            {
+               "name" : "172.26.0.5"
+            },
+            {
+               "name" : "172.26.0.6"
+            },
+            {
+               "name" : "172.26.0.7"
+            },
+            {
+               "name" : "172.26.0.8"
+            },
+            {
+               "name" : "172.26.0.9"
+            },
+            {
+               "name" : "172.26.0.10"
+            },
+            {
+               "name" : "172.26.0.11"
+            },
+            {
+               "name" : "172.26.0.12"
             }
          ],
          "type" : "disjoint"
@@ -86,7 +149,9 @@
             "flip" : "{% flip %}",
             "ip-version" : 4,
             "source" : "{% address[0] %}",
-            "source-node" : "{% pscheduler_address[0] %}"
+            "source-node" : "{% pscheduler_address[0] %}",
+            "output-raw" : true,
+	    "packet-interval": 0.01
          },
          "type" : "latencybg"
       },
