@@ -19,7 +19,7 @@ services:
       - systemd-image
     build:
       context: .
-      dockerfile: ${OS:-ubuntu}/Dockerfile
+      dockerfile: ${OS:-ubuntu}/Dockerfile${DF}
       args:
         TYPE: toolkit 
     volumes:
@@ -43,7 +43,7 @@ services:
       - toolkit
     build:
       context: .
-      dockerfile: ${OS:-ubuntu}/Dockerfile
+      dockerfile: ${OS:-ubuntu}/Dockerfile${DF}
       args:
         TYPE: testpoint 
     volumes:
