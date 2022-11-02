@@ -1,0 +1,54 @@
+# Dockerfile to build perfSONAR  node
+# To build, cd to folder and run
+#
+#     docker build --build-arg TYPE=<node-variant> -t perfsonar-<node-variant> ."
+#
+# where <node-variant> may be "testpoint" og "toolkit" 
+#
+# To run container with systemd operative in none-priviledge mode (may not work...)  
+#   docker run -d --tmpfs /tmp --tmpfs /run -v /sys/fs/cgroup:/sys/fs/cgroup:ro --net=host --name perfsonar-testpoint --rm perfsonar-testpoint
+#   docker run -d --tmpfs /tmp --tmpfs /run -v /sys/fs/cgroup:/sys/fs/cgroup:ro --net=host --name perfsonar-toolkit --rm perfsonar-toolkit
+#
+# ... or in privilede-mode
+#   docker run -d --privileged --net=host --name perfsonar-testpoint --rm perfsonar-testpoint
+#   docker run -d --privileged --net=host --name perfsonar-toolkit --rm perfsonar-toolkit
+#
+# Apply pipeworks to give container its own dhcp address (set TYPE to relevant variant):
+#
+#    TYPE='toolkit|testpoint' && \
+#    docker run -d --privileged --net=none --name perfsonar-${TYPE} --rm perfsonar-${TYPE} && \
+#    sudo ~/pipework/pipework eth0 perfsonar-${TYPE} dhclient-f U:${TYPE} && \
+#    docker exec -it perfsonar-${TYPE} ifconfig eth1 
+#
+
+
+FROM perfsonar-in-container_systemd-image:latest
+MAINTAINER Otto J Wittner <wittner@sikt.no>
+
+# Install management packages
+#ENV DEBIAN_FRONTEND=noninteractive
+
+#RUN ln -fs /usr/share/zoneinfo/Europe/Oslo /etc/localtime  # To install tzdata quietly
+
+RUN yum clean all && yum -y update && yum -y install -y coreutils man-db nano emacs git openssh-client net-tools iputils-ping traceroute tcpdump curl bind9-host unzip gnupg software-properties-common
+
+# Fiks tcpdump issue for priveledge mode
+RUN mv /usr/sbin/tcpdump /usr/bin/tcpdump
+RUN ln -s /usr/bin/tcpdump /usr/sbin/tcpdump
+
+# Install the EPEL RPM
+RUN yum -y install epel-release
+# Point CentOS installation at the perfSONAR main yum repository
+RUN rpm -hUv http://software.internet2.edu/rpms/el7/x86_64/latest/packages/perfSONAR-repo-0.10-1.noarch.rpm
+# Install the staging yum repository where test versions of the software are kept.
+RUN yum -y install perfSONAR-repo-staging
+RUN yum -y update
+
+# Install and explicitly init postgres (since initialisation seems to not happen "by it self") 
+#RUN yum -y install postgresql10-server && postgresql-10-setup initdb
+RUN yum -y install postgresql10-server sudo && sudo -u postgres /usr/pgsql-10/bin/initdb --no-locale --encoding=UTF8 --auth='ident' /var/lib/pgsql/10/data/
+RUN systemctl enable postgresql-10
+#Created symlink from /etc/systemd/system/multi-user.target.wants/postgresql-10.service to /usr/lib/systemd/system/postgresql-10.service.
+
+# Run systemd as in "parent"-image
+CMD ["/lib/systemd/systemd"]

@@ -23,13 +23,17 @@ services:
       args:
         TYPE: toolkit 
     volumes:
-       - /sys/fs/cgroup:/sys/fs/cgroup:ro
-       - .:/root/ps-dev
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+      - .:/root/ps-dev
+    tmpfs: 
+      - /run
+      - /tmp
+    tty: true
     ports:
       - 8085:80
       - 4435:443
-    # Enable use of tc for adding simulated delay and loss  
     #cap_add:
+       # Requiredd to enable use of tc for adding simulated delay and loss  
     #  - NET_ADMIN
     #privileged: true
     networks:
@@ -49,8 +53,8 @@ services:
     volumes:
        - /sys/fs/cgroup:/sys/fs/cgroup:ro
        - .:/root/ps-dev
-    # Enable use of tc for adding simulated delay and loss  
     cap_add:
+      # Requiredd to enable use of tc for adding simulated delay and loss  
       - NET_ADMIN
     networks:
       - ${PSNET:-psinternal}
