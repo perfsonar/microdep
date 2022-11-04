@@ -76,10 +76,21 @@ RUN chown -R postgres:postgres /var/lib/pgsql/$PG_VERSION/data/*
 ARG TYPE
 #RUN su - postgres -c "/usr/pgsql-10/bin/pg_ctl start -w -t 60" \
 #RUN nohup bash -c "/lib/systemd/systemd &" && sleep 4 \
-RUN su - postgres -c "/usr/pgsql-10/bin/pg_ctl -D /var/lib/pgsql/10/data -l logfile start -W -t 60" \
+RUN mkdir -p /var/run/postgresql && chown postgres.postgres /var/run/postgresql \
+    && su - postgres -c "/usr/pgsql-10/bin/pg_ctl -D /var/lib/pgsql/10/data start -w -t 120" \
+#su - postgres -c "/usr/pgsql-10/bin/pg_ctl -D /var/lib/pgsql/10/data -l logfile start -W -t 60" \
     && yum install -y perfsonar-$TYPE perfsonar-toolkit-security \
     && yum clean all \
     && rm -rf /var/cache/yum
+
+# Patch postgres-load to apply user "postgress" as default
+RUN chmod +w /usr/bin/postgresql-load \
+    &&  sed -i 's|die "Unable to determine PostgreSQL user."|PG_USER="postgres" && echo "Applying default user."|g' /usr/bin/postgresql-load
+# Reconfigure prefsonar Postgres DB (start db server first)
+RUN mkdir -p /var/run/postgresql && chown postgres.postgres /var/run/postgresql \
+    && su - postgres -c "/usr/pgsql-10/bin/pg_ctl -D /var/lib/pgsql/10/data start -w -t 120" \
+    && /usr/libexec/pscheduler/internals/db-update \
+    && /usr/libexec/pscheduler/internals/db-change-password
 
 # Rsyslog
 # Note: need to modify default CentOS7 rsyslog configuration to work with Docker, 
@@ -88,6 +99,9 @@ COPY perfsonar-testpoint-docker/rsyslog/rsyslog.conf /etc/rsyslog.conf
 COPY perfsonar-testpoint-docker/rsyslog/listen.conf /etc/rsyslog.d/listen.conf
 COPY perfsonar-testpoint-docker/rsyslog/python-pscheduler.conf /etc/rsyslog.d/python-pscheduler.conf
 COPY perfsonar-testpoint-docker/rsyslog/owamp-syslog.conf /etc/rsyslog.d/owamp-syslog.conf
+
+# Fix JNA and temp-file issue with Opensearch
+RUN if [ "$TYPE" = "toolkit" ]; then sed -i 's|${OPENSEARCH_TMPDIR}|/var/log/opensearch|g' /etc/opensearch/jvm.options; fi
 
 #RUN yum -y install postgresql10-server sudo && sudo -u postgres /usr/pgsql-10/bin/initdb --no-locale --encoding=UTF8 --auth='ident' /var/lib/pgsql/10/data/ && \
 #RUN \
