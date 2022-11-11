@@ -1,6 +1,3 @@
 [submodule "microdep"]
 	path = microdep
 	url = git@gitlab.sikt.no:iou/microdep.git
-[submodule "perfsonar-testpoint-docker"]
-	path = perfsonar-testpoint-docker
-	url = ./perfsonar-testpoint-docker
