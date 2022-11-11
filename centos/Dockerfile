@@ -31,6 +31,8 @@ ENV LANGUAGE=en_US.UTF-8
 ENV LC_COLLATE=C
 ENV LC_CTYPE=en_US.UTF-8
 
+# ---- I n s t a l l   p a c k a g e s  ------
+
 # Install management packages
 RUN yum clean all && yum -y update && yum install -y  coreutils man-db nano emacs git openssh-client net-tools iputils-ping traceroute tcpdump curl bind9-host unzip gnupg software-properties-common 
 
@@ -83,6 +85,21 @@ RUN mkdir -p /var/run/postgresql && chown postgres.postgres /var/run/postgresql 
     && yum clean all \
     && rm -rf /var/cache/yum
 
+# Add Rabbit message queue packages
+RUN yum -y install rabbitmq-server python3-pika && systemctl enable rabbitmq-server.service 
+
+# Add packages required gap-analytics.
+RUN yum -y install perl-App-cpanminus perl-Statistics-Basic perl-DateTime perl-JSON-XS perl-File-ShareDir-Install perl-Test-Exception perl-AnyEvent perl-ExtUtils-MakeMaker perl-version perl-Readonly perl-namespace-clean perl-Devel-GlobalDestruction perl-File-ShareDir perl-List-MoreUtils perl-Class-Data-Inheritable perl-Test-Simple perl-Test-Deep 
+RUN cpanm AnyEvent::RabbitMQ
+RUN yum -y install perl-ExtUtils-MakeMaker perl-Test-Simple
+RUN cpanm Statistics::LineFit
+
+# Add Opensearch dashboards ("Kibana")
+RUN if [ "$TYPE" = "toolkit" ]; then \
+        yum -y install opensearch-dashboards; \ 
+    fi
+# ----  E n d   p a c k a g e   i n s t a l l   ----
+
 # Patch postgres-load to apply user "postgress" as default
 RUN chmod +w /usr/bin/postgresql-load \
     &&  sed -i 's|die "Unable to determine PostgreSQL user."|PG_USER="postgres" && echo "Applying default user."|g' /usr/bin/postgresql-load
@@ -100,16 +117,24 @@ COPY perfsonar-testpoint-docker/rsyslog/listen.conf /etc/rsyslog.d/listen.conf
 COPY perfsonar-testpoint-docker/rsyslog/python-pscheduler.conf /etc/rsyslog.d/python-pscheduler.conf
 COPY perfsonar-testpoint-docker/rsyslog/owamp-syslog.conf /etc/rsyslog.d/owamp-syslog.conf
 
-# Fix JNA and temp-file issue with Opensearch
-RUN if [ "$TYPE" = "toolkit" ]; then sed -i 's|${OPENSEARCH_TMPDIR}|/var/log/opensearch|g' /etc/opensearch/jvm.options; fi
+# Make ntdp stay root and stop attempting to update system clock
+RUN sed -i 's|-u ntp:ntp ||g' /usr/lib/systemd/system/ntpd.service
+RUN echo "disable kernel" >> /etc/ntp.conf
 
-#RUN yum -y install postgresql10-server sudo && sudo -u postgres /usr/pgsql-10/bin/initdb --no-locale --encoding=UTF8 --auth='ident' /var/lib/pgsql/10/data/ && \
-#RUN \
-#    systemctl enable postgresql-10 && \
-#RUN \
-#    yum -y install perfsonar-$TYPE
+# Fix bind issue for memcached
+RUN sed -i 's|-l 127.0.0.1,::1|-l 0.0.0.0,::|' /etc/sysconfig/memcached
 
-#COPY etc/perfsonar-$TYPE/lsregistrationdaemon.conf /etc/perfsonar/lsregistrationdaemon.conf
+# Fix JNA and temp-file issue with Opensearch and Logstash, and increase startup timeout for Opensearch
+RUN if [ "$TYPE" = "toolkit" ]; then \
+       sed -i 's|${OPENSEARCH_TMPDIR}|/var/log/opensearch|g' /etc/opensearch/jvm.options; \
+       sed -i 's|#-Djava.io.tmpdir=$HOME|-Djava.io.tmpdir=/var/log/logstash|g' /etc/logstash/jvm.options; \
+       sed -i 's|TimeoutStartSec=75|TimeoutStartSec=150|g' /etc/systemd/system/multi-user.target.wants/opensearch.service; \
+    fi
+# Fix template error for Logstash
+RUN if [ "$TYPE" = "toolkit" ]; then \
+    cp /usr/share/logstash/vendor/local_gems/022abded/logstash-output-opensearch/lib/logstash/outputs/opensearch/templates/ecs-disabled/1x.json /usr/share/logstash/vendor/local_gems/022abded/logstash-output-opensearch/lib/logstash/outputs/opensearch/templates/ecs-disabled/2x.json; \
+    fi
+
 # Set management gui user/password to admin/notadminnono
 #RUN if [ "$TYPE" = "toolkit" ]; then yum -y install httpd-tools && htpasswd -c -b /etc/perfsonar/toolkit/psadmin.htpasswd admin notadminnono ; fi
 
@@ -117,29 +142,39 @@ RUN if [ "$TYPE" = "toolkit" ]; then sed -i 's|${OPENSEARCH_TMPDIR}|/var/log/ope
 COPY empty-file-do-not-remove *etc/perfsonar-$TYPE/psconfig/pscheduler.d/toolkit-webui.json /etc/perfsonar/psconfig/pscheduler.d/
 RUN rm /etc/perfsonar/psconfig/pscheduler.d/empty-file-do-not-remove
 
-
 # Prepare for feeding measurement via Rabbit message queue server
-#RUN yum -y install rabbitmq-server python3-pika && systemctl enable rabbitmq-server.service 
-
-#COPY etc/rabbitmq.json /etc/pscheduler/default-archives/rabbitmq.json
-#COPY etc/rabbitmq.json /etc/perfsonar/psconfig/archives.d/
+COPY etc/rabbitmq.json /etc/pscheduler/default-archives/rabbitmq.json
+COPY etc/rabbitmq.json /etc/perfsonar/psconfig/archives.d/
 
 # Rabbitmq debugging tools
-COPY bin/mfeit-rabbit-consume.py /root
-COPY bin/consume.pl /root
+COPY bin/mfeit-rabbit-consume.py /usr/local/bin
+COPY bin/consume.pl /usr/local/bin
 
-# Add gap-analytics. NOTE: Assumes qstream-gap-ana is avaiable (https://scm.uninett.no/iou/microdep)
-#RUN yum -y install perl-App-cpanminus perl-Statistics-Basic perl-DateTime perl-JSON-XS perl-File-ShareDir-Install perl-Test-Exception perl-AnyEvent perl-ExtUtils-MakeMaker perl-version perl-Readonly perl-namespace-clean perl-Devel-GlobalDestruction perl-File-ShareDir perl-List-MoreUtils perl-Class-Data-Inheritable perl-Test-Simple perl-Test-Deep 
-#RUN cpanm AnyEvent::RabbitMQ
-#RUN yum -y install perl-ExtUtils-MakeMaker perl-Test-Simple
-#RUN cpanm Statistics::LineFit 
-#COPY bin/qstream-gap-ana /root
+# Add analysis-scripts. (qstream-gap-ana is avaiable from https://scm.uninett.no/iou/microdep)
+COPY bin/qstream-gap-ana /usr/local/bin
+COPY bin/json2table.pl /usr/local/bin
+
+# TEST: Make Logstash feed analytic results to Opensearch (will fail for testpoint)
+COPY etc/logstash/from-gap-ana.conf /etc/logstash/conf.d/
+RUN if [ "$TYPE" = "toolkit" ]; then \
+       #echo -e "opensearch_admin_user=admin\nopensearch_admin_password=admin" >> /etc/perfsonar/logstash/logstash_sysconfig; \
+       USER=`awk -F " " '{print $1}' /etc/perfsonar/opensearch/opensearch_login` && sed -i "s|\${opensearch_admin_user}|$USER|g" /etc/logstash/conf.d/from-gap-ana.conf; \
+       PASSWD=`awk -F " " '{print $2}' /etc/perfsonar/opensearch/opensearch_login` && sed -i "s|\${opensearch_admin_password}|$PASSWD|g" /etc/logstash/conf.d/from-gap-ana.conf; \
+       mkdir -p /var/lib/logstash/microdep && chmod 777 /var/lib/logstash/microdep; \
+    fi
+
+# Fix username and password for Openseach dashboard ("Kibana")
+RUN if [ "$TYPE" = "toolkit" ]; then \
+       USER=`awk -F " " '{print $1}' /etc/perfsonar/opensearch/opensearch_login` && sed -i "s|opensearch.username: kibanaserver|opensearch.username: $USER|g" /etc/opensearch-dashboards/opensearch_dashboards.yml; \
+       PASSWD=`awk -F " " '{print $2}' /etc/perfsonar/opensearch/opensearch_login` && sed -i "s|opensearch.password: kibanaserver|opensearch.password: $PASSWD|g" /etc/opensearch-dashboards/opensearch_dashboards.yml; \
+    fi
+
+# Add tool for adding transmission delay and loss. Note: Requires NET_ADMIN container capabilities
+COPY bin/delay-loss-setup.sh /usr/local/bin
+
 
 EXPOSE 80
 EXPOSE 443
-
-# Add tool for adding transmission delay and loss
-COPY bin/delay-loss-setup.sh /usr/local/bin
 
 # Run systemd as in "parent"-image
 CMD ["/lib/systemd/systemd"]

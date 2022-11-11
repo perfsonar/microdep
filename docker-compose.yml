@@ -32,7 +32,8 @@ services:
     ports:
       - 8085:80
       - 4435:443
-    #cap_add:
+      - 5601:5601
+      #cap_add:
        # Requiredd to enable use of tc for adding simulated delay and loss  
     #  - NET_ADMIN
     #privileged: true
@@ -53,9 +54,9 @@ services:
     volumes:
        - /sys/fs/cgroup:/sys/fs/cgroup:ro
        - .:/root/ps-dev
-    cap_add:
+#    cap_add:
       # Requiredd to enable use of tc for adding simulated delay and loss  
-      - NET_ADMIN
+#      - NET_ADMIN
     networks:
       - ${PSNET:-psinternal}
       
@@ -75,7 +76,7 @@ networks:
       driver: default
       config:
         # To match ips given in psconfig files
-        - subnet: 172.26.0.0/24
+        - subnet: 172.100.0.0/24
 
   dhcp:
     driver: ghcr.io/devplayer0/docker-net-dhcp:golang
