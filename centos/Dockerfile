@@ -22,7 +22,7 @@
 #
 
 
-FROM perfsonar-in-container_systemd-image:latest
+FROM microdep-in-perfsonar_systemd-image:latest
 MAINTAINER Otto J Wittner <wittner@sikt.no>
 
 # Fix default locals
@@ -169,9 +169,23 @@ RUN if [ "$TYPE" = "toolkit" ]; then \
        PASSWD=`awk -F " " '{print $2}' /etc/perfsonar/opensearch/opensearch_login` && sed -i "s|opensearch.password: kibanaserver|opensearch.password: $PASSWD|g" /etc/opensearch-dashboards/opensearch_dashboards.yml; \
     fi
 
-# Add tool for adding transmission delay and loss. Note: Requires NET_ADMIN container capabilities
-COPY bin/delay-loss-setup.sh /usr/local/bin
-
+# Add Microdep map web GUI
+COPY etc/httpd/apache-microdep-gui.conf /etc/httpd/conf.d
+COPY microdep/server/script/*  /usr/lib/perfsonar/microdep/
+RUN cd /usr/lib/perfsonar/microdep/; ln -s microdep-map.html index.html
+RUN mkdir /usr/lib/perfsonar/microdep/js
+# Fix cross origin mess and missing/obsolite/missplaced css, js and other source-files
+RUN yum install -y wget
+RUN wget -P /usr/lib/perfsonar/microdep/js/ -i /usr/lib/perfsonar/microdep/list-of-external-sources.txt
+RUN sed -i \
+    -e 's|<link rel="stylesheet" href="/uninett-bootstrap-theme/css/bootstrap.min.css">||' \
+    -e 's|<link rel="stylesheet" href="/uninett-theme/css/uninett.css">||' \
+    -e 's|https://.*\(/.*\.js"\)|js\1|' \
+    -e 's|https://.*\(/.*\.css"\)|js\1|' \
+    -e 's|//.*\(/.*\.js"\)|js\1|' \
+    -e 's|//.*\(/.*\.css"\)|js\1|'  /usr/lib/perfsonar/microdep/microdep-map.html
+RUN mv /usr/lib/perfsonar/microdep/stats.js /usr/lib/perfsonar/microdep/js/
+RUN mv /usr/lib/perfsonar/microdep/ajax-loader.gif /usr/lib/perfsonar/microdep/js/
 
 EXPOSE 80
 EXPOSE 443
