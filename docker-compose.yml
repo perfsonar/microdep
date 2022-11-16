@@ -69,6 +69,16 @@ services:
     # Just make image "die" as it is only a parent image  
     command: "true"  
 
+  netemulator:
+    depends_on:
+      - testpoint
+    image: gaiaadm/pumba
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    # To all testpoints add packet loss where each successive probability (of loss) depends by a quarter on the last one
+    #   Prob(n) = .25 * Prob(n-1) + .75 * Random
+    # Note: The experienced loss rate seem to be an order of magitude less than what parameters specify...
+    command: "netem --tc-image gaiadocker/iproute2 --interface eth0 --duration 8760h loss --percent 20 --correlation 25 re2:_testpoint_"
 
 networks:
   psinternal:
