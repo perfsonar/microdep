@@ -1,0 +1,66 @@
+{
+   "_meta" : {
+      "hostvars" : {
+         "ytelse-brg.uninett.no" : {
+            "utm" : "32 6700300 297368",
+            "poststed" : "Bergen",
+            "termineringsadresse" : "Christies gate 18",
+            "postnummer" : "5007",
+            "admin_email" : "sak.sikt.no  , kontakt@sikt.no",
+            "nettinstallasjon" : "christiesgt"
+         },
+         "iou2.uninett.no" : {
+            "utm" : "32 7032685 569646",
+            "poststed" : "Trondheim",
+            "termineringsadresse" : "Abels gate 5",
+            "postnummer" : "7465",
+            "admin_email" : "",
+            "nettinstallasjon" : "uninett"
+         },
+         "ytelse-trd.uninett.no" : {
+            "utm" : "32 7032647 570200",
+            "poststed" : "Trondheim",
+            "termineringsadresse" : "Realfagsbygget, Høyskoleringen 5",
+            "postnummer" : "7034",
+            "admin_email" : "sak.sikt.no  , kontakt@sikt.no",
+            "nettinstallasjon" : "trd"
+         },
+         "niva-osl-microdep.c.uninett.no" : {
+            "utm" : "32 6644381 600205",
+            "poststed" : "Oslo",
+            "termineringsadresse" : "Økernveien 94",
+            "postnummer" : "0579",
+            "admin_email" : "",
+            "nettinstallasjon" : "niva-okernvn"
+         },
+         "ytelse-tos.uninett.no" : {
+            "utm" : "34 7731601 421381",
+            "poststed" : "Tromsø",
+            "termineringsadresse" : "Universitetsvegen 29",
+            "postnummer" : "9037",
+            "admin_email" : "sak.sikt.no  , kontakt@sikt.no",
+            "nettinstallasjon" : "tromso"
+         },
+         "ytelse-osl.uninett.no" : {
+            "utm" : "32 6646406 595935",
+            "poststed" : "Oslo",
+            "termineringsadresse" : "Informatikkbygget, Gaustadalleen 23 A",
+            "postnummer" : "0316",
+            "admin_email" : "sak.sikt.no  , kontakt@sikt.no",
+            "nettinstallasjon" : "oslo"
+         }
+      }
+   },
+   "ytelse" : {
+      "hosts" : [
+         "ytelse-brg.uninett.no",
+         "ytelse-osl.uninett.no",
+         "ytelse-tos.uninett.no",
+         "ytelse-trd.uninett.no",
+         "niva-osl-microdep.c.uninett.no",
+         "iou2.uninett.no"
+      ]
+   }
+}
+
+    

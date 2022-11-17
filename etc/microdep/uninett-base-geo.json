@@ -1,0 +1,462 @@
+{
+   "_meta" : {
+      "hostvars" : {
+         "hoytek-mp.uib.no" : {
+            "termineringsadresse" : "Thormøhlensgate 55",
+            "admin_email" : "kontakt@sikt.no",
+            "utm" : "32 6699533 297831",
+            "nettinstallasjon" : "hoytek",
+            "poststed" : "Bergen",
+            "postnummer" : "5008"
+         },
+         "grimstad-mp.uia.no" : {
+            "termineringsadresse" : "Jon Lilletuns vei 9",
+            "admin_email" : "kontakt@sikt.no",
+            "utm" : "32 6466051 475245",
+            "nettinstallasjon" : "grimstad",
+            "poststed" : "Grimstad",
+            "postnummer" : "4879"
+         },
+         "khio-mp.c.uninett.no" : {
+            "termineringsadresse" : "Fossveien 24",
+            "admin_email" : "kontakt@sikt.no",
+            "utm" : "32 6644395 598089",
+            "nettinstallasjon" : "seilduk",
+            "poststed" : "Oslo",
+            "postnummer" : "0551"
+         },
+         "unitosl-mp.c.uninett.no" : {
+            "termineringsadresse" : "Fridtjof Nansens vei 19",
+            "admin_email" : "kontakt@sikt.no",
+            "utm" : "32 6645016 595378",
+            "nettinstallasjon" : "unitosl",
+            "poststed" : "Oslo",
+            "postnummer" : "0369"
+         },
+         "nesna-mp.nord.no" : {
+            "termineringsadresse" : "Strandlandsv.",
+            "admin_email" : "kontakt@sikt.no",
+            "utm" : "33 7343393 411389",
+            "nettinstallasjon" : "nesna",
+            "poststed" : "Nesna",
+            "postnummer" : "8700"
+         },
+         "bergen-mp.uib.no" : {
+            "termineringsadresse" : "Nygårdsgt. 112",
+            "admin_email" : "kontakt@sikt.no",
+            "utm" : "32 6699857 297916",
+            "nettinstallasjon" : "nygardsgt",
+            "poststed" : "Bergen",
+            "postnummer" : "5020"
+         },
+         "volda-mp.hivolda.no" : {
+            "termineringsadresse" : "Berte Kanutte-huset, Joplassvegen 11",
+            "admin_email" : "kontakt@sikt.no",
+            "utm" : "32 6894124 347918",
+            "nettinstallasjon" : "volda",
+            "poststed" : "Volda",
+            "postnummer" : "6101"
+         },
+         "sias-mp.c.uninett.no" : {
+            "termineringsadresse" : "Drøbakveien 31",
+            "admin_email" : "",
+            "utm" : "32 6616000 598000",
+            "nettinstallasjon" : "as",
+            "poststed" : "Ås",
+            "postnummer" : "1433"
+         },
+         "stavanger-mp.uis.no" : {
+            "termineringsadresse" : "Rennebergstien 30",
+            "admin_email" : "kontakt@sikt.no",
+            "utm" : "32 6537792 309862",
+            "nettinstallasjon" : "stavanger",
+            "poststed" : "STAVANGER",
+            "postnummer" : "4021"
+         },
+         "kunnskapsv-mp.oslomet.no" : {
+            "termineringsadresse" : "Kunnskapsveien 55",
+            "admin_email" : "kontakt@sikt.no",
+            "utm" : "32 6650569 614109",
+            "nettinstallasjon" : "kjeller",
+            "poststed" : "Kjeller",
+            "postnummer" : "2027"
+         },
+         "nyalesund-mp.uninett.no" : {
+            "termineringsadresse" : "Unnamed Road",
+            "admin_email" : "kontakt@sikt.no",
+            "utm" : "33 8763251 434265",
+            "nettinstallasjon" : "nyal-amsterdam",
+            "poststed" : "Ny",
+            "postnummer" : "9173"
+         },
+         "elverum-mp.inn.no" : {
+            "termineringsadresse" : "Hamarveien 112",
+            "admin_email" : "kontakt@sikt.no",
+            "utm" : "32 6753309 638122",
+            "nettinstallasjon" : "elverum",
+            "poststed" : "Elverum",
+            "postnummer" : "2418"
+         },
+         "feide-mp.uninett.no" : {
+            "termineringsadresse" : "Gaustadalléen 23",
+            "admin_email" : "kontakt@sikt.no",
+            "utm" : "32 6646372 596003",
+            "nettinstallasjon" : "ifi2",
+            "poststed" : "Oslo",
+            "postnummer" : "373"
+         },
+         "suricata2.labs.uninett.no" : {
+            "termineringsadresse" : "Abels gate 5",
+            "admin_email" : "",
+            "utm" : "32 7032685 569646",
+            "nettinstallasjon" : "uninett",
+            "poststed" : "Trondheim",
+            "postnummer" : "7465"
+         },
+         "steinkjer-mp.nord.no" : {
+            "termineringsadresse" : "Skolegata 22",
+            "admin_email" : "kontakt@sikt.no",
+            "utm" : "32 7100912 622186",
+            "nettinstallasjon" : "steinkjer",
+            "poststed" : "Steinkjer",
+            "postnummer" : "7729"
+         },
+         "kongsberg-mp.usn.no" : {
+            "termineringsadresse" : "Kirkegata 2",
+            "admin_email" : "",
+            "utm" : "32 6614270 536343",
+            "nettinstallasjon" : "kongsberg",
+            "poststed" : null,
+            "postnummer" : "3616"
+         },
+         "forskningsradet-mp.forskningsradet.no" : {
+            "termineringsadresse" : "Drammensveien 288",
+            "admin_email" : "kontakt@sikt.no",
+            "utm" : "32 6642935 591979",
+            "nettinstallasjon" : "drammensveien288",
+            "poststed" : "Oslo",
+            "postnummer" : "283"
+         },
+         "drammen-mp.usn.no" : {
+            "termineringsadresse" : "Grønland 58 (Papirbredden)",
+            "admin_email" : "kontakt@sikt.no",
+            "utm" : "32 6623473 567082",
+            "nettinstallasjon" : "drammen",
+            "poststed" : "Drammen",
+            "postnummer" : "3019"
+         },
+         "bo-mp.usn.no" : {
+            "termineringsadresse" : "Gullbringvegen 36",
+            "admin_email" : "kontakt@sikt.no",
+            "utm" : "32 6585589 503383",
+            "nettinstallasjon" : "bo",
+            "poststed" : "Bø",
+            "postnummer" : "3800"
+         },
+         "hamar-mp.inn.no" : {
+            "termineringsadresse" : "Holsetgata 31",
+            "admin_email" : "kontakt@sikt.no",
+            "utm" : "32 6741882 612852",
+            "nettinstallasjon" : "hamar",
+            "poststed" : "Hamar",
+            "postnummer" : "2318"
+         },
+         "kronstad-mp.hvl.no" : {
+            "termineringsadresse" : "Nygårdsgt. 112",
+            "admin_email" : "",
+            "utm" : "32 6699857 297916",
+            "nettinstallasjon" : "hib",
+            "poststed" : "Bergen",
+            "postnummer" : "5020"
+         },
+         "kolla-mp.pc.uninett.no" : {
+            "termineringsadresse" : "Abels gate 5",
+            "admin_email" : "",
+            "utm" : "32 7032682 569652",
+            "nettinstallasjon" : "teknobyen",
+            "poststed" : "Trondheim",
+            "postnummer" : "7030"
+         },
+         "lab01-mp.uninett.no" : {
+            "termineringsadresse" : "Abels gate 5B",
+            "admin_email" : "",
+            "utm" : "32 7032695 569670",
+            "nettinstallasjon" : "teknobyen-lab",
+            "poststed" : "Trondheim",
+            "postnummer" : "7030"
+         },
+         "lab02-mp.uninett.no" : {
+            "termineringsadresse" : "Abels gate 5B",
+            "admin_email" : "",
+            "utm" : "32 7032695 569670",
+            "nettinstallasjon" : "teknobyen-lab",
+            "poststed" : "Trondheim",
+            "postnummer" : "7030"
+         },
+         "porsgrunn-mp.usn.no" : {
+            "termineringsadresse" : "Kjølnes ring 56",
+            "admin_email" : "kontakt@sikt.no",
+            "utm" : "32 6555694 538440",
+            "nettinstallasjon" : "porsgrunn",
+            "poststed" : "Porsgrunn",
+            "postnummer" : "3914"
+         },
+         "stord-mp.hvl.no" : {
+            "termineringsadresse" : "v/Jonny Huse",
+            "admin_email" : "kontakt@sikt.no",
+            "utm" : "32 6637158 305138",
+            "nettinstallasjon" : "stord",
+            "poststed" : "Stord",
+            "postnummer" : "5409"
+         },
+         "ude-mp.ude.oslo.no" : {
+            "termineringsadresse" : "Strømsveien 102",
+            "admin_email" : "kontakt@sikt.no",
+            "utm" : "32 6642900 599850",
+            "nettinstallasjon" : "skoleetatoslo",
+            "poststed" : "Oslo",
+            "postnummer" : "0602"
+         },
+         "fredrikstad-mp.hiof.no" : {
+            "termineringsadresse" : "K.G. Meldahlsvei 9",
+            "admin_email" : "kontakt@sikt.no",
+            "utm" : "32 6565275 610010",
+            "nettinstallasjon" : "fredrikstad",
+            "poststed" : "Kråkerøy",
+            "postnummer" : "1671"
+         },
+         "nhh-mp.nhh.no" : {
+            "termineringsadresse" : "Helleveien 30",
+            "admin_email" : "kontakt@sikt.no",
+            "utm" : "32 6704306 296429",
+            "nettinstallasjon" : "nhh",
+            "poststed" : "Bergen",
+            "postnummer" : "5045"
+         },
+         "ngu-mp.ngu.no" : {
+            "termineringsadresse" : "Leiv Eriksons vei 39",
+            "admin_email" : "kontakt@sikt.no",
+            "utm" : "32 7037067 572050",
+            "nettinstallasjon" : "ngu",
+            "poststed" : "Trondheim",
+            "postnummer" : "7491"
+         },
+         "kristiansand-mp.uia.no" : {
+            "termineringsadresse" : "Gimlemoen 25d",
+            "admin_email" : "kontakt@sikt.no",
+            "utm" : "32 6447341 441310",
+            "nettinstallasjon" : "kristiansand",
+            "poststed" : "Kristiansand",
+            "postnummer" : "4630"
+         },
+         "tromso-mp.uit.no" : {
+            "termineringsadresse" : "Universitetsvegen 29",
+            "admin_email" : "kontakt@sikt.no",
+            "utm" : "34 7731601 421381",
+            "nettinstallasjon" : "tromso",
+            "poststed" : "Tromsø",
+            "postnummer" : "9037"
+         },
+         "harstad-mp.uit.no" : {
+            "termineringsadresse" : "Havnegata 5",
+            "admin_email" : "kontakt@sikt.no",
+            "utm" : "33 7633309 562482",
+            "nettinstallasjon" : "harstad",
+            "poststed" : "Harstad",
+            "postnummer" : "9404"
+         },
+         "bi-mp.bi.no" : {
+            "termineringsadresse" : "Nydalsveien 37",
+            "admin_email" : "",
+            "utm" : "32 6647159 598635",
+            "nettinstallasjon" : "bi",
+            "poststed" : "Oslo",
+            "postnummer" : "0484"
+         },
+         "notodden-mp.usn.no" : {
+            "termineringsadresse" : "Lærerskoleveien 40",
+            "admin_email" : "",
+            "utm" : "32 6603682 514724",
+            "nettinstallasjon" : "notodden",
+            "poststed" : "Notodden",
+            "postnummer" : "3679"
+         },
+         "honefoss-mp.usn.no" : {
+            "termineringsadresse" : "Bredalsveien 14",
+            "admin_email" : "kontakt@sikt.no",
+            "utm" : "32 6669006 570031",
+            "nettinstallasjon" : "honefoss",
+            "poststed" : "Hønefoss",
+            "postnummer" : "3511"
+         },
+         "pil32-mp.oslomet.no" : {
+            "termineringsadresse" : "Pilestredet 32",
+            "admin_email" : "kontakt@sikt.no",
+            "utm" : "32 6643782 597043",
+            "nettinstallasjon" : "pil32",
+            "poststed" : "Oslo",
+            "postnummer" : "0166"
+         },
+         "halden-mp.hiof.no" : {
+            "termineringsadresse" : "Avd. for informatikk og automatisering",
+            "admin_email" : "kontakt@sikt.no",
+            "utm" : "32 6556850 634800",
+            "nettinstallasjon" : "halden",
+            "poststed" : "Halden",
+            "postnummer" : "1757"
+         },
+         "as-mp.nmbu.no" : {
+            "termineringsadresse" : "Drøbakveien 31",
+            "admin_email" : "",
+            "utm" : "32 6616000 598000",
+            "nettinstallasjon" : "as",
+            "poststed" : "Ås",
+            "postnummer" : "1433"
+         },
+         "molde-mp.himolde.no" : {
+            "termineringsadresse" : "Britvegen 2",
+            "admin_email" : "kontakt@sikt.no",
+            "utm" : "32 6957657 403376",
+            "nettinstallasjon" : "molde",
+            "poststed" : "Molde",
+            "postnummer" : "6410"
+         },
+         "narvik-mp.uit.no" : {
+            "termineringsadresse" : "Lodve Langes gate 2",
+            "admin_email" : "kontakt@sikt.no",
+            "utm" : "33 7593479 599871",
+            "nettinstallasjon" : "narvik",
+            "poststed" : "Narvik",
+            "postnummer" : "8514"
+         },
+         "forde-mp.hvl.no" : {
+            "termineringsadresse" : "Svanehaugveien 1",
+            "admin_email" : "kontakt@sikt.no",
+            "utm" : "32 6817181 334332",
+            "nettinstallasjon" : "forde",
+            "poststed" : "Førde",
+            "postnummer" : "6812"
+         },
+         "borre-mp.usn.no" : {
+            "termineringsadresse" : "Raveien 215",
+            "admin_email" : "",
+            "utm" : "32 6582196 582044",
+            "nettinstallasjon" : "borre",
+            "poststed" : "Horten",
+            "postnummer" : "3184"
+         },
+         "haugesund-mp.hvl.no" : {
+            "termineringsadresse" : "Bjørnsonsgate 45",
+            "admin_email" : "kontakt@sikt.no",
+            "utm" : "32 6591536 288645",
+            "nettinstallasjon" : "haugesund",
+            "poststed" : "Haugesund",
+            "postnummer" : "5528"
+         },
+         "lillehammer-mp.inn.no" : {
+            "termineringsadresse" : "Vormstuguvegen 2",
+            "admin_email" : "kontakt@sikt.no",
+            "utm" : "32 6780413 576551",
+            "nettinstallasjon" : "lillehammer-1n3056",
+            "poststed" : "Lillehammer",
+            "postnummer" : "2624"
+         },
+         "sogndal-mp.hvl.no" : {
+            "termineringsadresse" : "Fossvegen 6",
+            "admin_email" : "kontakt@sikt.no",
+            "utm" : "32 6790000 398000",
+            "nettinstallasjon" : "sogndal",
+            "poststed" : "Sogndal",
+            "postnummer" : "6851"
+         },
+         "alta-mp.uit.no" : {
+            "termineringsadresse" : "Follums vei 31",
+            "admin_email" : "kontakt@sikt.no",
+            "utm" : "34 7764018 587381",
+            "nettinstallasjon" : "alta",
+            "poststed" : null,
+            "postnummer" : "9509"
+         },
+         "cmi-mp.cmi.no" : {
+            "termineringsadresse" : "Jekteviksbakken 31",
+            "admin_email" : "kontakt@sikt.no",
+            "utm" : "32 6700499 296894",
+            "nettinstallasjon" : "cmi",
+            "poststed" : null,
+            "postnummer" : "5006"
+         },
+         "teknobyen-mp.uninett.no" : {
+            "termineringsadresse" : "Abels gate 5",
+            "admin_email" : "drift@uninett.no, kontakt@sikt.no",
+            "utm" : "32 7032682 569652",
+            "nettinstallasjon" : "teknobyen",
+            "poststed" : "Trondheim",
+            "postnummer" : "7030"
+         },
+         "levanger-mp.nord.no" : {
+            "termineringsadresse" : "Røstad",
+            "admin_email" : "kontakt@sikt.no",
+            "utm" : "32 7070509 613110",
+            "nettinstallasjon" : "levanger",
+            "poststed" : "Levanger",
+            "postnummer" : "7600"
+         }
+      }
+   },
+   "mp" : {
+      "hosts" : [
+         "sias-mp.c.uninett.no",
+         "forde-mp.hvl.no",
+         "halden-mp.hiof.no",
+         "cmi-mp.cmi.no",
+         "nesna-mp.nord.no",
+         "drammen-mp.usn.no",
+         "stord-mp.hvl.no",
+         "teknobyen-mp.uninett.no",
+         "bo-mp.usn.no",
+         "lab01-mp.uninett.no",
+         "nhh-mp.nhh.no",
+         "khio-mp.c.uninett.no",
+         "lab02-mp.uninett.no",
+         "feide-mp.uninett.no",
+         "levanger-mp.nord.no",
+         "ude-mp.ude.oslo.no",
+         "tromso-mp.uit.no",
+         "alta-mp.uit.no",
+         "bergen-mp.uib.no",
+         "porsgrunn-mp.usn.no",
+         "harstad-mp.uit.no",
+         "narvik-mp.uit.no",
+         "unitosl-mp.c.uninett.no",
+         "kunnskapsv-mp.oslomet.no",
+         "haugesund-mp.hvl.no",
+         "nyalesund-mp.uninett.no",
+         "grimstad-mp.uia.no",
+         "fredrikstad-mp.hiof.no",
+         "hoytek-mp.uib.no",
+         "kongsberg-mp.usn.no",
+         "kronstad-mp.hvl.no",
+         "ngu-mp.ngu.no",
+         "volda-mp.hivolda.no",
+         "kolla-mp.pc.uninett.no",
+         "molde-mp.himolde.no",
+         "honefoss-mp.usn.no",
+         "notodden-mp.usn.no",
+         "hamar-mp.inn.no",
+         "stavanger-mp.uis.no",
+         "forskningsradet-mp.forskningsradet.no",
+         "sogndal-mp.hvl.no",
+         "steinkjer-mp.nord.no",
+         "kristiansand-mp.uia.no",
+         "lillehammer-mp.inn.no",
+         "pil32-mp.oslomet.no",
+         "elverum-mp.inn.no",
+         "suricata2.labs.uninett.no",
+         "bi-mp.bi.no",
+         "as-mp.nmbu.no",
+         "borre-mp.usn.no"
+      ]
+   }
+}
+
+    

@@ -88,8 +88,8 @@ RUN mkdir -p /var/run/postgresql && chown postgres.postgres /var/run/postgresql 
 # Add Rabbit message queue packages
 RUN yum -y install rabbitmq-server python3-pika && systemctl enable rabbitmq-server.service 
 
-# Add packages required gap-analytics.
-RUN yum -y install perl-App-cpanminus perl-Statistics-Basic perl-DateTime perl-JSON-XS perl-File-ShareDir-Install perl-Test-Exception perl-AnyEvent perl-ExtUtils-MakeMaker perl-version perl-Readonly perl-namespace-clean perl-Devel-GlobalDestruction perl-File-ShareDir perl-List-MoreUtils perl-Class-Data-Inheritable perl-Test-Simple perl-Test-Deep 
+# Add packages required by microdep analytics.
+RUN yum -y install perl-App-cpanminus perl-Statistics-Basic perl-DateTime perl-JSON-XS perl-File-ShareDir-Install perl-Test-Exception perl-AnyEvent perl-ExtUtils-MakeMaker perl-version perl-Readonly perl-namespace-clean perl-Devel-GlobalDestruction perl-File-ShareDir perl-List-MoreUtils perl-Class-Data-Inheritable perl-Test-Simple perl-Test-Deep perl-YAML-LibYAML wget
 RUN cpanm AnyEvent::RabbitMQ
 RUN yum -y install perl-ExtUtils-MakeMaker perl-Test-Simple
 RUN cpanm Statistics::LineFit
@@ -128,7 +128,7 @@ RUN sed -i 's|-l 127.0.0.1,::1|-l 0.0.0.0,::|' /etc/sysconfig/memcached
 RUN if [ "$TYPE" = "toolkit" ]; then \
        sed -i 's|${OPENSEARCH_TMPDIR}|/var/log/opensearch|g' /etc/opensearch/jvm.options; \
        sed -i 's|#-Djava.io.tmpdir=$HOME|-Djava.io.tmpdir=/var/log/logstash|g' /etc/logstash/jvm.options; \
-       sed -i 's|TimeoutStartSec=75|TimeoutStartSec=150|g' /etc/systemd/system/multi-user.target.wants/opensearch.service; \
+       sed -i 's|TimeoutStartSec=75|TimeoutStartSec=300|g' /etc/systemd/system/multi-user.target.wants/opensearch.service; \
     fi
 # Fix template error for Logstash
 RUN if [ "$TYPE" = "toolkit" ]; then \
@@ -172,20 +172,40 @@ RUN if [ "$TYPE" = "toolkit" ]; then \
 # Add Microdep map web GUI
 COPY etc/httpd/apache-microdep-gui.conf /etc/httpd/conf.d
 COPY microdep/server/script/*  /usr/lib/perfsonar/microdep/
+RUN ln -s /usr/lib/perfsonar/microdep /root
 RUN cd /usr/lib/perfsonar/microdep/; ln -s microdep-map.html index.html
 RUN mkdir /usr/lib/perfsonar/microdep/js
 # Fix cross origin mess and missing/obsolite/missplaced css, js and other source-files
-RUN yum install -y wget
 RUN wget -P /usr/lib/perfsonar/microdep/js/ -i /usr/lib/perfsonar/microdep/list-of-external-sources.txt
 RUN sed -i \
     -e 's|<link rel="stylesheet" href="/uninett-bootstrap-theme/css/bootstrap.min.css">||' \
     -e 's|<link rel="stylesheet" href="/uninett-theme/css/uninett.css">||' \
+    -e 's|; @import url("/styles.css");||' \
     -e 's|https://.*\(/.*\.js"\)|js\1|' \
     -e 's|https://.*\(/.*\.css"\)|js\1|' \
     -e 's|//.*\(/.*\.js"\)|js\1|' \
-    -e 's|//.*\(/.*\.css"\)|js\1|'  /usr/lib/perfsonar/microdep/microdep-map.html
+    -e 's|//.*\(/.*\.css"\)|js\1|' \
+    -e 's|/js/ajax-loader.gif|"js/ajax-loader.gif"|'  /usr/lib/perfsonar/microdep/microdep-map.html
 RUN mv /usr/lib/perfsonar/microdep/stats.js /usr/lib/perfsonar/microdep/js/
 RUN mv /usr/lib/perfsonar/microdep/ajax-loader.gif /usr/lib/perfsonar/microdep/js/
+#RUN mkdir /usr/lib/perfsonar/microdep/js/images
+COPY etc/microdep/marker-*.png /usr/lib/perfsonar/microdep/js/images/
+# Move inline css to file
+#RUN sed  -n '/<style type=/{n;:a;p;n;/<\/style>/!ba;s/.*//p;}' /usr/lib/perfsonar/microdep/microdep-map.html > /usr/lib/perfsonar/microdep/js/microdep-map.css
+#RUN sed -i 's|\(<style type=.*>\)|<link rel="stylesheet" href="js/microdep-map.css">\n\1|'  /usr/lib/perfsonar/microdep/microdep-map.html
+#RUN sed -i '/<style type=/,/<\/style>/d' /usr/lib/perfsonar/microdep/microdep-map.html
+# Open up security restrictions
+#RUN sed -i 's|</head>|<meta http-equiv="Content-Security-Policy" content="default-src * ; img-src * http://* https://*; style-src * https://* http://*; script-src * https://* http://*" />\n</head>|' /usr/lib/perfsonar/microdep/microdep-map.html
+# CGI support for perl
+#RUN yum install -y perl-CGI
+RUN sed -i 's|::Simple||' /usr/lib/perfsonar/microdep/microdep-config.cgi
+RUN sed -i "s|YAML|YAML::XS|g" /usr/lib/perfsonar/microdep/yaml-to-json.cgi
+# Add and adjust to support global/Dragonlab topology
+RUN sed -i 's|/var/lib/microdep/|/usr/lib/perfsonar/microdep/|' /usr/lib/perfsonar/microdep/microdep-config.cgi
+RUN mkdir -p /usr/lib/perfsonar/microdep/dragonlab/etc
+RUN sed -i '/uninett:/,/$/d' /usr/lib/perfsonar/microdep/mapconfig.yml
+COPY etc/microdep/dragonlab*.json /usr/lib/perfsonar/microdep/dragonlab/
+COPY etc/microdep/mp-names.txt /usr/lib/perfsonar/microdep/dragonlab/
 
 EXPOSE 80
 EXPOSE 443

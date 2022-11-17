@@ -1,0 +1,5 @@
+#
+# Micro dep measuremet flow configurations for testing - full mesh of 2 nodes
+#
+testing_probenode_1 testing_probenode_2 
+testing_probenode_2 testing_probenode_1 
