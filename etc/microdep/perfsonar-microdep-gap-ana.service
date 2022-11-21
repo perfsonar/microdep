@@ -1,0 +1,11 @@
+[Unit]
+Description=perfSONAR Microdep Gap analysis
+After=network.target rabbitmq-server.service
+Requires=rabbitmq-server.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/qstream-gap-ana -owamp amqp:// -json /var/lib/logstash/microdep/gap-ana.json
+
+[Install]
+WantedBy=multi-user.target

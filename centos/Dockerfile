@@ -148,13 +148,15 @@ COPY etc/rabbitmq.json /etc/perfsonar/psconfig/archives.d/
 
 # Rabbitmq debugging tools
 COPY bin/mfeit-rabbit-consume.py /usr/local/bin
-COPY bin/consume.pl /usr/local/bin
-
-# Add analysis-scripts. (qstream-gap-ana is avaiable from https://scm.uninett.no/iou/microdep)
-COPY bin/qstream-gap-ana /usr/local/bin
+COPY bin/consume.pl /usr/local/bin 
 COPY bin/json2table.pl /usr/local/bin
 
-# TEST: Make Logstash feed analytic results to Opensearch (will fail for testpoint)
+# Add and enable analysis-scripts. (qstream-gap-ana is avaiable from https://scm.uninett.no/iou/microdep)
+COPY bin/qstream-gap-ana /usr/local/bin
+COPY etc/microdep/perfsonar-microdep-gap-ana.service /usr/lib/systemd/system/
+RUN systemctl enable perfsonar-microdep-gap-ana.service
+
+#  Make Logstash feed analytic results to Opensearch (will fail for testpoint)
 COPY etc/logstash/from-gap-ana.conf /etc/logstash/conf.d/
 RUN if [ "$TYPE" = "toolkit" ]; then \
        #echo -e "opensearch_admin_user=admin\nopensearch_admin_password=admin" >> /etc/perfsonar/logstash/logstash_sysconfig; \
@@ -185,7 +187,8 @@ RUN sed -i \
     -e 's|https://.*\(/.*\.css"\)|js\1|' \
     -e 's|//.*\(/.*\.js"\)|js\1|' \
     -e 's|//.*\(/.*\.css"\)|js\1|' \
-    -e 's|/js/ajax-loader.gif|"js/ajax-loader.gif"|'  /usr/lib/perfsonar/microdep/microdep-map.html
+    -e 's|/js/ajax-loader.gif|"js/ajax-loader.gif"|' \
+    -e 's|favicon.ico|/toolkit/favicon.ico|'    /usr/lib/perfsonar/microdep/microdep-map.html
 RUN mv /usr/lib/perfsonar/microdep/stats.js /usr/lib/perfsonar/microdep/js/
 RUN mv /usr/lib/perfsonar/microdep/ajax-loader.gif /usr/lib/perfsonar/microdep/js/
 #RUN mkdir /usr/lib/perfsonar/microdep/js/images
@@ -206,6 +209,13 @@ RUN mkdir -p /usr/lib/perfsonar/microdep/dragonlab/etc
 RUN sed -i '/uninett:/,/$/d' /usr/lib/perfsonar/microdep/mapconfig.yml
 COPY etc/microdep/dragonlab*.json /usr/lib/perfsonar/microdep/dragonlab/
 COPY etc/microdep/mp-names.txt /usr/lib/perfsonar/microdep/dragonlab/
+# Fix credentials for accessing Opensearch
+RUN if [ "$TYPE" = "toolkit" ]; then \
+        USER=`awk -F " " '{print $1}' /etc/perfsonar/opensearch/opensearch_login` ;\
+        PASSWD=`awk -F " " '{print $2}' /etc/perfsonar/opensearch/opensearch_login` ; \
+        sed -i "s|admin:no+nz+br|$USER:$PASSWD|g" /usr/lib/perfsonar/microdep/elastic-get-date-type.pl; \
+    fi
+
 
 EXPOSE 80
 EXPOSE 443

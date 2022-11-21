@@ -1,13 +1,14 @@
 [
-    { "id":"microdep-in-perfsonar_1","name":"Tokyo","url":"https://wikipedia.org/wiki/Tokyo","lat":35.6897,"lon":139.6922},
-    { "id":"microdep-in-perfsonar_2","name":"Jakarta","url":"https://wikipedia.org/wiki/Jakarta","lat":-6.2146,"lon":106.8451},
-    { "id":"microdep-in-perfsonar_3","name":"Delhi","url":"https://wikipedia.org/wiki/Delhi","lat":28.6600,"lon":77.2300},
-    { "id":"microdep-in-perfsonar_4","name":"Mumbai","url":"https://wikipedia.org/wiki/Mumbai","lat":18.9667,"lon":72.8333},
-    { "id":"microdep-in-perfsonar_5","name":"Manila","url":"https://wikipedia.org/wiki/Manila","lat":14.5958,"lon":120.9772},
-    { "id":"microdep-in-perfsonar_6","name":"Shanghai","url":"https://wikipedia.org/wiki/Shanghai","lat":31.1667,"lon":121.4667},
-    { "id":"microdep-in-perfsonar_7","name":"Sao Paulo","url":"https://wikipedia.org/wiki/Sao Paulo","lat":-23.5504,"lon":-46.6339},
-    { "id":"microdep-in-perfsonar_8","name":"Seoul","url":"https://wikipedia.org/wiki/Seoul","lat":37.5833,"lon":127.0000},
-    { "id":"microdep-in-perfsonar_9","name":"Mexico City","url":"https://wikipedia.org/wiki/Mexico City","lat":19.4333,"lon":-99.1333},
-    { "id":"microdep-in-perfsonar_10","name":"Guangzhou","url":"https://wikipedia.org/wiki/Guangzhou","lat":23.1288,"lon":113.2590},
-    { "id":"microdep-in-perfsonar_11","name":"Beijing","url":"https://wikipedia.org/wiki/Beijing","lat":39.9050,"lon":116.3914}
+    { "id":"microdep-in-perfsonar_testpoint_1","name":"Tokyo","url":"https://wikipedia.org/wiki/Tokyo","lat":35.6897,"lon":139.6922},
+    { "id":"microdep-in-perfsonar_testpoint_2","name":"Jakarta","url":"https://wikipedia.org/wiki/Jakarta","lat":-6.2146,"lon":106.8451},
+    { "id":"microdep-in-perfsonar_testpoint_3","name":"Delhi","url":"https://wikipedia.org/wiki/Delhi","lat":28.6600,"lon":77.2300},
+    { "id":"microdep-in-perfsonar_testpoint_4","name":"Mumbai","url":"https://wikipedia.org/wiki/Mumbai","lat":18.9667,"lon":72.8333},
+    { "id":"microdep-in-perfsonar_testpoint_5","name":"Manila","url":"https://wikipedia.org/wiki/Manila","lat":14.5958,"lon":120.9772},
+    { "id":"microdep-in-perfsonar_testpoint_6","name":"Shanghai","url":"https://wikipedia.org/wiki/Shanghai","lat":31.1667,"lon":121.4667},
+    { "id":"microdep-in-perfsonar_testpoint_7","name":"Sao Paulo","url":"https://wikipedia.org/wiki/Sao Paulo","lat":-23.5504,"lon":-46.6339},
+    { "id":"microdep-in-perfsonar_testpoint_8","name":"Seoul","url":"https://wikipedia.org/wiki/Seoul","lat":37.5833,"lon":127.0000},
+    { "id":"microdep-in-perfsonar_testpoint_9","name":"Mexico City","url":"https://wikipedia.org/wiki/Mexico City","lat":19.4333,"lon":-99.1333},
+    { "id":"microdep-in-perfsonar_testpoint_10","name":"Guangzhou","url":"https://wikipedia.org/wiki/Guangzhou","lat":23.1288,"lon":113.2590},
+    { "id":"microdep-in-perfsonar_toolkit_1","name":"Beijing","url":"https://wikipedia.org/wiki/Beijing","lat":39.9050,"lon":116.3914}
 ]
+
