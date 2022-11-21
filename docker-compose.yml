@@ -3,7 +3,7 @@
 # with minimum one toolkit-server and one testpoint.
 #
 #   - No of probe nodes my be scaled up via 'docker-compose up --scale testpoint=<num>'
-#   - OS distribution may be change by setting OS=centos (e.g. 'OS=centos docker-compose build')
+#   - OS distribution may be change by setting OS=ubuntu (e.g. 'OS=ubuntu docker-compose build')
 #   - DHCP ips may be activated by setting 'PSNET=dhcp', assuming a "ps-bridge" to external network is avaiable (setup-ps-bridge.sh). 
 #     Note: The docker-net-dhcp docker network driver is required to be installed (https://github.com/devplayer0/docker-net-dhcp) 
 #     
@@ -19,7 +19,7 @@ services:
       - systemd-image
     build:
       context: .
-      dockerfile: ${OS:-ubuntu}/Dockerfile${DF}
+      dockerfile: ${OS:-centos}/Dockerfile${DF}
       args:
         TYPE: toolkit 
     volumes:
@@ -48,7 +48,7 @@ services:
       - toolkit
     build:
       context: .
-      dockerfile: ${OS:-ubuntu}/Dockerfile${DF}
+      dockerfile: ${OS:-centos}/Dockerfile${DF}
       args:
         TYPE: testpoint 
     volumes:
@@ -63,7 +63,7 @@ services:
   systemd-image:
     build:
       context: .
-      dockerfile: ${OS:-ubuntu}/Dockerfile-systemd
+      dockerfile: ${OS:-centos}/Dockerfile-systemd
     volumes:
       - /sys/fs/cgroup:/sys/fs/cgroup:ro
     # Just make image "die" as it is only a parent image  

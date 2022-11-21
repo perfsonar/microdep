@@ -9,18 +9,18 @@ This project provides a docker container based test environment for integration 
 The test environment applies `docker-compose` for multi-container management, hence assumes `docker.io` and `docker-compose` to be available. 
 
 To prepare the test environment run:
-  * `docker-compose build` or `OS=ubuntu docker-compose build` to prepare a Ubuntu based test environment
-  * `OS=centos docker-compose build` to prepare a Centos based test environment
+  * `docker-compose build` or `OS=centos docker-compose build` to prepare a Centos based test environment
+  * `OS=ubuntu docker-compose build` to prepare a Ubuntu based test environment
 
 To initiate a test environment with a single toolkit node and N testpoint nodes run:
-  * `docker-compose up --scale testpoint=<N>` with N=[1,10] for an Ubuntu based setup
-  * `OS=centos docker-compose up --scale testpoint=<N>` with N=[1,10] for an Centos based setup
+  * `docker-compose up --scale testpoint=<N>` with N=[1,10] for an Centos based setup
+  * `OS=ubuntu docker-compose up --scale testpoint=<N>` with N=[1,10] for an Ubuntu based setup
 
 The perfSONAR webadmin GUI is made available via `http://<container-host>:8085/toolkit`.
 
 The Microdep map GUI is made available via `http://<container-host>:8085/microdep` ** NOT YET FULLY OPERATIONAL **.
 
-Note that docker-compose will initiate a network emulator (gaiaadm/pumba) for each testpoint node to add impairments to the testpoint nodes network interface ** NOT YET FULLY OPERATIONAL **
+Note that docker-compose will initiate a network emulator (gaiaadm/pumba) for each testpoint node to add impairments to the testpoint nodes network interface.
 
 ## Test enviroment with external IPs
 
