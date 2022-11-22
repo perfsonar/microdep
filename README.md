@@ -20,7 +20,7 @@ The perfSONAR webadmin GUI is made available via `http://<container-host>:8085/t
 
 The Microdep map GUI is made available via `http://<container-host>:8085/microdep`
 
-Opensearch dashboard (Kibana) may also be enabled with `docker exec microdep-in-container_toolkit_1 systemctl start opensearch-dashboard` and accessed via `http://<container-host>:5601`.
+Opensearch dashboards (Kibana) may also be enabled with `docker exec microdep-in-perfsonar_toolkit_1 systemctl start opensearch-dashboards` and accessed via `http://<container-host>:5601`.
 
 Note that docker-compose will initiate a network emulator (gaiaadm/pumba) for each testpoint node to add impairments to the testpoint nodes network interface.
 
