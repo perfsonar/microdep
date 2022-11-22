@@ -165,13 +165,15 @@ RUN if [ "$TYPE" = "toolkit" ]; then \
        mkdir -p /var/lib/logstash/microdep && chmod 777 /var/lib/logstash/microdep; \
     fi
 
-# Fix username and password for Openseach dashboard ("Kibana")
+# Fix host address, username and password for Opensearch dashboard ("Kibana")
 RUN if [ "$TYPE" = "toolkit" ]; then \
+       sed -i 's/# server.host: "localhost"/server.host: "0.0.0.0"/' /etc/opensearch-dashboards/opensearch_dashboards.yml; \
        USER=`awk -F " " '{print $1}' /etc/perfsonar/opensearch/opensearch_login` && sed -i "s|opensearch.username: kibanaserver|opensearch.username: $USER|g" /etc/opensearch-dashboards/opensearch_dashboards.yml; \
        PASSWD=`awk -F " " '{print $2}' /etc/perfsonar/opensearch/opensearch_login` && sed -i "s|opensearch.password: kibanaserver|opensearch.password: $PASSWD|g" /etc/opensearch-dashboards/opensearch_dashboards.yml; \
     fi
 
-# Add Microdep map web GUI
+#  A d d   M i c r o d e p   m a p   w e b   G U I
+# Add http config and html+js+ccs stuff
 COPY etc/httpd/apache-microdep-gui.conf /etc/httpd/conf.d
 COPY microdep/server/script/*  /usr/lib/perfsonar/microdep/
 RUN ln -s /usr/lib/perfsonar/microdep /root
@@ -191,7 +193,6 @@ RUN sed -i \
     -e 's|favicon.ico|/toolkit/favicon.ico|'    /usr/lib/perfsonar/microdep/microdep-map.html
 RUN mv /usr/lib/perfsonar/microdep/stats.js /usr/lib/perfsonar/microdep/js/
 RUN mv /usr/lib/perfsonar/microdep/ajax-loader.gif /usr/lib/perfsonar/microdep/js/
-#RUN mkdir /usr/lib/perfsonar/microdep/js/images
 COPY etc/microdep/marker-*.png /usr/lib/perfsonar/microdep/js/images/
 # Move inline css to file
 #RUN sed  -n '/<style type=/{n;:a;p;n;/<\/style>/!ba;s/.*//p;}' /usr/lib/perfsonar/microdep/microdep-map.html > /usr/lib/perfsonar/microdep/js/microdep-map.css
@@ -201,19 +202,30 @@ COPY etc/microdep/marker-*.png /usr/lib/perfsonar/microdep/js/images/
 #RUN sed -i 's|</head>|<meta http-equiv="Content-Security-Policy" content="default-src * ; img-src * http://* https://*; style-src * https://* http://*; script-src * https://* http://*" />\n</head>|' /usr/lib/perfsonar/microdep/microdep-map.html
 # CGI support for perl
 #RUN yum install -y perl-CGI
+# Fiks some perl libs
 RUN sed -i 's|::Simple||' /usr/lib/perfsonar/microdep/microdep-config.cgi
 RUN sed -i "s|YAML|YAML::XS|g" /usr/lib/perfsonar/microdep/yaml-to-json.cgi
-# Add and adjust to support global/Dragonlab topology
-RUN sed -i 's|/var/lib/microdep/|/usr/lib/perfsonar/microdep/|' /usr/lib/perfsonar/microdep/microdep-config.cgi
-RUN mkdir -p /usr/lib/perfsonar/microdep/dragonlab/etc
-RUN sed -i '/uninett:/,/$/d' /usr/lib/perfsonar/microdep/mapconfig.yml
+# Add and adjust to support global/Dragonlab topology (and remove Uninett topology)
+RUN sed -i '/uninett:/,$d' /usr/lib/perfsonar/microdep/mapconfig.yml
+RUN sed -i 's|/var/lib/microdep|/usr/lib/perfsonar/microdep|' /usr/lib/perfsonar/microdep/microdep-config.yml
 COPY etc/microdep/dragonlab*.json /usr/lib/perfsonar/microdep/dragonlab/
-COPY etc/microdep/mp-names.txt /usr/lib/perfsonar/microdep/dragonlab/
+COPY etc/microdep/mp-names.txt /usr/lib/perfsonar/microdep/mp-dragonlab/etc/
+COPY etc/microdep/mp-address.txt /usr/lib/perfsonar/microdep/mp-dragonlab/etc/
+COPY etc/microdep/rude-list.cfg /usr/lib/perfsonar/microdep/mp-dragonlab/etc/
+COPY etc/microdep/rude-extra.cfg /usr/lib/perfsonar/microdep/mp-dragonlab/etc/
+COPY bin/do-mvar-config /usr/local/bin/
+# Init Microdep config db
+RUN if [ "$TYPE" = "toolkit" ]; then \
+        sqlite3 /usr/lib/perfsonar/microdep/mp-dragonlab/etc/microdep.db "CREATE TABLE peers(id integer primary key autoincrement, from_name, to_name, start integer, end integer, type, timestamp);" ; \
+        sqlite3 /usr/lib/perfsonar/microdep/mp-dragonlab/etc/microdep.db "CREATE TABLE members(id integer primary key autoincrement, datetime,name, user, dns, ip, rude_port, crude_port, ssh_port, status, timestamp);" ; \
+        do-mvar-config -b /usr/lib/perfsonar/microdep -r /usr/lib/perfsonar/microdep -d "-1 day 0" -s; \
+    fi
 # Fix credentials for accessing Opensearch
 RUN if [ "$TYPE" = "toolkit" ]; then \
         USER=`awk -F " " '{print $1}' /etc/perfsonar/opensearch/opensearch_login` ;\
         PASSWD=`awk -F " " '{print $2}' /etc/perfsonar/opensearch/opensearch_login` ; \
-        sed -i "s|admin:no+nz+br|$USER:$PASSWD|g" /usr/lib/perfsonar/microdep/elastic-get-date-type.pl; \
+        sed -i "s|http://admin:no+nz+br|https://$USER:$PASSWD|g" /usr/lib/perfsonar/microdep/elastic-get-date-type.pl; \
+        sed -i "s|curl -X POST|curl -X POST --insecure|g" /usr/lib/perfsonar/microdep/elastic-get-date-type.pl; \
     fi
 
 

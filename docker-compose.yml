@@ -33,10 +33,6 @@ services:
       - 8085:80
       - 4435:443
       - 5601:5601
-      #cap_add:
-       # Requiredd to enable use of tc for adding simulated delay and loss  
-    #  - NET_ADMIN
-    #privileged: true
     networks:
       - ${PSNET:-psinternal}
     #stop_grace_period: 20s
@@ -54,9 +50,6 @@ services:
     volumes:
        - /sys/fs/cgroup:/sys/fs/cgroup:ro
        - .:/root/ps-dev
-#    cap_add:
-      # Requiredd to enable use of tc for adding simulated delay and loss  
-#      - NET_ADMIN
     networks:
       - ${PSNET:-psinternal}
       
@@ -78,7 +71,7 @@ services:
     # To all testpoints add packet loss where each successive probability (of loss) depends by a quarter on the last one
     #   Prob(n) = .25 * Prob(n-1) + .75 * Random
     # Note: The experienced loss rate seem to be an order of magitude less than what parameters specify...
-    command: "netem --tc-image gaiadocker/iproute2 --interface eth0 --duration 8760h loss --percent 20 --correlation 25 re2:_testpoint_"
+    command: "netem --tc-image gaiadocker/iproute2 --interface eth0 --duration 8760h loss --percent 50 --correlation 25 re2:_testpoint_ re2:_toolkit_"
 
 networks:
   psinternal:
