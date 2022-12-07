@@ -96,7 +96,7 @@ RUN cpanm Statistics::LineFit
 
 # Add Opensearch dashboards ("Kibana")
 RUN if [ "$TYPE" = "toolkit" ]; then \
-        yum -y install opensearch-dashboards; \ 
+       yum -y install opensearch-dashboards && systemctl enable opensearch-dashboards.service ; \
     fi
 # ----  E n d   p a c k a g e   i n s t a l l   ----
 
@@ -128,7 +128,7 @@ RUN sed -i 's|-l 127.0.0.1,::1|-l 0.0.0.0,::|' /etc/sysconfig/memcached
 RUN if [ "$TYPE" = "toolkit" ]; then \
        sed -i 's|${OPENSEARCH_TMPDIR}|/var/log/opensearch|g' /etc/opensearch/jvm.options; \
        sed -i 's|#-Djava.io.tmpdir=$HOME|-Djava.io.tmpdir=/var/log/logstash|g' /etc/logstash/jvm.options; \
-       sed -i 's|TimeoutStartSec=75|TimeoutStartSec=300|g' /etc/systemd/system/multi-user.target.wants/opensearch.service; \
+       sed -i 's|TimeoutStartSec=75|TimeoutStartSec=600|g' /etc/systemd/system/multi-user.target.wants/opensearch.service; \
     fi
 # Fix template error for Logstash
 RUN if [ "$TYPE" = "toolkit" ]; then \
@@ -139,24 +139,21 @@ RUN if [ "$TYPE" = "toolkit" ]; then \
 #RUN if [ "$TYPE" = "toolkit" ]; then yum -y install httpd-tools && htpasswd -c -b /etc/perfsonar/toolkit/psadmin.htpasswd admin notadminnono ; fi
 
 # Add default tests (apply empty-file-trick to avoid errors when building)
-COPY empty-file-do-not-remove *etc/perfsonar-$TYPE/psconfig/pscheduler.d/toolkit-webui.json /etc/perfsonar/psconfig/pscheduler.d/
+#COPY empty-file-do-not-remove *etc/perfsonar-$TYPE/psconfig/pscheduler.d/toolkit-webui.json /etc/perfsonar/psconfig/pscheduler.d/
+COPY empty-file-do-not-remove *etc/perfsonar-$TYPE/psconfig/pscheduler.d/microdep-tests.json /etc/perfsonar/psconfig/pscheduler.d/
 RUN rm /etc/perfsonar/psconfig/pscheduler.d/empty-file-do-not-remove
 
 # Prepare for feeding measurement via Rabbit message queue server
 COPY etc/rabbitmq.json /etc/pscheduler/default-archives/rabbitmq.json
 COPY etc/rabbitmq.json /etc/perfsonar/psconfig/archives.d/
 
-# Rabbitmq debugging tools
+# Add some Rabbitmq and Opensearch debugging tools
 COPY bin/mfeit-rabbit-consume.py /usr/local/bin
 COPY bin/consume.pl /usr/local/bin 
 COPY bin/json2table.pl /usr/local/bin
+COPY bin/opensearch-query.sh /usr/local/bin
 
-# Add and enable analysis-scripts. (qstream-gap-ana is avaiable from https://scm.uninett.no/iou/microdep)
-COPY bin/qstream-gap-ana /usr/local/bin
-COPY etc/microdep/perfsonar-microdep-gap-ana.service /usr/lib/systemd/system/
-RUN systemctl enable perfsonar-microdep-gap-ana.service
-
-#  Make Logstash feed analytic results to Opensearch (will fail for testpoint)
+#  Make Logstash feed analytic results to Opensearch
 COPY etc/logstash/from-gap-ana.conf /etc/logstash/conf.d/
 RUN if [ "$TYPE" = "toolkit" ]; then \
        #echo -e "opensearch_admin_user=admin\nopensearch_admin_password=admin" >> /etc/perfsonar/logstash/logstash_sysconfig; \
@@ -227,6 +224,16 @@ RUN if [ "$TYPE" = "toolkit" ]; then \
         sed -i "s|http://admin:no+nz+br|https://$USER:$PASSWD|g" /usr/lib/perfsonar/microdep/elastic-get-date-type.pl; \
         sed -i "s|curl -X POST|curl -X POST --insecure|g" /usr/lib/perfsonar/microdep/elastic-get-date-type.pl; \
     fi
+
+#   A d d   M i c r o d e p   a n a l y t i c s 
+#    (qstream-gap-ana is avaiable from https://scm.uninett.no/iou/microdep)
+COPY bin/qstream-gap-ana /usr/local/bin
+COPY etc/microdep/perfsonar-microdep-gap-ana.service /usr/lib/systemd/system/
+RUN systemctl enable perfsonar-microdep-gap-ana.service
+# Services which restart microdep services at 23:59 every evening. Note: Such restarts trigger output of required daily summary reports.
+COPY etc/microdep/perfsonar-microdep-restart.service /usr/lib/systemd/system/
+COPY etc/microdep/perfsonar-microdep-restart.timer /usr/lib/systemd/system/
+RUN systemctl enable perfsonar-microdep-restart.timer
 
 
 EXPOSE 80

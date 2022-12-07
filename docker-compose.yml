@@ -3,6 +3,15 @@
 # with minimum one toolkit-server and one testpoint.
 #
 #   - No of probe nodes my be scaled up via 'docker-compose up --scale testpoint=<num>'
+#     * When no of testpoint is >1 a star-topology is implemented ala
+#
+#      toolkit --- toolkit-net--- netem --- testpoint-net ---- testpoint_1
+#                      |                          |    | `---- testpoint_2
+#                      `------- docker host ------'    `------ testpoint_3
+#
+#     * netem adds routes in toolkit and testpoints containers to enable traffic to flow between toolkit and testpoints via netem
+#     * netem also adds traffic impairments (i.e. loss and delay) on the path between testpoints and toolkit
+#                                      
 #   - OS distribution may be change by setting OS=ubuntu (e.g. 'OS=ubuntu docker-compose build')
 #   - DHCP ips may be activated by setting 'PSNET=dhcp', assuming a "ps-bridge" to external network is avaiable (setup-ps-bridge.sh). 
 #     Note: The docker-net-dhcp docker network driver is required to be installed (https://github.com/devplayer0/docker-net-dhcp) 
@@ -33,8 +42,12 @@ services:
       - 8085:80
       - 4435:443
       - 5601:5601
+#    cap_add:
+#      - NET_ADMIN
     networks:
-      - ${PSNET:-psinternal}
+#      - ${PSNET:-psinternal}
+      toolkit-net:
+        ipv4_address: 172.150.1.2
     #stop_grace_period: 20s
 
   testpoint:
@@ -49,9 +62,13 @@ services:
         TYPE: testpoint 
     volumes:
        - /sys/fs/cgroup:/sys/fs/cgroup:ro
-       - .:/root/ps-dev
+       # Make opensearch data persist over "reboots"
+       - opensearch:/var/lib/opensearch
+#    cap_add:
+#      - NET_ADMIN
     networks:
-      - ${PSNET:-psinternal}
+#      - ${PSNET:-psinternal}
+      - testpoint-net
       
   systemd-image:
     build:
@@ -62,32 +79,87 @@ services:
     # Just make image "die" as it is only a parent image  
     command: "true"  
 
-  netemulator:
+  net-emulator:
+    hostname: ps-netemulator
     depends_on:
       - testpoint
-    image: gaiaadm/pumba
+      - toolkit
+    build:
+      context: .
+      dockerfile: netem/Dockerfile
+    privileged: true     # Required (unfortunately) to enable network "hacking"
     volumes:
+      - /proc:/proc
       - /var/run/docker.sock:/var/run/docker.sock
-    # To all testpoints add packet loss where each successive probability (of loss) depends by a quarter on the last one
-    #   Prob(n) = .25 * Prob(n-1) + .75 * Random
-    # Note: The experienced loss rate seem to be an order of magitude less than what parameters specify...
-    command: "netem --tc-image gaiadocker/iproute2 --interface eth0 --duration 8760h loss --percent 20 --correlation 25 re2:_testpoint_"
+    networks:
+      testpoint-net:
+        ipv4_address: 172.150.2.200
+      toolkit-net:
+        ipv4_address: 172.150.1.200
+        
+#  net-loss-emulator:
+#    depends_on:
+#      - testpoint
+#      - toolkit
+#    image: gaiaadm/pumba
+#    volumes:
+#      - /var/run/docker.sock:/var/run/docker.sock
+#    # To all testpoints and toolkit add packet loss where each successive probability (of loss) depends by a quarter on the last one
+#    #   Prob(n) = .25 * Prob(n-1) + .75 * Random
+#    # Note: The experienced loss rate seem to be an order of magitude less than what parameters specify...
+#    command: "netem --tc-image gaiadocker/iproute2 --interface eth0 --duration 8760h loss --percent 20 --correlation 25 re2:^microdep"
+
+    
+    
+#  net-delay-emulator:
+#    depends_on:
+#      - testpoint
+#      - toolkit
+#    image: gaiaadm/pumba
+#    volumes:
+#      - /var/run/docker.sock:/var/run/docker.sock
+#    # To all testpoints and toolkit add delay and jitter with correlation between jitter events
+#    command: "netem --tc-image gaiadocker/iproute2 --interface eth0 --duration 8760h delay --time 5 --jitter 2 --correlation 20 re2:^microdep"
 
 networks:
-  psinternal:
+#  psinternal:
+#    ipam:
+#      driver: default
+#      config:
+#        # To match ips given in psconfig files
+#        - subnet: 172.100.0.0/24
+
+#  upstream-net:
+#    ipam:
+#      driver: default
+#      config:
+#        - subnet: 172.150.0.0/24
+          
+  testpoint-net:
     ipam:
       driver: default
       config:
         # To match ips given in psconfig files
-        - subnet: 172.100.0.0/24
-
-  dhcp:
-    driver: ghcr.io/devplayer0/docker-net-dhcp:golang
-    driver_opts:
-      bridge: ps-bridge
-      #ipv6: 'true'
-      ignore_conflicts: 'false'
-      skip_routes: 'false'
-      #lease_timeout: '60s'
+        - subnet: 172.150.2.0/24
+          
+  toolkit-net:
     ipam:
-      driver: 'null'
+      driver: default
+      config:
+        # To match ips given in psconfig files
+        - subnet: 172.150.1.0/24
+      
+          
+#  dhcp:
+#    driver: ghcr.io/devplayer0/docker-net-dhcp:golang
+#    driver_opts:
+#      bridge: ps-bridge
+#      #ipv6: 'true'
+#      ignore_conflicts: 'false'
+#      skip_routes: 'false'
+#      #lease_timeout: '60s'
+#    ipam:
+#      driver: 'null'
+
+volumes:
+  opensearch:

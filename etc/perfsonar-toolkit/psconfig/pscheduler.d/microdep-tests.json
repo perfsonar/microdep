@@ -1,0 +1,143 @@
+{
+   "_meta" : {
+      "psconfig-translation" : {
+         "source-format" : "mesh-config-tasks-conf",
+         "time-translated" : "2022-09-13T14:39:46+00:00"
+      }
+   },
+   "addresses" : {
+      "toolkit_1" : {
+         "address" : "172.150.1.2"
+      },
+      "testpoint_1" : {
+         "address" : "172.150.2.2",
+         "no-agent" : true
+      },
+      "testpoint_2" : {
+         "address" : "172.150.2.3",
+         "no-agent" : true
+      },
+      "testpoint_3" : {
+         "address" : "172.150.2.4",
+         "no-agent" : true
+      },
+      "testpoint_4" : {
+         "address" : "172.150.2.5",
+         "no-agent" : true
+      },
+      "testpoint_5" : {
+         "address" : "172.150.2.6",
+         "no-agent" : true
+      },
+      "testpoint_6" : {
+         "address" : "172.150.2.7",
+         "no-agent" : true
+      },
+      "testpoint_7" : {
+         "address" : "172.150.2.8",
+         "no-agent" : true
+      },
+      "testpoint_8" : {
+         "address" : "172.150.2.9",
+         "no-agent" : true
+      },
+      "testpoint_9" : {
+         "address" : "172.150.2.10",
+         "no-agent" : true
+      },
+      "testpoint_10" : {
+         "address" : "172.150.2.11",
+         "no-agent" : true
+      }
+   },
+   "groups" : {
+      "Star-topology" : {
+         "a-addresses" : [
+            {
+               "name" : "toolkit_1"
+            }
+         ],
+         "b-addresses" : [
+            {
+               "name" : "testpoint_1"
+            },
+            {
+               "name" : "testpoint_2"
+            },
+            {
+               "name" : "testpoint_3"
+            },
+            {
+               "name" : "testpoint_4"
+            },
+            {
+               "name" : "testpoint_5"
+            },
+            {
+               "name" : "testpoint_6"
+            },
+            {
+               "name" : "testpoint_7"
+            },
+            {
+               "name" : "testpoint_8"
+            },
+            {
+               "name" : "testpoint_9"
+            },
+            {
+               "name" : "testpoint_10"
+            }
+         ],
+         "type" : "disjoint"
+      }
+    },
+   "schedules" : {
+      "Every-60s" : {
+         "repeat" : "PT60S",
+         "slip" : "PT60S",
+         "sliprand" : true
+      }
+   },
+   "tasks" : {
+      "toolkit-testpoints-delay-and-loss" : {
+         "_meta" : {
+            "display-name" : "Microdep delay and loss measurements"
+         },
+         "group" : "Star-topology",
+         "test" : "Delay-and-loss-ipv4-100pps"
+      },
+      "toolkit-testpoints-traceroutes" : {
+         "_meta" : {
+            "display-name" : "Microdep traceroutes every minute"
+         },
+         "group" : "Star-topology",
+         "schedule" : "Every-60s",
+         "test" : "Traceroute-ipv4"
+      }
+   },
+   "tests" : {
+      "Delay-and-loss-ipv4-100pps" : {
+         "spec" : {
+            "dest" : "{% address[1] %}",
+            "dest-node" : "{% pscheduler_address[1] %}",
+            "flip" : "{% flip %}",
+            "ip-version" : 4,
+            "source" : "{% address[0] %}",
+            "source-node" : "{% pscheduler_address[0] %}",
+            "output-raw" : true,
+	    "packet-interval": 0.01
+         },
+         "type" : "latencybg"
+      },
+      "Traceroute-ipv4" : {
+         "spec" : {
+            "dest" : "{% address[1] %}",
+            "ip-version" : 4,
+            "source" : "{% address[0] %}",
+            "source-node" : "{% pscheduler_address[0] %}"
+         },
+         "type" : "trace"
+      }
+   }
+}
