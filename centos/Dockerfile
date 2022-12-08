@@ -124,11 +124,11 @@ RUN echo "disable kernel" >> /etc/ntp.conf
 # Fix bind issue for memcached
 RUN sed -i 's|-l 127.0.0.1,::1|-l 0.0.0.0,::|' /etc/sysconfig/memcached
 
-# Fix JNA and temp-file issue with Opensearch and Logstash, and increase startup timeout for Opensearch
+# Fix JNA and temp-file issue with Opensearch and Logstash, and increase startup timeout and add auto restart for Opensearch
 RUN if [ "$TYPE" = "toolkit" ]; then \
        sed -i 's|${OPENSEARCH_TMPDIR}|/var/log/opensearch|g' /etc/opensearch/jvm.options; \
        sed -i 's|#-Djava.io.tmpdir=$HOME|-Djava.io.tmpdir=/var/log/logstash|g' /etc/logstash/jvm.options; \
-       sed -i 's|TimeoutStartSec=75|TimeoutStartSec=600|g' /etc/systemd/system/multi-user.target.wants/opensearch.service; \
+       sed -i 's|TimeoutStartSec=75|TimeoutStartSec=600\nRestart=on-failure\nRestartSec=10s|g' /usr/lib/systemd/system/opensearch.service; \
     fi
 # Fix template error for Logstash
 RUN if [ "$TYPE" = "toolkit" ]; then \

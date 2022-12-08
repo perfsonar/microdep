@@ -13,7 +13,7 @@
 ifconfig | grep "^\S" | cut -f1 -d" "| while read i; do
     if [ $i != 'lo' ]; then
 	echo -n Adding delay and loss to $i ...
-	tc qdisc add dev $i root netem delay 10ms loss 25% 75%
+	tc qdisc add dev $i root netem delay 10ms loss 30% 80%
 	if [ $? -eq 0 ]; then echo done; else echo failed. ; fi
     fi
 done
