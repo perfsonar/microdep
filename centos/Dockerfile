@@ -31,7 +31,7 @@ ENV LANGUAGE=en_US.UTF-8
 ENV LC_COLLATE=C
 ENV LC_CTYPE=en_US.UTF-8
 
-# ---- I n s t a l l   p a c k a g e s  ------
+# ---- D o w n l o a d   a n d   i n s t a l l   p a c k a g e s  ------
 
 # Install management packages
 RUN yum clean all && yum -y update && yum install -y  coreutils man-db nano emacs git openssh-client net-tools iputils-ping traceroute tcpdump curl bind9-host unzip gnupg software-properties-common 
@@ -86,7 +86,7 @@ RUN mkdir -p /var/run/postgresql && chown postgres.postgres /var/run/postgresql 
     && rm -rf /var/cache/yum
 
 # Add Rabbit message queue packages
-RUN yum -y install rabbitmq-server python3-pika && systemctl enable rabbitmq-server.service 
+RUN yum -y install rabbitmq-server python36-pika && systemctl enable rabbitmq-server.service 
 
 # Add packages required by microdep analytics.
 RUN yum -y install perl-App-cpanminus perl-Statistics-Basic perl-DateTime perl-JSON-XS perl-File-ShareDir-Install perl-Test-Exception perl-AnyEvent perl-ExtUtils-MakeMaker perl-version perl-Readonly perl-namespace-clean perl-Devel-GlobalDestruction perl-File-ShareDir perl-List-MoreUtils perl-Class-Data-Inheritable perl-Test-Simple perl-Test-Deep perl-YAML-LibYAML wget
@@ -98,7 +98,13 @@ RUN cpanm Statistics::LineFit
 RUN if [ "$TYPE" = "toolkit" ]; then \
        yum -y install opensearch-dashboards && systemctl enable opensearch-dashboards.service ; \
     fi
-# ----  E n d   p a c k a g e   i n s t a l l   ----
+
+# Fetch css, js and other source-files for Microdep
+COPY microdep/server/script/*  /usr/lib/perfsonar/microdep/
+RUN mkdir -p /usr/lib/perfsonar/microdep/js
+RUN wget -P /usr/lib/perfsonar/microdep/js/ -i /usr/lib/perfsonar/microdep/list-of-external-sources.txt
+
+# ----  E n d   d o w n l o a d s   a n d   p a c k a g e   i n s t a l l   ----
 
 # Patch postgres-load to apply user "postgress" as default
 RUN chmod +w /usr/bin/postgresql-load \
@@ -124,15 +130,18 @@ RUN echo "disable kernel" >> /etc/ntp.conf
 # Fix bind issue for memcached
 RUN sed -i 's|-l 127.0.0.1,::1|-l 0.0.0.0,::|' /etc/sysconfig/memcached
 
-# Fix JNA and temp-file issue with Opensearch and Logstash, and increase startup timeout and add auto restart for Opensearch
 RUN if [ "$TYPE" = "toolkit" ]; then \
+# Fix JNA and temp-file issue with Opensearch and Logstash,
        sed -i 's|${OPENSEARCH_TMPDIR}|/var/log/opensearch|g' /etc/opensearch/jvm.options; \
        sed -i 's|#-Djava.io.tmpdir=$HOME|-Djava.io.tmpdir=/var/log/logstash|g' /etc/logstash/jvm.options; \
+# Increase startup timeout and add auto restart for Opensearch
        sed -i 's|TimeoutStartSec=75|TimeoutStartSec=600\nRestart=on-failure\nRestartSec=10s|g' /usr/lib/systemd/system/opensearch.service; \
-    fi
 # Fix template error for Logstash
-RUN if [ "$TYPE" = "toolkit" ]; then \
-    cp /usr/share/logstash/vendor/local_gems/022abded/logstash-output-opensearch/lib/logstash/outputs/opensearch/templates/ecs-disabled/1x.json /usr/share/logstash/vendor/local_gems/022abded/logstash-output-opensearch/lib/logstash/outputs/opensearch/templates/ecs-disabled/2x.json; \
+       cp /usr/share/logstash/vendor/local_gems/022abded/logstash-output-opensearch/lib/logstash/outputs/opensearch/templates/ecs-disabled/1x.json /usr/share/logstash/vendor/local_gems/022abded/logstash-output-opensearch/lib/logstash/outputs/opensearch/templates/ecs-disabled/2x.json; \
+# Fix SSL problems with proxy towards Opensearch
+       cp /etc/opensearch/node.pem /etc/opensearch/both.pem; \
+       sed 's|PRI|RSA PRI|g' /etc/opensearch/node-key.pem >> /etc/opensearch/both.pem; \
+       sed -i 's|ProxyPass|    SSLProxyVerify none\n    SSLProxyCheckPeerCN off\n    SSLProxyCheckPeerName off\n    SSLProxyCheckPeerExpire off\n    SSLProxyMachineCertificateFile /etc/opensearch/both.pem\n    ProxyPass|' /etc/httpd/conf.d/apache-opensearch.conf; \
     fi
 
 # Set management gui user/password to admin/notadminnono
@@ -144,8 +153,9 @@ COPY empty-file-do-not-remove *etc/perfsonar-$TYPE/psconfig/pscheduler.d/microde
 RUN rm /etc/perfsonar/psconfig/pscheduler.d/empty-file-do-not-remove
 
 # Prepare for feeding measurement via Rabbit message queue server
-COPY etc/rabbitmq.json /etc/pscheduler/default-archives/rabbitmq.json
-COPY etc/rabbitmq.json /etc/perfsonar/psconfig/archives.d/
+#COPY etc/rabbitmq.json /etc/pscheduler/default-archives/rabbitmq.json
+#COPY etc/rabbitmq.json /etc/perfsonar/psconfig/archives.d/
+# Arciving is now specified in microdep-tests.json
 
 # Add some Rabbitmq and Opensearch debugging tools
 COPY bin/mfeit-rabbit-consume.py /usr/local/bin
@@ -172,12 +182,12 @@ RUN if [ "$TYPE" = "toolkit" ]; then \
 #  A d d   M i c r o d e p   m a p   w e b   G U I
 # Add http config and html+js+ccs stuff
 COPY etc/httpd/apache-microdep-gui.conf /etc/httpd/conf.d
-COPY microdep/server/script/*  /usr/lib/perfsonar/microdep/
+# Moved to download/install: COPY microdep/server/script/*  /usr/lib/perfsonar/microdep/
 RUN ln -s /usr/lib/perfsonar/microdep /root
 RUN cd /usr/lib/perfsonar/microdep/; ln -s microdep-map.html index.html
-RUN mkdir /usr/lib/perfsonar/microdep/js
 # Fix cross origin mess and missing/obsolite/missplaced css, js and other source-files
-RUN wget -P /usr/lib/perfsonar/microdep/js/ -i /usr/lib/perfsonar/microdep/list-of-external-sources.txt
+# Moved to download/install: RUN mkdir /usr/lib/perfsonar/microdep/js
+# Moved to download/install: RUN wget -P /usr/lib/perfsonar/microdep/js/ -i /usr/lib/perfsonar/microdep/list-of-external-sources.txt
 RUN sed -i \
     -e 's|<link rel="stylesheet" href="/uninett-bootstrap-theme/css/bootstrap.min.css">||' \
     -e 's|<link rel="stylesheet" href="/uninett-theme/css/uninett.css">||' \
@@ -217,7 +227,7 @@ RUN if [ "$TYPE" = "toolkit" ]; then \
         sqlite3 /usr/lib/perfsonar/microdep/mp-dragonlab/etc/microdep.db "CREATE TABLE members(id integer primary key autoincrement, datetime,name, user, dns, ip, rude_port, crude_port, ssh_port, status, timestamp);" ; \
         do-mvar-config -b /usr/lib/perfsonar/microdep -r /usr/lib/perfsonar/microdep -d "-1 day 0" -s; \
     fi
-# Fix credentials for accessing Opensearch
+# Fix credentials ++ for accessing Opensearch
 RUN if [ "$TYPE" = "toolkit" ]; then \
         USER=`awk -F " " '{print $1}' /etc/perfsonar/opensearch/opensearch_login` ;\
         PASSWD=`awk -F " " '{print $2}' /etc/perfsonar/opensearch/opensearch_login` ; \
@@ -235,9 +245,10 @@ COPY etc/microdep/perfsonar-microdep-restart.service /usr/lib/systemd/system/
 COPY etc/microdep/perfsonar-microdep-restart.timer /usr/lib/systemd/system/
 RUN systemctl enable perfsonar-microdep-restart.timer
 
-
 EXPOSE 80
 EXPOSE 443
+#EXPOSE 9200
+EXPOSE 5601
 
 # Run systemd as in "parent"-image
 CMD ["/lib/systemd/systemd"]

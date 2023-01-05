@@ -99,23 +99,6 @@
          "sliprand" : true
       }
    },
-   "tasks" : {
-      "toolkit-testpoints-delay-and-loss" : {
-         "_meta" : {
-            "display-name" : "Microdep delay and loss measurements"
-         },
-         "group" : "Star-topology",
-         "test" : "Delay-and-loss-ipv4-100pps"
-      },
-      "toolkit-testpoints-traceroutes" : {
-         "_meta" : {
-            "display-name" : "Microdep traceroutes every minute"
-         },
-         "group" : "Star-topology",
-         "schedule" : "Every-60s",
-         "test" : "Traceroute-ipv4"
-      }
-   },
    "tests" : {
       "Delay-and-loss-ipv4-100pps" : {
          "spec" : {
@@ -135,9 +118,68 @@
             "dest" : "{% address[1] %}",
             "ip-version" : 4,
             "source" : "{% address[0] %}",
-            "source-node" : "{% pscheduler_address[0] %}"
+             "source-node" : "{% pscheduler_address[0] %}",
+	     "queries" : 6
          },
          "type" : "trace"
       }
+   },
+   "archives": { 
+       "logstash": {
+	   "archiver": "http",
+	   "data": {
+               "schema": 2,
+               "_url": "http://localhost/logstash",
+               "op": "put",
+               "_headers": {
+		   "content-type": "application/json", "Authorization":"Basic cGVyZnNvbmFyOjcyOUpmVGVYcG9lazFFaFdyVTNJ"
+               }
+	   }
+       },
+       "gap-ana-rmq": {
+	   "archiver": "rabbitmq",
+	   "data": {
+               "schema": 2,
+               "_url": "amqp://guest:guest@localhost//",
+               "routing-key": "gap-ana",
+               "connection-expires": "PT10S",
+               "retry-policy": [
+		   { "attempts": 5,  "wait": "PT5S" }
+               ]
+	   },
+	   "ttl": "PT1H"
+       },
+       "traceroute-rmq": {
+	   "archiver": "rabbitmq",
+	   "data": {
+               "schema": 2,
+               "_url": "amqp://guest:guest@localhost//",
+               "routing-key": "traceroute",
+               "connection-expires": "PT10S",
+               "retry-policy": [
+		   { "attempts": 5,  "wait": "PT5S" }
+               ]
+	   },
+	   "ttl": "PT1H"
+       }
+   }, 
+   "tasks" : {
+       "toolkit-testpoints-delay-and-loss" : {
+           "_meta" : {
+               "display-name" : "Microdep delay and loss measurements"
+           },
+           "group" : "Star-topology",
+           "test" : "Delay-and-loss-ipv4-100pps",
+	   "archives": ["logstash","gap-ana-rmq"]
+       },
+       "toolkit-testpoints-traceroutes" : {
+           "_meta" : {
+               "display-name" : "Microdep traceroutes every minute"
+           },
+           "group" : "Star-topology",
+           "schedule" : "Every-60s",
+           "test" : "Traceroute-ipv4",
+	   "archives": ["logstash","traceroute-rmq"]
+       }
    }
 }

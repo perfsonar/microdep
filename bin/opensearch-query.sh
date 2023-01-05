@@ -3,8 +3,8 @@
 # Send Query string to Opensearch instance
 #
 
-HOST="localhost"
-CREDS=`sed 's| |:|' /etc/perfsonar/opensearch/opensearch_login`
+URL="http://localhost:9200"
+CREDS=`sed 's| |:|' /etc/perfsonar/opensearch/opensearch_login 2>/dev/null`
 ACTION="GET"
 IPV="-4"
 
@@ -12,10 +12,12 @@ function usage {
     echo "Run api command towards Opensearch server"
     echo "`basename $0` [-h] [options] api-command-path [json-input-structure]"
     echo "  -h           Help message."
-    ecoh "  -H hostname  Host name and port (default $HOST)"
+    echo "  -c user:pwd  Credential to apply (defaults are fetched from /etc/perfsonar/opensearch/opensearch_login)" 
+    echo "  -U url       Base url to Openseach instance (default $URL)"
     echo "  -G           Apply GET (default)"
     echo "  -P           Apply POST and read json from stdin"
     echo "  -D           Apply DELETE"
+    echo "  -v           Be verbose"
     exit 1;
 }
 
@@ -23,10 +25,13 @@ FDATE=`date -I`
 TFIELD="@timestamp"
 
 # Parse arguments
-while getopts ":H:hDPG" opt; do
+while getopts ":H:c:hDPGv" opt; do
     case $opt in
 	H)
 	    HOST=$OPTARG
+	    ;;
+	c)
+	    CREDS=$OPTARG
 	    ;;
 	P)
 	    ACTION="POST"
@@ -42,6 +47,9 @@ while getopts ":H:hDPG" opt; do
 		exit 1;
 	    fi
 	    ACTION="DELETE"
+	    ;;
+	v)
+	    VERBOSE="yes"
 	    ;;
 	h)
 	    usage
@@ -63,4 +71,15 @@ if [ $# -lt 1 ]; then
     usage
 fi
 
-curl --insecure $IPV -u $CREDS https://$HOST:9200/$1
+if [ $CREDS ]; then
+    # Prepare credentials as cli option
+    CREDS="-u $CREDS"
+fi
+if [ $ACTION = "POST" ]; then
+    INPUTTYPE="-H 'Content-Type: application/json'"
+fi
+CMD="curl -s --insecure $IPV $CREDS -X $ACTION $INPUTTYPE $HOST/$1 "
+if [ $VERBOSE ]; then
+    echo $CMD
+fi
+exec $CMD

@@ -61,10 +61,8 @@ RUN apt-get -y install python3-cryptography
 RUN apt-get -y install rabbitmq-server python3-pika
 # Add queue policy with geneous max queue size
 #RUN rabbitmqctl set_policy my-pol "^200-meg$" '{"max-length-bytes":209715200}' --apply-to queues
-#COPY etc/rabbitmq.json /etc/pscheduler/default-archives/rabbitmq.json
-COPY etc/rabbitmq.json /etc/perfsonar/psconfig/archives.d/
 # Add default tests (apply empty-file-trick to avoid errors when building)
-COPY empty-file-do-not-remove *etc/perfsonar-$TYPE/psconfig/pscheduler.d/toolkit-webui.json /etc/perfsonar/psconfig/pscheduler.d/
+COPY empty-file-do-not-remove *etc/perfsonar-$TYPE/psconfig/pscheduler.d/microdep-tests.json /etc/perfsonar/psconfig/pscheduler.d/
 RUN rm /etc/perfsonar/psconfig/pscheduler.d/empty-file-do-not-remove
 # Rabbitmq debugging tools
 COPY bin/mfeit-rabbit-consume.py /root
