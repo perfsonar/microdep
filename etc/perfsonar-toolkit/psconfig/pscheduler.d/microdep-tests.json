@@ -118,8 +118,7 @@
             "dest" : "{% address[1] %}",
             "ip-version" : 4,
             "source" : "{% address[0] %}",
-             "source-node" : "{% pscheduler_address[0] %}",
-	     "queries" : 6
+            "source-node" : "{% pscheduler_address[0] %}"
          },
          "type" : "trace"
       }
@@ -142,7 +141,7 @@
                "schema": 2,
                "_url": "amqp://guest:guest@localhost//",
                "routing-key": "gap-ana",
-               "connection-expires": "PT10S",
+               "connection-expires": "PT60S",
                "retry-policy": [
 		   { "attempts": 5,  "wait": "PT5S" }
                ]
@@ -155,7 +154,7 @@
                "schema": 2,
                "_url": "amqp://guest:guest@localhost//",
                "routing-key": "traceroute",
-               "connection-expires": "PT10S",
+               "connection-expires": "PT120S",
                "retry-policy": [
 		   { "attempts": 5,  "wait": "PT5S" }
                ]

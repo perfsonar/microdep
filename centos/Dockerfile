@@ -236,6 +236,7 @@ RUN if [ "$TYPE" = "toolkit" ]; then \
     fi
 
 #   A d d   M i c r o d e p   a n a l y t i c s 
+#    Gap analytics
 #    (qstream-gap-ana is avaiable from https://scm.uninett.no/iou/microdep)
 COPY bin/qstream-gap-ana /usr/local/bin
 COPY etc/microdep/perfsonar-microdep-gap-ana.service /usr/lib/systemd/system/
@@ -244,6 +245,15 @@ RUN systemctl enable perfsonar-microdep-gap-ana.service
 COPY etc/microdep/perfsonar-microdep-restart.service /usr/lib/systemd/system/
 COPY etc/microdep/perfsonar-microdep-restart.timer /usr/lib/systemd/system/
 RUN systemctl enable perfsonar-microdep-restart.timer
+#    Traceroute analytics
+COPY bin/create_new_db.sh /usr/local/bin
+RUN mkdir -p /var/run/postgresql && chown postgres.postgres /var/run/postgresql \
+    && su - postgres -c "/usr/pgsql-10/bin/pg_ctl -D /var/lib/pgsql/10/data start -w -t 120" \
+    && create_new_db.sh -t postgres -d routingmonitor
+COPY bin/trace_event_reader.py /usr/local/bin
+
+#COPY etc/microdep/perfsonar-microdep-trace-ana.service /usr/lib/systemd/system/
+#RUN systemctl enable perfsonar-microdep-trace-ana.service
 
 EXPOSE 80
 EXPOSE 443

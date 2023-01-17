@@ -1,14 +1,14 @@
 [
-    { "id":"microdep-in-perfsonar_testpoint_1","name":"Tokyo","url":"https://wikipedia.org/wiki/Tokyo","lat":35.6897,"lon":139.6922},
-    { "id":"microdep-in-perfsonar_testpoint_2","name":"Jakarta","url":"https://wikipedia.org/wiki/Jakarta","lat":-6.2146,"lon":106.8451},
-    { "id":"microdep-in-perfsonar_testpoint_3","name":"Delhi","url":"https://wikipedia.org/wiki/Delhi","lat":28.6600,"lon":77.2300},
-    { "id":"microdep-in-perfsonar_testpoint_4","name":"Mumbai","url":"https://wikipedia.org/wiki/Mumbai","lat":18.9667,"lon":72.8333},
-    { "id":"microdep-in-perfsonar_testpoint_5","name":"Manila","url":"https://wikipedia.org/wiki/Manila","lat":14.5958,"lon":120.9772},
-    { "id":"microdep-in-perfsonar_testpoint_6","name":"Shanghai","url":"https://wikipedia.org/wiki/Shanghai","lat":31.1667,"lon":121.4667},
-    { "id":"microdep-in-perfsonar_testpoint_7","name":"Sao Paulo","url":"https://wikipedia.org/wiki/Sao Paulo","lat":-23.5504,"lon":-46.6339},
-    { "id":"microdep-in-perfsonar_testpoint_8","name":"Seoul","url":"https://wikipedia.org/wiki/Seoul","lat":37.5833,"lon":127.0000},
-    { "id":"microdep-in-perfsonar_testpoint_9","name":"Mexico City","url":"https://wikipedia.org/wiki/Mexico City","lat":19.4333,"lon":-99.1333},
-    { "id":"microdep-in-perfsonar_testpoint_10","name":"Guangzhou","url":"https://wikipedia.org/wiki/Guangzhou","lat":23.1288,"lon":113.2590},
-    { "id":"microdep-in-perfsonar_toolkit_1","name":"Beijing","url":"https://wikipedia.org/wiki/Beijing","lat":39.9050,"lon":116.3914}
+    { "id":"microdep-in-perfsonar_testpoint_1","name":"Aalborg","url":"http://130.225.192.109/esmond/perfsonar/archive","lat":57.0483,"lon":9.9352},
+    { "id":"microdep-in-perfsonar_testpoint_2","name":"Talinn","url":"http://193.40.132.142/esmond/perfsonar/archive","lat":59.0000,"lon":26.0000},
+    { "id":"microdep-in-perfsonar_testpoint_3","name":"Lisbon","url":"http://194.210.0.1/esmond/perfsonar/archive","lat":38.7139,"lon":-9.1394},
+    { "id":"microdep-in-perfsonar_testpoint_4","name":"Slough","url":"http://194.81.236.227/esmond/perfsonar/archive","lat":51.4964,"lon":-0.1224},
+    { "id":"microdep-in-perfsonar_testpoint_5","name":"Dublin","url":"http://193.170.114.250/esmond/perfsonar/archive","lat":53.3472,"lon":-6.2439},
+    { "id":"microdep-in-perfsonar_testpoint_6","name":"Barcelona","url":"http://84.88.19.146/esmond/perfsonar/archive","lat":41.3873,"lon":2.1108},
+    { "id":"microdep-in-perfsonar_testpoint_7","name":"Italy","url":"https://193.206.127.163/esmond/perfsonar/archive","lat":43.1479,"lon":12.1097},
+    { "id":"microdep-in-perfsonar_testpoint_8","name":"Bucharest","url":"http://37.128.230.30/esmond/perfsonar/archive","lat":44.4443,"lon":26.0961},
+    { "id":"microdep-in-perfsonar_testpoint_9","name":"Yerevan","url":"http://37.26.173.34/esmond/perfsonar/archive","lat":40.1924,"lon":44.5066},
+    { "id":"microdep-in-perfsonar_testpoint_10","name":"Athens","url":"http://194.177.211.114/esmond/perfsonar/archive","lat":37.9833,"lon":23.7333},
+    { "id":"microdep-in-perfsonar_toolkit_1","name":"Poznan","url":"http://150.254.163.77/esmond/perfsonar/archive","lat":52.4073,"lon":16.9538}
 ]
 
