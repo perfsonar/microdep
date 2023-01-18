@@ -41,6 +41,7 @@ services:
       - 8085:80
       - 4435:443   # For https-access
       - 5601:5601  # Opensearch Dashboard (Kibana)
+      - 3000:3000  # Grafana
     networks:
       toolkit-net:
         ipv4_address: 172.150.1.2

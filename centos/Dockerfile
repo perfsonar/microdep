@@ -94,15 +94,22 @@ RUN cpanm AnyEvent::RabbitMQ
 RUN yum -y install perl-ExtUtils-MakeMaker perl-Test-Simple
 RUN cpanm Statistics::LineFit
 
-# Add Opensearch dashboards ("Kibana")
 RUN if [ "$TYPE" = "toolkit" ]; then \
+       # Add Opensearch dashboards ("Kibana")
        yum -y install opensearch-dashboards && systemctl enable opensearch-dashboards.service ; \
+       # Add Grafana visualisation server
+       cd /tmp; \
+       wget https://dl.grafana.com/oss/release/grafana-9.3.2-1.x86_64.rpm; \
+       sudo yum -y install grafana-9.3.2-1.x86_64.rpm; \
+       systemctl enable grafana-server.service; \
     fi
 
 # Fetch css, js and other source-files for Microdep
 COPY microdep/server/script/*  /usr/lib/perfsonar/microdep/
-RUN mkdir -p /usr/lib/perfsonar/microdep/js
-RUN wget -P /usr/lib/perfsonar/microdep/js/ -i /usr/lib/perfsonar/microdep/list-of-external-sources.txt
+RUN  mkdir -p /usr/lib/perfsonar/microdep/js;
+RUN if [ "$TYPE" = "toolkit" ]; then \
+       wget -P /usr/lib/perfsonar/microdep/js/ -i /usr/lib/perfsonar/microdep/list-of-external-sources.txt; \
+    fi
 
 # ----  E n d   d o w n l o a d s   a n d   p a c k a g e   i n s t a l l   ----
 
@@ -255,10 +262,16 @@ COPY bin/trace_event_reader.py /usr/local/bin
 #COPY etc/microdep/perfsonar-microdep-trace-ana.service /usr/lib/systemd/system/
 #RUN systemctl enable perfsonar-microdep-trace-ana.service
 
-EXPOSE 80
+# http web (use 443 instead!)
+EXPOSE 80  
+# https web
 EXPOSE 443
+# Opensearch (use https://<hostname>:443/opensearch/ instead)
 #EXPOSE 9200
+# Opensearch Dashboard   
 EXPOSE 5601
+# Grafana   
+EXPOSE 3000   
 
 # Run systemd as in "parent"-image
 CMD ["/lib/systemd/systemd"]
