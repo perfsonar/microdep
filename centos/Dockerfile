@@ -158,6 +158,12 @@ RUN if [ "$TYPE" = "toolkit" ]; then \
        cp /etc/opensearch/node.pem /etc/opensearch/both.pem; \
        sed 's|PRI|RSA PRI|g' /etc/opensearch/node-key.pem >> /etc/opensearch/both.pem; \
        sed -i 's|ProxyPass|    SSLProxyVerify none\n    SSLProxyCheckPeerCN off\n    SSLProxyCheckPeerName off\n    SSLProxyCheckPeerExpire off\n    SSLProxyMachineCertificateFile /etc/opensearch/both.pem\n    ProxyPass|' /etc/httpd/conf.d/apache-opensearch.conf; \
+# Fix access to local resources when external port mapping alters urls
+       sed -i 's|Listen 443 https|Listen 443 https\nListen 4435 https|' /etc/httpd/conf.d/ssl.conf; \
+       sed -i 's|_default_:443|_default_:443 _default_:4435|' /etc/httpd/conf.d/ssl.conf; \
+       sed -i 's|Listen 80|Listen 80\nListen 8085|' /etc/httpd/conf/httpd.conf; \
+       sed -i 's|\*:80|\*:80 \*:8085|' /etc/httpd/conf.d/apache-toolkit_web_gui.conf; \
+      
     fi
 
 # Set management gui user/password to admin/notadminnono
