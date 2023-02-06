@@ -53,3 +53,11 @@ To aquire a global ip via dhcp for a container run:
 A script to set up firewall rules with `ufw` is available.
 
 
+## Cgroup v2 issues
+
+The systemd image applied is designed to work for (legacy) cgroup v1 and v2 environments. Hence when running docker on a newer linux system (e.g. Ubuntu 22.04) with a kernel which by default supports cgrop v2 only (unified cgroup hierarchy) a kernel boot parameter needs to be added:
+
+  * Edit `/etc/defaults/grub`
+  * Add `systemd.unified_cgroup_hierarchy=false` to `GRUB_CMDLINE_LINUX_DEFAULT`
+  * Run `sudo update-grub`
+  * Reboot (in normal mode)
