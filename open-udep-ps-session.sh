@@ -22,3 +22,4 @@ gnome-terminal --tab --profile="white bg" --title "emacs on $HOST" -- ssh -4t $H
 sleep 1
 gnome-terminal --tab --profile="Default" -- ssh -4t $HOST "cd $WDIR && bash" &
 gnome-terminal --tab --profile="Default" -- ssh -4t $HOST "cd $WDIR && bash" &
+gnome-terminal --tab --profile="Default" -- ssh -4t $HOST "cd $WDIR && bash" 
