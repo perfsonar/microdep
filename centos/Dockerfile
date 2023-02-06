@@ -85,28 +85,37 @@ RUN mkdir -p /var/run/postgresql && chown postgres.postgres /var/run/postgresql 
     && yum clean all \
     && rm -rf /var/cache/yum
 
-# Add Rabbit message queue packages
-RUN yum -y install rabbitmq-server python36-pika && systemctl enable rabbitmq-server.service 
-
-# Add packages required by microdep analytics.
-RUN yum -y install perl-App-cpanminus perl-Statistics-Basic perl-DateTime perl-JSON-XS perl-File-ShareDir-Install perl-Test-Exception perl-AnyEvent perl-ExtUtils-MakeMaker perl-version perl-Readonly perl-namespace-clean perl-Devel-GlobalDestruction perl-File-ShareDir perl-List-MoreUtils perl-Class-Data-Inheritable perl-Test-Simple perl-Test-Deep perl-YAML-LibYAML wget
-RUN cpanm AnyEvent::RabbitMQ
-RUN yum -y install perl-ExtUtils-MakeMaker perl-Test-Simple
-RUN cpanm Statistics::LineFit
-
 RUN if [ "$TYPE" = "toolkit" ]; then \
        # Add Opensearch dashboards ("Kibana")
        yum -y install opensearch-dashboards && systemctl enable opensearch-dashboards.service ; \
+    fi
+RUN if [ "$TYPE" = "toolkit" ]; then \
        # Add Grafana visualisation server
+       sudo yum -y install wget; \
        cd /tmp; \
        wget https://dl.grafana.com/oss/release/grafana-9.3.2-1.x86_64.rpm; \
        sudo yum -y install grafana-9.3.2-1.x86_64.rpm; \
        systemctl enable grafana-server.service; \
     fi
 
+# Add Rabbit message queue packages
+RUN yum -y install rabbitmq-server python36-pika && systemctl enable rabbitmq-server.service 
+
+# Add packages required by microdep analytics.
+#   - qstream-gap-ana dependencies:
+RUN yum -y install perl-App-cpanminus perl-Statistics-Basic perl-DateTime perl-JSON-XS perl-File-ShareDir-Install perl-Test-Exception perl-AnyEvent perl-ExtUtils-MakeMaker perl-version perl-Readonly perl-namespace-clean perl-Devel-GlobalDestruction perl-File-ShareDir perl-List-MoreUtils perl-Class-Data-Inheritable perl-Test-Simple perl-Test-Deep perl-YAML-LibYAML wget
+RUN cpanm AnyEvent::RabbitMQ
+RUN yum -y install perl-ExtUtils-MakeMaker perl-Test-Simple
+RUN cpanm Statistics::LineFit
+#  - trace_event_reader dependencies
+RUN yum -y install python36-mysql gcc python3-devel
+RUN pip3 install multidict typing_extensions yarl async_timeout idna_ssl aiosignal cchardet charset_normalizer
+RUN pip3 install geoip2
+COPY etc/microdep/GeoLite2-ASN.mmdb /usr/share/GeoIP/
+
 # Fetch css, js and other source-files for Microdep
 COPY microdep/server/script/*  /usr/lib/perfsonar/microdep/
-RUN  mkdir -p /usr/lib/perfsonar/microdep/js;
+RUN  mkdir -p /usr/lib/perfsonar/microdep/js
 RUN if [ "$TYPE" = "toolkit" ]; then \
        wget -P /usr/lib/perfsonar/microdep/js/ -i /usr/lib/perfsonar/microdep/list-of-external-sources.txt; \
     fi
