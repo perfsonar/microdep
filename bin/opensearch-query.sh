@@ -3,7 +3,7 @@
 # Send Query string to Opensearch instance
 #
 
-URL="http://localhost:9200"
+URL="https://localhost:9200"
 CREDS=`sed 's| |:|' /etc/perfsonar/opensearch/opensearch_login 2>/dev/null`
 ACTION="GET"
 IPV="-4"
@@ -13,7 +13,7 @@ function usage {
     echo "`basename $0` [-h] [options] api-command-path [json-input-structure]"
     echo "  -h           Help message."
     echo "  -c user:pwd  Credential to apply (defaults are fetched from /etc/perfsonar/opensearch/opensearch_login)" 
-    echo "  -U url       Base url to Openseach instance (default $URL)"
+    echo "  -U url       Base url to Opensearch instance (default $URL)"
     echo "  -G           Apply GET (default)"
     echo "  -P           Apply POST and read json from stdin"
     echo "  -D           Apply DELETE"
@@ -25,10 +25,10 @@ FDATE=`date -I`
 TFIELD="@timestamp"
 
 # Parse arguments
-while getopts ":H:c:hDPGv" opt; do
+while getopts ":U:c:hDPGv" opt; do
     case $opt in
-	H)
-	    HOST=$OPTARG
+	U)
+	    URL=$OPTARG
 	    ;;
 	c)
 	    CREDS=$OPTARG
@@ -78,7 +78,7 @@ fi
 if [ $ACTION = "POST" ]; then
     INPUTTYPE="-H 'Content-Type: application/json'"
 fi
-CMD="curl -s --insecure $IPV $CREDS -X $ACTION $INPUTTYPE $HOST/$1 "
+CMD="curl -s --insecure $IPV $CREDS -X $ACTION $INPUTTYPE $URL/$1 "
 if [ $VERBOSE ]; then
     echo $CMD
 fi
