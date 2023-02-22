@@ -3,7 +3,7 @@ Description=Restart perfSONAR Microdep services
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/systemctl restart perfsonar-microdep-gap-ana.service
+ExecStart=/usr/bin/systemctl restart perfsonar-microdep-gap-ana.service perfsonar-microdep-trace-ana.service
 
 [Install]
 WantedBy=multi-user.target

@@ -32,6 +32,8 @@ services:
         TYPE: toolkit 
     volumes:
       - /sys/fs/cgroup:/sys/fs/cgroup:ro
+      # Attempt to make opensearch data persist over "reboots"
+      - opensearch:/var/lib/opensearch
       - .:/root/ps-dev
     tmpfs: 
       - /run
@@ -58,8 +60,6 @@ services:
         TYPE: testpoint 
     volumes:
        - /sys/fs/cgroup:/sys/fs/cgroup:ro
-       # Attempt to make opensearch data persist over "reboots"
-       - opensearch:/var/lib/opensearch
     networks:
       - testpoint-net
       

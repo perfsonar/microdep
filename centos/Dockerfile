@@ -185,15 +185,6 @@ COPY bin/consume.pl /usr/local/bin
 COPY bin/json2table.pl /usr/local/bin
 COPY bin/opensearch-query.sh /usr/local/bin
 
-#  Make Logstash feed analytic results to Opensearch
-COPY etc/logstash/from-gap-ana.conf /etc/logstash/conf.d/
-RUN if [ "$TYPE" = "toolkit" ]; then \
-       #echo -e "opensearch_admin_user=admin\nopensearch_admin_password=admin" >> /etc/perfsonar/logstash/logstash_sysconfig; \
-       USER=`awk -F " " '{print $1}' /etc/perfsonar/opensearch/opensearch_login` && sed -i "s|\${opensearch_admin_user}|$USER|g" /etc/logstash/conf.d/from-gap-ana.conf; \
-       PASSWD=`awk -F " " '{print $2}' /etc/perfsonar/opensearch/opensearch_login` && sed -i "s|\${opensearch_admin_password}|$PASSWD|g" /etc/logstash/conf.d/from-gap-ana.conf; \
-       mkdir -p /var/lib/logstash/microdep && chmod 777 /var/lib/logstash/microdep; \
-    fi
-
 # Fix host address, username and password for Opensearch dashboard ("Kibana")
 RUN if [ "$TYPE" = "toolkit" ]; then \
        sed -i 's/# server.host: "localhost"/server.host: "0.0.0.0"/' /etc/opensearch-dashboards/opensearch_dashboards.yml; \
@@ -257,25 +248,47 @@ RUN if [ "$TYPE" = "toolkit" ]; then \
         sed -i "s|curl -X POST|curl -X POST --insecure|g" /usr/lib/perfsonar/microdep/elastic-get-date-type.pl; \
     fi
 
+#   A d d   T r a c e t r e e   w e b   G U I 
+# Add http config and html+js+ccs stuff
+COPY etc/httpd/apache-tracetree-gui.conf /etc/httpd/conf.d
+COPY pstracetree/*  /usr/lib/perfsonar/tracetree/
+RUN ln -s /usr/lib/perfsonar/tracetree /root
+RUN cd /usr/lib/perfsonar/tracetree/; ln -s ls.html index.html
+
 #   A d d   M i c r o d e p   a n a l y t i c s 
 #    Gap analytics
 #    (qstream-gap-ana is avaiable from https://scm.uninett.no/iou/microdep)
 COPY bin/qstream-gap-ana /usr/local/bin
 COPY etc/microdep/perfsonar-microdep-gap-ana.service /usr/lib/systemd/system/
 RUN systemctl enable perfsonar-microdep-gap-ana.service
-# Services which restart microdep services at 23:59 every evening. Note: Such restarts trigger output of required daily summary reports.
-COPY etc/microdep/perfsonar-microdep-restart.service /usr/lib/systemd/system/
-COPY etc/microdep/perfsonar-microdep-restart.timer /usr/lib/systemd/system/
-RUN systemctl enable perfsonar-microdep-restart.timer
+
 #    Traceroute analytics
 COPY bin/create_new_db.sh /usr/local/bin
 RUN mkdir -p /var/run/postgresql && chown postgres.postgres /var/run/postgresql \
     && su - postgres -c "/usr/pgsql-10/bin/pg_ctl -D /var/lib/pgsql/10/data start -w -t 120" \
     && create_new_db.sh -t postgres -d routingmonitor
 COPY bin/trace_event_reader.py /usr/local/bin
+COPY etc/microdep/perfsonar-microdep-trace-ana.service /usr/lib/systemd/system/
+RUN systemctl enable perfsonar-microdep-trace-ana.service
 
-#COPY etc/microdep/perfsonar-microdep-trace-ana.service /usr/lib/systemd/system/
-#RUN systemctl enable perfsonar-microdep-trace-ana.service
+#  Make Logstash feed analytic results to Opensearch
+COPY etc/logstash/01-microdep-inputs.conf /usr/lib/perfsonar/logstash/pipeline/
+COPY etc/logstash/99-microdep-outputs.conf /usr/lib/perfsonar/logstash/pipeline/
+RUN if [ "$TYPE" = "toolkit" ]; then \
+       # Add microdep index pattern to pscheduler user ... but this require opensearch to run...
+       #sed -i "s|- 'pscheduler_\*'|- 'pscheduler_\*'\n      - 'dragonlab\*'|" opensearch/opensearch-security/roles.yml; \
+       #sed -i "s|- 'pscheduler\*'|- 'pscheduler\*'\n      - 'dragonlab\*'|" opensearch/opensearch-security/roles.yml; \
+       #/usr/share/opensearch/plugins/opensearch-security/tools/securityadmin.sh -f /etc/opensearch/opensearch-security/roles.yml -icl -nhnv -cert /etc/opensearch/admin.pem -cacert /etc/opensearch/root-ca.pem -key /etc/opensearch/admin-key.pem -t config
+       # ... substitute in user+passwd instead
+       USER=`awk -F " " '{print $1}' /etc/perfsonar/opensearch/opensearch_login` && sed -i "s|\${opensearch_admin_user}|$USER|g" /usr/lib/perfsonar/logstash/pipeline/99-microdep-outputs.conf; \
+       PASSWD=`awk -F " " '{print $2}' /etc/perfsonar/opensearch/opensearch_login` && sed -i "s|\${opensearch_admin_password}|$PASSWD|g" /usr/lib/perfsonar/logstash/pipeline/99-microdep-outputs.conf; \
+       mkdir -p /var/lib/logstash/microdep && chmod 777 /var/lib/logstash/microdep; \
+    fi
+
+# Add services which restart microdep services at 23:59 every evening to trigger output of daily summary reports.
+COPY etc/microdep/perfsonar-microdep-restart.service /usr/lib/systemd/system/
+COPY etc/microdep/perfsonar-microdep-restart.timer /usr/lib/systemd/system/
+RUN systemctl enable perfsonar-microdep-restart.timer
 
 # http web (use 443 instead!)
 EXPOSE 80  

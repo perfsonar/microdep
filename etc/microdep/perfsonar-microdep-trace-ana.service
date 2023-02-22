@@ -1,0 +1,11 @@
+[Unit]
+Description=perfSONAR Microdep traceroute analysis
+After=network.target rabbitmq-server.service postgresql-10.service
+Requires=rabbitmq-server.service postgresql-10.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/trace_event_reader.py -O /var/lib/logstash/microdep/trace-ana.json --pssrc amqp://localhost/?queue=traceroute --dbtype postgresql --namemap /usr/lib/perfsonar/microdep/mp-dragonlab/etc/mp-address.txt
+
+[Install]
+WantedBy=multi-user.target
