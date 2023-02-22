@@ -35,6 +35,8 @@ services:
       # Attempt to make opensearch data persist over "reboots"
       - opensearch:/var/lib/opensearch
       - .:/root/ps-dev
+      # Attempt to make opensearch data persist over "reboots"
+      - opensearch:/var/lib/opensearch
     tmpfs: 
       - /run
       - /tmp
