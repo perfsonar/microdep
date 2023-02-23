@@ -10,5 +10,5 @@
 [submodule "routingmonitor"]
 	path = routingmonitor
 	url = https://gitlab.sikt.no/iou/routingmonitor.git
-	branch = perfsonar-integration
+
 	
