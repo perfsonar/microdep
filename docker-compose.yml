@@ -18,7 +18,8 @@
 # Author: Otto J Wittner <otto.wittner@sikt.no>
 # Date: 2022-09-02
 
-version: "3.7"
+#version: "3.7"
+version: "3"
 
 services:
   toolkit:
