@@ -9,6 +9,6 @@
 	url = https://github.com/perfsonar/pstracetree.git
 [submodule "routingmonitor"]
 	path = routingmonitor
-	url = https://gitlab.sikt.no/iou/routingmonitor.git
+	url = git@gitlab.sikt.no:iou/routingmonitor.git
 
 	

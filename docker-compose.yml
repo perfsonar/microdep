@@ -33,24 +33,30 @@ services:
         TYPE: toolkit 
     volumes:
       - /sys/fs/cgroup:/sys/fs/cgroup:ro
-      # Make opensearch data persist over "reboots"
+      # Make misc data persist over "reboots"
       - opensearch:/var/lib/opensearch
+      - opensearch-ps-etc:/etc/perfsonar/opensearch
+      - grafana:/var/lib/grafana
+#      - etc:/etc
       # Add current dir as volum
-      - .:/root/ps-dev
+      #- .:/root/ps-dev
+      - /home/oak:/home/oak
     tmpfs: 
       - /run
       - /tmp
     tty: true
-    ports:
-      - 8085:80
-      - 4435:443   # For https-access
-      - 5611:5601  # Opensearch Dashboard (Kibana)
-      - 3000:3000  # Grafana
-    networks:
-      toolkit-net:
-        ipv4_address: 172.150.1.2
+    network_mode: host
+#    ports:
+#      - 8085:80
+#      - 4435:443   # For https-access
+#      - 5611:5601  # Opensearch Dashboard (Kibana)
+#      - 3000:3000  # Grafana
+#    networks:
+#      toolkit-net:
+#        ipv4_address: 172.150.1.2
 
   testpoint:
+    entrypoint: ["echo", "Service testpoint disabled. See docker-compose.yml."]
     hostname: ps-testpoint
     depends_on:
       - systemd-image
@@ -72,9 +78,11 @@ services:
     volumes:
       - /sys/fs/cgroup:/sys/fs/cgroup:ro
     # Just make image "die" as it is only a parent image  
-    command: "true"  
+    entrypoint: ["echo", "Service systemd-image only provides base image. See docker-compose.yml."]
+    #command: "true"  
 
   net-emulator:
+    entrypoint: ["echo", "Service net-emulator disabled. See docker-compose.yml."]
     hostname: ps-netemulator
     depends_on:
       - testpoint
@@ -109,3 +117,7 @@ networks:
 
 volumes:
   opensearch:
+  opensearch-ps-etc:
+  grafana:
+  etc:
+

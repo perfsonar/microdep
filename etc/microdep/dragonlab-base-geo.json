@@ -9,6 +9,8 @@
     { "id":"microdep-in-perfsonar_testpoint_8","name":"Bucharest","url":"http://37.128.230.30/esmond/perfsonar/archive","lat":44.4443,"lon":26.0961},
     { "id":"microdep-in-perfsonar_testpoint_9","name":"Yerevan","url":"http://37.26.173.34/esmond/perfsonar/archive","lat":40.1924,"lon":44.5066},
     { "id":"microdep-in-perfsonar_testpoint_10","name":"Athens","url":"http://194.177.211.114/esmond/perfsonar/archive","lat":37.9833,"lon":23.7333},
-    { "id":"microdep-in-perfsonar_toolkit_1","name":"Poznan","url":"http://150.254.163.77/esmond/perfsonar/archive","lat":52.4073,"lon":16.9538}
+    { "id":"microdep-in-perfsonar_toolkit_1","name":"Poznan","url":"http://150.254.163.77/esmond/perfsonar/archive","lat":52.4073,"lon":16.9538},
+    { "id":"sis.uninett.no","name":"Trondheim","url":"http://sis.uninett.no/esmond/perfsonar/archive","lat":63.41594176538965, "lon": 10.394740104675295},
+    {"id":"saopaulo-mp", "name":"Sao Paulo", "url":"http://www.rnp.br", "lat":-23.5442517, "lon":-46.7304324}
 ]
 

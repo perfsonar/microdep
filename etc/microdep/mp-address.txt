@@ -9,3 +9,5 @@ microdep-in-perfsonar_testpoint_7  172.150.2.8
 microdep-in-perfsonar_testpoint_8  172.150.2.9
 microdep-in-perfsonar_testpoint_9  172.150.2.10
 microdep-in-perfsonar_testpoint_10 172.150.2.11
+sis.uninett.no  158.38.2.233
+saopaulo-mp     200.133.192.133

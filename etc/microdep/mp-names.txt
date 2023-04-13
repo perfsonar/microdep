@@ -9,3 +9,5 @@ microdep-in-perfsonar_testpoint_7
 microdep-in-perfsonar_testpoint_8
 microdep-in-perfsonar_testpoint_9
 microdep-in-perfsonar_testpoint_10
+sis.uninett.no
+saopaulo-mp
