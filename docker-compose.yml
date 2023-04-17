@@ -54,7 +54,7 @@ services:
     hostname: ps-testpoint
     depends_on:
       - systemd-image
-      - toolkit
+#      - toolkit
     build:
       context: .
       dockerfile: ${OS:-centos}/Dockerfile
@@ -64,7 +64,8 @@ services:
        - /sys/fs/cgroup:/sys/fs/cgroup:ro
     networks:
       - testpoint-net
-      
+#    network_mode: host 
+
   systemd-image:
     build:
       context: .
