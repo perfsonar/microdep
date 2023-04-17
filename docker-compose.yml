@@ -34,7 +34,9 @@ services:
     volumes:
       - /sys/fs/cgroup:/sys/fs/cgroup:ro
       # Make opensearch data persist over "reboots"
-      - opensearch:/var/lib/opensearch
+      #    NOTE: If enabled, run `sed -i 's/kirk/admin|/g' /securityadmin_demo.sh && /securityadmin_demo.sh` in toolkit container
+      #          to update opensearch credentials
+#      - opensearch:/var/lib/opensearch     
       # Add current dir as volum
       - .:/root/ps-dev
     tmpfs: 
