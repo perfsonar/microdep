@@ -33,8 +33,11 @@ ENV LC_CTYPE=en_US.UTF-8
 
 # ---- D o w n l o a d   a n d   i n s t a l l   p a c k a g e s  ------
 
+# Clean up 
+RUN yum clean all && rm -rf /var/cache/yum/* && yum -y update
+
 # Install management packages
-RUN yum clean all && yum -y update && yum install -y  coreutils man-db nano emacs git openssh-client net-tools iputils-ping traceroute tcpdump curl bind9-host unzip gnupg software-properties-common 
+RUN yum install -y  coreutils man-db nano emacs git openssh-client net-tools iputils-ping traceroute tcpdump curl bind9-host unzip gnupg software-properties-common 
 
 # Fiks tcpdump issue for priveledge mode
 RUN mv /usr/sbin/tcpdump /usr/bin/tcpdump
@@ -81,9 +84,10 @@ ARG TYPE
 RUN mkdir -p /var/run/postgresql && chown postgres.postgres /var/run/postgresql \
     && su - postgres -c "/usr/pgsql-10/bin/pg_ctl -D /var/lib/pgsql/10/data start -w -t 120" \
 #su - postgres -c "/usr/pgsql-10/bin/pg_ctl -D /var/lib/pgsql/10/data -l logfile start -W -t 60" \
-    && yum install -y perfsonar-$TYPE perfsonar-toolkit-security \
-    && yum clean all \
-    && rm -rf /var/cache/yum
+    && yum install -y perfsonar-$TYPE perfsonar-toolkit-security 
+
+# Clean up 
+RUN yum clean all && rm -rf /var/cache/yum/* && yum -y update
 
 RUN if [ "$TYPE" = "toolkit" ]; then \
        # Add Opensearch dashboards ("Kibana")
@@ -144,7 +148,7 @@ RUN sed -i 's|-u ntp:ntp ||g' /usr/lib/systemd/system/ntpd.service
 RUN echo "disable kernel" >> /etc/ntp.conf
 
 # Fix bind issue for memcached
-RUN sed -i 's|-l 127.0.0.1,::1|-l 0.0.0.0,::|' /etc/sysconfig/memcached
+#RUN sed -i 's|-l 127.0.0.1,::1|-l 0.0.0.0,::|' /etc/sysconfig/memcached
 
 RUN if [ "$TYPE" = "toolkit" ]; then \
 # Fix JNA and temp-file issue with Opensearch and Logstash,
@@ -163,11 +167,12 @@ RUN if [ "$TYPE" = "toolkit" ]; then \
        sed -i 's|_default_:443|_default_:443 _default_:4435|' /etc/httpd/conf.d/ssl.conf; \
        sed -i 's|Listen 80|Listen 80\nListen 8085|' /etc/httpd/conf/httpd.conf; \
        sed -i 's|\*:80|\*:80 \*:8085|' /etc/httpd/conf.d/apache-toolkit_web_gui.conf; \
-      
+# Prepare script to re-config Opensearch security plugin to reconfig password
+       sed 's|kirk|admin|g' /securityadmin_demo.sh > /usr/local/sbin/securityadmin.sh; \
+# Set management gui user/password to admin/notadminnono
+       yum -y install httpd-tools && htpasswd -c -b /etc/perfsonar/toolkit/psadmin.htpasswd admin notadminnono ; \
     fi
 
-# Set management gui user/password to admin/notadminnono
-#RUN if [ "$TYPE" = "toolkit" ]; then yum -y install httpd-tools && htpasswd -c -b /etc/perfsonar/toolkit/psadmin.htpasswd admin notadminnono ; fi
 
 # Add default tests (apply empty-file-trick to avoid errors when building)
 #COPY empty-file-do-not-remove *etc/perfsonar-$TYPE/psconfig/pscheduler.d/toolkit-webui.json /etc/perfsonar/psconfig/pscheduler.d/
