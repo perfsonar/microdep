@@ -5,7 +5,7 @@ Requires=rabbitmq-server.service
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/qstream-gap-ana -addresses /usr/lib/perfsonar/microdep/mp-dragonlab/etc/mp-address.txt -owamp amqp:// -json /var/lib/logstash/microdep/gap-ana.json
+ExecStart=/usr/local/bin/qstream-gap-ana -v -minloss 5 -head -win 50 -jitter 600 -rtp 5 -addresses /usr/lib/perfsonar/microdep/mp-dragonlab/etc/mp-address.txt -owamp amqp:// -json /var/lib/logstash/microdep/gap-ana.json
 
 [Install]
 WantedBy=multi-user.target
