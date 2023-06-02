@@ -46,7 +46,7 @@ RUN ln -s /usr/bin/tcpdump /usr/sbin/tcpdump
 # Install the EPEL RPM
 RUN yum install -y epel-release
 # Point CentOS installation at the perfSONAR main yum repository
-RUN rpm -hUv http://software.internet2.edu/rpms/el7/x86_64/latest/packages/perfSONAR-repo-0.10-1.noarch.rpm
+RUN rpm -hUv http://software.internet2.edu/rpms/el7/x86_64/latest/packages/perfSONAR-repo-0.11-1.noarch.rpm
 # Install the staging yum repository where test versions of the software are kept.
 RUN yum install -y perfSONAR-repo-staging
 RUN yum update -y
