@@ -23,9 +23,10 @@ version: "3"
 
 services:
   toolkit:
-    hostname: ps-toolkit
+    container_name: ps-toolkit
     depends_on:
       - systemd-image
+    image: ottojwittner/microdep-in-perfsonar_toolkit
     build:
       context: .
       dockerfile: ${OS:-centos}/Dockerfile
@@ -60,10 +61,11 @@ services:
         ipv4_address: 172.150.1.2
 
   testpoint:
-    hostname: ps-testpoint
+    container_name: ps-testpoint
     depends_on:
       - systemd-image
 #      - toolkit
+    image: ottojwittner/microdep-in-perfsonar_testpoint
     build:
       context: .
       dockerfile: ${OS:-centos}/Dockerfile
@@ -76,19 +78,21 @@ services:
 #    network_mode: host 
 
   systemd-image:
+    image: ottojwittner/microdep-in-perfsonar_systemd-image
     build:
       context: .
       dockerfile: ${OS:-centos}/Dockerfile-systemd
     volumes:
       - /sys/fs/cgroup:/sys/fs/cgroup:ro
     # Just make image "die" as it is only a parent image  
-    command: "true"  
+    entrypoint: ["echo", "Service systemd-image only provides base image. See docker-compose.yml."]
 
   net-emulator:
-    hostname: ps-netemulator
+    container_name: ps-netemulator
     depends_on:
       - testpoint
       - toolkit
+    image: ottojwittner/microdep-in-perfsonar_net-emulator
     build:
       context: .
       dockerfile: netem/Dockerfile

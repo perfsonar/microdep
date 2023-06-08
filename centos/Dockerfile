@@ -33,7 +33,16 @@ ENV LC_CTYPE=en_US.UTF-8
 
 # ---- D o w n l o a d   a n d   i n s t a l l   p a c k a g e s  ------
 
-# Clean up 
+# Install the EPEL RPM
+RUN yum install -y epel-release
+
+# Point CentOS installation at the perfSONAR main yum repository
+# Install the staging yum repository where test versions of the software are kept.
+#RUN yum install -y perfSONAR-repo-staging
+#RUN rpm -hUv http://software.internet2.edu/rpms/el7/x86_64/latest/packages/perfSONAR-repo-0.11-1.noarch.rpm
+RUN yum install -y http://software.internet2.edu/rpms/el7/x86_64/latest/packages/perfsonar-repo-0.11-1.noarch.rpm
+
+# Clean cache and update 
 RUN yum clean all && rm -rf /var/cache/yum/* && yum -y update
 
 # Install management packages
@@ -42,14 +51,6 @@ RUN yum install -y  coreutils man-db nano emacs git openssh-client net-tools ipu
 # Fiks tcpdump issue for priveledge mode
 RUN mv /usr/sbin/tcpdump /usr/bin/tcpdump
 RUN ln -s /usr/bin/tcpdump /usr/sbin/tcpdump
-
-# Install the EPEL RPM
-RUN yum install -y epel-release
-# Point CentOS installation at the perfSONAR main yum repository
-RUN rpm -hUv http://software.internet2.edu/rpms/el7/x86_64/latest/packages/perfSONAR-repo-0.11-1.noarch.rpm
-# Install the staging yum repository where test versions of the software are kept.
-RUN yum install -y perfSONAR-repo-staging
-RUN yum update -y
 
 # Install and explicitly init postgres (since initialisation seems to not happen "by it self") 
 #
@@ -169,6 +170,7 @@ RUN if [ "$TYPE" = "toolkit" ]; then \
        sed -i 's|\*:80|\*:80 \*:8085|' /etc/httpd/conf.d/apache-toolkit_web_gui.conf; \
 # Prepare script to re-config Opensearch security plugin to reconfig password
        sed 's|kirk|admin|g' /securityadmin_demo.sh > /usr/local/sbin/securityadmin.sh; \
+       chmod +x /usr/local/sbin/securityadmin.sh; \
 # Set management gui user/password to admin/notadminnono
        yum -y install httpd-tools && htpasswd -c -b /etc/perfsonar/toolkit/psadmin.htpasswd admin notadminnono ; \
     fi
