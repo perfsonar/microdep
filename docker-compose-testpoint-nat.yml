@@ -15,6 +15,7 @@ services:
     container_name: ps-testpoint
     depends_on:
       - systemd-image
+    image: ottojwittner/microdep-in-perfsonar_testpoint
     build:
       context: .
       dockerfile: ${OS:-centos}/Dockerfile
@@ -42,6 +43,7 @@ services:
         ipv4_address: ${IPADDR:-172.150.2.3}
 
   systemd-image:
+    image: ottojwittner/microdep-in-perfsonar_systemd-image
     build:
       context: .
       dockerfile: ${OS:-centos}/Dockerfile-systemd
