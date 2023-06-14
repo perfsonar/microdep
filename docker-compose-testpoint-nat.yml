@@ -1,0 +1,59 @@
+#
+# Docker compose config building perfsonar testpoint service with nat'ed net and port mappings
+#   -When running on a host with NAT 1:1 (e.g. AWS VMs) a testpoint may interact with the "outside" world
+# by setting IPADDR and SUBNET to hosts global IP, (e.g. 'IPADDR=16.170.114.107 SUBNET=16.170.114.104/29 docker-compose -f docker-compose-testpoint-nat.yml up')
+#   - OS distribution may be change by setting OS=ubuntu (e.g. 'OS=ubuntu docker-compose -f docker-compose-testpoint-nat.yml up')
+#     
+# Author: Otto J Wittner <otto.wittner@sikt.no>
+# Date: 2023-06-14
+
+#version: "3.7"
+version: "3"
+
+services:
+  testpoint:
+    container_name: ps-testpoint
+    depends_on:
+      - systemd-image
+    build:
+      context: .
+      dockerfile: ${OS:-centos}/Dockerfile
+      args:
+        TYPE: testpoint 
+    volumes:
+       - /sys/fs/cgroup:/sys/fs/cgroup:ro
+    ports:
+#      - 80:80    # http-access
+      - 8085:80    # http-access
+#      - 443:443   # https-access
+      - 4435:443   # https-access
+      - 5601:5601  # Opensearch Dashboard (Kibana)
+      - 3000:3000  # Grafana
+      - 861:861    # owamp control
+      - 8760-8800:8760-8800/udp # owamp testports 
+      - 862:862    # twamp control
+      - 5000:5000  # nuttcp
+      - 5101:5101  # nuttcp
+      - 5201:5201  # iperf3
+      - 5001:5001  # iperf2
+      - 1123:123   # ntp
+    networks:
+      testpoint-net:
+        ipv4_address: ${IPADDR:-172.150.2.3}
+
+  systemd-image:
+    build:
+      context: .
+      dockerfile: ${OS:-centos}/Dockerfile-systemd
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+    # Just make image "die" as it is only a parent image  
+    entrypoint: ["echo", "Service systemd-image only provides base image. See docker-compose.yml."]
+
+networks:
+  testpoint-net:
+    ipam:
+      driver: default
+      config:
+        # May be set via env-var
+        - subnet: ${SUBNET:-"172.150.2.0/24"}
