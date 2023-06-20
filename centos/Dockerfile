@@ -144,7 +144,7 @@ RUN sed -i 's|-u ntp:ntp ||g' /usr/lib/systemd/system/ntpd.service
 RUN echo "disable kernel" >> /etc/ntp.conf
 
 # Fix bind issue for memcached
-RUN sed -i 's|-l 127.0.0.1,::1|-l 0.0.0.0,::|' /etc/sysconfig/memcached
+#RUN sed -i 's|-l 127.0.0.1,::1|-l 0.0.0.0,::|' /etc/sysconfig/memcached
 
 RUN if [ "$TYPE" = "toolkit" ]; then \
 # Fix JNA and temp-file issue with Opensearch and Logstash,
