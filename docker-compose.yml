@@ -54,7 +54,9 @@ services:
       - 5611:5601  # Opensearch Dashboard (Kibana)
       - 3000:3000  # Grafana
       - 861:861    # owamp control
+      - 8760-8800:8760-8800 # owamp tests
       - 862:862    # twamp control
+      - 18760-18800 # twamp tests
       - 5000:5000  # nuttcp
       - 5101:5101  # nuttcp
       - 5201:5201  # iperf3

@@ -96,7 +96,7 @@ RUN if [ "$TYPE" = "toolkit" ]; then \
     fi
 RUN if [ "$TYPE" = "toolkit" ]; then \
        # Add Grafana visualisation server
-       sudo yum -y install wget; \
+       sudo yum -y install wget nodejs; \
        cd /tmp; \
        wget https://dl.grafana.com/oss/release/grafana-9.3.2-1.x86_64.rpm; \
        sudo yum -y install grafana-9.3.2-1.x86_64.rpm; \
@@ -150,6 +150,10 @@ RUN echo "disable kernel" >> /etc/ntp.conf
 
 # Fix bind issue for memcached
 #RUN sed -i 's|-l 127.0.0.1,::1|-l 0.0.0.0,::|' /etc/sysconfig/memcached
+
+# Reduce range for owamp and twamp test-ports (to more easy enable docker port mapping)
+RUN sed -i 's|testports 8760-9960|testports 8760-8800|g' /etc/owamp-server/owamp-server.conf
+RUN sed -i 's|testports 18760-19960|testports 18760-18800|g' /etc/twamp-server/twamp-server.conf
 
 RUN if [ "$TYPE" = "toolkit" ]; then \
 # Fix JNA and temp-file issue with Opensearch and Logstash,
