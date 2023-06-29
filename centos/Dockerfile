@@ -272,8 +272,8 @@ COPY etc/microdep/perfsonar-microdep-trace-ana.service /usr/lib/systemd/system/
 RUN systemctl enable perfsonar-microdep-trace-ana.service
 
 #  Make Logstash feed analytic results to Opensearch
-COPY etc/logstash/01-microdep-inputs.conf /usr/lib/perfsonar/logstash/pipeline/
-COPY etc/logstash/99-microdep-outputs.conf /usr/lib/perfsonar/logstash/pipeline/
+ADD etc/logstash/microdep /usr/lib/perfsonar/logstash/pipeline/
+RUN echo -e "- path.config: /usr/lib/perfsonar/logstash/pipeline/microdep/*.conf\n  pipeline.id: microdep" >> /etc/logstash/pipelines.yml
 RUN if [ "$TYPE" = "toolkit" ]; then \
        # Add microdep index pattern to pscheduler user ... but this require opensearch to run...
        #sed -i "s|- 'pscheduler_\*'|- 'pscheduler_\*'\n      - 'dragonlab\*'|" opensearch/opensearch-security/roles.yml; \
