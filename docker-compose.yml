@@ -20,7 +20,8 @@
 # Date: 2022-09-02
 
 #version: "3.7"
-version: "3"
+#version: "3"
+version: "2.2"
 
 services:
   toolkit:
@@ -65,6 +66,7 @@ services:
     networks:
       toolkit-net:
         ipv4_address: 172.150.1.2
+        ipv6_address: fd00::150:1:2
 
   testpoint:
     container_name: ps-testpoint
@@ -109,23 +111,29 @@ services:
     networks:
       testpoint-net:
         ipv4_address: 172.150.2.200
+        ipv6_address: fd00::150:2:200
       toolkit-net:
         ipv4_address: 172.150.1.200
+        ipv6_address: fd00::150:1:200
         
 networks:
   testpoint-net:
+    enable_ipv6: true
     ipam:
       driver: default
       config:
         # To match ips given in psconfig files
         - subnet: 172.150.2.0/24
+        - subnet: fd00::150:2:0/112
           
   toolkit-net:
+    enable_ipv6: true
     ipam:
       driver: default
       config:
         # To match ips given in psconfig files
         - subnet: 172.150.1.0/24
+        - subnet: fd00::150:1:0/112
 
 volumes:
   opensearch:
