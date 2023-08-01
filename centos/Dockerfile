@@ -148,9 +148,6 @@ COPY perfsonar-testpoint-docker/rsyslog/owamp-syslog.conf /etc/rsyslog.d/owamp-s
 RUN sed -i 's|-u ntp:ntp ||g' /usr/lib/systemd/system/ntpd.service
 RUN echo "disable kernel" >> /etc/ntp.conf
 
-# Fix bind issue for memcached
-#RUN sed -i 's|-l 127.0.0.1,::1|-l 0.0.0.0,::|' /etc/sysconfig/memcached
-
 # Reduce range for owamp and twamp test-ports (to more easy enable docker port mapping)
 RUN sed -i 's|testports 8760-9960|testports 8760-8800|g' /etc/owamp-server/owamp-server.conf
 RUN sed -i 's|testports 18760-19960|testports 18760-18800|g' /etc/twamp-server/twamp-server.conf
@@ -159,6 +156,9 @@ RUN if [ "$TYPE" = "toolkit" ]; then \
 # Fix JNA and temp-file issue with Opensearch and Logstash,
        sed -i 's|${OPENSEARCH_TMPDIR}|/var/log/opensearch|g' /etc/opensearch/jvm.options; \
        sed -i 's|#-Djava.io.tmpdir=$HOME|-Djava.io.tmpdir=/var/log/logstash|g' /etc/logstash/jvm.options; \
+# Go easy on java heap size
+       sed -i 's|-Xms7g|-Xms2g|g' /etc/opensearch/jvm.options; \
+       sed -i 's|-Xmx7g|-Xms4g|g' /etc/opensearch/jvm.options; \
 # Increase startup timeout and add auto restart for Opensearch
        sed -i 's|TimeoutStartSec=75|TimeoutStartSec=600\nRestart=on-failure\nRestartSec=10s|g' /usr/lib/systemd/system/opensearch.service; \
 # Fix template error for Logstash
@@ -221,6 +221,7 @@ RUN sed -i \
     -e 's|//.*\(/.*\.js"\)|js\1|' \
     -e 's|//.*\(/.*\.css"\)|js\1|' \
     -e 's|/js/ajax-loader.gif|"js/ajax-loader.gif"|' \
+    -e 's|/js\.gml|js|' \
     -e 's|favicon.ico|/toolkit/favicon.ico|'    /usr/lib/perfsonar/microdep/microdep-map.html
 RUN mv /usr/lib/perfsonar/microdep/stats.js /usr/lib/perfsonar/microdep/js/
 RUN mv /usr/lib/perfsonar/microdep/ajax-loader.gif /usr/lib/perfsonar/microdep/js/
