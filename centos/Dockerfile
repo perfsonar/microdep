@@ -34,7 +34,7 @@ ENV LC_CTYPE=en_US.UTF-8
 # ---- D o w n l o a d   a n d   i n s t a l l   p a c k a g e s  ------
 
 # Install management packages
-RUN yum clean all && yum -y update && yum install -y  coreutils man-db nano emacs git openssh-client net-tools iputils-ping traceroute tcpdump curl bind9-host unzip gnupg software-properties-common 
+RUN yum clean all && yum -y update && yum install -y  coreutils man-db nano emacs git patch openssh-client net-tools iputils-ping traceroute tcpdump curl bind9-host unzip gnupg software-properties-common 
 
 # Fiks tcpdump issue for priveledge mode
 RUN mv /usr/sbin/tcpdump /usr/bin/tcpdump
@@ -163,7 +163,6 @@ RUN if [ "$TYPE" = "toolkit" ]; then \
        sed -i 's|_default_:443|_default_:443 _default_:4435|' /etc/httpd/conf.d/ssl.conf; \
        sed -i 's|Listen 80|Listen 80\nListen 8085|' /etc/httpd/conf/httpd.conf; \
        sed -i 's|\*:80|\*:80 \*:8085|' /etc/httpd/conf.d/apache-toolkit_web_gui.conf; \
-      
     fi
 
 # Set management gui user/password to admin/notadminnono
@@ -271,17 +270,17 @@ COPY bin/trace_event_reader.py /usr/local/bin
 COPY etc/microdep/perfsonar-microdep-trace-ana.service /usr/lib/systemd/system/
 RUN systemctl enable perfsonar-microdep-trace-ana.service
 
-#  Make Logstash feed analytic results to Opensearch
-ADD etc/logstash/microdep /usr/lib/perfsonar/logstash/pipeline/
-RUN echo -e "- path.config: /usr/lib/perfsonar/logstash/pipeline/microdep/*.conf\n  pipeline.id: microdep" >> /etc/logstash/pipelines.yml
+COPY etc/logstash/microdep /usr/lib/perfsonar/logstash/pipeline/microdep
 RUN if [ "$TYPE" = "toolkit" ]; then \
+       #  Make Logstash feed analytic results to Opensearch
+       echo -e "- path.config: /usr/lib/perfsonar/logstash/pipeline/microdep/*.conf\n  pipeline.id: microdep" >> /etc/logstash/pipelines.yml; \
        # Add microdep index pattern to pscheduler user ... but this require opensearch to run...
        #sed -i "s|- 'pscheduler_\*'|- 'pscheduler_\*'\n      - 'dragonlab\*'|" opensearch/opensearch-security/roles.yml; \
        #sed -i "s|- 'pscheduler\*'|- 'pscheduler\*'\n      - 'dragonlab\*'|" opensearch/opensearch-security/roles.yml; \
        #/usr/share/opensearch/plugins/opensearch-security/tools/securityadmin.sh -f /etc/opensearch/opensearch-security/roles.yml -icl -nhnv -cert /etc/opensearch/admin.pem -cacert /etc/opensearch/root-ca.pem -key /etc/opensearch/admin-key.pem -t config
        # ... substitute in user+passwd instead
-       USER=`awk -F " " '{print $1}' /etc/perfsonar/opensearch/opensearch_login` && sed -i "s|\${opensearch_admin_user}|$USER|g" /usr/lib/perfsonar/logstash/pipeline/99-microdep-outputs.conf; \
-       PASSWD=`awk -F " " '{print $2}' /etc/perfsonar/opensearch/opensearch_login` && sed -i "s|\${opensearch_admin_password}|$PASSWD|g" /usr/lib/perfsonar/logstash/pipeline/99-microdep-outputs.conf; \
+       USER=`awk -F " " '{print $1}' /etc/perfsonar/opensearch/opensearch_login` && sed -i "s|\${opensearch_admin_user}|$USER|g" /usr/lib/perfsonar/logstash/pipeline/microdep/03-microdep-outputs.conf; \
+       PASSWD=`awk -F " " '{print $2}' /etc/perfsonar/opensearch/opensearch_login` && sed -i "s|\${opensearch_admin_password}|$PASSWD|g" /usr/lib/perfsonar/logstash/pipeline/microdep/03-microdep-outputs.conf; \
        mkdir -p /var/lib/logstash/microdep && chmod 777 /var/lib/logstash/microdep; \
     fi
 
@@ -289,6 +288,12 @@ RUN if [ "$TYPE" = "toolkit" ]; then \
 COPY etc/microdep/perfsonar-microdep-restart.service /usr/lib/systemd/system/
 COPY etc/microdep/perfsonar-microdep-restart.timer /usr/lib/systemd/system/
 RUN systemctl enable perfsonar-microdep-restart.timer
+
+# Add link to Microdep in web gui sidebar
+COPY etc/httpd/sidebar.html.patch /tmp
+RUN if [ "$TYPE" = "toolkit" ]; then \
+      patch -u /usr/lib/perfsonar/web-ng/templates/components/sidebar.html -i /tmp/sidebar.html.patch; \
+    fi
 
 # http web (use 443 instead!)
 EXPOSE 80  
