@@ -137,6 +137,11 @@
          "repeat" : "PT60S",
          "slip" : "PT60S",
          "sliprand" : true
+      },
+      "Every-10s" : {
+         "repeat" : "PT10S",
+         "slip" : "PT10S",
+         "sliprand" : true
       }
    },
    "tests" : {
@@ -204,7 +209,7 @@
        }
    }, 
    "tasks" : {
-       "toolkit-testpoints-delay-and-loss" : {
+       "microdep-delay-and-loss" : {
            "_meta" : {
                "display-name" : "Microdep delay and loss measurements"
            },
@@ -212,7 +217,7 @@
            "test" : "Delay-and-loss-ipv4-100pps",
 	   "archives": ["logstash","gap-ana-rmq"]
        },
-       "toolkit-testpoints-traceroutes" : {
+       "microdep-traceroutes" : {
            "_meta" : {
                "display-name" : "Microdep traceroutes every minute"
            },
