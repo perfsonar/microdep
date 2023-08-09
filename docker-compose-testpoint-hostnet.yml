@@ -1,0 +1,35 @@
+#
+# Docker compose config building perfsonar testpoint service with host net set
+# i.e. a testpoint ready to interact with the "outside" world
+#
+#   - OS distribution may be change by setting OS=ubuntu (e.g. 'OS=ubuntu docker-compose -f docker-compose-testpoint-hostnet.yml build')
+#     
+# Author: Otto J Wittner <otto.wittner@sikt.no>
+# Date: 2023-06-02
+
+#version: "3.7"
+version: "3"
+
+services:
+  testpoint:
+    container_name: ps-testpoint
+    depends_on:
+      - systemd-image
+    build:
+      context: .
+      dockerfile: ${OS:-centos}/Dockerfile
+      args:
+        TYPE: testpoint 
+    volumes:
+       - /sys/fs/cgroup:/sys/fs/cgroup:ro
+    network_mode: host 
+
+  systemd-image:
+    build:
+      context: .
+      dockerfile: ${OS:-centos}/Dockerfile-systemd
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+    # Just make image "die" as it is only a parent image  
+    entrypoint: ["echo", "Service systemd-image only provides base image. See docker-compose.yml."]
+

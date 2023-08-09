@@ -33,20 +33,24 @@ ENV LC_CTYPE=en_US.UTF-8
 
 # ---- D o w n l o a d   a n d   i n s t a l l   p a c k a g e s  ------
 
+# Install the EPEL RPM
+RUN yum install -y epel-release
+
+# Point CentOS installation at the perfSONAR main yum repository
+# Install the staging yum repository where test versions of the software are kept.
+#RUN yum install -y perfSONAR-repo-staging
+#RUN rpm -hUv http://software.internet2.edu/rpms/el7/x86_64/latest/packages/perfSONAR-repo-0.11-1.noarch.rpm
+RUN yum install -y http://software.internet2.edu/rpms/el7/x86_64/latest/packages/perfsonar-repo-0.11-1.noarch.rpm
+
+# Clean cache and update 
+RUN yum clean all && rm -rf /var/cache/yum/* && yum -y update
+
 # Install management packages
-RUN yum clean all && yum -y update && yum install -y  coreutils man-db nano emacs git patch openssh-client net-tools iputils-ping traceroute tcpdump curl bind9-host unzip gnupg software-properties-common 
+RUN yum install -y  coreutils man-db nano emacs git patch openssh-client net-tools iputils-ping traceroute tcpdump curl bind9-host unzip gnupg software-properties-common 
 
 # Fiks tcpdump issue for priveledge mode
 RUN mv /usr/sbin/tcpdump /usr/bin/tcpdump
 RUN ln -s /usr/bin/tcpdump /usr/sbin/tcpdump
-
-# Install the EPEL RPM
-RUN yum install -y epel-release
-# Point CentOS installation at the perfSONAR main yum repository
-RUN rpm -hUv http://software.internet2.edu/rpms/el7/x86_64/latest/packages/perfSONAR-repo-0.10-1.noarch.rpm
-# Install the staging yum repository where test versions of the software are kept.
-RUN yum install -y perfSONAR-repo-staging
-RUN yum update -y
 
 # Install and explicitly init postgres (since initialisation seems to not happen "by it self") 
 #
@@ -81,9 +85,10 @@ ARG TYPE
 RUN mkdir -p /var/run/postgresql && chown postgres.postgres /var/run/postgresql \
     && su - postgres -c "/usr/pgsql-10/bin/pg_ctl -D /var/lib/pgsql/10/data start -w -t 120" \
 #su - postgres -c "/usr/pgsql-10/bin/pg_ctl -D /var/lib/pgsql/10/data -l logfile start -W -t 60" \
-    && yum install -y perfsonar-$TYPE perfsonar-toolkit-security \
-    && yum clean all \
-    && rm -rf /var/cache/yum
+    && yum install -y perfsonar-$TYPE perfsonar-toolkit-security 
+
+# Clean up 
+RUN yum clean all && rm -rf /var/cache/yum/* && yum -y update
 
 RUN if [ "$TYPE" = "toolkit" ]; then \
        # Add Opensearch dashboards ("Kibana")
@@ -91,7 +96,7 @@ RUN if [ "$TYPE" = "toolkit" ]; then \
     fi
 RUN if [ "$TYPE" = "toolkit" ]; then \
        # Add Grafana visualisation server
-       sudo yum -y install wget; \
+       sudo yum -y install wget nodejs; \
        cd /tmp; \
        wget https://dl.grafana.com/oss/release/grafana-9.3.2-1.x86_64.rpm; \
        sudo yum -y install grafana-9.3.2-1.x86_64.rpm; \
@@ -143,13 +148,17 @@ COPY perfsonar-testpoint-docker/rsyslog/owamp-syslog.conf /etc/rsyslog.d/owamp-s
 RUN sed -i 's|-u ntp:ntp ||g' /usr/lib/systemd/system/ntpd.service
 RUN echo "disable kernel" >> /etc/ntp.conf
 
-# Fix bind issue for memcached
-#RUN sed -i 's|-l 127.0.0.1,::1|-l 0.0.0.0,::|' /etc/sysconfig/memcached
+# Reduce range for owamp and twamp test-ports (to more easy enable docker port mapping)
+RUN sed -i 's|testports 8760-9960|testports 8760-8800|g' /etc/owamp-server/owamp-server.conf
+RUN sed -i 's|testports 18760-19960|testports 18760-18800|g' /etc/twamp-server/twamp-server.conf
 
 RUN if [ "$TYPE" = "toolkit" ]; then \
 # Fix JNA and temp-file issue with Opensearch and Logstash,
        sed -i 's|${OPENSEARCH_TMPDIR}|/var/log/opensearch|g' /etc/opensearch/jvm.options; \
        sed -i 's|#-Djava.io.tmpdir=$HOME|-Djava.io.tmpdir=/var/log/logstash|g' /etc/logstash/jvm.options; \
+# Go easy on java heap size
+       sed -i 's|-Xms7g|-Xms2g|g' /etc/opensearch/jvm.options; \
+       sed -i 's|-Xmx7g|-Xms4g|g' /etc/opensearch/jvm.options; \
 # Increase startup timeout and add auto restart for Opensearch
        sed -i 's|TimeoutStartSec=75|TimeoutStartSec=600\nRestart=on-failure\nRestartSec=10s|g' /usr/lib/systemd/system/opensearch.service; \
 # Fix template error for Logstash
@@ -163,10 +172,13 @@ RUN if [ "$TYPE" = "toolkit" ]; then \
        sed -i 's|_default_:443|_default_:443 _default_:4435|' /etc/httpd/conf.d/ssl.conf; \
        sed -i 's|Listen 80|Listen 80\nListen 8085|' /etc/httpd/conf/httpd.conf; \
        sed -i 's|\*:80|\*:80 \*:8085|' /etc/httpd/conf.d/apache-toolkit_web_gui.conf; \
+# Prepare script to re-config Opensearch security plugin to reconfig password
+       sed 's|kirk|admin|g' /securityadmin_demo.sh > /usr/local/sbin/securityadmin.sh; \
+       chmod +x /usr/local/sbin/securityadmin.sh; \
+# Set management gui user/password to admin/notadminnono
+       yum -y install httpd-tools && htpasswd -c -b /etc/perfsonar/toolkit/psadmin.htpasswd admin notadminnono ; \
     fi
 
-# Set management gui user/password to admin/notadminnono
-#RUN if [ "$TYPE" = "toolkit" ]; then yum -y install httpd-tools && htpasswd -c -b /etc/perfsonar/toolkit/psadmin.htpasswd admin notadminnono ; fi
 
 # Add default tests (apply empty-file-trick to avoid errors when building)
 #COPY empty-file-do-not-remove *etc/perfsonar-$TYPE/psconfig/pscheduler.d/toolkit-webui.json /etc/perfsonar/psconfig/pscheduler.d/
@@ -209,6 +221,7 @@ RUN sed -i \
     -e 's|//.*\(/.*\.js"\)|js\1|' \
     -e 's|//.*\(/.*\.css"\)|js\1|' \
     -e 's|/js/ajax-loader.gif|"js/ajax-loader.gif"|' \
+    -e 's|/js\.gml|js|' \
     -e 's|favicon.ico|/toolkit/favicon.ico|'    /usr/lib/perfsonar/microdep/microdep-map.html
 RUN mv /usr/lib/perfsonar/microdep/stats.js /usr/lib/perfsonar/microdep/js/
 RUN mv /usr/lib/perfsonar/microdep/ajax-loader.gif /usr/lib/perfsonar/microdep/js/
