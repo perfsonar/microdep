@@ -82,10 +82,14 @@ RUN chown -R postgres:postgres /var/lib/pgsql/$PG_VERSION/data/*
 ARG TYPE
 #RUN su - postgres -c "/usr/pgsql-10/bin/pg_ctl start -w -t 60" \
 #RUN nohup bash -c "/lib/systemd/systemd &" && sleep 4 \
+# TEMP FIX: Download missing lschachedaemon package from older version
+RUN  curl -O http://software.internet2.edu/rpms/el7/x86_64/5.0.3/RPMS/perfsonar-lscachedaemon-5.0.3-1.el7.noarch.rpm
 RUN mkdir -p /var/run/postgresql && chown postgres.postgres /var/run/postgresql \
     && su - postgres -c "/usr/pgsql-10/bin/pg_ctl -D /var/lib/pgsql/10/data start -w -t 120" \
 #su - postgres -c "/usr/pgsql-10/bin/pg_ctl -D /var/lib/pgsql/10/data -l logfile start -W -t 60" \
-    && yum install -y perfsonar-$TYPE perfsonar-toolkit-security 
+#    && yum install -y perfsonar-$TYPE
+# TEMP FIX: Install downloaded lschachedaemon package
+     && yum install -y perfsonar-lscachedaemon-5.0.3-1.el7.noarch.rpm perfsonar-$TYPE
 
 # Clean up 
 RUN yum clean all && rm -rf /var/cache/yum/* && yum -y update
@@ -96,10 +100,10 @@ RUN if [ "$TYPE" = "toolkit" ]; then \
     fi
 RUN if [ "$TYPE" = "toolkit" ]; then \
        # Add Grafana visualisation server
-       sudo yum -y install wget nodejs; \
-       cd /tmp; \
-       wget https://dl.grafana.com/oss/release/grafana-9.3.2-1.x86_64.rpm; \
-       sudo yum -y install grafana-9.3.2-1.x86_64.rpm; \
+       yum -y install wget nodejs https://dl.grafana.com/enterprise/release/grafana-enterprise-10.0.3-1.x86_64.rpm; \
+       #cd /tmp; \
+       #wget https://dl.grafana.com/oss/release/grafana-9.3.2-1.x86_64.rpm; \
+       #yum -y install grafana-9.3.2-1.x86_64.rpm; \
        systemctl enable grafana-server.service; \
     fi
 
@@ -114,7 +118,7 @@ RUN yum -y install perl-ExtUtils-MakeMaker perl-Test-Simple
 RUN cpanm Statistics::LineFit
 #  - trace_event_reader dependencies
 RUN yum -y install python36-mysql gcc python3-devel
-RUN pip3 install multidict typing_extensions yarl async_timeout idna_ssl aiosignal cchardet charset_normalizer
+RUN pip3 install multidict typing_extensions yarl async_timeout idna_ssl aiosignal cchardet charset_normalizer attrs
 RUN pip3 install geoip2
 COPY etc/microdep/GeoLite2-ASN.mmdb /usr/share/GeoIP/
 
@@ -162,7 +166,7 @@ RUN if [ "$TYPE" = "toolkit" ]; then \
 # Increase startup timeout and add auto restart for Opensearch
        sed -i 's|TimeoutStartSec=75|TimeoutStartSec=600\nRestart=on-failure\nRestartSec=10s|g' /usr/lib/systemd/system/opensearch.service; \
 # Fix template error for Logstash
-       cp /usr/share/logstash/vendor/local_gems/022abded/logstash-output-opensearch/lib/logstash/outputs/opensearch/templates/ecs-disabled/1x.json /usr/share/logstash/vendor/local_gems/022abded/logstash-output-opensearch/lib/logstash/outputs/opensearch/templates/ecs-disabled/2x.json; \
+#       cp /usr/share/logstash/vendor/local_gems/022abded/logstash-output-opensearch/lib/logstash/outputs/opensearch/templates/ecs-disabled/1x.json /usr/share/logstash/vendor/local_gems/022abded/logstash-output-opensearch/lib/logstash/outputs/opensearch/templates/ecs-disabled/2x.json; \
 # Fix SSL problems with proxy towards Opensearch
        cp /etc/opensearch/node.pem /etc/opensearch/both.pem; \
        sed 's|PRI|RSA PRI|g' /etc/opensearch/node-key.pem >> /etc/opensearch/both.pem; \
@@ -173,7 +177,7 @@ RUN if [ "$TYPE" = "toolkit" ]; then \
        sed -i 's|Listen 80|Listen 80\nListen 8085|' /etc/httpd/conf/httpd.conf; \
        sed -i 's|\*:80|\*:80 \*:8085|' /etc/httpd/conf.d/apache-toolkit_web_gui.conf; \
 # Prepare script to re-config Opensearch security plugin to reconfig password
-       sed 's|kirk|admin|g' /securityadmin_demo.sh > /usr/local/sbin/securityadmin.sh; \
+       sed -e 's|kirk|admin|g' -e 's|sudo|sudo OPENSEARCH_JAVA_HOME=/usr/share/opensearch/jdk|g' /securityadmin_demo.sh > /usr/local/sbin/securityadmin.sh; \
        chmod +x /usr/local/sbin/securityadmin.sh; \
 # Set management gui user/password to admin/notadminnono
        yum -y install httpd-tools && htpasswd -c -b /etc/perfsonar/toolkit/psadmin.htpasswd admin notadminnono ; \
@@ -303,9 +307,9 @@ COPY etc/microdep/perfsonar-microdep-restart.timer /usr/lib/systemd/system/
 RUN systemctl enable perfsonar-microdep-restart.timer
 
 # Add link to Microdep in web gui sidebar
-COPY etc/httpd/sidebar.html.patch /tmp
+COPY etc/httpd/sidebar.html.patch /root
 RUN if [ "$TYPE" = "toolkit" ]; then \
-      patch -u /usr/lib/perfsonar/web-ng/templates/components/sidebar.html -i /tmp/sidebar.html.patch; \
+      patch -u /usr/lib/perfsonar/web-ng/templates/components/sidebar.html -i /root/sidebar.html.patch; \
     fi
 
 # http web (use 443 instead!)
