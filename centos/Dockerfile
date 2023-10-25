@@ -156,6 +156,9 @@ RUN echo "disable kernel" >> /etc/ntp.conf
 RUN sed -i 's|testports 8760-9960|testports 8760-8800|g' /etc/owamp-server/owamp-server.conf
 RUN sed -i 's|testports 18760-19960|testports 18760-18800|g' /etc/twamp-server/twamp-server.conf
 
+# Add lookup service config
+COPY etc/perfsonar-toolkit/lsregistrationdaemon.conf /etc/perfsonar/lsregistrationdaemon.conf.example
+
 RUN if [ "$TYPE" = "toolkit" ]; then \
 # Fix JNA and temp-file issue with Opensearch and Logstash,
        sed -i 's|${OPENSEARCH_TMPDIR}|/var/log/opensearch|g' /etc/opensearch/jvm.options; \
