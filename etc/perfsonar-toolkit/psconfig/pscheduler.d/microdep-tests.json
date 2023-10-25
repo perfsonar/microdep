@@ -74,6 +74,35 @@
       }
    },
    "groups" : {
+      "dragonlab-test3" : {
+         "a-addresses" : [
+            {
+               "name" : "ps-sis.uninett.no"
+            }
+         ],
+         "b-addresses" : [
+            {
+               "name" : "saopaulo-mp"
+            },
+	     { "name": "amazonie2-mp.cn.uninett.no" },
+	     { "name": "amazonuw3-mp.cn.uninett.no" },
+	     { "name": "amazonff2-mp.cn.uninett.no" }
+         ],
+         "type" : "disjoint"
+      },
+      "dragonlab-test2" : {
+         "a-addresses" : [
+            {
+               "name" : "ps-sis.uninett.no"
+            }
+         ],
+         "b-addresses" : [
+            {
+               "name" : "saopaulo-mp"
+            }
+         ],
+         "type" : "disjoint"
+      },
       "dragonlab-test1" : {
          "a-addresses" : [
             {
@@ -137,11 +166,6 @@
          "repeat" : "PT60S",
          "slip" : "PT60S",
          "sliprand" : true
-      },
-      "Every-10s" : {
-         "repeat" : "PT10S",
-         "slip" : "PT10S",
-         "sliprand" : true
       }
    },
    "tests" : {
@@ -154,6 +178,8 @@
             "source" : "{% address[0] %}",
             "source-node" : "{% pscheduler_address[0] %}",
             "output-raw" : true,
+            "packet-count" : 360000,
+            "packet-subcount" : 200,
 	    "packet-interval": 0.01
          },
          "type" : "latencybg"
@@ -186,7 +212,7 @@
 	   "data": {
                "schema": 2,
                "_url": "amqp://guest:guest@localhost//",
-               "routing-key": "gap-ana",
+               "exchange": "gap-ana",
                "connection-expires": "PT60S",
                "retry-policy": [
 		   { "attempts": 5,  "wait": "PT5S" }
@@ -209,7 +235,7 @@
        }
    }, 
    "tasks" : {
-       "microdep-delay-and-loss" : {
+       "toolkit-testpoints-delay-and-loss" : {
            "_meta" : {
                "display-name" : "Microdep delay and loss measurements"
            },
@@ -217,7 +243,7 @@
            "test" : "Delay-and-loss-ipv4-100pps",
 	   "archives": ["logstash","gap-ana-rmq"]
        },
-       "microdep-traceroutes" : {
+       "toolkit-testpoints-traceroutes" : {
            "_meta" : {
                "display-name" : "Microdep traceroutes every minute"
            },
