@@ -43,17 +43,18 @@ services:
       # Add current dir as volum
       #- .:/root/ps-dev
       - /home/oak:/home/oak
+      - /home/wittner:/home/wittner
     tmpfs: 
       - /run
       - /tmp
     tty: true
     ports:
-#      - 80:80    # http-access
-#      - 443:443   # https-access
-      - 8085:80    # http-access
-      - 4435:443   # https-access
-#      - 5601:5601  # Opensearch Dashboard (Kibana)
-      - 5611:5601  # Opensearch Dashboard (Kibana)
+      - 80:80    # http-access
+      - 443:443   # https-access
+#      - 8085:80    # http-access
+#      - 4435:443   # https-access
+      - 5601:5601  # Opensearch Dashboard (Kibana)
+#      - 5611:5601  # Opensearch Dashboard (Kibana)
       - 3000:3000  # Grafana
       - 861:861    # owamp control
       - 8760-8800:8760-8800 # owamp tests
