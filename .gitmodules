@@ -1,14 +1,14 @@
 [submodule "microdep"]
 	path = microdep
-	url = https://gitlab.sikt.no/iou/microdep.git
+	url = git@gitlab.sikt.no:iou/microdep.git
 [submodule "perfsonar-testpoint-docker"]
 	path = perfsonar-testpoint-docker
 	url = https://github.com/perfsonar/perfsonar-testpoint-docker.git
 [submodule "pstracetree"]
 	path = pstracetree
-	url = https://github.com/perfsonar/pstracetree.git
+	url = git@github.com:perfsonar/pstracetree.git
 [submodule "routingmonitor"]
 	path = routingmonitor
-	url = https://gitlab.sikt.no/iou/routingmonitor.git
+	url = git@gitlab.sikt.no:iou/routingmonitor.git
 
 	
