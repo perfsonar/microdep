@@ -235,7 +235,7 @@
        }
    }, 
    "tasks" : {
-       "toolkit-testpoints-delay-and-loss" : {
+       "microdep-delay-and-loss" : {
            "_meta" : {
                "display-name" : "Microdep delay and loss measurements"
            },
@@ -243,7 +243,7 @@
            "test" : "Delay-and-loss-ipv4-100pps",
 	   "archives": ["logstash","gap-ana-rmq"]
        },
-       "toolkit-testpoints-traceroutes" : {
+       "microdep-traceroutes" : {
            "_meta" : {
                "display-name" : "Microdep traceroutes every minute"
            },

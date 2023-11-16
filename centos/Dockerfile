@@ -157,7 +157,7 @@ RUN sed -i 's|testports 8760-9960|testports 8760-8800|g' /etc/owamp-server/owamp
 RUN sed -i 's|testports 18760-19960|testports 18760-18800|g' /etc/twamp-server/twamp-server.conf
 
 # Add lookup service config
-COPY etc/perfsonar-toolkit/lsregistrationdaemon.conf /etc/perfsonar/lsregistrationdaemon.conf.example
+COPY etc/perfsonar-toolkit/lsregistrationdaemon.conf /etc/perfsonar/lsregistrationdaemon.conf
 
 RUN if [ "$TYPE" = "toolkit" ]; then \
 # Fix JNA and temp-file issue with Opensearch and Logstash,
@@ -185,6 +185,18 @@ RUN if [ "$TYPE" = "toolkit" ]; then \
 # Set management gui user/password to admin/notadminnono
        yum -y install httpd-tools && htpasswd -c -b /etc/perfsonar/toolkit/psadmin.htpasswd admin notadminnono ; \
     fi
+# Add service to run (re)run password setup for opensearch
+COPY etc/opensearch/opensearch-security-admin.service /usr/lib/systemd/system/
+RUN systemctl enable opensearch-security-admin.service
+
+#
+#  M i c r o d e p - i n - p e r f s o n a r   a d d i t i o n s
+#
+
+# Add subsession support for powstream 
+COPY owamp/owamp/owamp/powstream/powstream /usr/bin/powstream
+COPY pscheduler/pscheduler-latencybg-subcount.patch-with-runtime-paths /usr/libexec/pscheduler
+RUN cd /usr/libexec/pscheduler && patch -up1 < pscheduler-latencybg-subcount.patch-with-runtime-paths
 
 
 # Add default tests (apply empty-file-trick to avoid errors when building)
@@ -254,11 +266,16 @@ COPY etc/microdep/rude-list.cfg /usr/lib/perfsonar/microdep/mp-dragonlab/etc/
 COPY etc/microdep/rude-extra.cfg /usr/lib/perfsonar/microdep/mp-dragonlab/etc/
 COPY bin/do-mvar-config /usr/local/bin/
 # Init Microdep config db
+#RUN if [ "$TYPE" = "toolkit" ]; then \
+#        sqlite3 /usr/lib/perfsonar/microdep/mp-dragonlab/etc/microdep.db "CREATE TABLE peers(id integer primary key autoincrement, from_name, to_name, start integer, end integer, type, timestamp);" ; \
+#        sqlite3 /usr/lib/perfsonar/microdep/mp-dragonlab/etc/microdep.db "CREATE TABLE members(id integer primary key autoincrement, datetime,name, user, dns, ip, rude_port, crude_port, ssh_port, status, timestamp);" ; \
+#        do-mvar-config -b /usr/lib/perfsonar/microdep -r /usr/lib/perfsonar/microdep -d "-1 day 0" -s; \
+#    fi
 RUN if [ "$TYPE" = "toolkit" ]; then \
-        sqlite3 /usr/lib/perfsonar/microdep/mp-dragonlab/etc/microdep.db "CREATE TABLE peers(id integer primary key autoincrement, from_name, to_name, start integer, end integer, type, timestamp);" ; \
-        sqlite3 /usr/lib/perfsonar/microdep/mp-dragonlab/etc/microdep.db "CREATE TABLE members(id integer primary key autoincrement, datetime,name, user, dns, ip, rude_port, crude_port, ssh_port, status, timestamp);" ; \
-        do-mvar-config -b /usr/lib/perfsonar/microdep -r /usr/lib/perfsonar/microdep -d "-1 day 0" -s; \
+        /usr/lib/perfsonar/microdep/microdep-psconfig-load.pl -c --db /usr/lib/perfsonar/microdep/mp-dragonlab/etc/microdep.db /etc/perfsonar/psconfig/pscheduler.d/microdep-tests.json; \
     fi
+
+
 # Fix credentials ++ for accessing Opensearch
 RUN if [ "$TYPE" = "toolkit" ]; then \
         USER=`awk -F " " '{print $1}' /etc/perfsonar/opensearch/opensearch_login` ;\
