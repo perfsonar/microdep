@@ -13,3 +13,9 @@
 	url = git@gitlab.sikt.no:iou/routingmonitor.git
 
 	
+[submodule "pscheduler"]
+	path = pscheduler
+	url = git@github.com:perfsonar/pscheduler.git
+[submodule "owamp"]
+	path = owamp
+	url = git@github.com:perfsonar/owamp
