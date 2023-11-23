@@ -1,0 +1,54 @@
+access_policy   research-education
+access_policy_notes   This is a node applied in development hence not reccomended for production use
+add_signature   0
+<administrator>
+    email   microdep@sikt.no
+    name   Microdep project
+</administrator>
+allow_internal_addresses   0
+check_interval   3600
+city   Eskilstuna
+country   SE
+domain   amazonsth2-mp.cn.uninett.no
+latitude   59.3487387
+longitude   16.7041466
+organization   Sikt
+region   Europe
+role   nren
+role   test-host
+<service_template>
+    <local_bandwidth_service>
+        autodiscover_addresses   1
+    </local_bandwidth_service>
+    <local_latency_service>
+        autodiscover_addresses   1
+    </local_latency_service>
+    <local_web_service>
+        autodiscover_addresses   1
+    </local_web_service>
+</service_template>
+<site host>
+    autodiscover   1
+    autodiscover_interfaces   1
+    is_local   1
+    <service>
+        inherits   local_latency_service
+        type   twamp
+    </service>
+    <service>
+        inherits   local_latency_service
+        type   owamp
+    </service>
+    <service>
+        autodiscover_tests   1
+        autodiscover_tools   1
+        https_port   443
+        inherits   local_web_service
+        service_version   pscheduler-1.0
+        type   pscheduler
+        url_path   /pscheduler
+    </service>
+</site>
+site_name   amazonsth2-mp
+site_project   Microdep
+zip_code   7030
