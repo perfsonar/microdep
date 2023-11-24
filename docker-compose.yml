@@ -26,6 +26,7 @@ version: "2.2"
 services:
   toolkit:
     container_name: ps-toolkit
+    hostname: ${TOOLKIT_HOSTNAME:-toolkit}
     depends_on:
       - systemd-image
     image: ottojwittner/microdep-in-perfsonar_toolkit
@@ -33,7 +34,7 @@ services:
       context: .
       dockerfile: ${OS:-centos}/Dockerfile
       args:
-        TYPE: toolkit 
+        TYPE: toolkit
     volumes:
       - /sys/fs/cgroup:/sys/fs/cgroup:ro
       # Make misc data persist over "reboots"
@@ -76,6 +77,7 @@ services:
   testpoint:
     entrypoint: ["echo", "Service testpoint disabled. See docker-compose.yml."]
     container_name: ps-testpoint
+    hostname: ${TESTPOINT_HOSTNAME:-testpoint}
     depends_on:
       - systemd-image
 #      - toolkit
@@ -104,6 +106,7 @@ services:
   net-emulator:
     entrypoint: ["echo", "Service net-emulator disabled. See docker-compose.yml."]
     container_name: ps-netemulator
+    hostname: netemulator
     depends_on:
       - testpoint
       - toolkit

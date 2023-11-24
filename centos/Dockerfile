@@ -86,10 +86,7 @@ ARG TYPE
 RUN  curl -O http://software.internet2.edu/rpms/el7/x86_64/5.0.3/RPMS/perfsonar-lscachedaemon-5.0.3-1.el7.noarch.rpm
 RUN mkdir -p /var/run/postgresql && chown postgres.postgres /var/run/postgresql \
     && su - postgres -c "/usr/pgsql-10/bin/pg_ctl -D /var/lib/pgsql/10/data start -w -t 120" \
-#su - postgres -c "/usr/pgsql-10/bin/pg_ctl -D /var/lib/pgsql/10/data -l logfile start -W -t 60" \
-#    && yum install -y perfsonar-$TYPE
-# TEMP FIX: Install downloaded lschachedaemon package
-     && yum install -y perfsonar-lscachedaemon-5.0.3-1.el7.noarch.rpm perfsonar-$TYPE
+    && yum install -y perfsonar-lscachedaemon-5.0.3-1.el7.noarch.rpm perfsonar-$TYPE
 
 # Clean up 
 RUN yum clean all && rm -rf /var/cache/yum/* && yum -y update
@@ -101,9 +98,6 @@ RUN if [ "$TYPE" = "toolkit" ]; then \
 RUN if [ "$TYPE" = "toolkit" ]; then \
        # Add Grafana visualisation server
        yum -y install wget nodejs https://dl.grafana.com/enterprise/release/grafana-enterprise-10.0.3-1.x86_64.rpm; \
-       #cd /tmp; \
-       #wget https://dl.grafana.com/oss/release/grafana-9.3.2-1.x86_64.rpm; \
-       #yum -y install grafana-9.3.2-1.x86_64.rpm; \
        systemctl enable grafana-server.service; \
     fi
 
@@ -156,8 +150,11 @@ RUN echo "disable kernel" >> /etc/ntp.conf
 RUN sed -i 's|testports 8760-9960|testports 8760-8800|g' /etc/owamp-server/owamp-server.conf
 RUN sed -i 's|testports 18760-19960|testports 18760-18800|g' /etc/twamp-server/twamp-server.conf
 
-# Add lookup service config
-COPY etc/perfsonar-toolkit/lsregistrationdaemon.conf /etc/perfsonar/lsregistrationdaemon.conf
+# Add lookup service configs 
+COPY etc/lsregistrationdaemon.conf*  /etc/perfsonar/
+# Add service to apply host specific ls-config
+COPY etc/lsregistrationdaemon-conf.service /usr/lib/systemd/system/
+RUN systemctl enable lsregistrationdaemon-conf.service
 
 RUN if [ "$TYPE" = "toolkit" ]; then \
 # Fix JNA and temp-file issue with Opensearch and Logstash,
@@ -199,15 +196,11 @@ COPY pscheduler/pscheduler-latencybg-subcount.patch-with-runtime-paths /usr/libe
 RUN cd /usr/libexec/pscheduler && patch -up1 < pscheduler-latencybg-subcount.patch-with-runtime-paths
 
 
-# Add default tests (apply empty-file-trick to avoid errors when building)
-#COPY empty-file-do-not-remove *etc/perfsonar-$TYPE/psconfig/pscheduler.d/toolkit-webui.json /etc/perfsonar/psconfig/pscheduler.d/
-COPY empty-file-do-not-remove *etc/perfsonar-$TYPE/psconfig/pscheduler.d/microdep-tests.json /etc/perfsonar/psconfig/pscheduler.d/
-RUN rm /etc/perfsonar/psconfig/pscheduler.d/empty-file-do-not-remove
-
-# Prepare for feeding measurement via Rabbit message queue server
-#COPY etc/rabbitmq.json /etc/pscheduler/default-archives/rabbitmq.json
-#COPY etc/rabbitmq.json /etc/perfsonar/psconfig/archives.d/
-# Arciving is now specified in microdep-tests.json
+# Add default tests (only for toolkit)
+COPY etc/psconfig/pscheduler.d/microdep-tests.json /etc/perfsonar/psconfig/pscheduler.d/
+RUN if [ "$TYPE" = "testpoint" ]; then \
+       rm -r /etc/perfsonar/psconfig; \
+    fi
 
 # Add some Rabbitmq and Opensearch debugging tools
 COPY bin/mfeit-rabbit-consume.py /usr/local/bin
