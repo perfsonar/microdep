@@ -8,7 +8,8 @@
 #      toolkit --- toolkit-net--- netem --- testpoint-net ---- testpoint_1
 #                      |                          |    | `---- testpoint_2
 #                      `------- docker host ------'    |           : 
-#                                                      `------ testpoint_<num>
+#                                   |                  `------ testpoint_<num>
+#                                Internet  
 #
 #     * netem adds routes in toolkit and testpoints containers to enable traffic to flow between toolkit and testpoints via netem
 #     * netem also adds traffic impairments (i.e. loss and delay) on the path between testpoints and toolkit
@@ -19,11 +20,13 @@
 # Date: 2022-09-02
 
 #version: "3.7"
-version: "3"
+#version: "3"
+version: "2.2"
 
 services:
   toolkit:
     container_name: ps-toolkit
+    hostname: ${TOOLKIT_HOSTNAME:-toolkit}
     depends_on:
       - systemd-image
     image: ottojwittner/microdep-in-perfsonar_toolkit
@@ -31,37 +34,50 @@ services:
       context: .
       dockerfile: ${OS:-centos}/Dockerfile
       args:
-        TYPE: toolkit 
+        TYPE: toolkit
     volumes:
       - /sys/fs/cgroup:/sys/fs/cgroup:ro
+      # Make misc data persist over "reboots"
+      - opensearch:/var/lib/opensearch
+      - grafana:/var/lib/grafana
       # Make opensearch data persist over "reboots"
-      #    NOTE: If enabled, run `sed -i 's/kirk/admin|/g' /securityadmin_demo.sh && /securityadmin_demo.sh` in toolkit container
-      #          to update opensearch credentials
-#      - opensearch:/var/lib/opensearch     
       # Add current dir as volum
-      - .:/root/ps-dev
+      #- .:/root/ps-dev
+      - /home/oak:/home/oak
+      - /home/wittner:/home/wittner
     tmpfs: 
       - /run
       - /tmp
     tty: true
     ports:
-      - 8085:80    # http-access
-      - 4435:443   # https-access
-      - 5611:5601  # Opensearch Dashboard (Kibana)
+      - 80:80    # http-access
+      - 443:443   # https-access
+#      - 8085:80    # http-access
+#      - 4435:443   # https-access
+      - 5601:5601  # Opensearch Dashboard (Kibana)
+#      - 5611:5601  # Opensearch Dashboard (Kibana)
       - 3000:3000  # Grafana
       - 861:861    # owamp control
+      - 8760-8800:8760-8800 # owamp tests
       - 862:862    # twamp control
+      - 18760-18800 # twamp tests
       - 5000:5000  # nuttcp
       - 5101:5101  # nuttcp
       - 5201:5201  # iperf3
       - 5001:5001  # iperf2
       - 1123:123   # ntp
     networks:
-      toolkit-net:
-        ipv4_address: 172.150.1.2
+      ps-sis-net: 
+        ipv4_address: 158.38.2.234         
+#      toolkit-net:
+#        ipv4_address: 172.150.1.2
+#        ipv6_address: fd00::150:1:2
+#    network_mode: host 
 
   testpoint:
+    entrypoint: ["echo", "Service testpoint disabled. See docker-compose.yml."]
     container_name: ps-testpoint
+    hostname: ${TESTPOINT_HOSTNAME:-testpoint}
     depends_on:
       - systemd-image
 #      - toolkit
@@ -88,7 +104,9 @@ services:
     entrypoint: ["echo", "Service systemd-image only provides base image. See docker-compose.yml."]
 
   net-emulator:
+    entrypoint: ["echo", "Service net-emulator disabled. See docker-compose.yml."]
     container_name: ps-netemulator
+    hostname: netemulator
     depends_on:
       - testpoint
       - toolkit
@@ -103,23 +121,44 @@ services:
     networks:
       testpoint-net:
         ipv4_address: 172.150.2.200
+        ipv6_address: fd00::150:2:200
       toolkit-net:
         ipv4_address: 172.150.1.200
+        ipv6_address: fd00::150:1:200
         
 networks:
   testpoint-net:
+    enable_ipv6: true
     ipam:
       driver: default
       config:
         # To match ips given in psconfig files
         - subnet: 172.150.2.0/24
+        - subnet: fd00::150:2:0/112
           
   toolkit-net:
+    enable_ipv6: true
     ipam:
       driver: default
       config:
         # To match ips given in psconfig files
         - subnet: 172.150.1.0/24
+        - subnet: fd00::150:1:0/112
 
+  ps-sis-net:
+    name: ps-sis-net
+    driver: macvlan
+    driver_opts:
+      parent: bond0
+    ipam:
+      config:
+        - subnet: "158.38.2.0/24"
+          ip_range: "158.38.2.234/32"
+          gateway: "158.38.2.1"
+    
 volumes:
   opensearch:
+  opensearch-ps-etc:
+  grafana:
+  etc:
+

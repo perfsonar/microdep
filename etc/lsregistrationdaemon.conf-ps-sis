@@ -9,7 +9,7 @@ allow_internal_addresses   0
 check_interval   3600
 city   Trondheim
 country   NO
-domain   ps-examplhost.uninett.no
+domain   ps-sis.uninett.no
 latitude   63.415918738314055
 longitude   10.39497071350712
 organization   Sikt
@@ -58,6 +58,6 @@ role   test-host
         url_path   /pscheduler
     </service>
 </site>
-site_name   ps-examplehost
+site_name   ps-sis.uninett.no
 site_project   Microdep
 zip_code   7030

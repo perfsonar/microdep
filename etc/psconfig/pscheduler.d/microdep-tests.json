@@ -6,6 +6,29 @@
       }
    },
    "addresses" : {
+      "ps-sis.uninett.no" : {
+         "address" : "158.38.2.234"
+      },
+      "saopaulo-mp" : {
+         "address" : "200.133.192.133",
+         "no-agent" : true
+      },
+       "amazonie2-mp.cn.uninett.no": {
+	   "address": "63.33.90.46",
+	   "no-agent": true 
+       },
+       "amazonsth2-mp.cn.uninett.no": {
+	   "address": "16.170.114.107",
+	   "no-agent": true
+       },
+       "amazonuw3-mp.cn.uninett.no": {
+	   "address": "44.232.96.55",
+	   "no-agent": true 
+       },
+       "amazonff2-mp.cn.uninett.no": {
+	   "address": "3.64.103.227",
+	   "no-agent": true
+       },
       "toolkit_1" : {
          "address" : "172.150.1.2"
       },
@@ -51,6 +74,52 @@
       }
    },
    "groups" : {
+      "dragonlab-test3" : {
+         "a-addresses" : [
+            {
+               "name" : "ps-sis.uninett.no"
+            }
+         ],
+         "b-addresses" : [
+            {
+               "name" : "saopaulo-mp"
+            },
+	     { "name": "amazonie2-mp.cn.uninett.no" },
+	     { "name": "amazonuw3-mp.cn.uninett.no" },
+	     { "name": "amazonff2-mp.cn.uninett.no" }
+         ],
+         "type" : "disjoint"
+      },
+      "dragonlab-test2" : {
+         "a-addresses" : [
+            {
+               "name" : "ps-sis.uninett.no"
+            }
+         ],
+         "b-addresses" : [
+            {
+               "name" : "saopaulo-mp"
+            }
+         ],
+         "type" : "disjoint"
+      },
+      "dragonlab-test1" : {
+         "a-addresses" : [
+            {
+               "name" : "ps-sis.uninett.no"
+            }
+         ],
+         "b-addresses" : [
+            {
+               "name" : "saopaulo-mp"
+            },
+	     { "name": "amazonie2-mp.cn.uninett.no" },
+	     { "name": "amazonsth2-mp.cn.uninett.no" },
+	     { "name": "amazonuw3-mp.cn.uninett.no" },
+	     { "name": "amazonff2-mp.cn.uninett.no" }
+         ],
+         "type" : "disjoint"
+      },
       "Star-topology" : {
          "a-addresses" : [
             {
@@ -109,6 +178,8 @@
             "source" : "{% address[0] %}",
             "source-node" : "{% pscheduler_address[0] %}",
             "output-raw" : true,
+            "packet-count" : 360000,
+            "packet-subcount" : 200,
 	    "packet-interval": 0.01
          },
          "type" : "latencybg"
@@ -118,7 +189,8 @@
             "dest" : "{% address[1] %}",
             "ip-version" : 4,
             "source" : "{% address[0] %}",
-            "source-node" : "{% pscheduler_address[0] %}"
+            "source-node" : "{% pscheduler_address[0] %}",
+	    "probe-type" : "tcp" 
          },
          "type" : "trace"
       }
@@ -140,7 +212,7 @@
 	   "data": {
                "schema": 2,
                "_url": "amqp://guest:guest@localhost//",
-               "routing-key": "gap-ana",
+               "exchange": "gap-ana",
                "connection-expires": "PT60S",
                "retry-policy": [
 		   { "attempts": 5,  "wait": "PT5S" }
@@ -163,19 +235,19 @@
        }
    }, 
    "tasks" : {
-       "toolkit-testpoints-delay-and-loss" : {
+       "microdep-delay-and-loss" : {
            "_meta" : {
                "display-name" : "Microdep delay and loss measurements"
            },
-           "group" : "Star-topology",
+           "group" : "dragonlab-test1",
            "test" : "Delay-and-loss-ipv4-100pps",
 	   "archives": ["logstash","gap-ana-rmq"]
        },
-       "toolkit-testpoints-traceroutes" : {
+       "microdep-traceroutes" : {
            "_meta" : {
                "display-name" : "Microdep traceroutes every minute"
            },
-           "group" : "Star-topology",
+           "group" : "dragonlab-test1",
            "schedule" : "Every-60s",
            "test" : "Traceroute-ipv4",
 	   "archives": ["logstash","traceroute-rmq"]
