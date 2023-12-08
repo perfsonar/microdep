@@ -1,0 +1,173 @@
+{
+   "_meta" : {
+      "psconfig-translation" : {
+         "source-format" : "mesh-config-tasks-conf",
+         "time-translated" : "2022-09-13T14:39:46+00:00"
+      }
+   },
+   "addresses" : {
+      "ps-sis.uninett.no" : {
+         "address" : "158.38.2.234"
+      },
+      "saopaulo-mp" : {
+         "address" : "200.133.192.133",
+         "no-agent" : true
+      },
+       "amazonie2-mp.cn.uninett.no": {
+	   "address": "63.33.90.46",
+	   "no-agent": true 
+       },
+       "amazonsth2-mp.cn.uninett.no": {
+	   "address": "16.170.114.107",
+	   "no-agent": true
+       },
+       "amazonuw3-mp.cn.uninett.no": {
+	   "address": "44.232.96.55",
+	   "no-agent": true 
+       },
+       "amazonff2-mp.cn.uninett.no": {
+	   "address": "3.64.103.227",
+	   "no-agent": true
+       }
+   },
+   "groups" : {
+      "dragonlab-test3" : {
+         "a-addresses" : [
+            {
+               "name" : "ps-sis.uninett.no"
+            }
+         ],
+         "b-addresses" : [
+            {
+               "name" : "saopaulo-mp"
+            },
+	     { "name": "amazonie2-mp.cn.uninett.no" },
+	     { "name": "amazonuw3-mp.cn.uninett.no" },
+	     { "name": "amazonff2-mp.cn.uninett.no" }
+         ],
+         "type" : "disjoint"
+      },
+      "dragonlab-test2" : {
+         "a-addresses" : [
+            {
+               "name" : "ps-sis.uninett.no"
+            }
+         ],
+         "b-addresses" : [
+            {
+               "name" : "saopaulo-mp"
+            }
+         ],
+         "type" : "disjoint"
+      },
+      "dragonlab-test1" : {
+         "a-addresses" : [
+            {
+               "name" : "ps-sis.uninett.no"
+            }
+         ],
+         "b-addresses" : [
+            {
+               "name" : "saopaulo-mp"
+            },
+	     { "name": "amazonie2-mp.cn.uninett.no" },
+	     { "name": "amazonsth2-mp.cn.uninett.no" },
+	     { "name": "amazonuw3-mp.cn.uninett.no" },
+	     { "name": "amazonff2-mp.cn.uninett.no" }
+         ],
+         "type" : "disjoint"
+      }
+    },
+   "schedules" : {
+      "Every-60s" : {
+         "repeat" : "PT60S",
+         "slip" : "PT60S",
+         "sliprand" : true
+      }
+   },
+   "tests" : {
+      "Delay-and-loss-ipv4-100pps" : {
+         "spec" : {
+            "dest" : "{% address[1] %}",
+            "dest-node" : "{% pscheduler_address[1] %}",
+            "flip" : "{% flip %}",
+            "ip-version" : 4,
+            "source" : "{% address[0] %}",
+            "source-node" : "{% pscheduler_address[0] %}",
+            "output-raw" : true,
+            "packet-count" : 360000,
+            "packet-subcount" : 200,
+	    "packet-interval": 0.01
+         },
+         "type" : "latencybg"
+      },
+      "Traceroute-ipv4" : {
+         "spec" : {
+            "dest" : "{% address[1] %}",
+            "ip-version" : 4,
+            "source" : "{% address[0] %}",
+            "source-node" : "{% pscheduler_address[0] %}",
+	    "probe-type" : "tcp" 
+         },
+         "type" : "trace"
+      }
+   },
+   "archives": { 
+       "logstash": {
+	   "archiver": "http",
+	   "data": {
+               "schema": 2,
+               "_url": "http://localhost/logstash",
+               "op": "put",
+               "_headers": {
+		   "content-type": "application/json", "Authorization":"Basic cGVyZnNvbmFyOjcyOUpmVGVYcG9lazFFaFdyVTNJ"
+               }
+	   }
+       },
+       "gap-ana-rmq": {
+	   "archiver": "rabbitmq",
+	   "data": {
+               "schema": 2,
+               "_url": "amqp://guest:guest@localhost//",
+               "exchange": "gap-ana",
+               "connection-expires": "PT60S",
+               "retry-policy": [
+		   { "attempts": 5,  "wait": "PT5S" }
+               ]
+	   },
+	   "ttl": "PT1H"
+       },
+       "traceroute-rmq": {
+	   "archiver": "rabbitmq",
+	   "data": {
+               "schema": 2,
+               "_url": "amqp://guest:guest@localhost//",
+               "routing-key": "traceroute",
+               "connection-expires": "PT120S",
+               "retry-policy": [
+		   { "attempts": 5,  "wait": "PT5S" }
+               ]
+	   },
+	   "ttl": "PT1H"
+       }
+   }, 
+   "tasks" : {
+       "microdep-delay-and-loss" : {
+           "_meta" : {
+               "display-name" : "Microdep delay and loss measurements"
+           },
+           "group" : "dragonlab-test1",
+           "test" : "Delay-and-loss-ipv4-100pps",
+	   "archives": ["logstash","gap-ana-rmq"]
+       },
+       "microdep-traceroutes" : {
+           "_meta" : {
+               "display-name" : "Microdep traceroutes every minute"
+           },
+           "group" : "dragonlab-test1",
+           "schedule" : "Every-60s",
+           "test" : "Traceroute-ipv4",
+	   "archives": ["logstash","traceroute-rmq"]
+       }
+   }
+}
