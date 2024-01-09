@@ -1,0 +1,10 @@
+[Unit]
+Description=Enable host specific config file for lsregistration service
+Before=perfsonar-lsregistrationdaemon.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -c "/usr/bin/cp /etc/perfsonar/lsregistrationdaemon.conf-$(/usr/bin/hostname) /etc/perfsonar/lsregistrationdaemon.conf"
+
+[Install]
+WantedBy=multi-user.target

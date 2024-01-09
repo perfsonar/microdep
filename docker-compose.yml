@@ -26,20 +26,20 @@ version: "2.2"
 services:
   toolkit:
     container_name: ps-toolkit
+    hostname: ${TOOLKIT_HOSTNAME:-toolkit}
     depends_on:
       - systemd-image
-    image: ottojwittner/microdep-in-perfsonar_toolkit
     build:
       context: .
       dockerfile: ${OS:-centos}/Dockerfile
       args:
-        TYPE: toolkit 
+        TYPE: toolkit
     volumes:
       - /sys/fs/cgroup:/sys/fs/cgroup:ro
+      # Make misc data persist over "reboots"
+      - opensearch:/var/lib/opensearch
+      - grafana:/var/lib/grafana
       # Make opensearch data persist over "reboots"
-      #    NOTE: If enabled, run `sed -i 's/kirk/admin|/g' /securityadmin_demo.sh && /securityadmin_demo.sh` in toolkit container
-      #          to update opensearch credentials
-#      - opensearch:/var/lib/opensearch     
       # Add current dir as volum
       - .:/root/ps-dev
     tmpfs: 
@@ -48,12 +48,13 @@ services:
     tty: true
     ports:
 #      - 80:80    # http-access
-#      - 443:443   # https-access
       - 8085:80    # http-access
+#      - 443:443   # https-access
       - 4435:443   # https-access
 #      - 5601:5601  # Opensearch Dashboard (Kibana)
       - 5611:5601  # Opensearch Dashboard (Kibana)
-      - 3000:3000  # Grafana
+#      - 3000:3000  # Grafana
+      - 3030:3000  # Grafana
       - 861:861    # owamp control
       - 8760-8800:8760-8800 # owamp tests
       - 862:862    # twamp control
@@ -61,7 +62,8 @@ services:
       - 5000:5000  # nuttcp
       - 5101:5101  # nuttcp
       - 5201:5201  # iperf3
-      - 5001:5001  # iperf2
+#      - 5001:5001  # iperf2
+      - 5011:5001  # iperf2
       - 1123:123   # ntp
     networks:
       toolkit-net:
@@ -69,11 +71,12 @@ services:
         ipv6_address: fd00::150:1:2
 
   testpoint:
+#    entrypoint: ["echo", "Service testpoint disabled. See docker-compose.yml."]
     container_name: ps-testpoint
+    hostname: ${TESTPOINT_HOSTNAME:-testpoint}
     depends_on:
       - systemd-image
-#      - toolkit
-    image: ottojwittner/microdep-in-perfsonar_testpoint
+      - toolkit
     build:
       context: .
       dockerfile: ${OS:-centos}/Dockerfile
@@ -83,10 +86,8 @@ services:
        - /sys/fs/cgroup:/sys/fs/cgroup:ro
     networks:
       - testpoint-net
-#    network_mode: host 
 
   systemd-image:
-    image: ottojwittner/microdep-in-perfsonar_systemd-image
     build:
       context: .
       dockerfile: ${OS:-centos}/Dockerfile-systemd
@@ -96,11 +97,12 @@ services:
     entrypoint: ["echo", "Service systemd-image only provides base image. See docker-compose.yml."]
 
   net-emulator:
+#    entrypoint: ["echo", "Service net-emulator disabled. See docker-compose.yml."]
     container_name: ps-netemulator
+    hostname: netemulator
     depends_on:
       - testpoint
       - toolkit
-    image: ottojwittner/microdep-in-perfsonar_net-emulator
     build:
       context: .
       dockerfile: netem/Dockerfile
@@ -134,6 +136,7 @@ networks:
         # To match ips given in psconfig files
         - subnet: 172.150.1.0/24
         - subnet: fd00::150:1:0/112
-
 volumes:
   opensearch:
+  grafana:
+

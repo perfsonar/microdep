@@ -1,0 +1,13 @@
+[Unit]
+Description=Run securityadmin script to update passwords
+After=opensearch.service
+Requires=opensearch.service
+
+[Service]
+Type=oneshot
+# Wait a minute to ensure opensearch is ready
+ExecStartPre=/bin/sleep 60
+ExecStart=/usr/local/sbin/securityadmin.sh
+
+[Install]
+WantedBy=multi-user.target

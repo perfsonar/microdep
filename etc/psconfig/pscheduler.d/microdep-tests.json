@@ -109,6 +109,8 @@
             "source" : "{% address[0] %}",
             "source-node" : "{% pscheduler_address[0] %}",
             "output-raw" : true,
+            "packet-count" : 360000,
+            "packet-subcount" : 200,
 	    "packet-interval": 0.01
          },
          "type" : "latencybg"
@@ -118,7 +120,8 @@
             "dest" : "{% address[1] %}",
             "ip-version" : 4,
             "source" : "{% address[0] %}",
-            "source-node" : "{% pscheduler_address[0] %}"
+            "source-node" : "{% pscheduler_address[0] %}",
+	    "probe-type" : "tcp" 
          },
          "type" : "trace"
       }
@@ -140,7 +143,7 @@
 	   "data": {
                "schema": 2,
                "_url": "amqp://guest:guest@localhost//",
-               "routing-key": "gap-ana",
+               "exchange": "gap-ana",
                "connection-expires": "PT60S",
                "retry-policy": [
 		   { "attempts": 5,  "wait": "PT5S" }
@@ -163,7 +166,7 @@
        }
    }, 
    "tasks" : {
-       "toolkit-testpoints-delay-and-loss" : {
+       "microdep-delay-and-loss" : {
            "_meta" : {
                "display-name" : "Microdep delay and loss measurements"
            },
@@ -171,7 +174,7 @@
            "test" : "Delay-and-loss-ipv4-100pps",
 	   "archives": ["logstash","gap-ana-rmq"]
        },
-       "toolkit-testpoints-traceroutes" : {
+       "microdep-traceroutes" : {
            "_meta" : {
                "display-name" : "Microdep traceroutes every minute"
            },

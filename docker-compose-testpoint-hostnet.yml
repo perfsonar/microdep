@@ -13,6 +13,7 @@ version: "3"
 services:
   testpoint:
     container_name: ps-testpoint
+    hostname: ${TESTPOINT_HOSTNAME:-testpoint}
     depends_on:
       - systemd-image
     build:
