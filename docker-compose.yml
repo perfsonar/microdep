@@ -62,7 +62,8 @@ services:
       - 5000:5000  # nuttcp
       - 5101:5101  # nuttcp
       - 5201:5201  # iperf3
-      - 5001:5001  # iperf2
+#      - 5001:5001  # iperf2
+      - 5011:5001  # iperf2
       - 1123:123   # ntp
     networks:
       toolkit-net:
@@ -70,7 +71,7 @@ services:
         ipv6_address: fd00::150:1:2
 
   testpoint:
-    entrypoint: ["echo", "Service testpoint disabled. See docker-compose.yml."]
+#    entrypoint: ["echo", "Service testpoint disabled. See docker-compose.yml."]
     container_name: ps-testpoint
     hostname: ${TESTPOINT_HOSTNAME:-testpoint}
     depends_on:

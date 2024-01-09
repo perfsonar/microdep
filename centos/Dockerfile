@@ -118,12 +118,15 @@ COPY etc/microdep/GeoLite2-ASN.mmdb /usr/share/GeoIP/
 
 # Fetch css, js and other source-files for Microdep
 COPY microdep/server/script/*  /usr/lib/perfsonar/microdep-map/
-COPY microdep/server/script/microdep-config.yml /etc/perfsonar/microdep-map
-RUN rm /usr/lib/perfsonar/microdep-map/microdep-config.yml
 RUN  mkdir -p /usr/lib/perfsonar/microdep-map/js
 RUN if [ "$TYPE" = "toolkit" ]; then \
        wget -P /usr/lib/perfsonar/microdep-map/js/ -i /usr/lib/perfsonar/microdep-map/list-of-external-sources.txt; \
     fi
+# Add jquery libs
+RUN yum -y install js-jquery.noarch js-jquery-ui.noarch
+RUN ln -s /usr/share/javascript/jquery/latest /usr/lib/perfsonar/microdep-map/jquery
+RUN ln -s /usr/share/javascript/jquery-ui /usr/lib/perfsonar/microdep-map/jquery-ui
+
 
 # ----  E n d   d o w n l o a d s   a n d   p a c k a g e   i n s t a l l   ----
 
@@ -226,6 +229,9 @@ RUN cd /usr/lib/perfsonar/microdep-map/; ln -s microdep-map.html index.html
 # Moved to download/install: RUN mkdir /usr/lib/perfsonar/microdep-map/js
 # Moved to download/install: RUN wget -P /usr/lib/perfsonar/microdep-map/js/ -i /usr/lib/perfsonar/microdep-map/list-of-external-sources.txt
 RUN sed -i \
+    -e 's|src=\".*jquery.*min\.js\"|src=\"jquery/jquery.min.js\"|' \
+    -e 's|src=\".*jquery-ui.*min\.js\"|src=\"jquery-ui/jquery-ui.min.js"|' \
+    -e 's|href=\".*jquery-ui.*min\.css\"|href=\"jquery-ui/jquery-ui.min.css\"|' \
     -e 's|<link rel="stylesheet" href="/uninett-bootstrap-theme/css/bootstrap.min.css">||' \
     -e 's|<link rel="stylesheet" href="/uninett-theme/css/uninett.css">||' \
     -e 's|; @import url("/styles.css");||' \
@@ -235,7 +241,7 @@ RUN sed -i \
     -e 's|//.*\(/.*\.css"\)|js\1|' \
     -e 's|/js/ajax-loader.gif|"js/ajax-loader.gif"|' \
     -e 's|/js\.gml|js|' \
-    -e 's|favicon.ico|/toolkit/favicon.ico|'    /usr/lib/perfsonar/microdep/microdep-map.html
+    -e 's|favicon.ico|/toolkit/favicon.ico|'    /usr/lib/perfsonar/microdep-map/microdep-map.html
 RUN mv /usr/lib/perfsonar/microdep-map/stats.js /usr/lib/perfsonar/microdep-map/js/
 RUN mv /usr/lib/perfsonar/microdep-map/ajax-loader.gif /usr/lib/perfsonar/microdep-map/js/
 COPY etc/microdep/marker-*.png /usr/lib/perfsonar/microdep-map/js/images/
@@ -243,23 +249,25 @@ COPY etc/microdep/marker-*.png /usr/lib/perfsonar/microdep-map/js/images/
 RUN sed -i 's|::Simple||' /usr/lib/perfsonar/microdep-map/microdep-config.cgi
 RUN sed -i "s|YAML|YAML::XS|g" /usr/lib/perfsonar/microdep-map/yaml-to-json.cgi
 # Add and adjust to support global/Dragonlab topology (and remove Uninett topology)
-#COPY etc/microdep/dragonlab*.json /usr/lib/perfsonar/microdep/dragonlab/
-#COPY etc/microdep/mp-names.txt /usr/lib/perfsonar/microdep/mp-dragonlab/etc/
-#COPY etc/microdep/mp-address.txt /usr/lib/perfsonar/microdep/mp-dragonlab/etc/
-#COPY etc/microdep/rude-list.cfg /usr/lib/perfsonar/microdep/mp-dragonlab/etc/
-#COPY etc/microdep/rude-extra.cfg /usr/lib/perfsonar/microdep/mp-dragonlab/etc/
+RUN sed -i 's|/var/lib/microdep|/usr/lib/perfsonar/microdep-map|' /usr/lib/perfsonar/microdep-map/microdep-config.yml
+COPY etc/microdep/dragonlab*.json /usr/lib/perfsonar/microdep-map/dragonlab/
+#COPY etc/microdep/mp-names.txt /usr/lib/perfsonar/microdep-map/mp-dragonlab/etc/
+#COPY etc/microdep/mp-address.txt /usr/lib/perfsonar/microdep-map/mp-dragonlab/etc/
+#COPY etc/microdep/rude-list.cfg /usr/lib/perfsonar/microdep-map/mp-dragonlab/etc/
+#COPY etc/microdep/rude-extra.cfg /usr/lib/perfsonar/microdep-map/mp-dragonlab/etc/
 #COPY bin/do-mvar-config /usr/local/bin/
 # Init Microdep config db
 RUN if [ "$TYPE" = "toolkit" ]; then \
-        /usr/lib/perfsonar/microdep/microdep-psconfig-load.pl -c --db /usr/lib/perfsonar/microdep/mp-dragonlab/etc/microdep.db /etc/perfsonar/psconfig/pscheduler.d/microdep-tests.json; \
+        mkdir -p /usr/lib/perfsonar/microdep-map/mp-dragonlab/etc/; \
+        /usr/lib/perfsonar/microdep-map/microdep-psconfig-load.pl -c --db /usr/lib/perfsonar/microdep-map/mp-dragonlab/etc/microdep.db /etc/perfsonar/psconfig/pscheduler.d/microdep-tests.json; \
     fi
 
 # Fix credentials ++ for accessing Opensearch
 RUN if [ "$TYPE" = "toolkit" ]; then \
         USER=`awk -F " " '{print $1}' /etc/perfsonar/opensearch/opensearch_login` ;\
         PASSWD=`awk -F " " '{print $2}' /etc/perfsonar/opensearch/opensearch_login` ; \
-        sed -i "s|http://admin:no+nz+br|https://$USER:$PASSWD|g" /usr/lib/perfsonar/microdep/elastic-get-date-type.pl; \
-        sed -i "s|curl -X POST|curl -X POST --insecure|g" /usr/lib/perfsonar/microdep/elastic-get-date-type.pl; \
+        sed -i "s|http://admin:no+nz+br|https://$USER:$PASSWD|g" /usr/lib/perfsonar/microdep-map/elastic-get-date-type.pl; \
+        sed -i "s|curl -X POST|curl -X POST --insecure|g" /usr/lib/perfsonar/microdep-map/elastic-get-date-type.pl; \
     fi
 
 #   A d d   T r a c e t r e e   w e b   G U I 

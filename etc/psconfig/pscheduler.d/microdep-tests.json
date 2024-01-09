@@ -170,7 +170,7 @@
            "_meta" : {
                "display-name" : "Microdep delay and loss measurements"
            },
-           "group" : "dragonlab-test1",
+           "group" : "Star-topology",
            "test" : "Delay-and-loss-ipv4-100pps",
 	   "archives": ["logstash","gap-ana-rmq"]
        },
