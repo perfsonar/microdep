@@ -1,0 +1,68 @@
+#
+#  Ref: https://markandruth.co.uk/2020/10/10/running-systemd-inside-a-centos-8-docker-container
+#
+FROM almalinux:9
+
+ENV \
+	LANG=C.UTF-8 \
+	container=docker \
+	init=/lib/systemd/systemd
+
+# install systemd packages
+RUN \
+    yum -y install -y \
+    		systemd
+
+# configure systemd
+RUN \
+# remove systemd 'wants' triggers
+	find \
+		/etc/systemd/system/*.wants/* \
+		/lib/systemd/system/multi-user.target.wants/* \
+		/lib/systemd/system/local-fs.target.wants/* \
+		/lib/systemd/system/sockets.target.wants/*initctl* \
+		! -type d \
+		-delete && \
+#RUN \		
+# remove everything except tmpfiles setup in sysinit target
+	find \
+		/lib/systemd/system/sysinit.target.wants \
+		! -type d \
+		! -name '*systemd-tmpfiles-setup*' \
+		-delete && \
+#RUN \
+# remove UTMP updater service
+	find \
+		/lib/systemd \
+		-name systemd-update-utmp-runlevel.service \
+		-delete && \
+#RUN \		
+# disable /tmp mount
+	rm -vf /usr/share/systemd/tmp.mount && \
+#RUN \
+# fix missing BPF firewall support warning
+	sed -ri '/^IPAddressDeny/d' /lib/systemd/system/systemd-journald.service && \
+#RUN \
+# just for cosmetics, fix "not-found" entries while using "systemctl --all"
+	for MATCH in \
+		plymouth-start.service \
+		plymouth-quit-wait.service \
+		syslog.socket \
+		syslog.service \
+		display-manager.service \
+		systemd-sysusers.service \
+		tmp.mount \
+		systemd-udevd.service \
+		; do \
+			grep -rn --binary-files=without-match  ${MATCH} /lib/systemd/ | cut -d: -f1 | xargs sed -ri 's/(.*=.*)'${MATCH}'(.*)/\1\2/'; \
+	done && \
+#RUN \
+	systemctl set-default multi-user.target
+
+VOLUME ["/run", "/run/lock"]
+
+STOPSIGNAL SIGRTMIN+3
+
+# Might want to make the image just "died" since it is ment to be a "parent" for other containers
+ENTRYPOINT ["/lib/systemd/systemd"]
+
