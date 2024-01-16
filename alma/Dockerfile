@@ -22,7 +22,7 @@
 #
 
 
-FROM microdep-in-perfsonar_systemd-image:latest
+FROM ottojwittner/systemd-image-alma:latest
 MAINTAINER Otto J Wittner <wittner@sikt.no>
 
 # Fix default locals
@@ -34,19 +34,17 @@ ENV LC_CTYPE=en_US.UTF-8
 # ---- D o w n l o a d   a n d   i n s t a l l   p a c k a g e s  ------
 
 # Install the EPEL RPM
-RUN yum install -y epel-release
+RUN dnf install -y epel-release && dnf config-manager --set-enabled crb
 
-# Point CentOS installation at the perfSONAR main yum repository
-# Install the staging yum repository where test versions of the software are kept.
-#RUN yum install -y perfSONAR-repo-staging
-#RUN rpm -hUv http://software.internet2.edu/rpms/el7/x86_64/latest/packages/perfSONAR-repo-0.11-1.noarch.rpm
-RUN yum install -y http://software.internet2.edu/rpms/el7/x86_64/latest/packages/perfsonar-repo-0.11-1.noarch.rpm
+# Point CentOS installation at the perfSONAR main repository
+RUN dnf install -y http://software.internet2.edu/rpms/el9/x86_64/latest/packages/perfsonar-repo-0.11-1.noarch.rpm
 
 # Clean cache and update 
-RUN yum clean all && rm -rf /var/cache/yum/* && yum -y update
+RUN dnf clean all && rm -rf /var/cache/dnf/* && dnf -y update
 
 # Install management packages
-RUN yum install -y  coreutils man-db nano emacs git patch openssh-client net-tools iputils-ping traceroute tcpdump curl bind9-host unzip gnupg software-properties-common 
+RUN dnf install -y --allowerasing coreutils man-db nano emacs git patch openssh-clients net-tools iputils traceroute tcpdump curl bind-utils unzip gnupg
+#RUN apt install -y software-properties-common 
 
 # Fiks tcpdump issue for priveledge mode
 RUN mv /usr/sbin/tcpdump /usr/bin/tcpdump
@@ -59,59 +57,62 @@ RUN ln -s /usr/bin/tcpdump /usr/sbin/tcpdump
 # and
 # https://raw.githubusercontent.com/perfsonar/perfsonar-testpoint-docker/master/systemd/Dockerfile
 
-RUN yum install -y postgresql10-server
+#RUN dnf install -y postgresql10-server
 
 # Postgresql version
-ENV PG_VERSION 10
-ENV PGVERSION 10
+#ENV PG_VERSION 10
+#ENV PGVERSION 10
 
 # Set the environment variables
-ENV PGDATA /var/lib/pgsql/10/data
+#ENV PGDATA /var/lib/pgsql/10/data
 
 # Initialize the database
-RUN su - postgres -c "/usr/pgsql-10/bin/pg_ctl init"
+#RUN su - postgres -c "/usr/pgsql-10/bin/pg_ctl init"
 
 # Overlay the configuration files
-COPY perfsonar-testpoint-docker/postgresql/postgresql.conf /var/lib/pgsql/$PG_VERSION/data/postgresql.conf
-COPY perfsonar-testpoint-docker/postgresql/pg_hba.conf /var/lib/pgsql/$PG_VERSION/data/pg_hba.conf
+#COPY perfsonar-testpoint-docker/postgresql/postgresql.conf /var/lib/pgsql/$PG_VERSION/data/postgresql.conf
+#COPY perfsonar-testpoint-docker/postgresql/pg_hba.conf /var/lib/pgsql/$PG_VERSION/data/pg_hba.conf
 
 # Change own user
-RUN chown -R postgres:postgres /var/lib/pgsql/$PG_VERSION/data/*
+#RUN chown -R postgres:postgres /var/lib/pgsql/$PG_VERSION/data/*
 
 #Start postgresql and install perfSONAR
 ARG TYPE
 #RUN su - postgres -c "/usr/pgsql-10/bin/pg_ctl start -w -t 60" \
 #RUN nohup bash -c "/lib/systemd/systemd &" && sleep 4 \
 # TEMP FIX: Download missing lschachedaemon package from older version
-RUN  curl -O http://software.internet2.edu/rpms/el7/x86_64/5.0.3/RPMS/perfsonar-lscachedaemon-5.0.3-1.el7.noarch.rpm
-RUN mkdir -p /var/run/postgresql && chown postgres.postgres /var/run/postgresql \
-    && su - postgres -c "/usr/pgsql-10/bin/pg_ctl -D /var/lib/pgsql/10/data start -w -t 120" \
-    && yum install -y perfsonar-lscachedaemon-5.0.3-1.el7.noarch.rpm perfsonar-$TYPE
+#RUN  curl -O http://software.internet2.edu/rpms/el7/x86_64/5.0.3/RPMS/perfsonar-lscachedaemon-5.0.3-1.el7.noarch.rpm
+#RUN mkdir -p /var/run/postgresql && chown postgres.postgres /var/run/postgresql \
+#    && su - postgres -c "/usr/pgsql-10/bin/pg_ctl -D /var/lib/pgsql/10/data start -w -t 120" \
+#    && dnf install -y perfsonar-lscachedaemon-5.0.3-1.el7.noarch.rpm perfsonar-$TYPE
+RUN dnf install -y perfsonar-$TYPE
 
 # Clean up 
-RUN yum clean all && rm -rf /var/cache/yum/* && yum -y update
+RUN dnf clean all && rm -rf /var/cache/dnf/* && dnf -y update
 
 RUN if [ "$TYPE" = "toolkit" ]; then \
        # Add Opensearch dashboards ("Kibana")
-       yum -y install opensearch-dashboards && systemctl enable opensearch-dashboards.service ; \
+       dnf -y install opensearch-dashboards && systemctl enable opensearch-dashboards.service ; \
     fi
 RUN if [ "$TYPE" = "toolkit" ]; then \
        # Add Grafana visualisation server
-       yum -y install wget nodejs https://dl.grafana.com/enterprise/release/grafana-enterprise-10.0.3-1.x86_64.rpm; \
+       dnf -y install wget nodejs https://dl.grafana.com/enterprise/release/grafana-enterprise-10.0.3-1.x86_64.rpm; \
        systemctl enable grafana-server.service; \
     fi
 
 # Add Rabbit message queue packages
-RUN yum -y install rabbitmq-server python36-pika && systemctl enable rabbitmq-server.service 
+RUN dnf -y install centos-release-rabbitmq-38 && dnf -y update
+RUN dnf -y install rabbitmq-server python3-pika && systemctl enable rabbitmq-server.service 
 
 # Add packages required by microdep analytics.
 #   - qstream-gap-ana dependencies:
-RUN yum -y install perl-App-cpanminus perl-Statistics-Basic perl-DateTime perl-JSON-XS perl-File-ShareDir-Install perl-Test-Exception perl-AnyEvent perl-ExtUtils-MakeMaker perl-version perl-Readonly perl-namespace-clean perl-Devel-GlobalDestruction perl-File-ShareDir perl-List-MoreUtils perl-Class-Data-Inheritable perl-Test-Simple perl-Test-Deep perl-YAML-LibYAML wget
+RUN dnf -y install perl-App-cpanminus perl-DateTime perl-JSON-XS perl-File-ShareDir-Install perl-Test-Exception perl-AnyEvent perl-ExtUtils-MakeMaker perl-version perl-Readonly perl-namespace-clean perl-Devel-GlobalDestruction perl-File-ShareDir perl-List-MoreUtils perl-Class-Data-Inheritable perl-Test-Simple perl-Test-Deep perl-YAML-LibYAML wget
+RUN cpanm Statistics::Basic
 RUN cpanm AnyEvent::RabbitMQ
-RUN yum -y install perl-ExtUtils-MakeMaker perl-Test-Simple
+RUN dnf -y install perl-ExtUtils-MakeMaker perl-Test-Simple
 RUN cpanm Statistics::LineFit
 #  - trace_event_reader dependencies
-RUN yum -y install python36-mysql gcc python3-devel
+RUN dnf -y install python3-mysqlclient gcc python3-devel
 RUN pip3 install multidict typing_extensions yarl async_timeout idna_ssl aiosignal cchardet charset_normalizer attrs
 RUN pip3 install geoip2
 COPY etc/microdep/GeoLite2-ASN.mmdb /usr/share/GeoIP/
@@ -123,21 +124,22 @@ RUN if [ "$TYPE" = "toolkit" ]; then \
        wget -P /usr/lib/perfsonar/microdep-map/js/ -i /usr/lib/perfsonar/microdep-map/list-of-external-sources.txt; \
     fi
 # Add jquery libs
-RUN yum -y install js-jquery.noarch js-jquery-ui.noarch
+RUN dnf -y install js-jquery.noarch js-jquery-ui.noarch
 RUN ln -s /usr/share/javascript/jquery/latest /usr/lib/perfsonar/microdep-map/jquery
 RUN ln -s /usr/share/javascript/jquery-ui /usr/lib/perfsonar/microdep-map/jquery-ui
 
 
 # ----  E n d   d o w n l o a d s   a n d   p a c k a g e   i n s t a l l   ----
 
-# Patch postgres-load to apply user "postgress" as default
-RUN chmod +w /usr/bin/postgresql-load \
-    &&  sed -i 's|die "Unable to determine PostgreSQL user."|PG_USER="postgres" && echo "Applying default user."|g' /usr/bin/postgresql-load
+# POSTGRES
+# Patch postgres-load to apply user "postgres" as default
+#RUN chmod +w /usr/bin/postgresql-load \
+#    &&  sed -i 's|die "Unable to determine PostgreSQL user."|PG_USER="postgres" && echo "Applying default user."|g' /usr/bin/postgresql-load
 # Reconfigure prefsonar Postgres DB (start db server first)
-RUN mkdir -p /var/run/postgresql && chown postgres.postgres /var/run/postgresql \
-    && su - postgres -c "/usr/pgsql-10/bin/pg_ctl -D /var/lib/pgsql/10/data start -w -t 120" \
-    && /usr/libexec/pscheduler/internals/db-update \
-    && /usr/libexec/pscheduler/internals/db-change-password
+#RUN mkdir -p /var/run/postgresql && chown postgres.postgres /var/run/postgresql \
+#    && su - postgres -c "/usr/pgsql-10/bin/pg_ctl -D /var/lib/pgsql/10/data start -w -t 120" \
+#    && /usr/libexec/pscheduler/internals/db-update \
+#    && /usr/libexec/pscheduler/internals/db-change-password
 
 # Rsyslog
 # Note: need to modify default CentOS7 rsyslog configuration to work with Docker, 
@@ -148,8 +150,8 @@ COPY perfsonar-testpoint-docker/rsyslog/python-pscheduler.conf /etc/rsyslog.d/py
 COPY perfsonar-testpoint-docker/rsyslog/owamp-syslog.conf /etc/rsyslog.d/owamp-syslog.conf
 
 # Make ntdp stay root and stop attempting to update system clock
-RUN sed -i 's|-u ntp:ntp ||g' /usr/lib/systemd/system/ntpd.service
-RUN echo "disable kernel" >> /etc/ntp.conf
+#RUN sed -i 's|-u ntp:ntp ||g' /usr/lib/systemd/system/ntpd.service
+#RUN echo "disable kernel" >> /etc/ntp.conf
 
 # Reduce range for owamp and twamp test-ports (to more easy enable docker port mapping)
 RUN sed -i 's|testports 8760-9960|testports 8760-8800|g' /etc/owamp-server/owamp-server.conf
@@ -185,7 +187,7 @@ RUN if [ "$TYPE" = "toolkit" ]; then \
        sed -e 's|kirk|admin|g' -e 's|sudo|sudo OPENSEARCH_JAVA_HOME=/usr/share/opensearch/jdk|g' /securityadmin_demo.sh > /usr/local/sbin/securityadmin.sh; \
        chmod +x /usr/local/sbin/securityadmin.sh; \
 # Set management gui user/password to admin/notadminnono
-       yum -y install httpd-tools && htpasswd -c -b /etc/perfsonar/toolkit/psadmin.htpasswd admin notadminnono ; \
+       dnf -y install httpd-tools && htpasswd -c -b /etc/perfsonar/toolkit/psadmin.htpasswd admin notadminnono ; \
     fi
 # Add service to run (re)run password setup for opensearch
 COPY etc/opensearch/opensearch-security-admin.service /usr/lib/systemd/system/
@@ -286,9 +288,10 @@ RUN systemctl enable perfsonar-microdep-gap-ana.service
 
 #    Traceroute analytics
 COPY bin/create_new_db.sh /usr/local/bin
-RUN mkdir -p /var/run/postgresql && chown postgres.postgres /var/run/postgresql \
-    && su - postgres -c "/usr/pgsql-10/bin/pg_ctl -D /var/lib/pgsql/10/data start -w -t 120" \
-    && create_new_db.sh -t postgres -d routingmonitor
+# POSTGRES
+#RUN mkdir -p /var/run/postgresql && chown postgres.postgres /var/run/postgresql \
+#    && su - postgres -c "/usr/pgsql-10/bin/pg_ctl -D /var/lib/pgsql/10/data start -w -t 120" \
+#    && create_new_db.sh -t postgres -d routingmonitor
 COPY bin/trace_event_reader.py /usr/local/bin
 COPY etc/microdep/perfsonar-microdep-trace-ana.service /usr/lib/systemd/system/
 RUN systemctl enable perfsonar-microdep-trace-ana.service

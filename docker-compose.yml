@@ -93,7 +93,7 @@ services:
     build:
       context: .
       dockerfile: ${OS:-centos}/Dockerfile-systemd
-      image: ottojwittner/systemd-image-${OS:-centos}
+    image: ottojwittner/systemd-image-${OS:-centos}
     volumes:
       - /sys/fs/cgroup:/sys/fs/cgroup:ro
     # Just make image "die" as it is only a parent image  
