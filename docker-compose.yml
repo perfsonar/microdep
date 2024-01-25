@@ -27,6 +27,7 @@ services:
   toolkit:
     container_name: ps-toolkit
     hostname: ${TOOLKIT_HOSTNAME:-toolkit}
+    image: ottojwittner/ps-microdep-toolkit-${OS:-centos}
     depends_on:
       - systemd-image
     build:
@@ -74,6 +75,7 @@ services:
 #    entrypoint: ["echo", "Service testpoint disabled. See docker-compose.yml."]
     container_name: ps-testpoint
     hostname: ${TESTPOINT_HOSTNAME:-testpoint}
+    image: ottojwittner/ps-microdep-testpoint-${OS:-centos}
     depends_on:
       - systemd-image
       - toolkit
@@ -91,6 +93,7 @@ services:
     build:
       context: .
       dockerfile: ${OS:-centos}/Dockerfile-systemd
+      image: ottojwittner/systemd-image-${OS:-centos}
     volumes:
       - /sys/fs/cgroup:/sys/fs/cgroup:ro
     # Just make image "die" as it is only a parent image  
