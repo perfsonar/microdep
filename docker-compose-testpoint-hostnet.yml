@@ -2,7 +2,7 @@
 # Docker compose config building perfsonar testpoint service with host net set
 # i.e. a testpoint ready to interact with the "outside" world
 #
-#   - OS distribution may be change by setting OS=ubuntu (e.g. 'OS=ubuntu docker-compose -f docker-compose-testpoint-hostnet.yml build')
+#   - OS distribution may be changed (from default almalinux) by setting DISTRO=my-distro running e.g. 'DISTRO=ubuntu docker-compose -f docker-compose-hostnet.yml up')
 #     
 # Author: Otto J Wittner <otto.wittner@sikt.no>
 # Date: 2023-06-02
@@ -14,11 +14,12 @@ services:
   testpoint:
     container_name: ps-testpoint
     hostname: ${TESTPOINT_HOSTNAME:-testpoint}
+    image: ottojwittner/ps-microdep-testpoint-${DISTRO:-alma}
     depends_on:
       - systemd-image
     build:
       context: .
-      dockerfile: ${OS:-centos}/Dockerfile
+      dockerfile: ${DISTRO:-alma}/Dockerfile
       args:
         TYPE: testpoint 
     volumes:
@@ -28,7 +29,8 @@ services:
   systemd-image:
     build:
       context: .
-      dockerfile: ${OS:-centos}/Dockerfile-systemd
+      dockerfile: ${DISTRO:-alma}/Dockerfile-systemd
+    image: ottojwittner/systemd-image-${DISTRO:-alma}
     volumes:
       - /sys/fs/cgroup:/sys/fs/cgroup:ro
     # Just make image "die" as it is only a parent image  

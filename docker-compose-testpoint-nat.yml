@@ -2,7 +2,7 @@
 # Docker compose config building perfsonar testpoint service with nat'ed net and port mappings
 #   -When running on a host with NAT 1:1 (e.g. AWS VMs) a testpoint may interact with the "outside" world
 # by setting IPADDR and SUBNET to hosts global IP, (e.g. 'IPADDR=16.170.114.107 SUBNET=16.170.114.104/29 docker-compose -f docker-compose-testpoint-nat.yml up')
-#   - OS distribution may be change by setting OS=ubuntu (e.g. 'OS=ubuntu docker-compose -f docker-compose-testpoint-nat.yml up')
+#   - OS distribution may be changed (from default almalinux) by setting DISTRO=my-distro running e.g. 'DISTRO=ubuntu docker-compose -f docker-compose-testpoint-nat.yml up')
 #     
 # Author: Otto J Wittner <otto.wittner@sikt.no>
 # Date: 2023-06-14
@@ -14,22 +14,23 @@ services:
   testpoint:
     container_name: ps-testpoint
     hostname: ${TESTPOINT_HOSTNAME:-testpoint}
+    image: ottojwittner/ps-microdep-testpoint-${DISTRO:-alma}
     depends_on:
       - systemd-image
-    image: ottojwittner/microdep-in-perfsonar_testpoint
     build:
       context: .
-      dockerfile: ${OS:-centos}/Dockerfile
+      dockerfile: ${DISTRO:-alma}/Dockerfile
       args:
         TYPE: testpoint 
     volumes:
        - /sys/fs/cgroup:/sys/fs/cgroup:ro
     ports:
-      - 80:80    # http-access
-#      - 8085:80    # http-access
-      - 443:443   # https-access
-#      - 4435:443   # https-access
-      - 5601:5601  # Opensearch Dashboard (Kibana)
+#      - 80:80    # http-access
+      - 8085:80    # http-access
+#      - 443:443   # https-access
+      - 4435:443   # https-access
+#      - 5601:5601  # Opensearch Dashboard (Kibana)
+      - 5611:5601  # Opensearch Dashboard (Kibana)
       - 3000:3000  # Grafana
       - 861:861    # owamp control
       - 8760-8800:8760-8800/udp # owamp testports 
@@ -37,17 +38,18 @@ services:
       - 5000:5000  # nuttcp
       - 5101:5101  # nuttcp
       - 5201:5201  # iperf3
-      - 5001:5001  # iperf2
+#      - 5001:5001  # iperf2
+      - 5011:5001  # iperf2
       - 1123:123   # ntp
     networks:
       testpoint-net:
         ipv4_address: ${IPADDR:-172.150.2.3}
 
   systemd-image:
-    image: ottojwittner/microdep-in-perfsonar_systemd-image
     build:
       context: .
-      dockerfile: ${OS:-centos}/Dockerfile-systemd
+      dockerfile: ${DISTRO:-alma}/Dockerfile-systemd
+    image: ottojwittner/systemd-image-${DISTRO:-alma}
     volumes:
       - /sys/fs/cgroup:/sys/fs/cgroup:ro
     # Just make image "die" as it is only a parent image  
@@ -59,4 +61,4 @@ networks:
       driver: default
       config:
         # May be set via env-var
-        - subnet: ${SUBNET:-"172.150.2.0/24"}
+        - subnet: ${SUBNET:-172.150.2.0/24}
