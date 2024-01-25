@@ -67,10 +67,10 @@ if options.exchange:
     # Update queue name in case of one-time-queue-name when only exchange is specified
     queue_name = result.method.queue
     channel.queue_bind(exchange=options.exchange, queue=queue_name)
-    if options.verbose: print("Exchange '%s' and queue '%s' declared and bound.", options.exchange, queue_name) 
+    if options.verbose: print("Exchange '%s' and queue '%s' declared and bound." % (options.exchange, queue_name)) 
 elif options.queue:
     channel.queue_declare(queue=queue_name)
-    if options.verbose: print("Default exchange and queue '%s' declared.", queue_name) 
+    if options.verbose: print("Default exchange and queue '%s' declared." % queue_name) 
     
 def callback(_ch, _method, _properties, body):
     if options.verbose:
@@ -78,13 +78,13 @@ def callback(_ch, _method, _properties, body):
     else:
         print("%s" % (body.decode("ascii")))
 
-if options.exchange:        
-    channel.basic_consume(callback, queue=queue_name)
-else:
-    channel.basic_consume(callback, queue=queue_name, no_ack=True)
+channel.basic_consume(queue_name, callback)
+#if options.exchange:        
+#else:
+#    channel.basic_consume(callback, queue=queue_name, no_ack=True)
 
 if options.verbose:
-    print("Listening on %s:%s/%s ...", options.host, options.exchange, queue_name ) 
+    print("Listening on %s:%s/%s ..." % (options.host, options.exchange, queue_name) ) 
     print("[Ctrl-C to end]") 
         
 try:

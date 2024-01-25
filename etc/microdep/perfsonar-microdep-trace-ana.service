@@ -1,7 +1,7 @@
 [Unit]
 Description=perfSONAR Microdep traceroute analysis
-After=network.target rabbitmq-server.service postgresql-10.service
-Requires=rabbitmq-server.service postgresql-10.service
+After=network.target rabbitmq-server.service postgresql.service
+Requires=rabbitmq-server.service postgresql.service
 
 [Service]
 Type=simple

@@ -57,7 +57,7 @@ RUN ln -s /usr/bin/tcpdump /usr/sbin/tcpdump
 # and
 # https://raw.githubusercontent.com/perfsonar/perfsonar-testpoint-docker/master/systemd/Dockerfile
 
-#RUN dnf install -y postgresql10-server
+RUN dnf install -y postgresql-server
 
 # Postgresql version
 #ENV PG_VERSION 10
@@ -65,9 +65,12 @@ RUN ln -s /usr/bin/tcpdump /usr/sbin/tcpdump
 
 # Set the environment variables
 #ENV PGDATA /var/lib/pgsql/10/data
+ENV PGDATA /var/lib/pgsql/data
 
 # Initialize the database
 #RUN su - postgres -c "/usr/pgsql-10/bin/pg_ctl init"
+RUN su - postgres -c "/usr/bin/pg_ctl init"
+#RUN su - postgres -c "/usr/bin/postgresql-setup --initdb"
 
 # Overlay the configuration files
 #COPY perfsonar-testpoint-docker/postgresql/postgresql.conf /var/lib/pgsql/$PG_VERSION/data/postgresql.conf
@@ -75,6 +78,7 @@ RUN ln -s /usr/bin/tcpdump /usr/sbin/tcpdump
 
 # Change own user
 #RUN chown -R postgres:postgres /var/lib/pgsql/$PG_VERSION/data/*
+RUN chown -R postgres:postgres /var/lib/pgsql/data/*
 
 #Start postgresql and install perfSONAR
 ARG TYPE
@@ -85,19 +89,24 @@ ARG TYPE
 #RUN mkdir -p /var/run/postgresql && chown postgres.postgres /var/run/postgresql \
 #    && su - postgres -c "/usr/pgsql-10/bin/pg_ctl -D /var/lib/pgsql/10/data start -w -t 120" \
 #    && dnf install -y perfsonar-lscachedaemon-5.0.3-1.el7.noarch.rpm perfsonar-$TYPE
-RUN dnf install -y perfsonar-$TYPE
+RUN mkdir -p /var/run/postgresql && chown postgres.postgres /var/run/postgresql \
+    && su - postgres -c "/usr/bin/pg_ctl -D /var/lib/pgsql/data start -w -t 120" \
+    && dnf install -y perfsonar-$TYPE
+#RUN dnf install -y perfsonar-$TYPE
 
 # Clean up 
 RUN dnf clean all && rm -rf /var/cache/dnf/* && dnf -y update
 
+# Add Opensearch dashboards ("Kibana")
 RUN if [ "$TYPE" = "toolkit" ]; then \
-       # Add Opensearch dashboards ("Kibana")
        dnf -y install opensearch-dashboards && systemctl enable opensearch-dashboards.service ; \
     fi
+# Add Grafana visualisation server    
+COPY etc/grafana.repo /etc/yum.repos.d/grafana.repo
+RUN dnf -y install wget && wget -q -O gpg.key https://rpm.grafana.com/gpg.key && sudo rpm --import gpg.key
 RUN if [ "$TYPE" = "toolkit" ]; then \
-       # Add Grafana visualisation server
-       dnf -y install wget nodejs https://dl.grafana.com/enterprise/release/grafana-enterprise-10.0.3-1.x86_64.rpm; \
-       systemctl enable grafana-server.service; \
+           dnf -y update && dnf -y install grafana; \
+           systemctl enable grafana-server.service; \
     fi
 
 # Add Rabbit message queue packages
@@ -136,14 +145,15 @@ RUN ln -s /usr/share/javascript/jquery-ui /usr/lib/perfsonar/microdep-map/jquery
 #RUN chmod +w /usr/bin/postgresql-load \
 #    &&  sed -i 's|die "Unable to determine PostgreSQL user."|PG_USER="postgres" && echo "Applying default user."|g' /usr/bin/postgresql-load
 # Reconfigure prefsonar Postgres DB (start db server first)
-#RUN mkdir -p /var/run/postgresql && chown postgres.postgres /var/run/postgresql \
-#    && su - postgres -c "/usr/pgsql-10/bin/pg_ctl -D /var/lib/pgsql/10/data start -w -t 120" \
-#    && /usr/libexec/pscheduler/internals/db-update \
-#    && /usr/libexec/pscheduler/internals/db-change-password
+RUN mkdir -p /var/run/postgresql && chown postgres.postgres /var/run/postgresql \
+    && su - postgres -c "/usr/bin/pg_ctl -D /var/lib/pgsql/data start -w -t 120" \
+    && /usr/libexec/pscheduler/internals/db-update \
+    && /usr/libexec/pscheduler/internals/db-change-password
 
 # Rsyslog
-# Note: need to modify default CentOS7 rsyslog configuration to work with Docker, 
+# Note: need to modify default rsyslog configuration to work with Docker, 
 # as described here: http://www.projectatomic.io/blog/2014/09/running-syslog-within-a-docker-container/
+# (relevant for Centos7, but also for almalinux 9?)
 COPY perfsonar-testpoint-docker/rsyslog/rsyslog.conf /etc/rsyslog.conf
 COPY perfsonar-testpoint-docker/rsyslog/listen.conf /etc/rsyslog.d/listen.conf
 COPY perfsonar-testpoint-docker/rsyslog/python-pscheduler.conf /etc/rsyslog.d/python-pscheduler.conf
@@ -152,6 +162,12 @@ COPY perfsonar-testpoint-docker/rsyslog/owamp-syslog.conf /etc/rsyslog.d/owamp-s
 # Make ntdp stay root and stop attempting to update system clock
 #RUN sed -i 's|-u ntp:ntp ||g' /usr/lib/systemd/system/ntpd.service
 #RUN echo "disable kernel" >> /etc/ntp.conf
+
+# Make pscheduler services more tolerant to restart failures
+RUN sed -i 's|Restart=always|Restart=always\nStartLimitBurst=1000\nStartLimitIntervalSec=30|g' /usr/lib/systemd/system/pscheduler-archiver.service
+RUN sed -i 's|Restart=always|Restart=always\nStartLimitBurst=1000\nStartLimitIntervalSec=30|g' /usr/lib/systemd/system/pscheduler-runner.service
+RUN sed -i 's|Restart=always|Restart=always\nStartLimitBurst=1000\nStartLimitIntervalSec=30|g' /usr/lib/systemd/system/pscheduler-scheduler.service
+RUN sed -i 's|Restart=always|Restart=always\nStartLimitBurst=1000\nStartLimitIntervalSec=30|g' /usr/lib/systemd/system/pscheduler-ticker.service
 
 # Reduce range for owamp and twamp test-ports (to more easy enable docker port mapping)
 RUN sed -i 's|testports 8760-9960|testports 8760-8800|g' /etc/owamp-server/owamp-server.conf
@@ -289,9 +305,9 @@ RUN systemctl enable perfsonar-microdep-gap-ana.service
 #    Traceroute analytics
 COPY bin/create_new_db.sh /usr/local/bin
 # POSTGRES
-#RUN mkdir -p /var/run/postgresql && chown postgres.postgres /var/run/postgresql \
-#    && su - postgres -c "/usr/pgsql-10/bin/pg_ctl -D /var/lib/pgsql/10/data start -w -t 120" \
-#    && create_new_db.sh -t postgres -d routingmonitor
+RUN mkdir -p /var/run/postgresql && chown postgres.postgres /var/run/postgresql \
+    && su - postgres -c "/usr/bin/pg_ctl -D /var/lib/pgsql/data start -w -t 120" \
+    && create_new_db.sh -t postgres -d routingmonitor
 COPY bin/trace_event_reader.py /usr/local/bin
 COPY etc/microdep/perfsonar-microdep-trace-ana.service /usr/lib/systemd/system/
 RUN systemctl enable perfsonar-microdep-trace-ana.service
