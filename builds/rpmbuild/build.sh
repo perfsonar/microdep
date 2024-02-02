@@ -2,27 +2,74 @@
 #
 # Build rmp package(s)
 #
+# Based on https://hub.docker.com/r/jc21/rpmbuild-centos7
+#
 
-SPEC=$1
 RPMBUILDROOT=$(pwd)
 SRCROOT=$(pwd)/../../
+DISTRO=alma9
+DISTROS="alma9 centos7"
 
-if [ "$1" == "" ]; then
-    echo "Usage: build.sh specfile.spec"
+usage () {
+    echo "Usage: `basename $0` [-h] [-d distro] specfile.spec"
+    echo "-h              Help message."
+    echo "-d distro       Linux distro to build for. Default is $DISTRO. Supported are: $DISTROS"
+    echo "-q              Be quiet."
     exit 1;
-else
-    if [ ${1:0:6} != "SPECS/" ]; then
-	SPEC="SPECS/$SPEC"
+}
+
+msg () {
+    # Output message to stdout if appropriate
+    if [ -z $QUIET ]; then 
+	echo $*
     fi
-    docker run \
-	   --name rpmbuild-centos7 \
-           -v $RPMBUILDROOT:/home/rpmbuilder/rpmbuild \
-	   -v $SRCROOT:/home/src \
-           --rm=true \
-           rpmbuild-centos7-fixed \
-           /bin/build-spec /home/rpmbuilder/rpmbuild/$SPEC
-    
-    exit $?
+}
+
+# Parse arguments
+while getopts ":hqd:" opt; do
+    case $opt in
+	d)
+	    if $OPTARG in $DISTROS; then
+		DISTRO=$OPTARG
+	    else
+		
+	    ;;
+	q)
+	    QUIET="yes"
+	    ;;
+	h)
+	    echo "Run all job from crontab for given user."
+	    usage
+	    ;;
+	\?)
+	    echo "Invalid option: -$OPTARG" >&2
+	    exit 1
+	    ;;
+	:)
+	    echo "Option -$OPTARG requires an argument." >&2
+	    exit 1
+	    ;;
+    esac
+done
+shift $(($OPTIND - 1))  # (Shift away parsed arguments)
+
+if [ $# -lt 1 ]; then
+    usage
 fi
+
+SPEC=$1
+if [ ${SPEC:0:6} != "SPECS/" ]; then
+    # Add "SPECS" to path if no already there
+    SPEC="SPECS/$SPEC"
+fi
+docker run \
+       --name rpmbuild-$DISTRO \
+       -v $RPMBUILDROOT:/home/rpmbuilder/rpmbuild \
+       -v $SRCROOT:/home/src \
+       --rm=true \
+       ottojwittner/rpmbuild-$DISTRO \
+       /bin/build-spec /home/rpmbuilder/rpmbuild/$SPEC
+
+exit $?
 
 

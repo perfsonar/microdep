@@ -91,6 +91,7 @@ services:
       - testpoint-net
 
   systemd-image:
+    container_name: ps-systemd
     build:
       context: .
       dockerfile: ${DISTRO:-alma}/Dockerfile-systemd
@@ -110,6 +111,7 @@ services:
     build:
       context: .
       dockerfile: netem/Dockerfile
+    image: ottojwittner/netem-image
     privileged: true     # Required (unfortunately) to enable network "hacking"
     volumes:
       - /proc:/proc
@@ -142,5 +144,8 @@ networks:
         - subnet: fd00::150:1:0/112
 volumes:
   opensearch:
+    name: opensearch-${DISTRO:-alma}
   grafana:
+    name: grafana-${DISTRO:-alma}
   microdep-map-db:
+    name: microdep-map-db-${DISTRO:-alma}

@@ -1,0 +1,13 @@
+#!/bin/bash
+#
+# Base on https://github.com/jc21/docker-rpmbuild-centos7/blob/master/bin/build-all
+#
+# 2024-02-02 Otto J Wittner
+#
+
+# Enable devtools if variable is set and not empty
+#if [ -n "$DEVTOOLS" ]; then
+#    source /opt/rh/devtoolset-7/enable
+#fi
+
+/bin/build-spec $HOME/rpmbuild/SPECS/*.spec
