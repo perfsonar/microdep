@@ -11,10 +11,10 @@ DISTRO=alma9
 DISTROS="alma9 centos7"
 
 usage () {
-    echo "Usage: `basename $0` [-h] [-d distro] specfile.spec"
-    echo "-h              Help message."
-    echo "-d distro       Linux distro to build for. Default is $DISTRO. Supported are: $DISTROS"
-    echo "-q              Be quiet."
+    echo "Usage: `basename $0` [-hq] [-d distro] specfile.spec"
+    echo "  -h         Help message."
+    echo "  -d distro  Linux distro to build for. Default is $DISTRO. Supported are: $DISTROS"
+    echo "  -q         Be quiet."
     exit 1;
 }
 
@@ -32,7 +32,9 @@ while getopts ":hqd:" opt; do
 	    if $OPTARG in $DISTROS; then
 		DISTRO=$OPTARG
 	    else
-		
+		echo "Unsupported distro $OPTARG."
+		exit 1
+	    fi
 	    ;;
 	q)
 	    QUIET="yes"
@@ -62,13 +64,20 @@ if [ ${SPEC:0:6} != "SPECS/" ]; then
     # Add "SPECS" to path if no already there
     SPEC="SPECS/$SPEC"
 fi
-docker run \
-       --name rpmbuild-$DISTRO \
-       -v $RPMBUILDROOT:/home/rpmbuilder/rpmbuild \
-       -v $SRCROOT:/home/src \
-       --rm=true \
-       ottojwittner/rpmbuild-$DISTRO \
-       /bin/build-spec /home/rpmbuilder/rpmbuild/$SPEC
+
+# Prepare source file archive
+make -C ../.. dist
+cp ../../perfsonar-microdep*.tar.gz SOURCES
+
+#docker run \
+#       --name rpmbuild-$DISTRO \
+#       -v $RPMBUILDROOT:/home/rpmbuilder/rpmbuild \
+#       -v $SRCROOT:/home/src \
+#       --rm=true \
+#       ottojwittner/rpmbuild-$DISTRO \
+#       /bin/build-spec /home/rpmbuilder/rpmbuild/$SPEC
+
+docker-compose run rpmbuild
 
 exit $?
 

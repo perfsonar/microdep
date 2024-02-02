@@ -9,7 +9,7 @@ MAINTAINER Otto J Wittner - Sikt
 
 RUN dnf update -y
 RUN dnf install -y epel-release rpm-build sudo
-RUN dnf install -y yum-utils rpmdevtools
+RUN dnf install -y yum-utils rpmdevtools make
 
 # build files
 COPY bin/build-spec /bin/
