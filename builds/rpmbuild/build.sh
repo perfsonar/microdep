@@ -29,7 +29,7 @@ msg () {
 while getopts ":hqd:" opt; do
     case $opt in
 	d)
-	    if $OPTARG in $DISTROS; then
+	    if [ "`echo "$DISTROS" | grep -w $OPTARG`" ]; then
 		DISTRO=$OPTARG
 	    else
 		echo "Unsupported distro $OPTARG."
@@ -77,6 +77,7 @@ cp ../../perfsonar-microdep*.tar.gz SOURCES
 #       ottojwittner/rpmbuild-$DISTRO \
 #       /bin/build-spec /home/rpmbuilder/rpmbuild/$SPEC
 
+export DISTRO
 docker-compose run rpmbuild
 
 exit $?

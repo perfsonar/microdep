@@ -158,6 +158,6 @@ do
     spectool -g -R "${spec}"
     rc=$?; if [[ $rc != 0 ]]; then exit $rc; fi
 
-    sudo rpmbuild --clean -ba "${spec}"
+    rpmbuild --clean -ba "${spec}"
     rc=$?; if [[ $rc != 0 ]]; then exit $rc; fi
 done

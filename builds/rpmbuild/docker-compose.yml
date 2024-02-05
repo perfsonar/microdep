@@ -24,5 +24,18 @@ services:
       - ../../:/home/src
     stdin_open: true
     tty: true
-    #entrypoint: ["/bin/build-spec", "/home/rpmbuilder/rpmbuild/${SPEC:-SPECS/perfsonar-microdep.spec}"]
+    entrypoint: ["/bin/build-spec", "/home/rpmbuilder/rpmbuild/${SPEC:-SPECS/perfsonar-microdep.spec}"]
+
+  rpmtest:
+    container_name: ps-rpmbuilder
+    hostname: ps-rpmbuilder
+    image: ottojwittner/rpmbuild-${DISTRO:-alma9}
+    build:
+      context: .
+      dockerfile: Dockerfile-${DISTRO:-alma9}
+    volumes:
+      - .:/home/rpmbuilder/rpmbuild 
+      - ../../:/home/src
+    stdin_open: true
+    tty: true
     entrypoint: ["/bin/bash"]
