@@ -24,7 +24,7 @@
 version: "2.2"
 
 services:
-  toolkit:
+  ps-toolkit:
     container_name: ps-toolkit
     hostname: ${TOOLKIT_HOSTNAME:-toolkit}
     image: ottojwittner/ps-microdep-toolkit-${DISTRO:-alma}
@@ -72,7 +72,7 @@ services:
         ipv4_address: 172.150.1.2
         ipv6_address: fd00::150:1:2
 
-  testpoint:
+  ps-testpoint:
 #    entrypoint: ["echo", "Service testpoint disabled. See docker-compose.yml."]
     container_name: ps-testpoint
     hostname: ${TESTPOINT_HOSTNAME:-testpoint}
