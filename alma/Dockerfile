@@ -36,7 +36,7 @@ ENV LC_CTYPE=en_US.UTF-8
 # Install the EPEL RPM
 RUN dnf install -y epel-release && dnf config-manager --set-enabled crb
 
-# Point CentOS installation at the perfSONAR main repository
+# Point Almalinux 9 installation at the perfSONAR main repository
 RUN dnf install -y http://software.internet2.edu/rpms/el9/x86_64/latest/packages/perfsonar-repo-0.11-1.noarch.rpm
 
 # Clean cache and update 
@@ -44,7 +44,6 @@ RUN dnf clean all && rm -rf /var/cache/dnf/* && dnf -y update
 
 # Install management packages
 RUN dnf install -y --allowerasing coreutils man-db nano emacs git patch openssh-clients net-tools iputils traceroute tcpdump curl bind-utils unzip gnupg
-#RUN apt install -y software-properties-common 
 
 # Fiks tcpdump issue for priveledge mode
 RUN mv /usr/sbin/tcpdump /usr/bin/tcpdump
@@ -59,40 +58,20 @@ RUN ln -s /usr/bin/tcpdump /usr/sbin/tcpdump
 
 RUN dnf install -y postgresql-server
 
-# Postgresql version
-#ENV PG_VERSION 10
-#ENV PGVERSION 10
-
 # Set the environment variables
-#ENV PGDATA /var/lib/pgsql/10/data
 ENV PGDATA /var/lib/pgsql/data
 
 # Initialize the database
-#RUN su - postgres -c "/usr/pgsql-10/bin/pg_ctl init"
 RUN su - postgres -c "/usr/bin/pg_ctl init"
-#RUN su - postgres -c "/usr/bin/postgresql-setup --initdb"
-
-# Overlay the configuration files
-#COPY perfsonar-testpoint-docker/postgresql/postgresql.conf /var/lib/pgsql/$PG_VERSION/data/postgresql.conf
-#COPY perfsonar-testpoint-docker/postgresql/pg_hba.conf /var/lib/pgsql/$PG_VERSION/data/pg_hba.conf
 
 # Change own user
-#RUN chown -R postgres:postgres /var/lib/pgsql/$PG_VERSION/data/*
 RUN chown -R postgres:postgres /var/lib/pgsql/data/*
 
 #Start postgresql and install perfSONAR
 ARG TYPE
-#RUN su - postgres -c "/usr/pgsql-10/bin/pg_ctl start -w -t 60" \
-#RUN nohup bash -c "/lib/systemd/systemd &" && sleep 4 \
-# TEMP FIX: Download missing lschachedaemon package from older version
-#RUN  curl -O http://software.internet2.edu/rpms/el7/x86_64/5.0.3/RPMS/perfsonar-lscachedaemon-5.0.3-1.el7.noarch.rpm
-#RUN mkdir -p /var/run/postgresql && chown postgres.postgres /var/run/postgresql \
-#    && su - postgres -c "/usr/pgsql-10/bin/pg_ctl -D /var/lib/pgsql/10/data start -w -t 120" \
-#    && dnf install -y perfsonar-lscachedaemon-5.0.3-1.el7.noarch.rpm perfsonar-$TYPE
 RUN mkdir -p /var/run/postgresql && chown postgres.postgres /var/run/postgresql \
     && su - postgres -c "/usr/bin/pg_ctl -D /var/lib/pgsql/data start -w -t 120" \
     && dnf install -y perfsonar-$TYPE
-#RUN dnf install -y perfsonar-$TYPE
 
 # Clean up 
 RUN dnf clean all && rm -rf /var/cache/dnf/* && dnf -y update
@@ -141,9 +120,6 @@ RUN ln -s /usr/share/javascript/jquery-ui /usr/lib/perfsonar/microdep-map/jquery
 # ----  E n d   d o w n l o a d s   a n d   p a c k a g e   i n s t a l l   ----
 
 # POSTGRES
-# Patch postgres-load to apply user "postgres" as default
-#RUN chmod +w /usr/bin/postgresql-load \
-#    &&  sed -i 's|die "Unable to determine PostgreSQL user."|PG_USER="postgres" && echo "Applying default user."|g' /usr/bin/postgresql-load
 # Reconfigure prefsonar Postgres DB (start db server first)
 RUN mkdir -p /var/run/postgresql && chown postgres.postgres /var/run/postgresql \
     && su - postgres -c "/usr/bin/pg_ctl -D /var/lib/pgsql/data start -w -t 120" \
@@ -269,11 +245,6 @@ RUN sed -i "s|YAML|YAML::XS|g" /usr/lib/perfsonar/microdep-map/yaml-to-json.cgi
 # Add and adjust to support global/Dragonlab topology (and remove Uninett topology)
 RUN sed -i 's|/var/lib/microdep|/usr/lib/perfsonar/microdep-map|' /usr/lib/perfsonar/microdep-map/microdep-config.yml
 COPY etc/microdep/dragonlab*.json /usr/lib/perfsonar/microdep-map/dragonlab/
-#COPY etc/microdep/mp-names.txt /usr/lib/perfsonar/microdep-map/mp-dragonlab/etc/
-#COPY etc/microdep/mp-address.txt /usr/lib/perfsonar/microdep-map/mp-dragonlab/etc/
-#COPY etc/microdep/rude-list.cfg /usr/lib/perfsonar/microdep-map/mp-dragonlab/etc/
-#COPY etc/microdep/rude-extra.cfg /usr/lib/perfsonar/microdep-map/mp-dragonlab/etc/
-#COPY bin/do-mvar-config /usr/local/bin/
 # Init Microdep config db
 RUN if [ "$TYPE" = "toolkit" ]; then \
         mkdir -p /usr/lib/perfsonar/microdep-map/mp-dragonlab/etc/; \

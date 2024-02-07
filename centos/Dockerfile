@@ -22,7 +22,7 @@
 #
 
 
-FROM microdep-in-perfsonar_systemd-image:latest
+FROM ottojwittner/systemd-image-centos:latest
 MAINTAINER Otto J Wittner <wittner@sikt.no>
 
 # Fix default locals
@@ -36,10 +36,7 @@ ENV LC_CTYPE=en_US.UTF-8
 # Install the EPEL RPM
 RUN yum install -y epel-release
 
-# Point CentOS installation at the perfSONAR main yum repository
-# Install the staging yum repository where test versions of the software are kept.
-#RUN yum install -y perfSONAR-repo-staging
-#RUN rpm -hUv http://software.internet2.edu/rpms/el7/x86_64/latest/packages/perfSONAR-repo-0.11-1.noarch.rpm
+# Point CentOS 7 installation at the perfSONAR main yum repository
 RUN yum install -y http://software.internet2.edu/rpms/el7/x86_64/latest/packages/perfsonar-repo-0.11-1.noarch.rpm
 
 # Clean cache and update 
@@ -91,8 +88,8 @@ RUN mkdir -p /var/run/postgresql && chown postgres.postgres /var/run/postgresql 
 # Clean up 
 RUN yum clean all && rm -rf /var/cache/yum/* && yum -y update
 
+# Add Opensearch dashboards ("Kibana")
 RUN if [ "$TYPE" = "toolkit" ]; then \
-       # Add Opensearch dashboards ("Kibana")
        yum -y install opensearch-dashboards && systemctl enable opensearch-dashboards.service ; \
     fi
 RUN if [ "$TYPE" = "toolkit" ]; then \
@@ -150,6 +147,12 @@ COPY perfsonar-testpoint-docker/rsyslog/owamp-syslog.conf /etc/rsyslog.d/owamp-s
 # Make ntdp stay root and stop attempting to update system clock
 RUN sed -i 's|-u ntp:ntp ||g' /usr/lib/systemd/system/ntpd.service
 RUN echo "disable kernel" >> /etc/ntp.conf
+
+# Make pscheduler services more tolerant to restart failures
+RUN sed -i 's|Restart=always|Restart=always\nStartLimitBurst=1000\nStartLimitIntervalSec=30|g' /usr/lib/systemd/system/pscheduler-archiver.service
+RUN sed -i 's|Restart=always|Restart=always\nStartLimitBurst=1000\nStartLimitIntervalSec=30|g' /usr/lib/systemd/system/pscheduler-runner.service
+RUN sed -i 's|Restart=always|Restart=always\nStartLimitBurst=1000\nStartLimitIntervalSec=30|g' /usr/lib/systemd/system/pscheduler-scheduler.service
+RUN sed -i 's|Restart=always|Restart=always\nStartLimitBurst=1000\nStartLimitIntervalSec=30|g' /usr/lib/systemd/system/pscheduler-ticker.service
 
 # Reduce range for owamp and twamp test-ports (to more easy enable docker port mapping)
 RUN sed -i 's|testports 8760-9960|testports 8760-8800|g' /etc/owamp-server/owamp-server.conf
@@ -251,11 +254,6 @@ RUN sed -i "s|YAML|YAML::XS|g" /usr/lib/perfsonar/microdep-map/yaml-to-json.cgi
 # Add and adjust to support global/Dragonlab topology (and remove Uninett topology)
 RUN sed -i 's|/var/lib/microdep|/usr/lib/perfsonar/microdep-map|' /usr/lib/perfsonar/microdep-map/microdep-config.yml
 COPY etc/microdep/dragonlab*.json /usr/lib/perfsonar/microdep-map/dragonlab/
-#COPY etc/microdep/mp-names.txt /usr/lib/perfsonar/microdep-map/mp-dragonlab/etc/
-#COPY etc/microdep/mp-address.txt /usr/lib/perfsonar/microdep-map/mp-dragonlab/etc/
-#COPY etc/microdep/rude-list.cfg /usr/lib/perfsonar/microdep-map/mp-dragonlab/etc/
-#COPY etc/microdep/rude-extra.cfg /usr/lib/perfsonar/microdep-map/mp-dragonlab/etc/
-#COPY bin/do-mvar-config /usr/local/bin/
 # Init Microdep config db
 RUN if [ "$TYPE" = "toolkit" ]; then \
         mkdir -p /usr/lib/perfsonar/microdep-map/mp-dragonlab/etc/; \
@@ -291,6 +289,7 @@ RUN mkdir -p /var/run/postgresql && chown postgres.postgres /var/run/postgresql 
     && create_new_db.sh -t postgres -d routingmonitor
 COPY bin/trace_event_reader.py /usr/local/bin
 COPY etc/microdep/perfsonar-microdep-trace-ana.service /usr/lib/systemd/system/
+RUN sed -i "s|postgresql|postgresql-10|g" /usr/lib/systemd/system/perfsonar-microdep-trace-ana.service
 RUN systemctl enable perfsonar-microdep-trace-ana.service
 
 COPY etc/logstash/microdep /usr/lib/perfsonar/logstash/pipeline/microdep

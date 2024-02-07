@@ -18,7 +18,7 @@ microdep/server/script/microdep-config.yml microdep-map/microdep-config.yml
 # ... in addition there are a list of external libs to be fetched ...
 # Map config
 microdep/server/script/microdep-psconfig-load.pl bin/microdep_commands/microdep-psconfig-load.pl
-etc/perfsonar-toolkit/psconfig/pscheduler.d/microdep-tests.json  etc/perfsonar/psconfig/pscheduler.d/microdep-tests.json
+etc/psconfig/pscheduler.d/microdep-tests.json  etc/psconfig/pscheduler.d/microdep-tests.json
 # Debug-tools
 bin/rabbitmq-consume.py bin/microdep_commands/rabbitmq-consume.py
 bin/json2table.pl bin/microdep_commands/json2table.pl
@@ -26,12 +26,10 @@ bin/json2table.pl bin/microdep_commands/json2table.pl
 
 
 
-
-
-
-
-
 # ---- End of MANIFEST.in ----
+
+
+# --- Examples from psconfg (ignored by Makefile)----
 bin/psconfig_commands/agentctl
 bin/psconfig_commands/agents
 bin/psconfig_commands/lookup
