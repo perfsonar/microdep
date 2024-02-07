@@ -151,9 +151,10 @@ RUN sed -i 's|testports 18760-19960|testports 18760-18800|g' /etc/twamp-server/t
 
 # Add lookup service configs 
 COPY etc/lsregistrationdaemon.conf*  /etc/perfsonar/
-# Add service to apply host specific ls-config
-COPY etc/lsregistrationdaemon-conf.service /usr/lib/systemd/system/
-RUN systemctl enable lsregistrationdaemon-conf.service
+
+# Add service to apply host specific config
+COPY etc/hostspecific-conf.service /usr/lib/systemd/system/
+RUN systemctl enable hostspecific-conf.service
 
 RUN if [ "$TYPE" = "toolkit" ]; then \
 # Fix JNA and temp-file issue with Opensearch and Logstash,

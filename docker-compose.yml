@@ -79,7 +79,7 @@ services:
     image: ottojwittner/ps-microdep-testpoint-${DISTRO:-alma}
     depends_on:
       - systemd-image
-      - toolkit
+      - ps-toolkit
     build:
       context: .
       dockerfile: ${DISTRO:-alma}/Dockerfile
@@ -106,8 +106,8 @@ services:
     container_name: ps-netemulator
     hostname: netemulator
     depends_on:
-      - testpoint
-      - toolkit
+      - ps-testpoint
+      - ps-toolkit
     build:
       context: .
       dockerfile: netem/Dockerfile
