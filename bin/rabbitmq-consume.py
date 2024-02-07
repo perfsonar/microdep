@@ -77,11 +77,11 @@ def callback(_ch, _method, _properties, body):
         print("\nReceived %s\n" % (body.decode("ascii")))
     else:
         print("%s" % (body.decode("ascii")))
-
-channel.basic_consume(queue_name, callback)
-#if options.exchange:        
-#else:
-#    channel.basic_consume(callback, queue=queue_name, no_ack=True)
+try:
+    channel.basic_consume(queue_name, callback)
+except:
+    # Apply legacy order of arguments
+    channel.basic_consume(callback, queue_name)
 
 if options.verbose:
     print("Listening on %s:%s/%s ..." % (options.host, options.exchange, queue_name) ) 
