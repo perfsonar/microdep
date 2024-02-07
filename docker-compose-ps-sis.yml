@@ -24,7 +24,7 @@
 version: "2.2"
 
 services:
-  toolkit:
+  ps-toolkit:
     container_name: ps-toolkit
     hostname: ${TOOLKIT_HOSTNAME:-toolkit}
     image: ottojwittner/ps-microdep-toolkit-${DISTRO:-alma}
@@ -92,6 +92,9 @@ networks:
     
 volumes:
   opensearch:
+    name: opensearch-${DISTRO:-alma}
   grafana:
+    name: grafana-${DISTRO:-alma}
   microdep-map-db:
+    name: microdep-map-db-${DISTRO:-alma}
 
