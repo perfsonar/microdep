@@ -206,7 +206,7 @@ RUN cd /usr/libexec/pscheduler && patch -up1 < pscheduler-latencybg-subcount.pat
 
 
 # Add default tests (only for toolkit)
-COPY etc/psconfig/pscheduler.d/microdep-tests.json /etc/perfsonar/psconfig/pscheduler.d/
+COPY etc/psconfig/pscheduler.d/* /etc/perfsonar/psconfig/pscheduler.d/
 RUN if [ "$TYPE" = "testpoint" ]; then \
        rm -r /etc/perfsonar/psconfig; \
     fi
