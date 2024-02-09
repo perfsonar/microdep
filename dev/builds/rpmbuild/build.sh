@@ -5,8 +5,8 @@
 # Based on https://hub.docker.com/r/jc21/rpmbuild-centos7
 #
 
-RPMBUILDROOT=$(pwd)
-SRCROOT=$(pwd)/../../
+BUILDROOT=$(pwd)
+SRCROOT=$(dirname $(dirname $(pwd)))
 DISTRO=alma9
 DISTROS="alma9 centos7"
 
@@ -59,15 +59,18 @@ if [ $# -lt 1 ]; then
     usage
 fi
 
-SPEC=$1
-if [ ${SPEC:0:6} != "SPECS/" ]; then
-    # Add "SPECS" to path if no already there
-    SPEC="SPECS/$SPEC"
+SPEC=$(basename $1)
+if [ ! -f "SPECS/$SPEC"  ]; then
+    # Specfile not in expected folder
+    echo "Error: Copy specfile into ./SPECS/ subfolder"
+    exit 1
 fi
 
+#echo $DISTRO $BUILDROOT $SRCROOT $SPEC
+
 # Prepare source file archive
-make -C ../.. dist
-cp ../../perfsonar-microdep*.tar.gz SOURCES
+make -C $SRCROOT dist
+cp $SRCROOT/perfsonar-microdep*.tar.gz SOURCES
 
 #docker run \
 #       --name rpmbuild-$DISTRO \
@@ -78,7 +81,11 @@ cp ../../perfsonar-microdep*.tar.gz SOURCES
 #       /bin/build-spec /home/rpmbuilder/rpmbuild/$SPEC
 
 export DISTRO
-docker-compose run rpmbuild
+#export BUILDROOT
+#export SRCROOT
+export SPEC
+
+docker-compose up --build rpmbuild
 
 exit $?
 

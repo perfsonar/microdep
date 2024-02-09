@@ -20,22 +20,16 @@ services:
       context: .
       dockerfile: Dockerfile-${DISTRO:-alma9}
     volumes:
-      - .:/home/rpmbuilder/rpmbuild 
-      - ../../:/home/src
+#      - ${BUILDROOT:-./}:/home/rpmbuilder/rpmbuild 
+#      - ${SRCROOT:-../../}:/home/src
+      - ./SPECS:/home/rpmbuilder/rpmbuild/SPECS 
+      - ./SOURCES:/home/rpmbuilder/rpmbuild/SOURCES 
+      - ./SRPMS:/home/rpmbuilder/rpmbuild/SRPMS 
+      - ./RPMS:/home/rpmbuilder/rpmbuild/RPMS
+#      - ../../:/home/src
+#     Needs 3 levels up as builds/ is a symlink to dev/builds/ which docker-compose expands
+      - ../../../:/home/src
     stdin_open: true
     tty: true
-    entrypoint: ["/bin/build-spec", "/home/rpmbuilder/rpmbuild/${SPEC:-SPECS/perfsonar-microdep.spec}"]
-
-  rpmtest:
-    container_name: ps-rpmbuilder
-    hostname: ps-rpmbuilder
-    image: ottojwittner/rpmbuild-${DISTRO:-alma9}
-    build:
-      context: .
-      dockerfile: Dockerfile-${DISTRO:-alma9}
-    volumes:
-      - .:/home/rpmbuilder/rpmbuild 
-      - ../../:/home/src
-    stdin_open: true
-    tty: true
-    entrypoint: ["/bin/bash"]
+    entrypoint: ["/bin/build-spec", "/home/rpmbuilder/rpmbuild/SPECS/perfsonar-microdep-${DISTRO:-alma9}.spec"]
+    # Run `docker-compose run --entrypoint /bin/bash rpmbuild` to achieve entrypoint: ["/bin/bash"]

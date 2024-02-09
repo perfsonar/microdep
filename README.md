@@ -10,10 +10,10 @@ This project provides a collection of tools realizing the *perfSONAR Microdep an
 ## Project structure
 
 During the ongoing migration fase for *PS Microdep* the `/dev` folder holds misc subprojects the *PS Microdep analytic system* 
-inherets its components from. A container based development environment is also provided for component and system testing.
+inherets its components from, i.e. `/dev`holds the legacy Microdep development environment. 
 
-Other folders hold scripts and files applied by the operational version of the system, i.e. files included in builds for different distributions.
-Note that these files are currently copies of files under `/dev`. 
+Other folders hold scripts and files applied by the perfsonar version of the system, i.e. files included in builds for different distributions.
+Note that these files are typically copies of files under `/dev`. Run `make resync` to ensure perfsonar version is in sync with legacy version. 
 
 ## Building
 

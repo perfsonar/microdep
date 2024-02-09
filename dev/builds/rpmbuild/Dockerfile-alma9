@@ -24,7 +24,8 @@ RUN sed -i '/Defaults    requiretty/c\#Defaults    requiretty' /etc/sudoers
 
 # Rpm User
 RUN adduser -G wheel rpmbuilder
-RUN mkdir -p /home/rpmbuilder/rpmbuild/{BUILD,SPECS,SOURCES,BUILDROOT,RPMS,SRPMS,tmp}
+#RUN mkdir -p /home/rpmbuilder/rpmbuild/{BUILD,SPECS,SOURCES,BUILDROOT,RPMS,SRPMS,tmp}
+RUN mkdir -p /home/rpmbuilder/rpmbuild/{BUILD,BUILDROOT,tmp}
 RUN chmod -R 777 /home/rpmbuilder/rpmbuild
 
 COPY .rpmmacros /home/rpmbuilder/

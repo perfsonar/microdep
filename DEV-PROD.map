@@ -1,0 +1,32 @@
+# Mapping specifiying files to be synced from legacy Microdep development to current
+# NOTE: Destination path need to include filename
+# ---- Last line of header - Do not remove or edit ----
+dev/LICENSE LICENSE
+Makefile 
+# Map frontend
+dev/microdep/server/script/microdep-map.html microdep-map/index.html
+dev/microdep/server/script/ajax-loader.gif microdep-map/ajax-loader.gif
+dev/microdep/server/script/microdep-map.js microdep-map/js/microdep-map.js
+dev/microdep/server/script/stats.js microdep-map/js/stats.js
+dev/microdep/server/script/map-lib.js microdep-map/js/map-lib.js
+dev/microdep/server/script/graph.js microdep-map/js/graph.js
+dev/microdep/server/script/curve-chart.html microdep-map/curve-chart.html
+dev/microdep/server/script/curve-chart.js microdep-map/js/curve-chart.js
+dev/microdep/server/script/elastic-get-date-type.pl microdep-map/elastic-get-date-type.pl
+dev/microdep/server/script/yaml-to-json.cgi microdep-map/yaml-to-json.cgi
+dev/microdep/server/script/microdep-config.cgi microdep-map/microdep-config.cgi
+dev/microdep/server/script/microdep-config.yml microdep-map/microdep-config.yml
+# ... in addition there are a list of external libs to be fetched ...
+# Map config
+dev/microdep/server/script/microdep-psconfig-load.pl bin/microdep_commands/microdep-psconfig-load.pl
+dev/etc/psconfig/pscheduler.d/microdep-tests.json  etc/psconfig/pscheduler.d/microdep-tests.json
+# Debug-tools
+dev/bin/rabbitmq-consume.py bin/microdep_commands/rabbitmq-consume.py
+dev/bin/json2table.pl bin/microdep_commands/json2table.pl
+#bin/opensearch-query.sh bin/microdep_commands/opensearch-query.sh  "POST" action not fully implemented yet...
+#dev/etc/hostspecific-conf.service scripts/hostspecific-conf.service
+dev/etc/microdep/perfsonar-microdep-trace-ana.service scripts/perfsonar-microdep-trace-ana.service
+dev/etc/microdep/perfsonar-microdep-restart.service scripts/perfsonar-microdep-restart.service
+dev/etc/microdep/perfsonar-microdep-gap-ana.service scripts/perfsonar-microdep-gap-ana.service
+#dev/etc/opensearch/opensearch-security-admin.service scripts/opensearch-security-admin.service
+
