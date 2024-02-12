@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+
+  <!-- Latest compiled and minified CSS -->
+  <link rel="stylesheet" href="/uninett-bootstrap-theme/css/bootstrap.min.css">
+  <!-- Custom styles for this template -->
+  <link rel="stylesheet" href="/uninett-theme/css/uninett.css"> 
+  <link rel="shortcut icon" href="favicon.ico" type="image/x-icon" />
+  <!-- Bootstrap core JavaScript --> 
+  <!-- Placed at the end of the document so the pages load faster --> 
+
+  <script type="text/javascript" src="https://code.jquery.com/jquery-3.4.1.min.js"></script> 
+  <link rel="stylesheet" type="text/css" href="js/datatables.min.css"/>
+  <script type="text/javascript" language="javascript" src="js/datatables.min.js"></script>
+ 
+  <script src="https://d3js.org/d3.v4.js"></script>
+    
+<!-- empty meta method in autohandler -->
+
+<title>Micro dependability measurement node map</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+; @import url("/styles.css"); 
+</style>
+
+<link rel="author" href="mailto:drift@uninett.no">
+
+<link rel="stylesheet" href="//code.jquery.com/ui/1.12.1/themes/smoothness/jquery-ui.css">
+<script src="//code.jquery.com/ui/1.12.1/jquery-ui.js"></script>
+
+  <!--
+    <link href="//cdnjs.cloudflare.com/ajax/libs/select2/4.0.0/css/select2.min.css" rel="stylesheet" />
+    <script src="//cdnjs.cloudflare.com/ajax/libs/select2/4.0.0/js/select2.min.js"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/vis/4.21.0/vis.js" type="text/javascript"></script>
+    <script href="https://cdnjs.cloudflare.com/ajax/libs/vis/4.21.0/vis.css" rel="stylesheet" type="text/css"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/vis/4.21.0/vis-timeline-graph2d.min.css" rel="stylesheet" type="text/css" />
+  -->
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.0.3/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.0.3/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.0.3/dist/leaflet.markercluster-src.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.0.3/dist/MarkerCluster.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.0.3/dist/MarkerCluster.Default.css">
+<!--
+<script src="js/leaflet/leaflet.js"></script>
+<link rel="stylesheet" href=js/leaflet/leaflet.css" />
+<script src="js/leaflet.markercluster/leaflet.markercluster-src.js"></script>
+<link rel="stylesheet"js/leaflet.markercluster/MarkerCluster.css">
+<link rel="stylesheet" href="js/leaflet.markercluster/MarkerCluster.Default.css">
+-->
+
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet-contextmenu/1.2.1/leaflet.contextmenu.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-contextmenu/1.2.1/leaflet.contextmenu.min.js"></script>
+<script src="./js/leaflet.curve.js"></script>
+<script src="./js/L.LatLng.UTM.js"></script>
+<!-- <script src="./js/latlon-spherical.js"></script> -->
+<script src="./js/stats.js"></script>
+<script src="js/sorttable.js"></script>
+<!-- <script src="map-lib-2.js"></script>  -->
+<!-- script src="graph-2.js"></script-->
+
+<style type="text/css">
+#mapid { height: 900px; z-index: 1;}
+#midding {width:600px}
+#busyx {  margin: auto;
+	  width: 5%; 
+	  /* border: 3px solid #2222aa; */
+	  padding: 10px;
+       }
+
+/* css to customize Leaflet default styles  */
+    .popupCustom .leaflet-popup-tip,
+    .popupCustom .leaflet-popup-content-wrapper {
+	font-size:large;
+	background: #e0e0e0;
+	color: #234c5e;
+    }
+    .leaflet-popup, .leaflet-pane {
+	font-size:large;	
+    }
+    .knapp, select, td, th { font-size:x-large;   }
+    table td { padding:5px; }
+    .knapp { line-height: 1.3em; }
+    th {
+	cursor: pointer;
+    }
+    caption { font-size: x-large;  font-weight: bold; }
+
+    table.sortable thead {
+	background-color:#eee;
+	color:#666666;
+	font-weight: bold;
+	cursor: default;
+    }
+
+
+    table.sortable th:not(.sorttable_sorted):not(.sorttable_sorted_reverse):not(.sorttable_nosort):after { 
+	content: " \25B4\25BE" 
+    } 
+</style>
+
+</head>
+
+<body style="height:80%; width:90%; padding-top:5px; margin:auto;">
+  <!-- <h2>Micro dependability measurement node map</h2> -->
+    <!--
+    <button class=knapp id="draw">Connections</button>
+    -->
+    <select id=network class=knapp title='Measurement network'>
+      <option value=none>None</option>
+    </select>
+    <select id=event_type title='Measurement type'>
+      <option value=none>None</option>
+    </select>
+
+    <select id=prop_select class=knapp title='Measurement variable'></select>
+
+    <select id=stats_type class=knapp title='Statistics type'>
+      <option value="99.0">99%</option>
+      <option value="95.0">95%</option>
+      <option value="50.0">50%</option>
+      <option value="1.0">1%</option>
+<!--      <option value=avg>Average</option>
+      <option value=min>Minimum</option>
+      <option value=max>Maximum</option> -->
+     </select>
+
+    <select class=knapp id=period title='Measurement period'>
+      <option value=1>Hour</option>
+      <option value=24 selected="selected">Day</option>
+      <option value=168>Week</option>
+      <option value=672>4 weeks</option>
+    </select>
+    <input class=knapp type="text" id="datepicker" size=12em title='Measurement start'>
+    <input class=knapp type="text" id="period_input" size=4em placeholder="00:00" title='Starting hour'>
+
+    <button class=knapp id=prev title='Previous period'>Prev</button>
+    <button  class=knapp id=next title='Next period'>Next</button>
+    
+    <!--
+    <button  class=knapp id=search>Search</button>
+    -->
+   <input class=knapp type="search" id="search_input" size=5em placeholder=search title='Type to select by link names'>
+   <!---->
+    <span  class=knapp id=refs></span>
+    <button  class=knapp id=live title="Refresh display every minute">Autorefresh</button>
+
+    <img id=busy src=/js/ajax-loader.gif alt='Busy fetching data'>
+    <span class=knapp style=float:right><a href=https://sikt.no/en/micro-dependability target=microdep-project>About project</a></span>
+<!--
+    <div id=busy><img width=100% src=/js/ajax-loader.gif></div>
+    -->
+  <main id=tabs>
+    <ul>
+      <li><a href="#mapid">Map</a>
+      <li>
+	<select class=knapp id=check title='Reports for current parameter'>
+	  <option value=choose>+</option>
+	  <!-- <option value=curve title='Table of alle variables'>Line curve</option> -->
+	  <option value=heatmap title='Table of alle variables'>Heatmap</option>
+	  <option value=missing title='Missing opposite links'>Missing</option>
+	  <option value=asymmetry title='Asymmetry in selected variable'>Asymmetry</option>
+	  <option value=summary title='Table of alle variables'>Summary</option>
+	</select>
+      </li>
+ <!--     <li><a href="#report">Report</a> -->
+    </ul>
+    <div id="mapid"></div>
+<!--    <div id="report"></div> -->
+  </main>
+    <div id=legend></div>
+    <div>
+       <b>Last status:</b><span  id=status>none</span>
+       <b>Last error:</b><span  id=error>none</span>
+    </div>
+
+    <span class=knapp id=missing style=align:left></span>
+        *) The positons of sites are a guess and not official.
+<!-- <div id=dialog>testing dialog popup</div> -->
+
+<script src="microdep-map.js" type="module"></script>
+
+</body>
+</html>
