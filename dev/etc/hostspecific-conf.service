@@ -4,8 +4,8 @@ Before=perfsonar-lsregistrationdaemon.service psconfig-pscheduler-agent.service
 
 [Service]
 Type=oneshot
-ExecStart=-/bin/bash -c "/usr/bin/cp /etc/perfsonar/lsregistrationdaemon.conf-$(/usr/bin/hostname) /etc/perfsonar/lsregistrationdaemon.conf"
-ExecStart=-/bin/bash -c "/usr/bin/cp /etc/psconfig/pscheduler.d/microdep-tests.json-$(/usr/bin/hostname) /etc/psconfig/pscheduler.d/microdep-tests.json
+ExecStart=-/bin/bash -c "/usr/bin/cp /etc/perfsonar/lsregistrationdaemon.conf-$(/usr/bin/hostname -s) /etc/perfsonar/lsregistrationdaemon.conf"
+ExecStart=-/bin/bash -c "/usr/bin/cp /etc/psconfig/pscheduler.d/microdep-tests.json-$(/usr/bin/hostname -s) /etc/psconfig/pscheduler.d/microdep-tests.json
 
 [Install]
 WantedBy=multi-user.target

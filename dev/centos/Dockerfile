@@ -290,7 +290,7 @@ RUN mkdir -p /var/run/postgresql && chown postgres.postgres /var/run/postgresql 
     && create_new_db.sh -t postgres -d routingmonitor
 COPY bin/trace_event_reader.py /usr/local/bin
 COPY etc/microdep/perfsonar-microdep-trace-ana.service /usr/lib/systemd/system/
-RUN sed -i "s|postgresql|postgresql-10|g" /usr/lib/systemd/system/perfsonar-microdep-trace-ana.service
+RUN sed -i "s|postgresql\.service|postgresql-10\.service|g" /usr/lib/systemd/system/perfsonar-microdep-trace-ana.service
 RUN systemctl enable perfsonar-microdep-trace-ana.service
 
 COPY etc/logstash/microdep /usr/lib/perfsonar/logstash/pipeline/microdep
