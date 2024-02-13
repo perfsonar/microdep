@@ -126,6 +126,7 @@ services:
         
 networks:
   testpoint-net:
+    name: testpoint-net
     enable_ipv6: true
     ipam:
       driver: default
@@ -135,6 +136,7 @@ networks:
         - subnet: fd00::150:2:0/112
           
   toolkit-net:
+    name: toolkit-net
     enable_ipv6: true
     ipam:
       driver: default
