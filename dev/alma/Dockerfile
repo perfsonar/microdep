@@ -22,7 +22,7 @@
 #
 
 
-FROM ottojwittner/systemd-image-alma:latest
+FROM systemd-image-alma:latest
 MAINTAINER Otto J Wittner <wittner@sikt.no>
 
 # Fix default locals
@@ -33,6 +33,7 @@ ENV LC_CTYPE=en_US.UTF-8
 
 # ---- D o w n l o a d   a n d   i n s t a l l   p a c k a g e s  ------
 
+RUN dnf update -y 
 # Install the EPEL RPM
 RUN dnf install -y epel-release && dnf config-manager --set-enabled crb
 

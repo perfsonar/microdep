@@ -15,7 +15,7 @@ services:
   rpmbuild:
     container_name: ps-rpmbuilder
     hostname: ps-rpmbuilder
-    image: ottojwittner/rpmbuild-${DISTRO:-alma9}
+    image: rpmbuild-${DISTRO:-alma9}
     build:
       context: .
       dockerfile: Dockerfile-${DISTRO:-alma9}

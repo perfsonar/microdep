@@ -27,7 +27,7 @@ services:
   ps-toolkit:
     container_name: ps-toolkit
     hostname: ${TOOLKIT_HOSTNAME:-toolkit}
-    image: ottojwittner/ps-microdep-toolkit-${DISTRO:-alma}
+    image: ps-microdep-toolkit-${DISTRO:-alma}
     depends_on:
       - systemd-image
     build:
@@ -72,7 +72,7 @@ services:
     build:
       context: .
       dockerfile: ${DISTRO:-alma}/Dockerfile-systemd
-    image: ottojwittner/systemd-image-${DISTRO:-alma}
+    image: systemd-image-${DISTRO:-alma}
     volumes:
       - /sys/fs/cgroup:/sys/fs/cgroup:ro
     # Just make image "die" as it is only a parent image  

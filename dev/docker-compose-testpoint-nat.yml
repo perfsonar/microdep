@@ -14,7 +14,7 @@ services:
   ps-testpoint:
     container_name: ps-testpoint
     hostname: ${TESTPOINT_HOSTNAME:-testpoint}
-    image: ottojwittner/ps-microdep-testpoint-${DISTRO:-alma}
+    image: ps-microdep-testpoint-${DISTRO:-alma}
     depends_on:
       - systemd-image
     build:
@@ -49,7 +49,7 @@ services:
     build:
       context: .
       dockerfile: ${DISTRO:-alma}/Dockerfile-systemd
-    image: ottojwittner/systemd-image-${DISTRO:-alma}
+    image: systemd-image-${DISTRO:-alma}
     volumes:
       - /sys/fs/cgroup:/sys/fs/cgroup:ro
     # Just make image "die" as it is only a parent image  
