@@ -26,7 +26,7 @@ version: "2.2"
 services:
   ps-toolkit:
     container_name: ps-toolkit
-    hostname: ${TOOLKIT_HOSTNAME:-toolkit}
+    hostname: ${TOOLKIT_HOSTNAME:-ps-sis}
     image: ps-microdep-toolkit-${DISTRO:-alma}
     depends_on:
       - systemd-image
