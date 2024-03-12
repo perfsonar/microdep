@@ -69,6 +69,10 @@ make -C %{srcroot} ROOTPATH=%{buildroot}/%{install_base} CONFIGPATH=%{buildroot}
 
 mkdir -p %{buildroot}/%{_unitdir}
 install -D -m 0644 -t %{buildroot}/%{_unitdir} %{srcroot}/scripts/*.service 
+install -D -m 0644 -t %{buildroot}/etc/perfsonar/microdep/ %{srcroot}/etc/mapconfig.yml
+install -D -m 0644 -t %{buildroot}/etc/perfsonar/microdep/ %{srcroot}/etc/microdep-config.yml
+install -D -m 0644 -t %{buildroot}/etc/httpd/conf.d/ %{srcroot}/etc/apache-microdep-map.conf
+
 rm -rf %{buildroot}/%{install_base}/scripts
 rm -f %{buildroot}/%{install_base}/Makefile
 

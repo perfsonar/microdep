@@ -1,4 +1,0 @@
-#
-# Config file for microdep-config-db.cgi (alias microdep-config.cgi)
-#
-basedir: "/var/lib/microdep"

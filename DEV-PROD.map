@@ -12,21 +12,30 @@ dev/microdep/server/script/map-lib.js microdep-map/js/map-lib.js
 dev/microdep/server/script/graph.js microdep-map/js/graph.js
 dev/microdep/server/script/curve-chart.html microdep-map/curve-chart.html
 dev/microdep/server/script/curve-chart.js microdep-map/js/curve-chart.js
-dev/microdep/server/script/elastic-get-date-type.pl microdep-map/elastic-get-date-type.pl
-dev/microdep/server/script/yaml-to-json.cgi microdep-map/yaml-to-json.cgi
-dev/microdep/server/script/microdep-config.cgi microdep-map/microdep-config.cgi
-dev/microdep/server/script/microdep-config.yml microdep-map/microdep-config.yml
+dev/microdep/server/script/elastic-get-date-type.pl bin/microdep_commands/elastic-get-date-type.pl
+dev/microdep/server/script/yaml-to-json.cgi bin/microdep_commands/yaml-to-json.cgi
+dev/microdep/server/script/microdep-config.cgi bin/microdep_commands/microdep-config.cgi
+dev/microdep/server/script/mapconfig.yml etc/mapconfig.yml
+dev/microdep/server/script/microdep-config.yml etc/microdep-config.yml
 # ... in addition there are a list of external libs to be fetched ...
 # Map config
 dev/microdep/server/script/microdep-psconfig-load.pl bin/microdep_commands/microdep-psconfig-load.pl
 dev/etc/psconfig/pscheduler.d/microdep-tests.json  etc/psconfig/pscheduler.d/microdep-tests.json
+dev/etc/httpd/apache-microdep-gui.conf etc/apache-microdep-map.conf
 # Debug-tools
 dev/bin/rabbitmq-consume.py bin/microdep_commands/rabbitmq-consume.py
 dev/bin/json2table.pl bin/microdep_commands/json2table.pl
 #bin/opensearch-query.sh bin/microdep_commands/opensearch-query.sh  "POST" action not fully implemented yet...
 #dev/etc/hostspecific-conf.service scripts/hostspecific-conf.service
+# Analytic tools
+dev/microdep/bin/qstream-gap-ana bin/microdep_commands/qstream-gap-ana
+dev/routingmonitor/trace_event_reader.py bin/microdep_commands/trace_event_reader.py
+dev/etc/microdep/perfsonar-microdep-gap-ana.service scripts/perfsonar-microdep-gap-ana.service
 dev/etc/microdep/perfsonar-microdep-trace-ana.service scripts/perfsonar-microdep-trace-ana.service
 dev/etc/microdep/perfsonar-microdep-restart.service scripts/perfsonar-microdep-restart.service
-dev/etc/microdep/perfsonar-microdep-gap-ana.service scripts/perfsonar-microdep-gap-ana.service
 #dev/etc/opensearch/opensearch-security-admin.service scripts/opensearch-security-admin.service
-
+# New to-be-made psconfig-file monitoring (https://superuser.com/questions/1171751/restart-systemd-service-automatically-whenever-a-directory-changes-any-file-ins)
+#dev/etc/microdep/perfsonar-microdep-psconfig-check.service scripts/perfsonar-microdep-psconfig-check.service
+# - needs to rerun microdep-psconfig-load.pl on psconfig-files
+#dev/etc/microdep/perfsonar-microdep-psconfig-check.path scripts/perfsonar-microdep-psconfig-check.path
+# - monitors /etc/perfsonar/psconfig/pscheduler.d folder
