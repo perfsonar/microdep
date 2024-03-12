@@ -9,7 +9,7 @@
 
 #Version variables set by automated scripts
 %define perfsonar_auto_version 5.1.0
-%define perfsonar_auto_relnum 1
+%define perfsonar_auto_relnum alfa1
 
 Name:			perfsonar-microdep
 Version:		%{perfsonar_auto_version}
@@ -28,38 +28,26 @@ Meta-package pulling in packaged required for Microdep Analytics in perfSONAR
 %package map
 Summary:		Microdep map web GUI presenting analytic results
 Group:			Applications/Communications
-Requires:               perfsonar-toolkit >= 5.0.7
+#Requires:               perfsonar-toolkit >= 5.0.7
+Requires:		httpd
+Requires:               mod_ssl
 Requires:		perl >= 5.32
-#Requires:               perl(CHI) 
-#Requires:		perl(Data::Dumper)
-#Requires:		perl(Data::Validate::Domain)
-#Requires:		perl(Data::Validate::IP)
-#Requires:		perl(English)
-#Requires:		perl(Exporter)
-#Requires:		perl(File::Basename)
-#Requires:		perl(FindBin)
-#Requires:		perl(Getopt::Long)
-#Requires:		perl(JSON)
-#Requires:		perl(JSON::Validator)
-#Requires:		perl(Log::Log4perl)
-#Requires:		perl(Module::Load)
-#Requires:		perl(Mouse)
-#Requires:		perl(POSIX)
-#Requires:		perl(Params::Validate)
-#Requires:		perl(Pod::Usage)
-#Requires:		perl(Regexp::Common)
-#Requires:		perl(Term::ProgressBar)
-#Requires:		perl(File::ReadBackwards)
-#Requires:		perl(Hash::Merge)
-#Requires:		perl(URI)
-#Requires:		perl(base)
-#Requires:		perl(lib)
-#Requires:		perl(vars)
-#Requires:		perl(warnings)
-#Requires:		coreutils
-#Requires:		shadow-utils
+Requires:               perl(CGI) 
+Requires:		perl(Data::Dumper)
+Requires:               perl(DBI) 
+Requires:		perl(Getopt::Long)
+Requires:		perl(JSON)
+Requires:		perl(LWP::Simple)
+Requires:		perl(Socket)
+Requires:		perl(strict)
+Requires:		perl(URI)
+Requires:		perl(warnings)
+Requires:		perl(YAML)
+Requires:               js-jquery
+Requires:               perfsonar-tracetree
+Requires:               
 %{?systemd_requires: %systemd_requires}
-#BuildRequires:          systemd
+BuildRequires:          systemd
 
 %description map
 Web GUI presenting Microdep analytic results in a map view
@@ -75,7 +63,6 @@ Requires:		perl >= 5.32
 %description ana
 Analytic scripts generating events for Microdep
 
-
 %install
 rm -rf %{buildroot}
 make -C %{srcroot} ROOTPATH=%{buildroot}/%{install_base} CONFIGPATH=%{buildroot}/%{config_base} install
@@ -84,6 +71,9 @@ mkdir -p %{buildroot}/%{_unitdir}
 install -D -m 0644 -t %{buildroot}/%{_unitdir} %{srcroot}/scripts/*.service 
 rm -rf %{buildroot}/%{install_base}/scripts
 rm -f %{buildroot}/%{install_base}/Makefile
+
+%clean
+rm -rf %{buildroot}
 
 %post map
 /usr/bin/sed -i 's|/var/lib/mircodep|%{configbase}|'  %{microdep_web_dir}/microdep-config.yml

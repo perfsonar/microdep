@@ -22,7 +22,7 @@
 #
 
 
-FROM ottojwittner/systemd-image-alma:latest
+FROM systemd-image-alma:latest
 MAINTAINER Otto J Wittner <wittner@sikt.no>
 
 # Fix default locals
@@ -107,6 +107,7 @@ COPY etc/microdep/GeoLite2-ASN.mmdb /usr/share/GeoIP/
 
 # Fetch css, js and other source-files for Microdep
 COPY microdep/server/script/*  /usr/lib/perfsonar/microdep-map/
+COPY microdep/server/script/microdep-map.js  /usr/lib/perfsonar/microdep-map/
 RUN  mkdir -p /usr/lib/perfsonar/microdep-map/js
 RUN if [ "$TYPE" = "toolkit" ]; then \
        wget -P /usr/lib/perfsonar/microdep-map/js/ -i /usr/lib/perfsonar/microdep-map/list-of-external-sources.txt; \
@@ -172,10 +173,10 @@ RUN if [ "$TYPE" = "toolkit" ]; then \
        sed 's|PRI|RSA PRI|g' /etc/opensearch/node-key.pem >> /etc/opensearch/both.pem; \
        sed -i 's|ProxyPass|    SSLProxyVerify none\n    SSLProxyCheckPeerCN off\n    SSLProxyCheckPeerName off\n    SSLProxyCheckPeerExpire off\n    SSLProxyMachineCertificateFile /etc/opensearch/both.pem\n    ProxyPass|' /etc/httpd/conf.d/apache-opensearch.conf; \
 # Fix access to local resources when external port mapping alters urls
-       sed -i 's|Listen 443 https|Listen 443 https\nListen 4435 https|' /etc/httpd/conf.d/ssl.conf; \
-       sed -i 's|_default_:443|_default_:443 _default_:4435|' /etc/httpd/conf.d/ssl.conf; \
-       sed -i 's|Listen 80|Listen 80\nListen 8085|' /etc/httpd/conf/httpd.conf; \
-       sed -i 's|\*:80|\*:80 \*:8085|' /etc/httpd/conf.d/apache-toolkit_web_gui.conf; \
+       sed -i 's|Listen 443 https|Listen 443 https\nListen 4435 https\nListen 4436 https|' /etc/httpd/conf.d/ssl.conf; \
+       sed -i 's|_default_:443|_default_:443 _default_:4435 _default_:4436|' /etc/httpd/conf.d/ssl.conf; \
+       sed -i 's|Listen 80|Listen 80\nListen 8085\nListen 8086|' /etc/httpd/conf/httpd.conf; \
+       sed -i 's|\*:80|\*:80 \*:8085 \*:8086|' /etc/httpd/conf.d/apache-toolkit_web_gui.conf; \
 # Prepare script to re-config Opensearch security plugin to reconfig password
        sed -e 's|kirk|admin|g' -e 's|sudo|sudo OPENSEARCH_JAVA_HOME=/usr/share/opensearch/jdk|g' /securityadmin_demo.sh > /usr/local/sbin/securityadmin.sh; \
        chmod +x /usr/local/sbin/securityadmin.sh; \
@@ -200,6 +201,11 @@ RUN cd /usr/libexec/pscheduler && patch -up1 < pscheduler-latencybg-subcount.pat
 COPY etc/psconfig/pscheduler.d/* /etc/perfsonar/psconfig/pscheduler.d/
 RUN if [ "$TYPE" = "testpoint" ]; then \
        rm -r /etc/perfsonar/psconfig; \
+    fi
+# Publish psconfig file for microdep tests
+RUN if [ "$TYPE" = "tootlkit" ]; then \
+       dnf install -y perfsonar-psconfig-publisher; \
+       psconfig publish --pretty /etc/perfsonar/psconfig/pscheduler.d/microdep-tests.json; \
     fi
 
 # Add some Rabbitmq and Opensearch debugging tools
@@ -262,10 +268,14 @@ RUN if [ "$TYPE" = "toolkit" ]; then \
 
 #   A d d   T r a c e t r e e   w e b   G U I 
 # Add http config and html+js+ccs stuff
-COPY etc/httpd/apache-tracetree-gui.conf /etc/httpd/conf.d
-COPY pstracetree/*  /usr/lib/perfsonar/tracetree/
-RUN ln -s /usr/lib/perfsonar/tracetree /root
-RUN cd /usr/lib/perfsonar/tracetree/; ln -s ls.html index.html
+#COPY etc/httpd/apache-tracetree-gui.conf /etc/httpd/conf.d
+#COPY pstracetree/*  /usr/lib/perfsonar/tracetree/
+#RUN ln -s /usr/lib/perfsonar/tracetree /root
+#RUN cd /usr/lib/perfsonar/tracetree/; ln -s ls.html index.html
+COPY pstracetree/rpmbuild/RPMS/noarch/perfsonar-tracetree-5.1.0-alfa1.el9.noarch.rpm /root
+RUN if [ "$TYPE" = "toolkit" ]; then \
+        dnf install -y /root/perfsonar-tracetree-5.1.0-alfa1.el9.noarch.rpm; \
+    fi	 
 
 #   A d d   M i c r o d e p   a n a l y t i c s 
 #    Gap analytics

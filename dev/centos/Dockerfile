@@ -22,7 +22,7 @@
 #
 
 
-FROM ottojwittner/systemd-image-centos:latest
+FROM systemd-image-centos:latest
 MAINTAINER Otto J Wittner <wittner@sikt.no>
 
 # Fix default locals

@@ -27,7 +27,7 @@ services:
   ps-toolkit:
     container_name: ps-toolkit
     hostname: ${TOOLKIT_HOSTNAME:-toolkit}
-    image: ottojwittner/ps-microdep-toolkit-${DISTRO:-alma}
+    image: ps-microdep-toolkit-${DISTRO:-alma}
     depends_on:
       - systemd-image
     build:
@@ -50,9 +50,11 @@ services:
     tty: true
     ports:
 #      - 80:80    # http-access
-      - 8085:80    # http-access
+#      - 8085:80    # http-access
+      - 8086:80    # http-access
 #      - 443:443   # https-access
-      - 4435:443   # https-access
+#      - 4435:443   # https-access
+      - 4436:443   # https-access
 #      - 5601:5601  # Opensearch Dashboard (Kibana)
       - 5611:5601  # Opensearch Dashboard (Kibana)
 #      - 3000:3000  # Grafana
@@ -76,7 +78,7 @@ services:
 #    entrypoint: ["echo", "Service testpoint disabled. See docker-compose.yml."]
     container_name: ps-testpoint
     hostname: ${TESTPOINT_HOSTNAME:-testpoint}
-    image: ottojwittner/ps-microdep-testpoint-${DISTRO:-alma}
+    image: ps-microdep-testpoint-${DISTRO:-alma}
     depends_on:
       - systemd-image
       - ps-toolkit
@@ -95,7 +97,7 @@ services:
     build:
       context: .
       dockerfile: ${DISTRO:-alma}/Dockerfile-systemd
-    image: ottojwittner/systemd-image-${DISTRO:-alma}
+    image: systemd-image-${DISTRO:-alma}
     volumes:
       - /sys/fs/cgroup:/sys/fs/cgroup:ro
     # Just make image "die" as it is only a parent image  

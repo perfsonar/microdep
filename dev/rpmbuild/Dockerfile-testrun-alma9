@@ -1,0 +1,16 @@
+FROM almalinux:9
+MAINTAINER Otto J Wittner - Sikt
+
+# To be set up...
+
+#RUN dnf update -y && dnf install -y yum-utils && dnf config-manager --set-enabled crb &&  dnf install -y epel-release procps-ng 
+#COPY RPMS/noarch/*.el9.noarch.rpm /root/
+#RUN dnf -y install /root/*.el9.noarch.rpm
+#RUN dnf -y install /root/perfsonar-sorttablejs-*.el9.noarch.rpm /root/perfsonar-visjs-*.el9.noarch.rpm /root/perfsonar-tracetree-*.el9.noarch.rpm
+
+CMD ["/usr/sbin/httpd", "-DNO_DETACH", "-DFOREGROUND"]
+
+
+
+
+

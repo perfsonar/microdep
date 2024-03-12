@@ -2,7 +2,7 @@
 # Build rpm packages for specified distro. 
 # Run with "DISTRO=<distro-tag> SPEC=<rpm-spec-file> docker-compose run".
 # Default distro is alma9. Valied distro tags are: alma9 centos7
-# Default rpm-spec-file is "SPECS/perfsonar-microdep.spec"
+# Default rpm-spec-files are "SPEC/*-alma9.spec"
 #     
 # Author: Otto J Wittner <otto.wittner@sikt.no>
 # Date: 2024-02-02
@@ -15,7 +15,7 @@ services:
   rpmbuild:
     container_name: ps-rpmbuilder
     hostname: ps-rpmbuilder
-    image: ottojwittner/rpmbuild-${DISTRO:-alma9}
+    image: rpmbuild-${DISTRO:-alma9}
     build:
       context: .
       dockerfile: Dockerfile-${DISTRO:-alma9}
@@ -27,9 +27,19 @@ services:
       - ./SRPMS:/home/rpmbuilder/rpmbuild/SRPMS 
       - ./RPMS:/home/rpmbuilder/rpmbuild/RPMS
 #      - ../../:/home/src
-#     Needs 3 levels up as builds/ is a symlink to dev/builds/ which docker-compose expands
-      - ../../../:/home/src
+#     Needs 2 levels up as long as rpmbuilds/ is a symlink to dev/builds/ (which docker-compose expands)
+      - ../../:/home/src
     stdin_open: true
     tty: true
-    entrypoint: ["/bin/build-spec", "/home/rpmbuilder/rpmbuild/SPECS/perfsonar-microdep-${DISTRO:-alma9}.spec"]
+    entrypoint: ["/bin/build-spec", "/home/rpmbuilder/rpmbuild/${SPEC:-SPECS/*-alma9.spec}"]
     # Run `docker-compose run --entrypoint /bin/bash rpmbuild` to achieve entrypoint: ["/bin/bash"]
+
+  testrun:
+    container_name: ps-microdep
+    hostname: ps-microdep
+    build:
+      context: .
+      dockerfile: Dockerfile-testrun-${DISTRO:-alma9}
+    ports:
+      - 8086:80
+      - 4436:443

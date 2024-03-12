@@ -6,7 +6,7 @@
 #
 
 BUILDROOT=$(pwd)
-SRCROOT=$(dirname $(dirname $(pwd)))
+SRCROOT=$(dirname $(pwd))
 DISTRO=alma9
 DISTROS="alma9 centos7"
 
