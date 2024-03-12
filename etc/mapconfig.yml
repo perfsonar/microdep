@@ -1,0 +1,847 @@
+#
+# Default Microdep Map config file
+#
+
+dragonlab:
+  # Measuremet network/variant parameters
+  title: "Global"
+  descr: "Interdomain global measurement network"
+  default_event_type: "gap"     # Event type to apply if no relevant is available
+  default_event_type_live: "gap"     # Event type to apply if no relevant is available and date is today
+  event_type:
+    # Event types for variant
+    gap:
+      enable: true               # Show explicitly in map
+      title: "Gaps"
+      descr: "Flow downtime events, i.e. probe packets are lost."
+      index: "dragonlab"
+      summary_event_type: "gapsum"  # Additional event type for summary info to include 
+      popup:
+        # Data for popup windows
+        summary:
+          # Summary info fields
+          - down_ppm
+          - h_ddelay
+          - h_jit
+          - h_min_d
+          - big_gaps
+          - big_time
+          - small_gaps
+          - small_time
+        see_routes: "traceroute"  # Source for traceroute viewer
+        table:
+          # Table columns (in addition to date and time) to display in map popup windows
+          - tloss
+          - h_ddelay
+      default_field: "down_ppm"
+      field:
+        down_ppm:
+          title: "Unavailability"
+          descr: "Fraction of downtime over total time in parts-per-million (10 ppm <=> \"five-nines\")."
+          unit: "ppm"
+          type: "number"
+          aggr: "sum"
+        tloss:
+          title: "Time lost"
+          descr: "Downtime in packet flow."
+          unit: "ms"
+          type: "number"
+          aggr: "sum"
+        h_ddelay:
+          title: "Queue"
+          descr: "Events with significantly larger current delay than minimum delay."
+          unit: "ms"
+          type: "number"
+          aggr: "avg"
+        h_jit:
+          title: "Jitter"
+          descr: "Delay varations measured as specified by RFC3550 appendix A.8."
+          unit: "ms"
+          type: "number"
+          aggr: "avg"
+        h_min_d:
+          title: "Min delay"
+          descr: "Minimum one-way delay measured in a limited time window (~ 1-2min)."
+          unit: "ms"
+          type: "number"
+          aggr: "min"
+        h_slope_10:
+          title: "Slope"
+          descr: "Slope of increase in delay ahead of a gap (based on 10 probe packets)."
+          unit: ""
+          type: "number"
+          aggr: "avg"
+      default_summary_field: "down_ppm"
+      summary_field:      # From summary event type
+        down_ppm:
+          title: "Unavailability"
+          descr: "Fraction of downtime over total time in parts-per-million (10 ppm <=> \"five-nines\")."
+          unit: "ppm"
+          type: "number"
+          aggr: "sum"
+        h_ddelay:
+          title: "Queue"
+          unit: "ms"
+          type: "number"
+          aggr: "avg"
+        h_jit:
+          title: "Jitter"
+          unit: "ms"
+          type: "number"
+          aggr: "avg"
+        h_min_d:
+          title: "Min delay"
+          unit: "ms"
+          type: "number"
+          aggr: "min"
+        big_gaps:
+          title: "Big gaps"
+          unit: "#"
+          type: "number"
+          aggr: "sum"
+        big_time:
+          title: "Big gap time"
+          unit: "s"
+          type: "number"
+          aggr: "sum"
+        small_gaps:
+          title: "Small gaps"
+          unit: "#"
+          type: "number"
+          aggr: "sum"
+        small_time:
+          title: "Small gap time"
+          unit: "s"
+          type: "number"
+          aggr: "sum"
+        
+    jitter:
+      enable: true
+      title: "Queues"
+      descr: "Events with significant delay variations."
+      index: "dragonlab_jitter" 
+      summary_event_type: "gapsum"  # Additional event type for summary info to include 
+      popup:
+        # Data for popup windows
+        summary:
+          # Summary info fields
+          - down_ppm
+          - h_ddelay
+          - h_jit
+          - h_min_d
+          - big_gaps
+          - big_time
+          - small_gaps
+          - small_time            - 
+        see_routes: "traceroute"  # Source for traceroute viewer
+        table:
+          # Table columns (in addition to date and time) to display in map popup windows
+          - h_jit
+          - h_ddelay
+      default_field: "h_ddelay"
+      field:
+        h_ddelay:
+          title: "Queue"
+          unit: "ms"
+          type: "number"
+          aggr: "avg"
+        h_jit:
+          title: "Jitter"
+          unit: "ms"
+          type: "number"
+          aggr: "avg"
+        h_min_d:
+          title: "Min delay"
+          unit: "ms"
+          type: "number"
+          aggr: "min"
+        h_slope_10:
+          title: "Slope"
+          unit: ""
+          type: "number"
+          aggr: "avg"
+      default_summary_field: "h_ddelay"
+      summary_field:      # From summary event type
+        down_ppm:
+          title: "Unavailability"
+          descr: "Fraction of downtime over total time in parts-per-million (10 ppm <=> \"five-nines\")."
+          unit: "ppm"
+          type: "number"
+          aggr: "sum"
+        h_ddelay:
+          title: "Queue"
+          unit: "ms"
+          type: "number"
+          aggr: "avg"
+        h_jit:
+          title: "Jitter"
+          unit: "ms"
+          type: "number"
+          aggr: "avg"
+        h_min_d:
+          title: "Min delay"
+          unit: "ms"
+          type: "number"
+          aggr: "min"
+        big_gaps:
+          title: "Big gaps"
+          unit: "#"
+          type: "number"
+          aggr: "sum"
+        big_time:
+          title: "Big gap time"
+          unit: "s"
+          type: "number"
+          aggr: "sum"
+        small_gaps:
+          title: "Small gaps"
+          unit: "#"
+          type: "number"
+          aggr: "sum"
+        small_time:
+          title: "Small gap time"
+          unit: "s"
+          type: "number"
+          aggr: "sum"
+
+    routeerr:
+      enable: true
+      title: "Route errors"
+      descr: "Events where UDP based traceroute probes never reach their destination."
+      index: "dragonlab_routemon" 
+      summary_event_type: "routesum"  # Additional event type for summary info to include 
+      popup:
+        # Data for popup windows
+        summary:
+          # Summary info fields
+          - routes_failed
+          - routes_reached
+          - routes_analysed
+          - min_length
+          - max_length
+          - unique_hosts
+          - unique_hosts_per_hop
+        see_routes: "traceroute"  # Source for traceroute viewer
+        table:
+          # Fields to display (in addition to date and time) as table columns in map popup windows
+          - anomaly_count
+          - last_hop
+          #- max_length
+          - last_reply_from
+      default_summary_field: "routes_failed"
+      summary_field:
+        routes_failed:
+          title: "Routes failed"
+          unit: "#"
+          type: "number"
+          aggr: "sum"
+        routes_reached:
+          title: "Routes completed"
+          unit: "#"
+          type: "number"
+          aggr: "sum"
+          scale: "reversed"   # Large numbers are desirable
+        routes_analysed:
+          title: "Routes analysed"
+          unit: "#"
+          type: "number"
+          aggr: "sum"
+          scale: "reversed"   # Large numbers are desirable
+        min_length:
+          title: "Min length"
+          unit: "hops"
+          type: "number"
+          aggr: "min"
+        max_length:
+          title: "Max length"
+          unit: "hops"
+          type: "number"
+          aggr: "max"
+        unique_hosts:
+          title: "Unique hosts"
+          unit: "#"
+          type: "number"
+          aggr: "max"
+        unique_hosts_per_hop:
+          title: "Hosts per hop"
+          unit: "hops"
+          type: "vector"       # I.e. space separated list of numbers
+          aggr: "max"
+      default_field: "anomaly_count"
+      field:
+        anomaly_count:
+          title: "Routes failed"
+          unit: "#"
+          type: "number"
+          aggr: "sum"
+        duration:
+          title: "Route down times"
+          unit: "s"
+          type: "number"
+          aggr: "sum"
+        last_hop:
+          title: "Last hop"
+          unit: "hop#"
+          descr: "Hop no of last host responding"
+          type: "number"
+          aggr: "max"
+        max_length:
+          title: "Normal length"
+          unit: "hops"
+          descr: "Maximum observed lenght of route to destination"
+          type: "number"
+          aggr: "max"
+        last_reply_from:
+          title: "Last host"
+          unit: ""
+          descr: "Address of last host responding"
+          type: "string"
+          aggr: ""
+        icmp_errors:
+          title: "ICMP messages"
+          unit: ""
+          descr: "ICMP messages received from last host"
+          type: "string"
+          aggr: ""
+        
+    routechange:
+      enable: true
+      title: "Route changes"
+      descr: "Events with significant change in ip addesses observed by UDP based traceroute."
+      index: "dragonlab_routemon" 
+      summary_event_type: "routesum"
+      popup:
+        # Data for popup windows
+        summary:
+          # Summary info
+          - route_changes
+          - routes_analysed
+          - min_length
+          - max_length
+          - unique_hosts
+          - unique_hosts_per_hop
+        see_routes: "traceroute"  # Source for traceroute viewer
+        table:
+          # Table columns (in addition to date and time) to display in map popup windows
+          - no_hops_over_ce_limit
+          - routechange_asn
+          - routechange_ip
+          - ce_delta
+      default_summary_field: "route_changes"
+      summary_field:
+        routes_failed:
+          title: "Routes failed"
+          unit: "#"
+          type: "number"
+          aggr: "sum"
+        routes_reached:
+          title: "Routes completed"
+          unit: "#"
+          type: "number"
+          aggr: "sum"
+          scale: "reversed"   # Large numbers are desirable
+        routes_analysed:
+          title: "Routes analysed"
+          unit: "#"
+          type: "number"
+          aggr: "sum"
+          scale: "reversed"   # Large numbers are desirable
+        min_length:
+          title: "Min length"
+          unit: "hops"
+          type: "number"
+          aggr: "min"
+        max_length:
+          title: "Max length"
+          unit: "hops"
+          type: "number"
+          aggr: "max"
+        unique_hosts:
+          title: "Unique hosts"
+          unit: "#"
+          type: "number"
+          aggr: "max"
+        unique_hosts_per_hop:
+          title: "Hosts per hop"
+          unit: "hops"
+          type: "vector"       # I.e. space separated list of numbers
+          aggr: "max"
+        route_changes:
+          title: "Route changes"
+          unit: "#"
+          type: "number"
+          aggr: "max"       # Accumulative field, i.e. only last logged value is relevant
+          #aggr: "sum"
+      default_field: "route_changes"
+      field:
+        anomality_class:
+          title: "Status"
+          unit: ""
+          descr: "New / well known route"
+          type: "string"
+          aggr: ""
+        ce_delta:
+          title: "Per hop anomaly"
+          unit: ""
+          descr: "Anomaly factors (delta cross entropy) per hop along route"
+          type: "vector"
+          aggr: "sum"
+        ce_delta_max:
+          title: "Max hop anomaly"
+          unit: ""
+          descr: "Largest anomaly factor (delta cross entropy) observed along route"
+          type: "number"
+          aggr: "max"
+        ce_delta_total:
+          title: "Route anomaly"
+          unit: ""
+          descr: "Sum of anomaly factors (delta cross entropy) observed along route"
+          type: "number"
+          aggr: "sum"
+        no_hops_over_ce_limit:
+          title: "Abnormal hops"
+          unit: "#"
+          descr: "No of hops with anomaly factor (delta cross entropy) above threshold."
+          type: "number"
+          aggr: "sum"
+        prev_normal:
+          title: "Changed from"
+          unit: ""
+          descr: "List of hosts in previous routes"
+          type: "string"
+          aggr: ""
+        new_normal:
+          title: "Changed to"
+          unit: ""
+          descr: "List of hosts in latest routes"
+          type: "string"
+          aggr: ""
+        route_changes:
+          title: "Route changes"
+          unit: "#"
+          type: "number"
+          aggr: "max"       # Accumulative field, i.e. only last logged value is relevant
+        routechange_asn:
+          title: "ASN"
+          unit: ""
+          descr: "ASN of router(s) responisble for route-change"
+          type: "string"
+          aggr: ""
+          mouseover: "routechange_as"     # Show tooltip title on mouse-over based on other field
+        routechange_as:
+          title: "AS"
+          unit: ""
+          descr: "AS name(s) of router(s) responisble for route-change"
+          type: "string"
+          aggr: ""
+        routechange_ip:
+          title: "IP"
+          unit: ""
+          descr: "IP address(es) of router(s) responisble for route-change"
+          type: "string"
+          aggr: ""
+          mouseover: "routechange_name"     # Show tooltip title on mouse-over based on other field
+        routechange_name:
+          title: "Name"
+          unit: ""
+          descr: "Host name of router(s) responisble for route-change"
+          type: "string"
+          aggr: ""
+          mouseover: "routechange_ip"     # Show tooltip title on mouse-over based on other field
+          
+    tcprouteerr:
+      enable: true
+      title: "TCP route errors"
+      descr: "Events where TCP based traceroute probes never reach their destination."
+      index: "dragonlab_routemon" 
+      summary_event_type: "tcproutesum"
+      popup:
+        # Data for popup windows
+        summary:
+          # Summary info
+          - routes_failed
+          - routes_reached
+          - routes_analysed
+          - min_length
+          - max_length
+          - unique_hosts
+          - unique_hosts_per_hop
+        see_routes: "tcptraceroute"  # Source for traceroute viewer
+        table:
+          # Table columns (in addition to date and time) to display in map popup windows
+          - anomaly_count
+          - last_hop
+          - last_reply_from
+      default_summary_field: "routes_failed"
+      summary_field:
+        routes_failed:
+          title: "Routes failed"
+          unit: "#"
+          type: "number"
+          aggr: "sum"
+        routes_reached:
+          title: "Routes completed"
+          unit: "#"
+          type: "number"
+          aggr: "sum"
+          scale: "reversed"   # Large numbers are desirable
+        routes_analysed:
+          title: "Routes analysed"
+          unit: "#"
+          type: "number"
+          aggr: "sum"
+          scale: "reversed"   # Large numbers are desirable
+        min_length:
+          title: "Min length"
+          unit: "hops"
+          type: "number"
+          aggr: "min"
+        max_length:
+          title: "Max length"
+          unit: "hops"
+          type: "number"
+          aggr: "max"
+        unique_hosts:
+          title: "Unique hosts"
+          unit: "#"
+          type: "number"
+          aggr: "max"
+        unique_hosts_per_hop:
+          title: "Hosts per hop"
+          unit: "hops"
+          type: "vector"       # I.e. space separated list of numbers
+          aggr: "max"
+      default_field: "anomaly_count"
+      field:
+        anomaly_count:
+          title: "Routes failed"
+          unit: "#"
+          type: "number"
+          aggr: "sum"
+        duration:
+          title: "Route down times"
+          unit: "s"
+          type: "number"
+          aggr: "sum"
+        last_hop:
+          title: "Last hop"
+          unit: "hop#"
+          descr: "Hop no of last host responding"
+          type: "number"
+          aggr: "max"
+        max_length:
+          title: "Normal length"
+          unit: "hops"
+          descr: "Maximum observed lenght of route to destination"
+          type: "number"
+          aggr: "max"
+        last_reply_from:
+          title: "Last host"
+          unit: ""
+          descr: "Address of last host responding"
+          type: "string"
+          aggr: ""
+        icmp_errors:
+          title: "ICMP messages"
+          unit: ""
+          descr: "ICMP messages received from last host"
+          type: "string"
+          aggr: ""
+
+    tcproutechange:
+      enable: true
+      title: "TCP Route changes"
+      descr: "Events with significant change in ip addesses observed by TCPP based traceroute."
+      index: "dragonlab_routemon" 
+      summary_event_type: "tcproutesum"
+      popup:
+        # Data for popup windows
+        summary:
+          # Summary info
+          - route_changes
+          - routes_analysed
+          - min_length
+          - max_length
+          - unique_hosts
+          - unique_hosts_per_hop
+        see_routes: "tcptraceroute"  # Source for traceroute viewer
+        table:
+          # Table columns (in addition to date and time) to display in map popup windows
+          - no_hops_over_ce_limit
+          - routechange_asn
+          - routechange_ip
+          - ce_delta
+      default_summary_field: "route_changes"
+      summary_field:
+        routes_failed:
+          title: "Routes failed"
+          unit: "#"
+          type: "number"
+          aggr: "sum"
+        routes_reached:
+          title: "Routes completed"
+          unit: "#"
+          type: "number"
+          aggr: "sum"
+          scale: "reversed"   # Large numbers are desirable
+        routes_analysed:
+          title: "Routes analysed"
+          unit: "#"
+          type: "number"
+          aggr: "sum"
+          scale: "reversed"   # Large numbers are desirable
+        min_length:
+          title: "Min length"
+          unit: "hops"
+          type: "number"
+          aggr: "min"
+        max_length:
+          title: "Max length"
+          unit: "hops"
+          type: "number"
+          aggr: "max"
+        unique_hosts:
+          title: "Unique hosts"
+          unit: "#"
+          type: "number"
+          aggr: "max"
+        unique_hosts_per_hop:
+          title: "Hosts per hop"
+          unit: "hops"
+          type: "vector"       # I.e. space separated list of numbers
+          aggr: "max"
+        route_changes:
+          title: "Route changes"
+          unit: "#"
+          type: "number"
+          aggr: "max"
+      default_field: "route_changes"
+      field:
+        anomality_class:
+          title: "Status"
+          unit: ""
+          descr: "New / well known route"
+          type: "string"
+          aggr: ""
+        ce_delta:
+          title: "Per hop anomaly"
+          unit: ""
+          descr: "Anomaly factors (delta cross entropy) per hop along route"
+          type: "vector"
+          aggr: "sum"
+        ce_delta_max:
+          title: "Max hop anomaly"
+          unit: ""
+          descr: "Largest anomaly factor (delta cross entropy) observed along route"
+          type: "number"
+          aggr: "max"
+        ce_delta_total:
+          title: "Route anomaly"
+          unit: ""
+          descr: "Sum of anomaly factors (delta cross entropy) observed along route"
+          type: "number"
+          aggr: "sum"
+        no_hops_over_ce_limit:
+          title: "Abnormal hops"
+          unit: "#"
+          descr: "No of hops with anomaly factor (delta cross entropy) above threshold."
+          type: "number"
+          aggr: "sum"
+        prev_normal:
+          title: "Changed from"
+          unit: ""
+          descr: "List of hosts in previous routes"
+          type: "string"
+          aggr: ""
+        new_normal:
+          title: "Changed to"
+          unit: ""
+          descr: "List of hosts in latest routes"
+          type: "string"
+          aggr: ""
+        route_changes:
+          title: "Route changes"
+          unit: "#"
+          type: "number"
+          aggr: "max"
+        routechange_asn:
+          title: "ASN"
+          unit: ""
+          descr: "ASN of router(s) responisble for route-change"
+          type: "string"
+          aggr: ""
+          mouseover: "routechange_as"     # Show tooltip title on mouse-over based on other field
+        routechange_as:
+          title: "AS"
+          unit: ""
+          descr: "AS name(s) of router(s) responisble for route-change"
+          type: "string"
+          aggr: ""
+        routechange_ip:
+          title: "IP"
+          unit: ""
+          descr: "IP address(es) of router(s) responisble for route-change"
+          type: "string"
+          aggr: ""
+          mouseover: "routechange_name"     # Show tooltip title on mouse-over based on other field
+        routechange_name:
+          title: "Name"
+          unit: ""
+          descr: "Host name of router(s) responisble for route-change"
+          type: "string"
+          aggr: ""
+          mouseover: "routechange_ip"     # Show tooltip title on mouse-over based on other field
+
+    correlation:
+      # Correlated events
+      enable: true
+      title: "Correlations"
+      descr: "Events of time correlated gap and route-change events."
+      index: "dragonlab_correvents"
+      summary_event_type: "corrsum"
+      asn_source: "routechange_asn"       # Field providing relevant as numbers  
+      popup:
+        summary:
+          - corr_count
+          - corr_count_uniq
+          - corr_count_src
+          - avg_duration
+          - max_tloss
+          - tloss
+#          - uniq_events
+        table:
+#          - corr_count_uniq
+          - events_corr
+          - tloss
+          - routechange_asn
+          - routechange_ip
+          - ce_delta
+      default_summary_field: "max_tloss"
+      summary_field:
+        count:
+          title: "Correlations"
+          descr: "Total no of correlations events"
+          unit: "#"
+          type: "number"
+          aggr: "sum"
+        corr_count:
+          title: "All events"
+          descr: "Sum of all events in all correlations"
+          unit: "#"
+          type: "number"
+          aggr: "sum"
+        corr_count_uniq:
+          title: "Unique events"
+          descr: "Total no of unique event types involved in correlations"
+          unit: "#"
+          type: "number"
+          aggr: "avg"
+        corr_count_src:
+          title: "Event src"
+          descr: "Max no of sourcefiles seen for a correlation"
+          unit: "#"
+          type: "number"
+          aggr: "max"
+        uniq_events:
+          title: "Unique events"
+          descr: "List of unique event types involved in correlations"
+          unit: ""
+          type: "string"
+          aggr: ""
+        sum_duration:
+          title: "Total window"
+          descr: "Tot window of all correlations"
+          unit: "s"
+          type: "number"
+          aggr: ""
+        avg_duration:
+          title: "Avg window"
+          descr: "Average window for correlations"
+          unit: "s"
+          type: "number"
+          aggr: ""        
+        sum_tloss:
+          title: "Total time lost"
+          descr: "Sum of all downtimes"
+          unit: "ms"
+          type: "number"
+          aggr: "sum"
+          threshold_low: "1000"    # Limit between "green" and "yellow" severaty level
+          threshold_high: "10000"   # Limit between "yellow" and "red" severaty level
+        max_tloss:
+          title: "Max time lost"
+          descr: "Longest continous downtime observed"
+          unit: "ms"
+          type: "number"
+          aggr: "max"
+          threshold_low: "1000"    # Limit between "green" and "yellow" severaty level
+          threshold_high: "5000"   # Limit between "yellow" and "red" severaty level
+        tloss:
+          title: "Time lost"
+          descr: "Periode of downtime where no packets arrive"
+          unit: "ms"
+          type: "number"
+          aggr: "sum"
+          threshold_low: "1000"    # Limit between "green" and "yellow" severaty level
+          threshold_high: "10000"   # Limit between "yellow" and "red" severaty level
+      default_field: "tloss"
+      field:
+        events_corr:
+          title: "Events"
+          descr: "Events found to correlate"
+          unit: ""
+          type: "string"
+          aggr: ""
+        corr_count:
+          title: "Events"
+          descr: "No of events correlating"
+          unit: "#"
+          type: "number"
+          aggr: "sum"
+        corr_count_uniq:
+          title: "Unique events"
+          descr: "No of unique events correlation"
+          unit: "#"
+          type: "number"
+          aggr: "avg"
+        ce_delta:
+          title: "Per hop anomaly"
+          unit: ""
+          descr: "Anomaly factors (delta cross entropy) per hop along route"
+          type: "vector"
+          aggr: "sum"
+        tloss:
+          title: "Time lost"
+          descr: "Periode of downtime where no packets arrive"
+          unit: "ms"
+          type: "number"
+          aggr: "sum"
+        routechange_asn:
+          title: "ASN"
+          unit: ""
+          descr: "ASN of router(s) responsible for route-change"
+          type: "string"
+          aggr: ""
+          mouseover: "routechange_as"     # Show tooltip title on mouse-over based on other field
+        routechange_as:
+          title: "AS"
+          unit: ""
+          descr: "AS name(s) of router(s) responsible for route-change"
+          type: "string"
+          aggr: ""
+        routechange_ip:
+          title: "IP"
+          unit: ""
+          descr: "IP address(es) of router(s) responsible for route-change"
+          type: "string"
+          aggr: ""
+          mouseover: "routechange_name"     # Show tooltip title on mouse-over based on other field
+        routechange_name:
+          title: "Name"
+          unit: ""
+          descr: "Host name of router(s) responsible for route-change"
+          type: "string"
+          aggr: ""
+          mouseover: "routechange_ip"     # Show tooltip title on mouse-over based on other field
+          
+

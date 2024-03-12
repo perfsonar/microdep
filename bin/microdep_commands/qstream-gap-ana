@@ -1,0 +1,1660 @@
+#!/usr/bin/perl
+# use strict;
+# use warnings 'all';
+# use PDL;
+# use PDL::Ops;
+# use PDL::Fit::Polynomial;
+use Socket;
+use Statistics::LineFit;
+use Statistics::Basic qw(:all);
+use Getopt::Long;
+use Time::Local;
+use POSIX(strftime);
+use Data::Dumper;
+    
+#use LWP::Simple;
+
+# use Math::Int64 qw(uint64 uint64_to_number);
+use constant JAN_1970 => 0x83aa7e80;
+
+# use LWP::UserAgent ();
+# use LWP::Protocol::https;
+
+# make sure that summary records are produced when killed
+use sigtrap qw/handler handle_signals normal-signals/;
+
+my $version="1.0.5";
+
+# date --date 'jan 1 2000' +%s
+my $min_tx=946681200;
+my $max_tx=1893452400; # 2030-01-01
+my $maxseqreorder=1000; # 
+my $max_small_gap=10; # the max size of a small graph
+my $max_small_graphs=20;
+my $max_big_graphs=20;
+my $gap_limit={'big'=>5000, 'small'=>50, 'tiny'=>0}; # lost packets of that kind
+my $max_gaps={'big'=>1000, 'small'=>1000, 'tiny'=>1000}; # count of that kind
+my $late_delay=3000; # ms to doom a packet late
+my %src_adr=(),  my %dst_adr=();
+my %least_delay; # least delay observed
+my %hostname=();
+
+my %bad_lines=(); # count invalid input lines tat resemble crude fmt
+my $bad_line=0; # signal previous line was bad
+my $unknown_lines=0; # lines that does not match any RE
+my %small_tx=();
+
+my $rmq_cv;  # Conditional variable applied when reading from Rabbit message queue
+
+my $opt_ddelay_low=2;   # end of burst limit
+my $opt_ddelay_high=10; # start of burst limit
+my $opt_rtp = 5; # number of ddelays to average before test
+
+# parms for jitter report
+my %n_normal=();  # count of normal packets for modulo
+my $min_jit = 10;  # jitter in ms
+my $min_ddelay = 10;
+my $min_slope=0.5;
+my $jitter_period=600; # seconds between jitter reports
+my %jitter_last=(); # last time jitter reported
+my %jitter_values=(); # last jitter values reported
+
+my %mindelay; # minimum delay last slep
+my %minseq; # minimum delay last slep
+my $packet_interval=(); # packet interval guestimate per id
+
+my $opt_debug = 0;   # Debug level     
+my $opt_batchsize = 0;   # Override batch size (packet count) of measurement result set produced by owamp source. 
+
+my %seqnum_base;       # Base for sequence numbers of current batch from powstream
+my %pre_seqnum_base;   # Base for sequence numbers of previous batch of each flow
+
+my $usage="$0 '[-title text] [-minloss n] [-win n] [-graph file] [max-small-graphs n]  [-outdir dir] [-head|-rhead] [-id id] [-names file] [-addresses file] [-json file] [-v] [-version] [-esmond url] [file]...
+Analyse gaps in a crude packet log
+  - output a list of statistical qos parameters as text or json
+  - make linear regression to see the delay trend around a gap
+  - make curves to show the delay change before and after a gap
+Parameters
+  -h -help             Help message
+  -rhead n             Output headers so that R can make the headings in the text tables
+  -max-small-graphs n  Limit number(20) of graphs to output from small few packet losses
+  -slep n              Number(1000) of crude lines in the circular buffer
+  -index name          Elastic Search index name to use
+  -owamp url           Get json owamp data from pscheduler (http://) og from rabbit message queue (ampq://)
+  -json file           Filename to store json event documents (intended for logstash ?)
+  -jitter secs         Emit jitter stats with secs interval
+  -rtp n               RTP jitter algorithm with 1/n change of average (5)
+  -change_factor f     Fraction change to cause threshold jitter report (0.3)
+  -threshold vector    Threshold values for reporting, in form of a vector ala  \"<min-jitter>,<min-ddelay>,<min-slope>\" ($min_jit,$min_ddelay,$min_slop)
+  -debug n             Level of debug info to output ($opt_debug)
+  -batchsize n         Override batch size (packet count) expected when reading owamp subsession data sets
+    ";
+
+my ($opt_h, $opt_help, $opt_id, $opt_slep, $opt_format, $opt_minloss, $opt_win, $opt_recover, $opt_max_small_graphs, $opt_head, $opt_rhead, $opt_graph, $opt_outdir, $opt_title, $opt_addresses, $opt_names, $opt_threshold, $opt_owamp, $opt_json, $opt_jitter, $opt_rtp, $opt_change_factor, $opt_index, $opt_v, $opt_version);
+
+
+GetOptions( 'h' => \$opt_h, 'help' => \$opt_help, 'id=s' => \$opt_id, 'slep=s' => \$opt_slep, 'format=s'=>\$opt_format,
+	    'minloss=s' => \$opt_minloss, 'win=s' => \$opt_win, 'recover=s' => \$opt_recover,
+	    'max-small-graphs=s' => \$opt_max_small_graphs, 
+	    'head' => \$opt_head, 'rhead' => \$opt_rhead, 'graph=s' => \$opt_graph, 'outdir=s' => \$opt_outdir, 
+	    'title=s' => \$opt_title, 'addresses=s'=> \$opt_addresses, 'names=s' => \$opt_names, 'json=s' => \$opt_json, 'index=s' => \$opt_index, 
+	    'jitter=s' => \$opt_jitter, 'threshold' => \$opt_threshold, 'owamp=s' => \$opt_owamp,
+	    'rtp=s' => \$opt_rtp, 'ddelay_low=s' => $opt_ddelay_low, 'ddelay_high=s' => \$opt_ddelay_high,
+	    'debug=s' => \$opt_debug, 'batchsize=s' => $opt_batchsize,
+	    'change_factor=s' => \$opt_change_factor, 'v' => \$opt_v, 'version' => \$opt_version )
+    or die $usage;
+# &NGetOpt( 'h', 'help', 'id=s', 'slep=s', 'minloss=s', 'win=s', 'max-small-graphs=s', 'head', 'rhead', 'graph=s', 'outdir=s', 'title=s', 'names=s', 'json=s', 'index=s', 'v', 'version') || die "$!" . $usage ."\n";
+
+if ( $opt_h || $opt_help) {
+    printf "Version $version\n";
+    printf "$usage\n";
+    exit(0);
+}
+if ( $opt_version) {
+    printf "Version $version\n";
+    exit(0);
+}
+
+if ($opt_owamp){
+    require LWP::Simple;
+    # require perfSONAR_PS::Client::Esmond::ApiConnect;
+    require AnyEvent::RabbitMQ;
+    require Net::AMQP;
+    require URI;
+    # Prepare conditional event-variabel applied when reading from rabbit message queue
+    $rmq_cv = AnyEvent->condvar;
+}
+
+if ($opt_threshold){
+    my ( $min_jit, $min_dddelay, $min_slope) = split(',', $opt_threshold);
+}
+my $jitter_delta={'jit'=> $min_jit/2, 'ddelay'=> $min_ddelay/2, 'slope'=>$min_slope/2};
+
+$jitter_period= $opt_jitter if $opt_jitter;
+my $change_factor= $opt_change_factor || 0.3;
+my $jitter_factor={'jit'=> $change_factor, 'ddelay'=> $change_factor, 'slope'=>$change_factor};
+
+    
+
+my @heads= qw/id date time tunix x1 nloss tloss seqloss x2 seqtail overlap x3 h_n h_jit h_ddelay h_delay h_min_d h_slope_10 h_slope_20 h_slope_30 h_slope_40 h_slope_50 x4 t_n t_jit t_ddelay t_delay t_min_d t_slope_10 t_slope_20 t_slope_30 t_slope_40 t_slope_50 dTTL/;
+
+if ($opt_rhead){
+    @heads=split(" ", $opt_rhead);
+    my $h="";
+    foreach $a (@heads ){ 
+	$h.='"'.$a.'", ' }
+    chop($h); chop($h); # remove ', '
+    
+    printf 'head<-c(' . $h . ")\n";
+#id", "date", "time", "tunix", "x1", "nloss", "tloss", "seqloss", "x2", "seqtail", "overlap", "x3", "head_n", "head_jit", "head_ddelay", "head_delay", "head_slope", "x4", "tail_n", "tail_jit", "tail_ddelay", "tail_delay", "tail_slope_10", "tail_slope_20")'; printf "\n";
+    exit 0;
+}
+
+my %hix=(); # hash on name to index in @heads
+foreach my $i(0..$#heads){
+   $hix{$heads[$i]}=$i;
+} 
+my $coder; # json coder
+#if ( $opt_json || $opt_owamp){
+    # require JSON::XS;
+    #require JSON::PP;
+    use JSON::PP;
+#}
+ 
+if ( $opt_json){
+    my $json=$opt_json;
+    open JSON, ">>$json" || die  "Could not open $json ; $!";
+    JSON->autoflush(1);
+    # $coder = JSON::XS->new->ascii->pretty->allow_nonref;
+    # $coder = JSON::XS->new->ascii->allow_nonref;
+    $coder = JSON::PP->new->ascii->allow_nonref;
+    my $encoder=$coder->canonical([1]);  # use of this ?
+}
+
+
+if ($opt_graph){
+    require Chart::Clicker;
+    require Chart::Clicker::Data::Series;
+    require Chart::Clicker::Data::DataSet;
+    require Chart::Clicker::Renderer::Point;
+}
+
+if ( $opt_addresses){
+    get_addresses($opt_addresses);
+}
+
+if ( $opt_names){
+    get_names($opt_names);
+}
+
+
+
+my $maxslep=$opt_slep || 10000 ;
+my $maxhead=$opt_win || 10; # packets to keep before
+my $maxtail=$opt_win || 10; # packets to keep after 
+my $min_slopes=5; # slopes to report on text report
+my $minloss= $opt_minloss || 5;
+my $minrecover = $opt_recover || 5;
+my $outdir=$opt_outdir || ".";
+my $title=$opt_title || 'Delay';
+
+my $crude_fmt='^ID=(\d+) SEQ=(\d+) SRC=([\w\:\.]+):\d+ DST=([\w\:\.]+):\d+\s+Tx=([\d\.]+)\s+Rx=([\d\.]+)\s+SIZE=(\d+)';
+my $bv_fmt='^([\d]+)\s+([\d\.\:]+)\s+([\d\.]+)\s+([\d\.]+)'; # BV's condensed format for crude
+my $ip4_fmt='^\d+\.\d+\.\d+\.\d+$';
+my $ip6_fmt='^[a-fA-F\d]+\:[a-fA-F\d\:]+$';
+
+my $exp_num='[\d\.e\-]+'; # 2.32831e-10
+my $owamp_fmt='^(\d+)\s+(\d+)\s+($exp_num)\s+(\d+)\s+(\d+)\s+($exp_num)\s+(\d+)';
+my $id= $opt_id || "ukjent" ;
+my %npackets=(); # keep track of all ids
+my $print_line;
+my %duration; # seconds per id
+my %late_n=();
+my $t0; # start time for each source
+my %last_tx; # last tx seen
+my %t0=();
+my (%late_sum, %nsmall_gaps, %nbig_gaps);
+my %jitter_data=();
+
+if ($opt_owamp){
+    if ( $opt_owamp =~ /^http.*:\/\// ){
+	read_owamp_curl($opt_owamp);
+    } elsif ($opt_owamp =~ /^amqp.*:\/\//) {
+	read_owamp_rabbitmq($opt_owamp);
+    } else {
+	read_owamp_file($opt_owamp);
+    }
+} else {
+    read_crude();
+}
+
+foreach $id ( keys %t0 ) {
+    $duration{$id}=$last_tx{$id}-$t0{$id};
+}
+
+
+if ( $opt_v ){
+#    foreach $id ( sort keys %dupl){
+#	printf STDERR "%-30s %d duplicates\n", $id, $dupl{$id};
+#    }
+
+#    foreach $id ( sort keys %reorder){
+#	printf  STDERR "%-30s %d reordered (%d ppm)\n", $id, $reorder{$id}, $reorder{$id}*10^6/$npackets{$id};
+#    }
+    
+    foreach $id ( sort keys %npackets){
+	my $lates=0;
+	$lates=$late_sum{$id}/$late_n{$id} if $late_n{$id} > 0;
+	my $ppm=0;
+	$ppm = 10**6 * ($small_time{$id} + $big_time{$id}) / $duration{$id} if $duration{$id} > 0;
+
+	printf  STDERR "%-30s lasted %02d:%02d:%02d ( %d seconds ) and has %d small and %d big gaps and lost %.3f small and %.3f big seconds, %d resets, %d late n,  %.1fs late, %d duplicates, %d reordered, %d ttl changes and downtime %d ppm.\n", $id,
+	    $duration{$id}/3600, $duration{$id}%3600/60, $duration{$id}%60, $duration{$id},
+	    $nsmall_gaps{$id}, $nbig_gaps{$id}, 
+	    $small_time{$id}, $big_time{$id}, $resets{$id}, $late_n{$id},$lates,
+	    $dupl{$id}, $reorder{$id}, $dttl_count{$id}, $ppm;
+    }
+    printf STDERR "Big gap limit %d packets.\n", $minloss;
+      
+#    if (!%nbreak){
+#	print  STDERR "No big gaps($minloss) found in $npackets packets.";
+#    }
+}
+
+foreach $id (keys %small_tx){
+    print  STDERR "ID $id has Tx too small in $small_tx{$id} packets\n";
+}
+foreach $id (keys %bad_lines){
+    print  STDERR "ID $id has invalid parameters in $bad_lines{$id} lines\n";
+}
+print STDERR "Unknown lines : $unknown_lines\n";
+
+
+make_summary();
+
+
+exit(0);
+
+################################################################################
+sub handle_signals(){
+    make_summary();
+    # while ( $#ARGV >= 0) { printf "Got signal %s\n", shift @ARGV }
+    # die "Caught a signal $!";
+    close JSON if $opt_json;
+    exit(1);
+}
+
+
+sub make_summary(){
+    if ($opt_json){
+	foreach $id (keys %jitter_data){
+	    report_summary_jitter($id); # the last interval
+	}
+	emit_summary_json();
+	close JSON;
+    }
+}
+
+
+sub GetOwampDataFromEsmond($$$$$) {
+
+    my $url = shift;    
+    my $uri = shift;    
+    my $start_time = shift;
+    my $end_time = shift;
+    my $results = shift;
+
+    my $filter = new perfSONAR_PS::Client::Esmond::ApiFilters();
+    $filter->time_start($start_time);
+    $filter->time_end($end_time);
+
+    my $result_client = new perfSONAR_PS::Client::Esmond::ApiConnect(
+	url => $url,
+	filters => $filter
+        );
+    
+    my $data = $result_client->get_data($uri); # the uri from previous phase
+    if($result_client->error) {
+	return($result_client->error);
+    }
+
+    # for each datapoint
+    foreach my $d (@{$data}){
+	#print "Time: " . $d->datetime . "\n";
+	foreach my $hop (@{$d->val}){
+	    #print "ttl=" . $hop->{ttl} . ",query=" . $hop->{query};
+	    if($hop->{success}){
+		#print ",ip=" . $hop->{ip} . ",rtt=" . $hop->{rtt} . ",mtu=" . $hop->{mtu} . "\n";
+
+		$$results{$d->ts}{$hop->{ttl}}{$hop->{ip}} = {
+		    'mtu' => $hop->{mtu},
+			'rtt' =>  $hop->{rtt},
+		};
+	    }else{
+		if (defined($hop->{error_message})) {
+		    $$results{$d->ts}{$hop->{ttl}}{$hop->{error_message}} = 1;
+		} else {
+		    $$results{$d->ts}{$hop->{ttl}}{'error'} = 1;
+		}
+	    }
+	}
+    }
+    return('');
+}
+
+
+################################################################################
+#name           id              dns                             ip
+
+sub emit_summary_json{
+    
+    foreach $id ( sort keys %npackets){
+	my $latems=0;
+	$latems=$late_sum{$id}/$late_n{$id} if $late_n{$id} > 0;
+	my $down_pmm=0;
+	if ( $duration{$id} > 0 ){
+	    $down_ppm = 10**6 * ($small_time{$id} + $big_time{$id}) / $duration{$id};
+	}
+	
+	my $json={
+	    "event_type" => "gapsum",
+	    "lasted" => sprintf ( "%02d:%02d:%02d", $duration{$id}/3600, $duration{$id}%3600/60, $duration{$id}%60 ),
+	    "lasted_sec" => sprintf ( "%.3f", $duration{$id} ) * 1.0,
+	    "small_gaps" => $nsmall_gaps{$id} * 1 || 0, 
+	    "big_gaps" => $nbig_gaps{$id} * 1 || 0, 
+	    "small_time" => sprintf ( "%.3f", $small_time{$id} ) * 1.0, 
+	    "big_time" => sprintf ( "%.3f", $big_time{$id} ) * 1.0, 
+	    "resets" => $resets{$id} * 1  || 0, 
+	    "late" => $late_n{$id} * 1  || 0,
+	    "late_sec" => sprintf ( "%.3f", $latems/1000 ) * 1.0,
+	    "duplicates" => $dupl{$id} * 1  || 0, 
+	    "reordered" => $reorder{$id} * 1  || 0,
+	    "dTTL" => $dttl_count{$id} * 1  || 0,
+	    "least_delay" => sprintf("%.3f", $least_delay{$id}*1000) * 1,
+	     "down_ppm" => sprintf ( "%.3f", $down_ppm ) * 1.0, # ppm
+	};
+
+	if ( $jitter_obs{$id}{"h_jit"} ){
+	    my $jitson = {
+		"h_jit" => median( $jitter_obs{$id}{"h_jit"} )->query*1.0, # ->query to put it in numerical context
+		"h_ddelay" => median( $jitter_obs{$id}{"h_ddelay"} )->query * 1.0,
+		"h_min_d" => median( $jitter_obs{$id}{"h_min_d"} )->query  *1.0,
+		"h_delay" => median( $jitter_obs{$id}{"h_delay"} )->query * 1.0,
+		"h_slope_10" => median( $jitter_obs{$id}{"h_slope_10"} )->query *1.0,
+
+		"h_jit_sdv" => stddev( $jitter_obs{$id}{"h_jit"} )->query * 1.0,
+		"h_ddelay_sdv" => stddev( $jitter_obs{$id}{"h_ddelay"} )->query * 1.0,
+		"h_min_d_sdv" => stddev( $jitter_obs{$id}{"h_min_d"} )->query * 1.0,
+		"h_delay_sdv" => stddev( $jitter_obs{$id}{"h_delay"} )->query * 1.0,
+		"h_slope_10_sdv" => stddev( $jitter_obs{$id}{"h_slope_10"} )->query * 1.0,
+		    "ddelay_low_n" =>  $#{$jitter_obs{$id}{"ddelay_low"}} + 1, 
+		    "ddelay_low_median" =>  median( $jitter_obs{$id}{"ddelay_low"} )->query * 1.0, 
+		    "ddelay_low_sdv" =>  stddev( $jitter_obs{$id}{"ddelay_low"} )->query * 1.0, 
+		    "ddelay_high_n" =>  $#{$jitter_obs{$id}{"ddelay_high"}} + 1, 
+		    "ddelay_high_median" =>  median( $jitter_obs{$id}{"ddelay_high"} )->query * 1.0, 
+		    "ddelay_high_sdv" =>  stddev( $jitter_obs{$id}{"ddelay_high"} )->query * 1.0, 
+	    };
+	    $json = { %$json, %$jitson};
+	}
+
+	foreach $gap_type( keys %$gap_limit ){ # note dropped gaps 
+	    $json{"dropped_$gap_type"}=$dropped_gaps{$id}{$gap_type};
+	}
+
+	emit_json( $json, $id, $ptx{$id} );
+    }
+}
+
+sub emit_json{
+    my ($json, $id, $tunix)=@_;
+    my $to;
+    my $from;
+    if ( $hostname{$dst_adr{$id}}){
+	$to=$hostname{$dst_adr{$id}}
+    } else {
+	$to=`hostname`; chomp($to);
+	$hostname{$dst_adr{$id}}=$to;
+    }
+    if ( $hostname{$src_adr{$id}}){
+	$from=$hostname{$src_adr{$id}}
+    } else {
+	$from=`hostname`; chomp($from);
+	$hostname{$src_adr{$id}}=$from;
+    }
+    my $datems=timestamp( $tunix);
+
+    my $head= {
+	"\@date" => $datems,
+	"timestamp"=> $tunix * 1.0,
+	"timestamp_zone" => "GMT",
+	"datetime"=> $datems,
+	"from"=> $from, "to"=> $to,
+	"from_adr" => $src_adr{$id},
+	"to_adr" => $dst_adr{$id}};
+    # $new{keys %$json} = values %$json;
+    my $new={ %$head, %$json }; # a reference to hash
+
+    print JSON $coder->encode($new ) ."\n" || warn "JSON print failed : $!";
+
+}
+
+################################################################################
+
+sub get_addresses {
+    $file=shift;
+    if ( open ADRS, "<$file" ){
+	# Read the whole file and check if it contains perfsonar psconfig json data
+	read ADRS, my $psconfig_content_str, -s ADRS;
+	my $psconfig_content;
+	eval { $psconfig_content = decode_json($psconfig_content_str); };
+	if ( !$@ && $psconfig_content->{'addresses'}) {
+	    # PSconfig address mapping structure found. Load it into "resolver cache".
+	    foreach my $addr (keys %{$psconfig_content->{'addresses'}}) {
+		$hostname{$psconfig_content->{'addresses'}->{$addr}->{'address'}} = $addr; 
+	    }
+	} else {
+	    # No PSconfig content. Reread file assuming host-file format ("<hostname> <ip>")
+	    seek ADRS, 0, 0;
+	    while(<ADRS>){
+		next if /^\s*#/;
+		my ($name, $ip)=split;
+		$hostname{$ip}=$name;
+	    }
+	}
+	close ADRS;
+    } else {
+	#die "Could not open mp-list $file : $!";
+	warn "Could not open mp-list $file : $!";
+    }
+}
+
+sub get_names {
+    $file=shift;
+    if ( open NAMES, "<$file" ){
+	while(<NAMES>){
+	    next if /^\s*#/;
+	    my ($name, $user, $dns, $ip)=split;
+	    $hostname{$ip}=$name;
+	}
+	close NAMES;
+    } else {
+	#die "Could not open mp-list $file : $!";
+	warn "Could not open mp-list $file : $!";
+    }
+}
+
+sub get_name{
+    my $adr=shift;
+    my $name;
+    if ($hostname{$adr}){
+	$name=$hostname{$adr};
+    } else {
+	if ( $hostname = gethostbyaddr(inet_aton($adr), AF_INET)  ){
+	    $name=$hostname;
+	} else {
+	    $name=$adr;
+	}
+	$hostname{$adr}=$name;
+    }
+    return $name;
+}
+
+
+################################################################################
+sub owptime2datetime {
+    my ($owptime) = @_;
+
+    my $tstamp =$owptime;
+    # $tstamp = uint64_to_number(($tstamp >> 32) & 0xFFFFFFFF);
+    $tstamp = $owptime / 2 ** 32;
+    $tstamp -= JAN_1970;
+    #return DateTime->from_epoch(epoch => $tstamp);
+    return $tstamp;
+}
+
+sub read_owamp_json($){
+    my $data=shift;
+    my $r= decode_json($data);	
+    if ( $r && $r->{state} eq 'finished' ){
+	my $result=$r->{result};
+	my $raw=$result->{'raw-packets'};
+	foreach $p (@$raw ){
+
+	    if ( $p->{'src-ts'} > 0 && $p->{'dst-ts'} > 0 ){
+		my $tx=owptime2datetime($p->{'src-ts'});
+		my $rx=owptime2datetime($p->{'dst-ts'});
+		my $seq=$p->{'seq-num'};
+		my ($src, $dst)=('anywhere', 'elsewhere');
+		$_= sprintf "ID=%s SEQ=%d SRC=%s DST=%s Tx=%.3f Rx=%.3f SIZE=%d HOPLIMIT=%d",
+		    0, $seq, $src, $dst, $tx, $rx, 64, $p->{'ip-ttl'};
+		analyze_packet($seq, $src, $dst, $tx, $rx);
+	    } else {
+		if ( $opt_debug > 0) { warn "Invalid OWAMP timestamps for peers $opt_id"; }
+	    }
+	}
+    }
+}
+
+sub read_owamp_file{
+    my $file=shift;
+    open OWAMP, "<$file" || die 'Could not open ' . $file . ' because ' . $!;
+
+    while(<OWAMP>){
+	chomp();
+	# read_owamp_json( $_);  # read esmond json
+	owamp_ana( $_);
+    }
+}
+
+
+sub read_owamp_curl{
+    my $url=shift;
+    $data=`curl -k -s $url`;
+    read_owamp_json( $data);
+}
+
+sub read_owamp {
+    my $url=shift;
+    $ENV{'PERL_LWP_SSL_VERIFY_HOSTNAME'} = 0;
+    $ENV{PERL_NET_HTTPS_SSL_SOCKET_CLASS} = 'Net::SSL';
+    my $resp=get($url);
+    if ( $resp){
+	read_owamp_json($resp);
+    } else {
+	printf 'error getting url:' . $url . " code: " . $!; 
+    }
+}
+sub read_owamp_ua {
+    my $url=shift;
+    $ENV{'PERL_LWP_SSL_VERIFY_HOSTNAME'} = 0;
+    $ENV{PERL_NET_HTTPS_SSL_SOCKET_CLASS} = 'Net::SSL';
+    my $ua = LWP::UserAgent->new;
+    $ua->ssl_opts( verify_hostname => 0); # certs don't verify in ps-land
+    my $resp = $ua->get($url);
+    if ( $resp->is_success ){
+	read_owamp_json( $resp->content);
+    } else {
+	print $resp->content;
+    }
+}
+
+
+sub owamp_ana($){
+    my $payload=shift;
+
+    # Batch of json data ready for analysis
+    my $data = decode_json($payload);
+    print Dumper($data) if $opt_debug > 3;
+    if ( $data && $data->{'run'}->{'state'} eq 'finished' ){
+	# Stats is "finished". Get results
+	my $batchsize = $opt_batchsize;
+	if (! $batchsize) {
+	    $batchsize = $data->{'test'}->{'spec'}->{'packet-count'};
+	}
+	(my $src, my $dst)=($data->{'test'}->{'spec'}->{'source-node'}, $data->{'test'}->{'spec'}->{'dest-node'} );
+	$opt_id = $src . "-" . $dst;   # Set global id for flow since analyze_packet() also can rely on this
+	my $results=$data->{'result'}->{'raw-packets'};
+	my $pre_tx = 0;    # Last tx observed for current flow
+	my $pre_seq = 0;   # Last seq num observed for current flow
+	foreach $probepacket (@$results){
+	    # if ( $probepacket->{'src-ts'} > 0 && $probepacket->{'dst-ts'} > 0 ){
+	    
+	    my $tx=owptime2datetime($probepacket->{'src-ts'});
+	    my $rx=owptime2datetime($probepacket->{'dst-ts'});
+	    my $seq=$probepacket->{'seq-num'};
+	    my $uniq_seq;
+	    # Adjust seq num attempting to make it unique across batches
+	    if ( $pre_tx > 0 && $tx < $pre_tx && $seq > $pre_seq ) {
+		# Packet from previous batch
+		$uniq_seq = $seq + $pre_seqnum_base{$opt_id};
+	    } elsif ($tx > $pre_tx && $seq < $prev_seq) {
+		# New batch / session. Increase base seq num to add.
+		$pre_seqnum_base{$opt_id} = $seqnum_base{$opt_id};
+		$seqnum_base{$opt_id} += $batchsize;
+		$uniq_seq = $seq + $seqnum_base{$opt_id};
+	    } else {
+		# Packet from current batch
+		$uniq_seq = $seq + $seqnum_base{$opt_id};
+	    }					    
+	    $_= sprintf "ID=%s SEQ=%d SRC=%s DST=%s Tx=%.3f Rx=%.3f SIZE=%d HOPLIMIT=%d",
+		0, $uniq_seq, $src, $dst, $tx, $rx, 64, $probepacket->{'ip-ttl'};
+	    analyze_packet($uniq_seq, $src, $dst, $tx, $rx);
+	    print $uniq_seq, " ", $src, " ", $dst, " ", $tx, " ", $rx, "\n" if $opt_debug > 3; 
+	    $pre_tx = $tx;
+	    # } else {
+	    #	if ( $opt_debug > 0) { warn "Invalid OWAMP timestamps for peers $opt_id"; }
+	    # }
+	    $pre_seq = $seq;
+	}
+    }
+
+}
+
+
+sub read_owamp_rabbitmq{
+    # Reads and analyze owamp records from Rabbit MQ "forever"
+    my $url_str=shift;
+    my %rmq_params = (
+	host       => 'localhost',
+	port       => 5672,
+	user       => 'guest',
+	pass       => 'guest',
+	vhost      => '/',
+	exchange   => 'gap-ana',
+	queue      => ''
+	);
+    my $payload;
+    my $channel;     # Channel to Rabbitmq server
+    
+    if ($url_str) {
+	# Parse url and update %rmq_params
+	$url = URI->new($url_str);
+	$url->scheme eq "amqp" || die "Error: Unsupported Rabbit message queue protocol";
+	(my $creds, my $host) = split('@', $url->authority);
+	if ($host) {
+	    $rmq_params{'host'} = $host;
+	    (my $u, my $p) = split(":", $creds);
+	    $rmq_params{'user'} = $u if ($u);
+	    $rmq_params{'pass'} = $p if ($p);
+	} else {
+	    # No credentials in scheme-string.
+	    $host = $url->authority;
+	}
+	# Extract port (if set)
+	(my $hostname, my $port) = split(":", $host);
+	$rmq_params{'host'} = $hostname if ($hostname);
+	$rmq_params{'port'} = $port if ($port);
+	
+	$rmq_params{'vhost'} = substr($url->path,1) if ($url->path);
+	my @uriparams = $url->query_form;
+	#print "uri:\n", Dumper(@uriparams);
+	for (my $q=0; $q<$#uriparams; $q++) {
+	    if ($uriparams[$q] eq "queue") {
+		$rmq_params{'queue'} = $uriparams[$q+1];
+	    }
+	    if ($uriparams[$q] eq "exchange") {
+		$rmq_params{'exchange'} = $uriparams[$q+1];
+	    }
+	}
+    }
+    
+    print "rmq:\n", Dumper(%rmq_params) if $opt_debug > 3;
+    
+    #
+    # Prepare function for consuming messages from a queue
+    #
+    my $consume_from_queue = sub {
+	# Create queue (either with specifies name or temporary name)
+	my $auto_delete = ( $rmq_params{'queue'} == '');   # Ensure temp queues are deleted
+	print "Declaring queue '", $rmq_params{'queue'}, "'...\n" if $opt_debug > 2;
+	$channel->declare_queue(
+	    queue => $rmq_params{'queue'},
+	    auto_delete => $auto_delete,
+	    on_success => sub {
+		# Fetch name of queue applied
+		my $method = shift;
+		#print "Method: ", $method, "\n";
+		#exit;
+		$rmq_params{'queue'} = $method->method_frame->queue;
+		print "Queue ", $rmq_params{'queue'}, " declared.\n" if $opt_debug > 2;
+		if ($rmq_params{'exchange'}) {
+		    # Bind queue to exchange
+		    $channel->bind_queue(
+			queue => $rmq_params{'queue'},
+			exchange => $rmq_params{'exchange'},
+			on_success => sub {
+			    print "Queue ", $rmq_params{'queue'}, " ready bound to exchange ", $rmq_params{'exchange'}, "\n" if $opt_debug > 2;
+			    # Prepare to consume from queue
+			    $channel->consume(
+				queue => $rmq_params{'queue'},
+				on_consume => sub {
+				    # Message consumed from queue
+				    my $msg = shift;
+				    $payload = $msg->{body}->payload;
+				    print "Read data from rmq. Analysing...\n" if $opt_debug > 2;
+				    owamp_ana($payload);
+				    
+				    # Tell "main loop" to stop waiting for more, i.e. consume only single message
+				    #$rmq_cv->send;
+				}
+				);
+			},
+			on_failure => $rmq_cv,
+			);
+		} else {
+		    # Prepare to consume from queue
+		    $channel->consume(
+			queue => $rmq_params{'queue'},
+			on_consume => sub {
+			    # Message consumed from queue
+			    my $msg = shift;
+			    $payload = $msg->{body}->payload;
+			    print "Read data from rmq. Analysing...\n" if $opt_debug > 2;
+			    owamp_ana($payload);
+			    
+			    # Tell "main loop" to stop waiting for more, i.e. consume only single message
+			    #$rmq_cv->send;
+			}
+			);
+		}
+	    },
+	    on_failure => $rmq_cv,
+	    );
+    };
+    
+    # Connect to RabbitMQ server
+    my $ar = AnyEvent::RabbitMQ->new->load_xml_spec()->connect(
+	host       => $rmq_params{'host'},
+	port       => $rmq_params{'port'},
+	user       => $rmq_params{'user'},
+	pass       => $rmq_params{'pass'},
+	vhost      => $rmq_params{'vhost'},
+	on_success => sub {
+	    my $ar = shift;
+	    print "Successfull connetion to rmq server.\n" if $opt_debug > 2;
+	    # Open channel
+	    $ar->open_channel(
+		on_success => sub {
+		    print "Channel to rmq server ready.\n" if $opt_debug > 2;
+		    $channel = shift;
+		    if ($rmq_params{'exchange'}) {
+			# Create exchange in case it doesn't exist
+			print "Declaring exchange ", $rmq_params{'exchange'} , " \n" if $opt_debug > 2;
+			$channel->declare_exchange(
+			    exchange => $rmq_params{'exchange'},
+			    type => "fanout",
+			    on_success => $consume_from_queue,
+			    on_failure => $rmq_cv,
+			    );
+		    } elsif ($rmq_params{'queue'}) {
+			# Read directly from queue
+			$consume_from_queue->();
+		    }
+		},
+		on_failure => $rmq_cv,
+		);
+	},
+	on_failure => $rmq_cv,
+	);
+    
+    # Subroutine "main loop" - wait for consumption to complete 
+    print "Waiting for rmq input...\n" if $opt_debug > 2;
+    $rmq_cv->recv;
+}
+
+
+sub duplicated_fields{
+    my $line=shift;
+    my @fields=split( /\s+/, $line);
+    my %keys;
+    foreach $field (@fields){
+	my ($key, $val)=split(/=/, $field);
+	if ( $keys{$key} ){
+	    return 1;
+	}
+	$keys{$key}++;
+    }
+    return 0;
+}
+
+sub read_crude {
+    my $tx; # current transmit time
+
+    while(<>){
+
+	if ( $. <= 1 && /^crude version 0.9.0/){
+	    # die "### Versjon med feil i Rx : $_";
+	}
+	my $seq;
+		
+	if ( ( my ( $rudeid, $seq, $src, $dst, $tx, $rx, $size) = /$crude_fmt/ ) ) {
+	    if ( $size == 64 and not duplicated_fields($_) and
+		 ( $src =~ /$ip4_fmt/ or $src =~ /$ip6_fmt/ ) and
+		 ( $dst =~ /$ip4_fmt/ or $dst =~ /$ip6_fmt/ ) ){ # good lines
+		analyze_packet($seq, $src, $dst, $tx, $rx);
+	    } else {
+		$bad_lines{$src}++;
+		print if $opt_debug;
+		# forget next gap
+		$bad_line{$src}=1;	       
+	    }
+	} elsif ( /crude version/){ # new file restart sequence control
+	    undef %pseq, %slep, %gap_slep, %slep_data, %gap_data;
+	} else {
+	    $unknown_lines++;
+	}
+	# elsif (  ( my ($seq, $tx, $ssync, $serr, $rx, $rsync, $rerr, $ttl) = /$owamp_fmt/ ) 
+		   # || ( my ($seq, $src, $tx, $rx) = /$bv_fmt/ )  # to liberal and blows up memory when problematic records
+	#    ){ 
+	#    analyze_packet($seq, $src, $dst, $tx, $rx);
+	#}
+    }
+}
+    
+sub gap_type {
+    my $gap=shift;
+    foreach $type ( 'big', 'small', 'tiny'){
+	return $type if $gap >= $$gap_limit{$type};
+    }
+}
+
+sub analyze_packet {
+    my ($seq, $src, $dst, $tx, $rx ) = @_;    
+    if ( $opt_id){
+	# Note: $opt_id is also set when reading owamp data since source id only does not uniqly identify a flow
+	$id=$opt_id;
+    } else {
+	$id=get_name($src);
+    }
+    
+    $src_adr{$id}=$src if ! $src_adr{$id} ;
+    $dst_adr{$id}=$dst if ! $dst_adr{$id} ;
+    $src_name{$id}=get_name($src);
+    $dst_name{$id}=get_name($dst);
+    
+    if ( $rx <= 0 ){ # assume lost packet
+	return 1; #==== return
+    }
+    
+    if ($tx < $min_tx || $tx > $max_tx){
+	$small_tx{$id}++;
+	next;  #########################
+    }
+    $last_tx{$id}=$tx;
+    
+    $npackets{$id}++;
+    my $dt=0;
+    my $bufferit=1;
+    
+    if (defined($pseq{$id}) ){
+	my $dseq=$seq - $pseq{$id};
+	$dt=$rx-$tx;
+	$ids{$id}++;
+	$least_delay{$id} = $dt if !$least_delay{$id} || $dt < $least_delay{$id};
+	
+	if (  $tx < $t0{$id}) { # packets from the past
+	    $late_n{$id}++;		    
+	    $late_sum{$id}+=$dt;
+	    $late_ss{$id}+=$dt*$dt;
+	    $bufferit=0;
+	} elsif ( $dseq == 1 ){ # normal packet
+	    if ( $ntail_seq{$id} && $ntail_seq{$id} > 0 ){ # is recovering
+		$ntail_seq{$id}++;
+		if ( $ntail_seq{$id} > $minrecover && $in_gap{$id} ){
+		    my $missing= $gap_end_seq{$id} - $head_seq{$id};
+		    my $gap_type=gap_type($missing);
+		    
+		    if ( $n_gaps{$id}{$gap_type}++ <= $$max_gaps{$gap_type} ){
+			
+			$emit_graph{$id}=1;
+
+			if ( $missing <= $max_small_gap ){
+			    $n_small_graphs{$id}++;
+
+			    if ($n_small_graphs{$id} > $max_small_graphs){
+				$emit_graph{$id}=0;
+			    }
+			} else {
+			    $n_big_graphs{$id}++;
+			    if ( $n_big_graphs{$id} > $max_big_graphs){
+				$emit_graph{$id}=0;
+			    } 
+			}
+			
+			emit_break_head($id, $missing );
+
+			# add the ok part of the postgap tail
+			my $good=$#{$gap_slep{$id}} -  $ntail_seq{$id};
+			$good = 0 if $bad < 0 ;
+
+			my $dttl= get_ttl($gap_slep{$id}[$good])-get_ttl($head_end{$id});
+			push(@{$dttl{$id}}, $tail_ttl - $head_ttl );
+			if ( $dttl != 0){
+			    $dttl_count{$id}++;
+			}
+			
+			for ($lno=0; $lno <= $#{$gap_slep{$id}}; $lno++){
+			    push( @{$slep{$id}}, $gap_slep{$id}[$lno] );
+			    push( @{$slep_data{$id}}, $gap_data{$id}[$lno] );
+			    $nslep{$id}++;
+			}
+		    } else { # ignore when too many gaps
+			$dropped_gaps{$id}{$gap_type}++;
+		    }
+		    $gap_slep{$id}=[]; # copied - blank it.	 
+		    $gap_data{$id}=[]; # copied - blank it.	 
+		    $ntail_seq{$id}=0;  #
+
+		}
+	    } else { # normal packet
+		
+		if ( $opt_jitter && ( $n_normal{$id}++ % $maxhead ) == 0 ){  # jitter check
+		    check_jitter($id);
+		}
+		
+	    }
+
+	    $pseq{$id}= $seq;
+	    $ptx{$id}=$tx;
+
+	} elsif ($dseq == 0 ){ #
+	    $dupl{$id}++;
+	    $bufferit=0;
+	} elsif ($dseq < 0 ) { # reordered
+	    if ( $dt > $late_delay ){ # late packet
+		$late_n{$id}++;
+		$late_sum{$id}+=$dt;
+		$late_ss{$id}+=$dt*$dt;
+	    } elsif ( $dseq > (-$maxseqreorder) ){ # reordered
+		$reorder{$id}++;
+		undef $lost{$id}{$seq};
+		$bufferit=0;
+	    } else { # reset
+		$resets{$id}++;
+		$seq0{$id}=$seq;
+		# $pseq{$id}= $seq;
+		undef $pseq{$id};
+		$ptx{$id}=$tx;
+		# emit_gap_summary
+	    }
+	} elsif ( ( $dseq > 1 ) && ( $nslep{$id} > 0 ) ){ # some packets lost and we got started
+
+	    if ( $bad_line{$src} ){ # ignore gap
+		$bad_line{$src}=0;
+	    } else { # accept gap
+		if ( $in_gap{$id} ){
+		    $ntail_seq{$id} = 1;
+		} elsif ( $dseq > $minloss ){ # is a new big gap
+		    if ( $ntail_seq{$id} < 1 ){ # start of new gap
+			my $start=$#{$slep{$id}} - $maxhead;
+			$start=0 if $start < 0 ; # has to few packets in buffer
+			$head_start{$id} = $slep{$id}[$start];
+			$head_end{$id} = $slep{$id}[$#{$slep{$id}}] ; # last valid record before outage
+			$head_seq{$id} = $pseq{$id};
+			$in_gap{$id}=1;
+			$ntail_seq{$id} = 1; # restart this if there are more holes   
+		    }	
+		    $gap_slep{$id}=[];
+		    $gap_data{$id}=[];
+		    $nbig_gaps{$id}++;
+		    # $big_gaps{$id} += $dseq-1;
+		    $big_time{$id} += $tx - $ptx{$id} - &p_interval( $id );
+		} else {
+		    $nsmall_gaps{$id}++;
+		    $small_gaps{$id} += $dseq-1;
+		    $small_time{$id} += $tx - $ptx{$id} - &p_interval($id);
+		}
+		# note which packets are lost
+		foreach $lost ( $pseq{$id}+1 .. $seq-1 ){
+		    $lost{$id}{$lost}=1;
+		}
+		$gap_end{$id}=$_;
+		$gap_end_seq{$id}=$seq;
+	    }
+	    $ptx{$id}=$tx;
+	    $pseq{$id}= $seq;
+	}
+    } else { # first packet
+	$seq0{$id}=$seq;
+	$pseq{$id}=$seq;
+	$ptx{$id}=$tx;
+	$t0{$id}=$tx if !$t0{$id};
+    }
+
+    #	    if ( $dt == 0 || $dt <= $late_delay ){ # buffer lines
+    if ( $bufferit){
+	$data={'tx'=>$tx, 'rx'=>$rx,'delay'=>$dt,'seq'=>$seq};
+	if ( $in_gap{$id} && $in_gap{$id} > 0 ){  # during gap
+	    push(@{$gap_slep{$id}}, $_);
+	    push(@{$gap_data{$id}}, $data );
+	} else {
+	    push(@{$slep{$id}},$_);
+	    push(@{$slep_data{$id}}, $data );
+	    $nslep{$id}++;
+	    while ( $nslep{$id} > $maxslep){
+		shift @{$slep{$id}};
+		shift @{$slep_data{$id}};
+		$nslep{$id}--;
+	    }
+	}
+    }
+    $in_gap{$id}=0 if ! $ntail_seq{$id} || $ntail_seq{$id} < 1;
+
+    # handle tail
+    # count up multiple possibly overlapping tails
+    #	if ($dseq > $minloss && $nslep{$id} > 0 ){
+    #	if ( $ntail_seq{$id} > 0 ){
+    foreach $i (0 .. $#{$ntail{$id}}){
+	if ($ntail{$id}[$i] < $maxtail){
+	    $ntail{$id}[$i]++;
+	}
+    }
+    #	}
+    # 
+    #	  foreach $i (0 .. $#{$ntail{$id}}){
+    if ($nbreak{$id} && $nbreak{$id} > 0 && $ntail{$id} && ($ntail{$id}[0] >= $maxtail)){
+	my $head=shift(@{$head1{$id}});
+	
+	push(@{$tail{$id}}, report_delay( $id, 'tail', \$slep_data{$id}), 0, 0);
+	$print_line.= sprintf "%s overlap %8d %2d ", $head, $head_seq{$id}, $#{$ntail{$id}}+1;  
+	shift(@{$ntail{$id}});
+	&emit_stats($id);
+	$nbreak{$id}--;
+    }
+    #	}
+    #	  }
+    #	}
+} # of analyze_packet
+
+################################################################################
+# find minimum of a member var in an array of hashes
+sub get_min {
+    my ( $refd, $var, $pos)=@_;
+    my $min;
+    my $rd=$$refd;
+    foreach $rd (@$rd ){
+	if ( ! $min || $rd->{$var} < $min ){
+	    $min = $rd->{$var};
+	    $seq = $rd->{$pos};
+	}
+    }
+    return ($min, $seq);
+}
+
+################################################################################
+# keep track of last jitter reports
+
+sub jitter_change {
+    my ( $id, $jit, $ddelay, $slope)=@_;
+    if (! defined($jitter_values{$id})
+	|| val_change( $id, 'jit', $jit)
+	|| val_change( $id, 'ddelay', $ddelay)
+	|| val_change( $id, 'slope', $slope)
+	){
+	$jitter_values{$id}={'jit'=> $jit, 'ddelay'=> $ddelay, 'slope'=> $slope};
+	return 1;
+    }
+    return 0;  
+}
+
+sub val_change{
+    my ($id, $var, $val)=@_;
+    #    if ( abs (abs $val - $jitter_values{$id}->{$var} ) > $jitter_delta->{$var} ){
+    my $prev=$jitter_values{$id}->{$var};
+    my $delta = $val - $prev;
+    
+#    if ( abs ( $delta ) > $jitter_factor->{$var} * $prev ){
+    if ( abs ( $delta ) > $jitter_delta->{$var} ){
+	return 1; # true
+    }
+    return 0; # false
+}
+
+################################################################################
+sub check_jitter{
+    my $id = shift;
+    my $end=$#{$slep_data{$id}};
+    my $start = $end - $maxhead;
+    my $tstart;
+    
+    if ( $start >= 0 ){
+	$tstart = $slep_data{$id}[$start]{tx};
+	
+	my $r=report_delay( $id, 'stats', \$slep_data{$id}, NULL, 0);
+	my $l=$$r{line};
+	$l=~s/^\s*//;
+	my @rec  = split(/\s+/, $l );
+	my ( $n, $jit, $ddelay, $delay, $min_d, $slope_10, $slope_20, $slope_30, $slope_40, $slope_50)=@rec;
+
+	# emit jitter record at least every jitter_period
+	my $do_report = 0;
+	if ( $jitter_data{$id}{start} && ( $tstart >= ( $jitter_data{$id}{start} + $jitter_period ) ) ){
+	    $do_report=1;
+	}
+	# count all windows over the limits
+	if ( $ddelay >= $opt_ddelay_high){
+	    push( @{$jitter_obs{$id}{ddelay_high}}, $ddelay);
+	} elsif ( $ddelay >= $opt_ddelay_low){
+	    push( @{$jitter_obs{$id}{ddelay_low}}, $ddelay);
+	}
+
+	my $indicator = $ddelay;
+	if ( $opt_rtp ) {
+	    if ( $jitter_data{$id}{ddelay_acc} ){
+		$jitter_data{$id}{ddelay_acc} = $jitter_data{$id}{ddelay_acc} +
+		    ( $ddelay - $jitter_data{$id}{ddelay_acc} ) / $opt_rtp;  #
+	    } else {
+		$jitter_data{$id}{ddelay_acc} = $ddelay;
+	    }
+	    $indicator = $jitter_data{$id}{ddelay_acc} ;
+	}
+
+	if ( $jitter_data{$id}{high_ddelay} ){ # in high area
+	    if ( $indicator < $opt_ddelay_low ){ # out of high area
+		$do_report=2;
+	    }
+	} elsif ( $indicator > $opt_ddelay_high ){ # into high area
+	    $do_report=3;
+	}
+
+	if ( $do_report > 0 ){
+	    report_summary_jitter( $id );
+	    %{$jitter_data{$id}}=();
+	}
+
+	jitter_add_record($id, \@rec);
+	$jitter_data{$id}{end} = $slep_data{$id}[$end]{tx};
+	if ( ! $jitter_data{$id}{start} ){
+	    $jitter_data{$id}{start} = $tstart;
+	}
+	if ( ! $jitter_data{$id}{high_ddlay} && $indicator > $opt_ddelay_high ){
+	    $jitter_data{$id}{high_ddelay} = $indicator;
+	    $jitter_data{$id}{ddelay_acc} = $ddelay;
+	}
+    }
+}
+
+sub report_summary_jitter{
+    my ( $id ) = @_;
+
+    my $json={
+	"event_type" => "jitter",
+	"report_type" => "interval",
+	"tloss" => ( $jitter_data{$id}{end} - $jitter_data{$id}{start} - &p_interval( $id ) ) * 1000,  # in ms
+	"h_n" => sum( \@{$jitter_data{$id}{n}} ),
+	"h_jit" => median( $jitter_data{$id}{jit} )->query,
+	"h_ddelay" => median( $jitter_data{$id}{ddelay} )->query,
+	"h_delay" => median( $jitter_data{$id}{delay} )->query,
+	"h_min_d" => median( $jitter_data{$id}{min_d} )->query,
+	# "rtx" => median( $jitter_date{$id}{rtx} )->query,
+	# "rdelay" => $jitter_data{$id}{rdelay},
+	# slopes not computed for jitter
+	# "slopes" => median( $jitter_data{$id}{slopes} ),
+	"h_slope_10" => median( $jitter_data{$id}{slope_10} )->query,
+	# "h_slope_20" => median( $jitter_data{$id}{slope_20} )->query,
+	# "h_slope_30" => median( $jitter_data{$id}{slope_30} )->query,
+	# "h_slope_40" => median( $jitter_data{$id}{slope_40} )->query,
+	# "h_slope_50" => median( $jitter_data{$id}{slope_50} )->query,
+	    
+	"h_jit_sd" => stddev( $jitter_data{$id}{jit} )->query,
+	"h_ddelay_sd" => stddev( $jitter_data{$id}{ddelay} )->query,
+	"h_delay_sd" => stddev( $jitter_data{$id}{delay} )->query,
+	"h_slope_10_sd" => stddev( $jitter_data{$id}{slope_10} )->query
+    };
+    if ( $jitter_data{$id}{high_ddelay} ){
+	$$json{report_type} = "threshold" ;
+    }
+
+    emit_json( $json, $id, $jitter_data{$id}{start} ); 
+    #$jitter_last{$id} = $tstart;
+    jitter_stats($id, $json);
+}
+
+
+sub jitter_add_record{
+    my ($id, $r)=@_;
+    # my @vars= qw /n jit ddelay delay min_d slope_10 slope_20 slope_30 slope_40 slope_50/;
+    my @vars= qw /n jit ddelay delay min_d slope_10/;	    
+	    
+    $jitter_data{$id}={} if ! $jitter_data{$id};
+    for ( my $i=0; $i <= $#vars; $i++){
+	$jitter_data{$id}{$vars[$i]} = () if ! $jitter_data{$id}{$vars[$i]};
+	push( @{$jitter_data{$id}{$vars[$i]}}, $r->[$i] );
+    }
+    # if ( $jitter_data{$id}{high_ddelay} ){  # slepende eksponensielt gjennomsnitt (ref rtp jitter def)
+    #	$jitter_data{$id}{ddelay_acc} = $jitter_data{$id}{ddelay_acc} + ( $ddelay - $jitter_data{$id}{ddelay_acc} )/5;  
+    #} 
+
+}
+
+#================================================================================
+#### just icomplete ideas
+#
+sub jitter_add_var{
+}
+
+sub jitter_slep_add{
+    my $a=shift;
+    my $val=shift;
+    @$a=() if ! @$a;
+    push ( @$a, $val);
+    
+    # will be 0 every jitter period;
+    # if ( $#a > $slep_jitter_max ){
+    # shift @$a;
+    # }
+}
+sub jitter_slep_init{
+    my $id=shift;
+    $slep_jitter{$id} = ();
+    $slep_ddelay{$id} = ();
+    $slep_slope_10{$id} = ();
+}
+
+
+sub jitter_slep_stats{
+    my ($id, $jit, $ddelay, $slope10)=@_;
+    jitter_slep_add( $slep_jitter{$id}, $jit);
+    jitter_slep_add( $slep_ddelay{$id}, $ddelay);
+    jitter_slep_add( $slep_slope{$id}, $slope10);
+}
+
+#================================================================================
+    
+
+sub jitter_reg{
+    my ($id, $r, $var)=@_;
+    if (defined($r->{$var})){
+	push( @{$jitter_obs{$id}{$var}}, $r->{$var} );
+    } else {
+	print "No data for $id $var\n";
+    }
+}
+sub jitter_stats{
+    my ($id, $r)=@_; #
+    jitter_reg( $id, $r, "h_jit");
+    jitter_reg( $id, $r, "h_ddelay");
+    jitter_reg( $id, $r, "h_min_d");
+    jitter_reg( $id, $r, "h_delay");
+    jitter_reg( $id, $r, "h_slope_10");
+}
+
+
+################################################################################
+
+sub get_ttl {
+    my $line=shift;
+    my ($txt, $ttl)=/(HOPLIMIT|TTL)=(\d+)/;
+    return $ttl;
+}
+
+##################################################################################
+
+sub emit_break_head {
+    my ($id, $dseq) = @_;
+    $nbreak{$id}++;
+#    $tx1=&tx($slep{$id}[$#{$slep{$id}}]);
+    my $tx1=&tx($head_end{$id});
+    my $rx1=&rx($head_end{$id});
+#    my $tx2=&tx( $slep{$id}[$#{$slep{$id}} - $ntail_seq{$id} + 2] );
+    my $tx2=&tx( $gap_end{$id} );
+    my $rx2=&rx( $gap_end{$id} );
+    
+#    my $dt= $rx2 - $tx1 - $min_delay; 
+    my $dt= $tx2 - $tx1 - &p_interval($id); # clock from same side more accurate diff
+    my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) =
+	localtime($tx1); 
+    push( @{$head1{$id}}, sprintf "%-25s %4d-%02d-%02d %02d:%02d:%02d %s gap %5d %5.1f %6d ", 
+	  $id, $year+1900,$mon+1,$mday, $hour, $min, $sec, $tx1,
+	  $dseq-1, $dt*1000, $head_seq{$id}-$seq0{$id} );
+    
+    push(@{$ntail{$id}}, 0); # remember this break
+    push(@{$head{$id}}, report_delay($id, 'head', \$slep_data{$id}, $tx1, $dt));
+#		@slep{$id}=(); 
+#		$nslep{$id}=0;
+}
+
+################################################################################
+# guess packet interval by meadian transmit interval
+sub p_interval{
+    my $id=shift;
+    return $packet_interval{$id} if $packet_interval{$id};
+    my $ptx;
+    my @tx; 
+    foreach $l( @{$slep{$id}} ){
+	my $tx=&tx($l);
+	if ( $ptx){
+	    push(@tx, $tx-$ptx);
+	}
+	$ptx=$tx;
+    }
+    my @txs=sort {$a <=> $b} @tx;
+    my $median=$txs[ int( ($#txs + 1) / 2) ];
+    $packet_interval{$id} = $median if $#{$slep{$id}} > 100;
+    return $median;
+}
+
+sub tx{
+    my $l=shift;
+    my $seq;
+    if ( $l =~ /Tx=(\d+\.\d+)/ ){
+	return $1 ;
+    } elsif (($seq, $src, $tx, $rx) = $l=~/$bv_fmt/ ){
+	return $tx;
+    } 
+    return -1;
+}
+sub rx{
+    my $l=shift;
+    my $seq;
+    if ( $l =~ /Rx=(\d+\.\d+)/ ){
+	return $1 ;
+    } elsif (($seq, $src, $tx, $rx) = $l=~/$bv_fmt/ ){
+	return $rx;
+    } 
+    return -1;
+}
+
+sub emit_stats{
+    my $id=shift;
+
+    my @lostseq= ();
+    @lostseq= keys %{$lost{$id}}; #  if %lost{$id};
+
+#    print "head###########\n",@{$head{$id}}, "tail ####\n",@{$tail{$id}};
+#    printf "head %3d %s  tail  %3d %s\n", $#{$head{$id}}+1, &report_delay($head{$id}),   
+
+    if ( $#lostseq >= 0 ){ # still lost packets later (reorder)
+	my $h=shift(@{$head{$id}});
+	my $t=shift(@{$tail{$id}});
+	$print_line .= sprintf "head %s  tail  %s %5d\n", $$h{line}, $$t{line}, shift(@{$dttl{$id}});
+	print_line(\$print_line, $h);
+    }   else {
+	$print_line='';
+	# print stderr "reordering fixed : $print_line\n";
+    }
+
+
+#    $get_tail{$id}=0;
+#    $ntail{$id}=0;
+    $tail{$id}=();
+    $lost{$id}=();
+
+}
+
+sub report_delay{ # jitter for one delay
+    my $id=shift;
+    my $type=shift; # head, tail
+    my $refd=shift; # array of data
+    my $txgap=shift;
+    my $dt=shift;
+ 
+    # my @l=@$$refd;
+    my $ptx=0, $prx=0, $sumjit=0, $njit=0, $sumdd=0, $sumdelay=0;
+    my $taildelay; #  in tail/head
+    my @rdelay=(), @rtx=(), $tx0=0; 
+    my @rrx=(), $rx0=0; 
+    my ($rudeid, $seq, $src, $dst, $tx, $rx, $size, $pseq);
+
+    my $start=$#{$$refd}-$maxhead;
+    $start=0 if $start < 0;
+    
+    foreach $i( $start .. ($#$$refd - 0) ){  # skip the last one which might be after the gap
+	my $rdata=\@$$refd[$i];
+#	if ( ( ($rudeid, $seq, $src, $dst, $tx, $rx, $size)=
+#	    $$rline =~ /ID=(\d+)\s+SEQ=(\d+)\s+SRC=([\d.:]+)\s+DST=([\d.:]+)\s+Tx=([\d.,]+)\s+Rx=([\d.,]+).+SIZE=(\d+)/)
+#	    || ( ($seq, $src, $tx, $rx) = $$rline =~ /$bv_fmt/ )
+#	){
+	{
+	    $delay=$$rdata->{delay};
+	    $tx=$$rdata->{tx};
+	    $rx=$$rdata->{rx};
+	    $seq=$$rdata->{seq};
+	    
+	    if ( !$mindelay{$id} || $delay < $mindelay{$id} ){ # minimum for slep
+		$mindelay{$id} = $delay;
+		$minseq{$id} = $seq;
+	    }    
+	    if ( !$taildelay || $delay < $taildelay){
+		$taildelay = $delay;
+	    }
+	    if (  $tx0 == 0 ) {
+		$tx0=$tx;
+		$rx0=$rx;
+		if ( $type eq "head" ){ # use start of head for tail also
+		    push(@{$txgap{$id}}, $txgap);  # stack head if nested gaps
+		} elsif ( $type eq "tail"){ # pull from stacked head
+		    $txgap=shift( @{$txgap{$id}} );
+		}
+	    }
+
+	    if ($ptx &&  ($seq - $pseq) == 1){ # jitter for normal packets
+		$dtx=$tx-$ptx;
+		$drx=$rx-$prx;
+		$jit=$drx-$dtx;
+		$sumjit += abs $jit;
+		$njit++;
+		$sumdelay+=$delay;
+		$sumdd+=$delay;
+		push(@rtx, ($tx-$tx0)*1000); #ms
+		push(@rrx, ($rx-$rx0)*1000); #ms
+		push(@rdelay, $delay);
+	    }
+	    $ptx=$tx;
+	    $prx=$rx;
+	    # $pdelay=$delay;
+	    $pseq=$seq;
+	}
+    }
+
+    my $d=$$refd;
+    if ( $d->[0]{seq} > $minseq{$id} ){ # minimum of last maxslep packets
+	($mindelay{$id}, $minseq{$id}) =get_min( $refd, 'delay', 'seq');
+    }
+
+
+    for ($i=0; $i<=$#rdelay; $i++){ # relative delay in ms
+	$rdelay[$i]=($rdelay[$i]-$mindelay{$id})*1000;  
+    }
+
+    $sumdd=$sumdd-$njit*$mindelay{$id}; # sum differences from minimum
+
+    if($njit> 0 ){
+	$lineFit = Statistics::LineFit->new();
+	my @slopes=(), my $slopes=""; my $lr_start; my $lr_a; my $lr_b;
+
+	my $cc; # chart object
+	my $ctx; # chart context
+	my $ctx_lr;
+
+	if ( $opt_graph && $emit_graph{$id}){
+	    
+	    $cc = Chart::Clicker->new( width=>800, height=>600);
+	    if ( $dt > 0) {
+		$cc->title->text(sprintf "$title $type $id %.3fs", $dt);
+	    } else {
+		$cc->title->text("$title $type $id");
+	    }
+	    $ctx = $cc->get_context('default');	    
+	    $ctx->renderer(Chart::Clicker::Renderer::Point->new);
+#	    $ctx->renderer(Chart::Clicker::Renderer::Line->new);
+	    $ctx->domain_axis->label('Time(ms)');
+	    $ctx->range_axis->label('d-delay(ms)');
+
+	    my $series = Chart::Clicker::Data::Series->new( name => 'delay', 
+		keys    => \@rtx, values => \@rdelay);
+	    my $ds = Chart::Clicker::Data::DataSet->new(series => [ $series ]);
+	    $cc->add_to_datasets($ds);
+
+	    $ctx_lr=Chart::Clicker::Context->new( name => 'LR' );
+	    $ctx_lr->renderer(Chart::Clicker::Renderer::Line->new);
+	    $ctx_lr->share_axes_with($ctx);
+	    $cc->add_to_contexts($ctx_lr);
+	}
+
+	foreach ( $i=0; $i <= $#rtx-4; $i+=10){
+	    my ( $lr_start, $lr_end );
+	    if ( $type eq "head"){ # analyze head from end and tail from start
+		$lr_start=$i; $lr_end=$#rtx;
+	    } else {
+		$lr_start=0; $lr_end=min($i+10,$#rtx);
+	    }
+		
+	    my @drtx=@rtx[$lr_start..$lr_end];
+	    my @drdelay=@rdelay[$lr_start..$lr_end];
+
+# virker ikke
+#	    ($yfit, $coeffs) = fitpoly1d \@drtx, \@drdelay, 4; # Fit a cubi
+
+	    my $slope;
+	    if ($type eq 'stats' && $i > 0 ){ # save on slope LR for jitter allow slope_10
+		$slope=$intercept=0;   
+	    } else {
+		$lineFit->setData ( \@drtx, \@drdelay );
+		if (! ( ($intercept, $slope) = $lineFit->coefficients() ) ){
+		    warn "File $ARGV : $!";
+		}
+	    }
+	    push(@slopes, sprintf("%9.3f ", $slope) );
+	    # $slopes.=sprintf("%9.3f ", $slope);
+	    $lr_a=$slope; $lr_b=$intercept;
+
+	    if ( $opt_graph && $emit_graph{$id}){
+		my $x1=$rtx[$lr_start], $x2=$rtx[$lr_end];
+#		for ( $x=$x1; $x<=$x2; $x+=($x2-$x1)/50){
+#		for ( $x=$x1; $x<=$x2; $x++){
+#		    $cc->add_data('LR-'.$i, {$x => $lr_a*$x+$lr_b});
+#		}
+
+		my $series=Chart::Clicker::Data::Series->new( name => 'LR-'.$i, 
+		   keys=> [$x1, $x2], values=> [$lr_a*$x1+$lr_b, $lr_a*$x2+$lr_b] );
+		my $ds = Chart::Clicker::Data::DataSet->new(series => [ $series ]);
+		$ds->context('LR');
+		$cc->add_to_datasets($ds);
+	    }
+
+	    # $cc->add_data('LR', {$x1 => $lr_a*$x+$lr_b, $lr_a*$x2+$lr_b});
+	}
+	if ( $opt_graph && $emit_graph{$id}){
+#            $ctx->domain_axis->range->max( $rtx[$#rtx]*1.05);
+#	    $ctx->range_axis->range->max( $rdelay[$#rdelay]*1.05);
+
+	    $cc->write_output( sprintf("%s/%s-%.3f-loss-%s%s",$outdir,$id,$txgap,$type,$opt_graph)) 
+		|| warn "Chart error : $!";
+	    undef $cc; # try to free the space used by the graph
+	}
+
+	# make sure all columns are filled in
+	$slopes=join(' ', @slopes);
+	for (my $i=$#slopes; $i < ($min_slopes-1); $i++){ $slopes.=" -"; }
+	my %rec= ( n=>$njit, jit=>$sumjit/$njit*1000, ddelay=>$sumdd/$njit*1000, delay=> $sumdelay/$njit*1000, 
+		   min_d=>$mindelay{$id}*1000, slopes=>\@slopes, rtx=>\@rtx, rdelay=>\@rdelay );
+	$rec{line}= sprintf  "%3d %9.3f %9.3f %9.3f %9.3f %s", $njit, $sumjit/$njit*1000, $sumdd/$njit*1000, 
+	    $sumdelay/$njit*1000, $mindelay{$id}*1000, $slopes;
+	return \%rec;
+    } else {
+	return sprintf  "%3d %5.3f %5.3f", 0, 0, 0;
+    }
+
+    
+} # report_delay
+
+sub min{
+    return $_[0] if  $_[0] <= $_[1] ;
+    return $_[1];
+}
+
+sub max{
+    my $ref=shift;
+    my $max;
+    foreach $v( @$ref){
+	$max = $v if !$max || $max < $v;
+    }
+    return $max;
+}
+
+# generate header form based on first data line
+sub headmaker{
+    my $line=shift;
+    my @l=split //, $line;
+    $p=0;
+    for ($i=0;$i<=$#l;$i++){
+	if ( ( $l[$i] eq " " || $l[$i] eq "\n" )  && $l[$i-1] ne " "){
+	    $form.=sprintf "%%%ds ", $i-$p-1;
+	    $p=$i;
+	}
+    }
+    return $form;
+}
+
+sub print_line{
+    my $line=shift;
+    my $r=shift;  # the head object
+    if ( ! $head_done ){
+	if($opt_head && $opt_v){
+	    printf headmaker($$line)."\n", @heads;
+	}
+	$head_done=1;
+    }
+    if ( $opt_json){
+	emit_event_json($line, $r);
+    } 
+    if ( $opt_v ){
+	print $$line;
+    }
+    $$line='';
+}
+
+sub emit_event_json{
+    my $line=shift;
+    my $r=shift;
+    if ( $$line =~ /\d\d\d\d-\d\d-\d\d\s+\d\d:/){ #looks like report line : yyy-mm-dd hh:
+	my @f=split(/\s+/, $$line);
+	my $from=$f[$hix{id}];
+	my $o;
+	if ( $dst_name{$id}){
+	    $to = $dst_name{$id};x
+	} else {
+	    $to=`hostname`; chomp($to);
+	}
+
+#	my ($date, $t)= ( $f[$hix{date}], $f[$hix{time}] );
+#	my @gt=gmtime $f[$hix{tunix}];
+#	my $datems= sprintf "%s.%03d", strftime("%Y-%m-%dT%T", @gt),  int($f[$hix{tunix}]*1000)%1000 ;
+
+	my $json= {
+	    "event_type" => "gap",
+	    "tloss"=>$f[$hix{tloss}] * 1.0 ,
+	    "h_n" => $f[$hix{h_n}] * 1,
+	    "h_jit" => $f[$hix{h_jit}] * 1.0,
+	    "h_ddelay" => $f[$hix{h_ddelay}] * 1.0,
+	    "h_delay" => $f[$hix{h_delay}] * 1.0,
+	    "h_min_d" => $f[$hix{h_min_d}] * 1.0,
+	    "h_slope_10" => $f[$hix{h_slope_10}] * 1.0,
+	    "h_slope_20" => $f[$hix{h_slope_20}] * 1.0,
+	    "h_slope_30" => $f[$hix{h_slope_30}] * 1.0,
+	    "h_slope_40" => $f[$hix{h_slope_40}] * 1.0,
+	    "h_slope_50" => $f[$hix{h_slope_50}] * 1.0,
+	    "t_n" => $f[$hix{t_n}] * 1,
+	    "t_jit" => $f[$hix{t_jit}] * 1.0,
+	    "t_ddelay" => $f[$hix{t_ddelay}] * 1.0,
+	    "t_delay" => $f[$hix{t_delay}] * 1.0,
+	    "t_min_d" => $f[$hix{t_min_d}] * 1.0,
+	    "t_slope_10" => $f[$hix{t_slope_10}] * 1.0,
+	    "t_slope_20" => $f[$hix{t_slope_20}] * 1.0,
+	    "t_slope_30" => $f[$hix{t_slope_30}] * 1.0,
+	    "t_slope_40" => $f[$hix{t_slope_40}] * 1.0,
+	    "t_slope_50" => $f[$hix{t_slope_50}] * 1.0,
+	    "overlap" => $f[$hix{overlap}] * 1,
+		"dTTL" => $f[$hix{dTTL}] * 1,
+		"rtx" => $$r{rtx},
+		"rdelay" => $$r{rdelay}
+		#				     "" => $f[$hix{}],
+	};
+
+	emit_json($json, $from, $f[$hix{tunix}]); 
+ 
+    } else {
+	warn "Could not parse line : $$line";
+    }
+}
+
+sub emit_jitter_json{
+    my $line=shift;  # ref
+}
+
+sub sum{
+    my $ref_a = shift;
+    my $sum=0;
+    foreach $val ( @$ref_a ){
+	$sum += $val;
+    }
+}
+
+sub timestamp {
+    my $tgmt = shift @_;
+    my @tlocal = localtime( $tgmt);
+    my $tzmin= ( timegm(@tlocal) - timelocal(@tlocal) ) / 60 ;
+    my $ts  = strftime("%Y-%m-%dT%H:%M:%S", @tlocal);
+    return sprintf "%s.%03d%+03d%02d", $ts,  ( $tgmt - int($tgmt) ) * 1000, $tzmin / 60, abs($tzmin) % 60;
+}
