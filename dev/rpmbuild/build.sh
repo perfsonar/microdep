@@ -10,10 +10,12 @@ SRCROOT=$(dirname $(pwd))
 DISTRO=alma9
 DISTROS="alma9 centos7"
 
+
 usage () {
-    echo "Usage: `basename $0` [-hq] [-d distro] specfile.spec"
+    echo "Usage: `basename $0` [options] specfile.spec"
     echo "  -h         Help message."
     echo "  -d distro  Linux distro to build for. Default is $DISTRO. Supported are: $DISTROS"
+    echo "  -s         Start shell in build container."
     echo "  -q         Be quiet."
     exit 1;
 }
@@ -26,7 +28,7 @@ msg () {
 }
 
 # Parse arguments
-while getopts ":hqd:" opt; do
+while getopts ":hsqd:" opt; do
     case $opt in
 	d)
 	    if [ "`echo "$DISTROS" | grep -w $OPTARG`" ]; then
@@ -35,6 +37,9 @@ while getopts ":hqd:" opt; do
 		echo "Unsupported distro $OPTARG."
 		exit 1
 	    fi
+	    ;;
+	s)
+	    BSHELL="yes"
 	    ;;
 	q)
 	    QUIET="yes"
@@ -65,12 +70,13 @@ if [ ! -f "SPECS/$SPEC"  ]; then
     echo "Error: Copy specfile into ./SPECS/ subfolder"
     exit 1
 fi
+SPEC=SPECS/$SPEC
 
 #echo $DISTRO $BUILDROOT $SRCROOT $SPEC
 
 # Prepare source file archive
 make -C $SRCROOT dist
-cp $SRCROOT/perfsonar-microdep*.tar.gz SOURCES
+cp $SRCROOT/perfsonar-*.tar.gz SOURCES
 
 #docker run \
 #       --name rpmbuild-$DISTRO \
@@ -85,8 +91,13 @@ export DISTRO
 #export SRCROOT
 export SPEC
 
-docker-compose up --build rpmbuild
-
+if [ -z "$BSHELL" ]; then
+    docker-compose up --build rpmbuild
+else
+    docker-compose build rpmbuild
+    docker-compose run --entrypoint /bin/bash rpmbuild
+fi
+    
 exit $?
 
 
