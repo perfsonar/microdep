@@ -7,9 +7,14 @@
 FROM almalinux:9
 MAINTAINER Otto J Wittner - Sikt
 
-RUN dnf update -y
-RUN dnf install -y epel-release rpm-build sudo
-RUN dnf install -y yum-utils rpmdevtools make
+RUN dnf update -y && dnf install -y yum-utils && dnf config-manager --set-enabled crb &&  dnf install -y epel-release procps-ng rpm-build sudo rpmdevtools make nano
+
+# Add stuff requried to build rpm packages of pip-installable python modules
+RUN dnf install -y python3-devel git python3-sphinx python3-setuptools gcc python3-docutils
+RUN python3 -m pip install pyp2rpm
+RUN python3 -m pip install sphinxcontrib.towncrier
+#RUN python3 -m pip install pypi2rpm
+#RUN python3 -m pip install py2pack
 
 # build files
 COPY bin/build-spec /bin/

@@ -12,7 +12,8 @@
 version: "2.2"
 
 services:
-  rpmbuild:
+  buildcontainer:
+    # Basic container, extended by other services
     container_name: ps-rpmbuilder
     hostname: ps-rpmbuilder
     image: rpmbuild-${DISTRO:-alma9}
@@ -29,12 +30,31 @@ services:
 #      - ../../:/home/src
 #     Needs 2 levels up as long as rpmbuilds/ is a symlink to dev/builds/ (which docker-compose expands)
       - ../../:/home/src
+      
+  rpmbuild:
+    # Builds rpm packages specified by SPEC env var, or all specs matching "SPECS/*-alma9.spec"
+    extends: buildcontainer
     stdin_open: true
     tty: true
     entrypoint: ["/bin/build-spec", "/home/rpmbuilder/rpmbuild/${SPEC:-SPECS/*-alma9.spec}"]
-    # Run `docker-compose run --entrypoint /bin/bash rpmbuild` to achieve entrypoint: ["/bin/bash"]
 
+  pypspec:
+    # Generate a rpm spec for a pip-installable python packages specified in PYPACK
+    extends: buildcontainer
+    stdin_open: true
+    tty: true
+    entrypoint: ["/usr/local/bin/pyp2rpm", "-s","${PYPACK}"]
+      
+  shell:
+    # Bash in build container
+    extends: buildcontainer
+    stdin_open: true
+    tty: true
+    entrypoint: ["/bin/bash"]
+
+    
   testrun:
+    # Test container for microdep
     container_name: ps-microdep
     hostname: ps-microdep
     build:

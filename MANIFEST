@@ -1,5 +1,4 @@
 LICENSE
-Makefile
 microdep-map/index.html
 microdep-map/ajax-loader.gif
 microdep-map/js/microdep-map.js
@@ -23,3 +22,7 @@ bin/microdep_commands/trace_event_reader.py
 scripts/perfsonar-microdep-gap-ana.service
 scripts/perfsonar-microdep-trace-ana.service
 scripts/perfsonar-microdep-restart.service
+etc/logstash/microdep/01-microdep-inputs.conf
+etc/logstash/microdep/02-microdep-filter.conf
+etc/logstash/microdep/03-microdep-outputs.conf
+

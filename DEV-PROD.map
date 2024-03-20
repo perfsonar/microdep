@@ -1,8 +1,7 @@
-# Mapping specifiying files to be synced from legacy Microdep development to current
+# Mapping which specifis files to be synced from legacy Microdep development to current
 # NOTE: Destination path need to include filename
 # ---- Last line of header - Do not remove or edit ----
 dev/LICENSE LICENSE
-Makefile 
 # Map frontend
 dev/microdep/server/script/microdep-map.html microdep-map/index.html
 dev/microdep/server/script/ajax-loader.gif microdep-map/ajax-loader.gif
@@ -33,6 +32,10 @@ dev/routingmonitor/trace_event_reader.py bin/microdep_commands/trace_event_reade
 dev/etc/microdep/perfsonar-microdep-gap-ana.service scripts/perfsonar-microdep-gap-ana.service
 dev/etc/microdep/perfsonar-microdep-trace-ana.service scripts/perfsonar-microdep-trace-ana.service
 dev/etc/microdep/perfsonar-microdep-restart.service scripts/perfsonar-microdep-restart.service
+dev/etc/logstash/microdep/01-microdep-inputs.conf etc/logstash/microdep/01-microdep-inputs.conf
+dev/etc/logstash/microdep/02-microdep-filter.conf etc/logstash/microdep/02-microdep-filter.conf
+dev/etc/logstash/microdep/03-microdep-outputs.conf etc/logstash/microdep/03-microdep-outputs.conf
+
 #dev/etc/opensearch/opensearch-security-admin.service scripts/opensearch-security-admin.service
 # New to-be-made psconfig-file monitoring (https://superuser.com/questions/1171751/restart-systemd-service-automatically-whenever-a-directory-changes-any-file-ins)
 #dev/etc/microdep/perfsonar-microdep-psconfig-check.service scripts/perfsonar-microdep-psconfig-check.service
