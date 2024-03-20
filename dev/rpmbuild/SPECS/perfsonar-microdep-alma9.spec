@@ -21,7 +21,8 @@ URL:			http://www.perfsonar.net
 Source0:		perfsonar-microdep-%{version}.tar.gz
 BuildRoot:		%{_tmppath}/%{name}-%{version}-root-%(%{__id_u} -n)
 BuildArch:		noarch
-Requires:
+Requires:               perfsonar-microdep-map
+Requires:               perfsonar-microdep-ana
 
 %description
 Meta-package pulling in packaged required for Microdep Analytics in perfSONAR
@@ -180,6 +181,10 @@ systemctl enable perfsonar-microdep-gap-ana.service
 systemctl enable perfsonar-microdep-trace-ana.service
 systemctl enable perfsonar-microdep-restart.timer
 
+%files 
+%defattr(0644,perfsonar,perfsonar,0755)
+%license %{install_base}/LICENSE
+
 %files map
 %defattr(0644,perfsonar,perfsonar,0755)
 %license %{install_base}/LICENSE
@@ -198,6 +203,8 @@ systemctl enable perfsonar-microdep-restart.timer
 %attr(0644,perfsonar,perfsonar) /etc/httpd/conf.d/apache-microdep-map.conf
 
 %files ana
+%defattr(0644,perfsonar,perfsonar,0755)
+%license %{install_base}/LICENSE
 %attr(0755,perfsonar,perfsonar) %{_unitdir}/perfsonar-microdep-gap-ana.service
 %attr(0755,perfsonar,perfsonar) %{_unitdir}/perfsonar-microdep-trace-ana.service
 %attr(0755,perfsonar,perfsonar) %{_unitdir}/perfsonar-microdep-restart.service

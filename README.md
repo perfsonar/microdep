@@ -40,8 +40,8 @@ A set of packages composes the overal analytic system
 Note that currently PS Microdep depends on **perfsonar-toolkit**, i.e. it needs to be installed on a server running the full toolkit suit.
 
 RPM-based distibutions
-  * el7 (centos): `sudo yum install perfsonar-microdep-map perfsonar-microdep-ana per` **NOTE YET AVAILABLE**
-  * el8, el9 (almalinux): `sudo dnf install perfsonar-microdep*`
+  * el7 (centos): `sudo yum install perfsonar-microdep` **NOT YET AVAILABLE**
+  * el8, el9 (almalinux): `sudo dnf install perfsonar-microdep`
  
 DEB-based distributions (Debian, Ubuntu) **NOT YET AVAILABLE**
   * `sudo apt install perfsonar-microdep`
