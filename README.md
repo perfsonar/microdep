@@ -10,14 +10,23 @@ This project provides a collection of tools realizing the *perfSONAR Microdep an
 ## Project structure
 
 During the ongoing migration fase for *PS Microdep* the `/dev` folder holds misc subprojects the *PS Microdep analytic system* 
-inherets its components from, i.e. `/dev`holds the legacy Microdep development environment. 
+inherets its components from, i.e. `/dev` holds the legacy Microdep development environment. 
 
 Other folders hold scripts and files applied by the perfsonar version of the system, i.e. files included in builds for different distributions.
 Note that these files are typically copies of files under `/dev`. Run `make resync` to ensure perfsonar version is in sync with legacy version. 
 
 ## Building
 
-TO BE ADDED
+As a start rpm-packages for el9 (almalinux) are under development. To re-build PS Microdep packages
+  * `make resync`
+  * `cd rpmbuild/`
+  * `./build.sh SPECS/perfsonar-microdep-alma9.spec`
+
+Updated rpm packages should become available in `rpmbuild/RPMS`
+
+Note the building requires `docker` and `docker-compose` to be available.
+
+`unibuild` is intended to replace this build procedure soon.
 
 ## Installation
 
@@ -28,16 +37,16 @@ A set of packages composes the overal analytic system
   * **perfsonar-tracetree**    : Web based graphical traceroute viewer
   * **perfsonar-microdep-ana** : Realtime analytics for event discovery
 
-Note that currently PS Microdep depends on **perfsonar-toolkit**, i.e. needs to be installed on a server running the full toolkit suit.
+Note that currently PS Microdep depends on **perfsonar-toolkit**, i.e. it needs to be installed on a server running the full toolkit suit.
 
 RPM-based distibutions
-  * el7 (centos): `sudo yum install perfsonar-microdep`
-  * el8, el9 (almalinux): `sudo dnf install perfsonar-microdep`
+  * el7 (centos): `sudo yum install perfsonar-microdep-map perfsonar-microdep-ana per` **NOTE YET AVAILABLE**
+  * el8, el9 (almalinux): `sudo dnf install perfsonar-microdep*`
  
-DEB-based distributions (Debian, Ubuntu)
+DEB-based distributions (Debian, Ubuntu) **NOT YET AVAILABLE**
   * `sudo apt install perfsonar-microdep`
   
-From source
+From source **NOT YET AVAIABLE**
   * `tar zxvf perfsonar-microdep-xxx.yyy.zz.tar.gz`
   * `cd perfsonar-microdep`
   * `./configure`

@@ -21,7 +21,7 @@ URL:			http://www.perfsonar.net
 Source0:		perfsonar-microdep-%{version}.tar.gz
 BuildRoot:		%{_tmppath}/%{name}-%{version}-root-%(%{__id_u} -n)
 BuildArch:		noarch
-Requires:               perfsonar-toolkit >= 5.0.7
+Requires:
 
 %description
 Meta-package pulling in packaged required for Microdep Analytics in perfSONAR
@@ -29,6 +29,7 @@ Meta-package pulling in packaged required for Microdep Analytics in perfSONAR
 %package map
 Summary:		Microdep map web GUI presenting analytic results
 Group:			Applications/Communications
+Requires:               perfsonar-toolkit >= 5.0.7
 Requires:		httpd
 Requires:               mod_ssl
 Requires:		perl >= 5.32
@@ -58,9 +59,10 @@ Requires:               perfsonar-select2js
 Web GUI presenting Microdep analytic results in a map view
 
 %package ana
-Summary:		Microdep map web GUI presenting analytic results
+Summary:		Microdep analytic toolset to analize perfSONAR datasets
 Group:			Applications/Communications
 # Rabbit message queue
+Requires:               perfsonar-toolkit >= 5.0.7
 Requires:               centos-release-rabbitmq-38
 Requires:               rabbitmq-server
 Requires:		perl >= 5.32
@@ -101,7 +103,7 @@ Requires:               python3-pika
 #BuildRequires:          systemd
 
 %description ana
-Analytic scripts generating events for Microdep
+Analytic scripts to process perfSONAR data sets and generate events. Events may be viualized by Microdep map.
 
 %install
 rm -rf %{buildroot}
