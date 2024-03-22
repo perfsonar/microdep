@@ -1,5 +1,7 @@
 # perfSONAR Microdep 
 
+**IMPORTANT**: This project is still very much under development and will currently not build nor run effortlessly. It is recommended to wait with installation and test until a release branch is ready (hopefully 5.1.0).
+
 This project provides a collection of tools realizing the *perfSONAR Microdep analytic system*.
 *PS Microdep* provides
   * A set of analytic scripts which detects events in background latency data-sets and traceroue data-sets
