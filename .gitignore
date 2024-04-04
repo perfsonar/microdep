@@ -1,3 +1,25 @@
+# Ignore mac hidden files
+.DS_Store
+
+# Keyring files
+.pki/
+
+# Editor Droppings
+.*.swp
 *~
 \#*\#
-builds/rpmbuild/tmp/*
+
+# Ignore rpms, logs and other build artifacts
+unibuild-log
+unibuild-repo
+unibuild-work
+multiarch_build
+
+# Quilt cache directory
+.pc/
+
+# Vagrant cache
+.vagrant/
+
+# Detritus from the one-shot Docker builder
+DOSB/

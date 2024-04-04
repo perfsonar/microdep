@@ -5,8 +5,8 @@
 %define perfsonar_auto_relnum alfa1
 
 Name:			select2js
-Version:		%{perfsonar_auto_version}
-Release:		%{perfsonar_auto_relnum}%{?dist}
+Version:		4.0.0
+Release:		1%{?dist}
 Summary:		A jQuery-based replacement for select boxesA
 License:		MIT Licence
 Group:			Development/Libraries

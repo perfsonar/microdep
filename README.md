@@ -19,16 +19,12 @@ Note that these files are typically copies of files under `/dev`. Run `make resy
 
 ## Building
 
-As a start rpm-packages for el9 (almalinux) are under development. To re-build PS Microdep packages
-  * `make resync`
-  * `cd rpmbuild/`
-  * `./build.sh SPECS/perfsonar-microdep-alma9.spec`
+Appling *unibuild*
+  * Ensure *docker* is installed: `sudo apt install docker-ce-cli docker-compose-plugin`
+  * Fetch *unibuild* compose file: `wget -O docker-compose.yml https://raw.githubusercontent.com/perfsonar/unibuild/main/docker-envs/docker-compose.yml`
+  * el9: `docker compose run el9 unibuild build`
 
-Updated rpm packages should become available in `rpmbuild/RPMS`
-
-Note the building requires `docker` and `docker-compose` to be available.
-
-`unibuild` is intended to replace this build procedure soon.
+Updated rpm packages should become available in `<package-name>/unibuild-work/products/` (e.g `microdep/unibuild-work/products/`)
 
 ## Installation
 

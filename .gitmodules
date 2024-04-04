@@ -1,20 +1,20 @@
 [submodule "microdep"]
-	path = microdep/perfsonar-microdep/dev/microdep
+	path = microdep-dev/microdep
 	url = git@gitlab.sikt.no:iou/microdep.git
 [submodule "perfsonar-testpoint-docker"]
-	path = microdep/perfsonar-microdep/dev/perfsonar-testpoint-docker
+	path = microdep-dev/perfsonar-testpoint-docker
 	url = https://github.com/perfsonar/perfsonar-testpoint-docker.git
 [submodule "pstracetree"]
-	path = microdep/perfsonar-microdep/dev/pstracetree
+	path = microdep-dev/pstracetree
 	url = git@github.com:perfsonar/pstracetree.git
 [submodule "routingmonitor"]
-	path = microdep/perfsonar-microdep/dev/routingmonitor
+	path = microdep-dev/routingmonitor
 	url = git@gitlab.sikt.no:iou/routingmonitor.git
 
 	
 [submodule "pscheduler"]
-	path = microdep/perfsonar-microdep/dev/pscheduler
+	path = microdep-dev/pscheduler
 	url = git@github.com:perfsonar/pscheduler.git
 [submodule "owamp"]
-	path = microdep/perfsonar-microdep/dev/owamp
+	path = microdep-dev/owamp
 	url = git@github.com:perfsonar/owamp

@@ -29,7 +29,7 @@ Meta-package pulling in packaged required for Microdep Analytics in perfSONAR
 %package map
 Summary:		Microdep map web GUI presenting analytic results
 Group:			Applications/Communications
-Requires:               perfsonar-toolkit >= 5.0.7
+#Requires:               perfsonar-toolkit >= 5.0.7
 Requires:		httpd
 Requires:               mod_ssl
 Requires:		perl >= 5.32
@@ -45,13 +45,13 @@ Requires:		perl(URI)
 Requires:		perl(warnings)
 Requires:		perl(YAML)
 Requires:               js-jquery
-Requires:               perfsonar-tracetree
-Requires:               perfsonar-chartjs
-Requires:               perfsonar-d3sj
-Requires:               perfsonar-hammerjs
-Requires:               perfsonar-leaflet
-Requires:               perfsonar-momentjs
-Requires:               perfsonar-select2js
+#Requires:               perfsonar-tracetree
+Requires:               chartjs = 4.4.2
+Requires:               d3js = 4
+Requires:               hammerjs = 2.0.8
+Requires:               leafletjs = 1.0.3
+Requires:               momentjs = 2.27.0
+Requires:               select2js = 4.0.0
 %{?systemd_requires: %systemd_requires}
 #BuildRequires:          systemd
 
@@ -62,8 +62,8 @@ Web GUI presenting Microdep analytic results in a map view
 Summary:		Microdep analytic toolset to analize perfSONAR datasets
 Group:			Applications/Communications
 # Rabbit message queue
-Requires:               perfsonar-toolkit >= 5.0.7
-Requires:               centos-release-rabbitmq-38
+#Requires:               perfsonar-toolkit >= 5.0.7
+BuildRequires:          centos-release-rabbitmq-38
 Requires:               rabbitmq-server
 Requires:		perl >= 5.32
 # qstream_gap_ana
@@ -72,13 +72,16 @@ Requires:               perl(Statistics::LineFit)
 Requires:               perl(Statistics::Basic)
 Requires:               perl(Getopt::Long)
 Requires:               perl(Time::Local)
-Requires:               perl(POSIX(strftime))
+#Requires:               perl(POSIX(strftime))
+Requires:               perl(POSIX)
 Requires:               perl(Data::Dumper)
 Requires:               perl(constant)
 Requires:               perl(sigtrap)
 Requires:               perl(LWP::Simple)
 Requires:               perl(AnyEvent::RabbitMQ)
+#Requires:               perl-AnyEvent-RabbitMQ
 Requires:               perl(Net::AMQP)
+#Requires:               perl-Net-AMQP
 Requires:               perl(URI)
 Requires:               perl(JSON::PP)
 Requires:               perl(Chart::Clicker)
@@ -105,8 +108,12 @@ Requires:               python3-pika
 %description ana
 Analytic scripts to process perfSONAR data sets and generate events. Events may be viualized by Microdep map.
 
+%prep
+%setup -q
+
 %install
 rm -rf %{buildroot}
+pwd & ls -l
 make ROOTPATH=%{buildroot}/%{install_base} CONFIGPATH=%{buildroot}/%{microdep_config_base} install
 
 # Install systemd services
@@ -187,7 +194,6 @@ systemctl enable perfsonar-microdep-restart.timer
 %files map
 %defattr(0644,perfsonar,perfsonar,0755)
 %license %{install_base}/LICENSE
-#%config(noreplace) %{microdep_config_base}/microdep.db
 %attr(0644,perfsonar,perfsonar) %{microdep_web_dir}/*.html
 %attr(0644,perfsonar,perfsonar) %{microdep_web_dir}/*.gif
 %attr(0644,perfsonar,perfsonar) %{microdep_web_dir}/js/*

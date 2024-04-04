@@ -1,44 +1,44 @@
 # Mapping which specifis files to be synced from legacy Microdep development to current
 # NOTE: Destination path need to include filename
 # ---- Last line of header - Do not remove or edit ----
-dev/LICENSE LICENSE
+../../microdep-dev/LICENSE LICENSE
 # Map frontend
-dev/microdep/server/script/microdep-map.html microdep-map/index.html
-dev/microdep/server/script/ajax-loader.gif microdep-map/ajax-loader.gif
-dev/microdep/server/script/microdep-map.js microdep-map/js/microdep-map.js
-dev/microdep/server/script/stats.js microdep-map/js/stats.js
-dev/microdep/server/script/map-lib.js microdep-map/js/map-lib.js
-dev/microdep/server/script/graph.js microdep-map/js/graph.js
-dev/microdep/server/script/curve-chart.html microdep-map/curve-chart.html
-dev/microdep/server/script/curve-chart.js microdep-map/js/curve-chart.js
-dev/microdep/server/script/elastic-get-date-type.pl bin/microdep_commands/elastic-get-date-type.pl
-dev/microdep/server/script/yaml-to-json.cgi bin/microdep_commands/yaml-to-json.cgi
-dev/microdep/server/script/microdep-config.cgi bin/microdep_commands/microdep-config.cgi
-dev/microdep/server/script/mapconfig.yml etc/mapconfig.yml
-dev/microdep/server/script/microdep-config.yml etc/microdep-config.yml
+../../microdep-dev/microdep/server/script/microdep-map.html microdep-map/index.html
+../../microdep-dev/microdep/server/script/ajax-loader.gif microdep-map/ajax-loader.gif
+../../microdep-dev/microdep/server/script/microdep-map.js microdep-map/js/microdep-map.js
+../../microdep-dev/microdep/server/script/stats.js microdep-map/js/stats.js
+../../microdep-dev/microdep/server/script/map-lib.js microdep-map/js/map-lib.js
+../../microdep-dev/microdep/server/script/graph.js microdep-map/js/graph.js
+../../microdep-dev/microdep/server/script/curve-chart.html microdep-map/curve-chart.html
+../../microdep-dev/microdep/server/script/curve-chart.js microdep-map/js/curve-chart.js
+../../microdep-dev/microdep/server/script/elastic-get-date-type.pl bin/microdep_commands/elastic-get-date-type.pl
+../../microdep-dev/microdep/server/script/yaml-to-json.cgi bin/microdep_commands/yaml-to-json.cgi
+../../microdep-dev/microdep/server/script/microdep-config.cgi bin/microdep_commands/microdep-config.cgi
+../../microdep-dev/microdep/server/script/mapconfig.yml etc/mapconfig.yml
+../../microdep-dev/microdep/server/script/microdep-config.yml etc/microdep-config.yml
 # ... in addition there are a list of external libs to be fetched ...
 # Map config
-dev/microdep/server/script/microdep-psconfig-load.pl bin/microdep_commands/microdep-psconfig-load.pl
-dev/etc/psconfig/pscheduler.d/microdep-tests.json  etc/psconfig/pscheduler.d/microdep-tests.json
-dev/etc/httpd/apache-microdep-gui.conf etc/apache-microdep-map.conf
+../../microdep-dev/microdep/server/script/microdep-psconfig-load.pl bin/microdep_commands/microdep-psconfig-load.pl
+../../microdep-dev/etc/psconfig/pscheduler.d/microdep-tests.json  etc/psconfig/pscheduler.d/microdep-tests.json
+../../microdep-dev/etc/httpd/apache-microdep-gui.conf etc/apache-microdep-map.conf
 # Debug-tools
-dev/bin/rabbitmq-consume.py bin/microdep_commands/rabbitmq-consume.py
-dev/bin/json2table.pl bin/microdep_commands/json2table.pl
+../../microdep-dev/bin/rabbitmq-consume.py bin/microdep_commands/rabbitmq-consume.py
+../../microdep-dev/bin/json2table.pl bin/microdep_commands/json2table.pl
 #bin/opensearch-query.sh bin/microdep_commands/opensearch-query.sh  "POST" action not fully implemented yet...
-#dev/etc/hostspecific-conf.service scripts/hostspecific-conf.service
+#../../microdep-dev/etc/hostspecific-conf.service scripts/hostspecific-conf.service
 # Analytic tools
-dev/microdep/bin/qstream-gap-ana bin/microdep_commands/qstream-gap-ana
-dev/routingmonitor/trace_event_reader.py bin/microdep_commands/trace_event_reader.py
-dev/etc/microdep/perfsonar-microdep-gap-ana.service scripts/perfsonar-microdep-gap-ana.service
-dev/etc/microdep/perfsonar-microdep-trace-ana.service scripts/perfsonar-microdep-trace-ana.service
-dev/etc/microdep/perfsonar-microdep-restart.service scripts/perfsonar-microdep-restart.service
-dev/etc/logstash/microdep/01-microdep-inputs.conf etc/logstash/microdep/01-microdep-inputs.conf
-dev/etc/logstash/microdep/02-microdep-filter.conf etc/logstash/microdep/02-microdep-filter.conf
-dev/etc/logstash/microdep/03-microdep-outputs.conf etc/logstash/microdep/03-microdep-outputs.conf
+../../microdep-dev/microdep/bin/qstream-gap-ana bin/microdep_commands/qstream-gap-ana
+../../microdep-dev/routingmonitor/trace_event_reader.py bin/microdep_commands/trace_event_reader.py
+../../microdep-dev/etc/microdep/perfsonar-microdep-gap-ana.service scripts/perfsonar-microdep-gap-ana.service
+../../microdep-dev/etc/microdep/perfsonar-microdep-trace-ana.service scripts/perfsonar-microdep-trace-ana.service
+../../microdep-dev/etc/microdep/perfsonar-microdep-restart.service scripts/perfsonar-microdep-restart.service
+../../microdep-dev/etc/logstash/microdep/01-microdep-inputs.conf etc/logstash/microdep/01-microdep-inputs.conf
+../../microdep-dev/etc/logstash/microdep/02-microdep-filter.conf etc/logstash/microdep/02-microdep-filter.conf
+../../microdep-dev/etc/logstash/microdep/03-microdep-outputs.conf etc/logstash/microdep/03-microdep-outputs.conf
 
-#dev/etc/opensearch/opensearch-security-admin.service scripts/opensearch-security-admin.service
+#../../microdep-dev/etc/opensearch/opensearch-security-admin.service scripts/opensearch-security-admin.service
 # New to-be-made psconfig-file monitoring (https://superuser.com/questions/1171751/restart-systemd-service-automatically-whenever-a-directory-changes-any-file-ins)
-#dev/etc/microdep/perfsonar-microdep-psconfig-check.service scripts/perfsonar-microdep-psconfig-check.service
+#../../microdep-dev/etc/microdep/perfsonar-microdep-psconfig-check.service scripts/perfsonar-microdep-psconfig-check.service
 # - needs to rerun microdep-psconfig-load.pl on psconfig-files
-#dev/etc/microdep/perfsonar-microdep-psconfig-check.path scripts/perfsonar-microdep-psconfig-check.path
+#../../microdep-dev/etc/microdep/perfsonar-microdep-psconfig-check.path scripts/perfsonar-microdep-psconfig-check.path
 # - monitors /etc/perfsonar/psconfig/pscheduler.d folder

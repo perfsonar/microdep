@@ -25,7 +25,7 @@ default:
         }'  DEV-PROD.map
 
 resync:
-# Sync files in /dev with root environment
+# Sync files in (legacy) dev folder with root environment
 	@awk -v f=$(FORCE) '\
 	BEGIN{ R=0 } \
 	{ \

@@ -1,0 +1,4 @@
+%packager Otto J Wittner <otto.wittner@sikt.no>
+%vendor Sikt
+%_topdir ./
+%__perl_requires %{nil}

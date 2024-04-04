@@ -5,8 +5,8 @@
 %define perfsonar_auto_relnum alfa1
 
 Name:			chartjs
-Version:		%{perfsonar_auto_version}
-Release:		%{perfsonar_auto_relnum}%{?dist}
+Version:		4.4.2
+Release:		1%{?dist}
 Summary:		Simple Javascript charting library
 License:		MIT Licence
 Group:			Development/Libraries
@@ -19,6 +19,7 @@ Simple yet flexible JavaScript charting library for the modern web.
 
 %package adapter-moment
 Summary:		Chartjs adaptor for Momentsjs
+Release:		0.1.1%{?dist}
 License:                MIT Licence
 Group:			Development/Libraries
 Requires:               chartjs
@@ -28,6 +29,7 @@ This adapter allows the use of Moment.js with Chart.js
 
 %package plugin-zoom
 Summary:		Zoom and pan plugin for Chart.js
+Release:		1.1.2%{?dist}
 License:                MIT Licence
 Group:			Development/Libraries
 Requires:               chartjs
@@ -39,7 +41,7 @@ A zoom and pan plugin for Chart.js
 
 rm -rf %{buildroot}
 # Fetch chartjs 
-curl --create-dirs -o %{buildroot}/%{install_base}/chartjs/chart.js https://cdn.jsdelivr.net/npm/chart.js
+curl --create-dirs -o %{buildroot}/%{install_base}/chartjs/4.4.2/chart.js https://cdn.jsdelivr.net/npm/chart.js@4.4.2
 curl --create-dirs -o %{buildroot}/%{install_base}/chartjs/LICENSE.md https://raw.githubusercontent.com/chartjs/Chart.js/master/LICENSE.md
 # Fetch adaptor-moment 0.1.1
 curl --create-dirs -o %{buildroot}/%{install_base}/chartjs-adapter-moment/0.1.1/chartjs-adapter-moment.js https://cdn.jsdelivr.net/npm/chartjs-adapter-moment@0.1.1
@@ -54,9 +56,9 @@ rm -rf %{buildroot}
 %files 
 %defattr(0644,perfsonar,perfsonar,0755)
 %license %{install_base}/chartjs/LICENSE.md
-%attr(0644,perfsonar,perfsonar) %{install_base}/chartjs/chart.js
+%attr(0644,perfsonar,perfsonar) %{install_base}/chartjs/4.4.2/chart.js
 
-%files adaptor-moment 
+%files adapter-moment 
 %defattr(0644,perfsonar,perfsonar,0755)
 %license %{install_base}/chartjs-adapter-moment/0.1.1/LICENSE.md
 %attr(0644,perfsonar,perfsonar) %{install_base}/chartjs-adapter-moment/0.1.1/chartjs-adapter-moment.js

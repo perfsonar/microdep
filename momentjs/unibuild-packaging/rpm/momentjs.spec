@@ -5,8 +5,8 @@
 %define perfsonar_auto_relnum alfa1
 
 Name:			momentjs
-Version:		%{perfsonar_auto_version}
-Release:		%{perfsonar_auto_relnum}%{?dist}
+Version:		2.27.0
+Release:		1%{?dist}
 Summary:		Dates and times tools in JavaScript
 License:		MIT Licence
 Group:			Development/Libraries

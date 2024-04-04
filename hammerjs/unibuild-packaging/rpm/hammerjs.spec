@@ -5,8 +5,8 @@
 %define perfsonar_auto_relnum alfa1
 
 Name:			hammerjs
-Version:		%{perfsonar_auto_version}
-Release:		%{perfsonar_auto_relnum}%{?dist}
+Version:		2.0.8
+Release:		1%{?dist}
 Summary:		JS lib to recognize gestures.
 License:		MIT Licence
 Group:			Development/Libraries

@@ -5,8 +5,8 @@
 %define perfsonar_auto_relnum alfa1
 
 Name:			d3js
-Version:		%{perfsonar_auto_version}
-Release:		%{perfsonar_auto_relnum}%{?dist}
+Version:		4
+Release:		1%{?dist}
 Summary:		JS library for visualizing data.
 License:		ISC License
 Group:			Development/Libraries

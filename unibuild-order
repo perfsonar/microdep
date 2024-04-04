@@ -15,6 +15,19 @@ changecom()dnl
 # we force it to be built only for RPM-based systems.
 #ifelse(PACKAGING,rpm,hello-rpm)
 
+# Order-list
+perl_test_deep_type
+perl_string_rewriteprefix
+perl_moosex_storage
+perl_moosex_clone
+perl_anyevent_rabbitmq
+perl_anyevent_rabbitmq
+perl_check_isa
+perl_geometry_primitive
+perl_color_scheme
+perl_chart_clicker
+perl_net_amqp
+perl_anyevent_rabbitmq
 d3js
 hammerjs
 chartjs

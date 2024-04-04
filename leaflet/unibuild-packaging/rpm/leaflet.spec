@@ -5,8 +5,8 @@
 %define perfsonar_auto_relnum alfa1
 
 Name:			leafletjs
-Version:		%{perfsonar_auto_version}
-Release:		%{perfsonar_auto_relnum}%{?dist}
+Version:		1.0.3
+Release:		1%{?dist}
 Summary:		JS library for mobile-friendly interactive maps.
 License:		BSD 2
 Group:			Development/Libraries
@@ -19,6 +19,7 @@ An open-source JavaScript library for mobile-friendly interactive maps. Develope
 
 %package contextmenu
 Summary:		A context menu for Leaflet
+Release:                1.2.1%{?dist}
 License:                MIT Licence
 Group:			Development/Libraries
 Requires:               leafletjs
@@ -28,6 +29,7 @@ A context menu for Leaflet
 
 %package markercluster
 Summary:		Animated Marker Clustering
+Release:                1.0.3%{?dist}
 License:                MIT Licence
 Group:			Development/Libraries
 Requires:               leafletjs
@@ -45,7 +47,7 @@ curl --create-dirs -o %{buildroot}/%{install_base}/leafletjs/1.0.3/LICENSE https
 # Fetch leaflet context menu
 curl --create-dirs -o %{buildroot}/%{install_base}/leaflet-contextmenu/1.2.1/leaflet.contextmenu.min.js https://cdnjs.cloudflare.com/ajax/libs/leaflet-contextmenu/1.2.1/leaflet.contextmenu.min.js
 curl --create-dirs -o %{buildroot}/%{install_base}/leaflet-contextmenu/1.2.1/leaflet.contextmenu.min.css https://cdnjs.cloudflare.com/ajax/libs/leaflet-contextmenu/1.2.1/leaflet.contextmenu.min.css
-curl --create-dirs -o %{buildroot}/%{install_base}/leaflet-contextmenu/1.0.3/license.html https://opensource.org/license/mit
+curl --create-dirs -o %{buildroot}/%{install_base}/leaflet-contextmenu/1.2.1/license.html https://opensource.org/license/mit
 # Fetch leaflet markercluster
 curl --create-dirs -o %{buildroot}/%{install_base}/leaflet-markercluster/1.0.3/leaflet.markercluster-src.js https://unpkg.com/leaflet.markercluster@1.0.3/dist/leaflet.markercluster-src.js
 curl --create-dirs -o %{buildroot}/%{install_base}/leaflet-markercluster/1.0.3/MarkerCluster.css https://unpkg.com/leaflet.markercluster@1.0.3/dist/MarkerCluster.css
@@ -63,7 +65,7 @@ rm -rf %{buildroot}
 
 %files contextmenu 
 %defattr(0644,perfsonar,perfsonar,0755)
-%license %{install_base}/leaflet-contextmenu/1.0.3/license.html
+%license %{install_base}/leaflet-contextmenu/1.2.1/license.html
 %attr(0644,perfsonar,perfsonar) %{install_base}/leaflet-contextmenu/1.2.1/leaflet.contextmenu.min.js
 %attr(0644,perfsonar,perfsonar) %{install_base}/leaflet-contextmenu/1.2.1/leaflet.contextmenu.min.css
 
