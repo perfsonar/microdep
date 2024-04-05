@@ -58,9 +58,14 @@ shift $(($OPTIND - 1))  # (Shift away parsed arguments)
 if [ $# -lt 1 ]; then
     usage
 fi
+
+#Prepare environment
+cp .rpmmacros ~/
+dnf install -qy cpanspec
+
 for PERLLIB in $*
 do
-    echo "Perparing unibuild evironment for $PERLLIB ..."
+    msg "Perparing unibuild evironment for $PERLLIB ..."
     
     DIR=$(echo $PERLLIB | awk '{print tolower($0)}' | sed 's/::/_/g')
     DIR="perl_${DIR}"
@@ -68,23 +73,51 @@ do
     # Prepare unibuild folders
     mkdir -p $DIR/unibuild-packaging/${DISTROS[$DISTRO]}
     cd $DIR
-    # Fetch source and create spec
-    cpanspec -o -m -v $PERLLIB
-    # Fix source in spec
-    sed -i -E 's|^(Source0:.*)http.*/(.*)|\1\2 |g' *.spec
-    # Add perl module syntax to spec
-    sed -i -E "s|^(%description)|Provides:       perl($PERLLIB)\n\n\1|g" *.spec
+    # Fetch source and create spec (with perl module syntax spec as "Provides:")
+    TARFILE=$(ls *.tar.gz 2>/dev/null | head -n 1)
+    if [ "$TARFILE" ]; then
+	# Make spec of available tar
+	cpanspec -o -m -v $TARFILE
+    else
+	# Download tar from CPAN and make spec
+	cpanspec -o -m -v $PERLLIB
+    fi
+    if [ $? -eq 0 ]; then
+	# cpanspec succeeded.
+	# Fix source in spec
+	sed -i -E 's|^(Source0:.*)http.*/(.*)|\1\2 |g' *.spec
 
-    mv *.spec unibuild-packaging/${DISTROS[$DISTRO]}
-    cat <<EOF > Makefile
+	# Add modules provided by lib
+	#MODULES=$( tar -tvf *.tar.gz  | grep "/lib/.*\.pm" | sed -E 's|.*/lib/(.*)\.pm|\1|g' | sed 's|/|::|g')
+	MODULES=$( tar -tvf *.tar.gz  | awk '{print $6}' | grep "^[^/]*/lib/.*\.pm" |  sed -E 's|.*/lib/(.*)\.pm|\1|g' | sed 's|/|::|g')
+	for l in $MODULES; do
+	    # Add perl module syntax to spec for module
+	    sed -i -E "s|^(%description)|Provides:       perl($l)\n\1|g" *.spec
+	done
+	if [ "$MODULES" ]; then
+	    # Make it pretty. Add an extra line feed
+	    sed -i -E "s|^(%description)|\n\1|g" *.spec
+	else
+	    msg "Waring: No modules (*.pm) found in /lib in library."
+	    # Add perl module syntax to spec for core module
+	    sed -i -E "s|^(%description)|Provides:       perl($PERLLIB)\n\n\1|g" *.spec
+	fi
+	
+	mv *.spec unibuild-packaging/${DISTROS[$DISTRO]}
+	cat <<EOF > Makefile
 #
 # Makefile for Any Package
 #
 
 include unibuild/unibuild.make
 EOF
-    cd ..
-    sed  -i "s|# Order-list|# Order-list\n${DIR}|g" unibuild-order
-    echo "$1 added to unibuild-order"
-    echo
+	cd ..
+	grep -q "^${DIR}$" unibuild-order
+	if [ $? -gt 0 ]; then
+	    # Add new module to order list
+	    sed  -i "s|# Order-list|# Order-list\n${DIR}|g" unibuild-order
+	    echo "${DIR} added to unibuild-order"
+	fi
+    fi
+	echo
 done

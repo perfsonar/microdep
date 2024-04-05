@@ -16,23 +16,32 @@ changecom()dnl
 #ifelse(PACKAGING,rpm,hello-rpm)
 
 # Order-list
-perl_test_deep_type
-perl_string_rewriteprefix
-perl_moosex_storage
-perl_moosex_clone
-perl_anyevent_rabbitmq
-perl_anyevent_rabbitmq
-perl_check_isa
-perl_geometry_primitive
-perl_color_scheme
-perl_chart_clicker
-perl_net_amqp
-perl_anyevent_rabbitmq
 d3js
 hammerjs
 chartjs
 momentjs
 leaflet
 select2js
+perl_color_library
+perl_moosex_aliases
+perl_string_rewriteprefix
+perl_test_deep_type
+perl_moosex_storage
+perl_hash_util_fieldhash_compat
+perl_moosex_clone
+perl_graphics_color
+perl_forest
+perl_check_isa
+perl_geometry_primitive
+perl_graphics_primitive
+perl_text_flow
+perl_graphics_primitive_driver_cairo
+perl_layout_manager
+perl_color_scheme
+perl_chart_clicker
+perl_statistics_basic
+perl_statistics_linefit
+perl_net_amqp
+perl_anyevent_rabbitmq
 microdep
 
