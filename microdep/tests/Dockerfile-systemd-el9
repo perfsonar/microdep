@@ -1,0 +1,40 @@
+#
+#  Ref: https://markandruth.co.uk/2020/10/10/running-systemd-inside-a-centos-8-docker-container
+#
+FROM almalinux/9-init
+
+ENV \
+	LANG=C.UTF-8 \
+	container=docker \
+	init=/lib/systemd/systemd
+
+RUN \		
+# disable /tmp mount
+	rm -vf /usr/share/systemd/tmp.mount && \
+#RUN \
+# fix missing BPF firewall support warning
+	sed -ri '/^IPAddressDeny/d' /lib/systemd/system/systemd-journald.service && \
+#RUN \
+# just for cosmetics, fix "not-found" entries while using "systemctl --all"
+	for MATCH in \
+		plymouth-start.service \
+		plymouth-quit-wait.service \
+		syslog.socket \
+		syslog.service \
+		display-manager.service \
+		systemd-sysusers.service \
+		tmp.mount \
+		systemd-udevd.service \
+		; do \
+			grep -rn --binary-files=without-match  ${MATCH} /lib/systemd/ | cut -d: -f1 | xargs sed -ri 's/(.*=.*)'${MATCH}'(.*)/\1\2/'; \
+	done && \
+#RUN \
+	systemctl set-default multi-user.target
+
+VOLUME ["/run", "/run/lock"]
+
+STOPSIGNAL SIGRTMIN+3
+
+# Might want to make the image just "died" since it is ment to be a "parent" for other containers
+ENTRYPOINT ["/lib/systemd/systemd"]
+

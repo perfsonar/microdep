@@ -9,5 +9,6 @@ default:
 
 system-test:
 	@echo "Prepareing system test of PS Microdep..."
-	@sleep 3 # Simulate test
+	docker compose -f microdep/tests/system-test.yml --project-directory . build 
+	docker compose -f microdep/tests/system-test.yml --project-directory . up 
 	@echo "System test completed."

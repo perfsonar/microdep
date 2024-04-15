@@ -1,0 +1,155 @@
+#
+# Docker compose config building perfsonar test environment
+# with minimum one toolkit-server and one testpoint.
+#
+#   - No of probe nodes my be scaled up via 'docker-compose up --scale testpoint=<num>' with <num> = [1-10]
+#     * When no of testpoint is >1 a star-topology is implemented ala
+#
+#      toolkit --- toolkit-net--- netem --- testpoint-net ---- testpoint_1
+#                      |                          |    | `---- testpoint_2
+#                      `------- docker host ------'    |           : 
+#                                   |                  `------ testpoint_<num>
+#                                Internet  
+#
+#     * netem adds routes in toolkit and testpoints containers to enable traffic to flow between toolkit and testpoints via netem
+#     * netem also adds traffic impairments (i.e. loss and delay) on the path between testpoints and toolkit
+#                                      
+#   - OS distribution may be changed (from default el9) by setting DISTRO=my-distro running e.g. 'DISTRO=ubuntu docker-compose build'
+#     
+# Author: Otto J Wittner <otto.wittner@sikt.no>
+# Date: 2022-09-02
+
+#version: "3.7"
+#version: "3"
+version: "2.2"
+
+services:
+  ps-toolkit:
+    container_name: ps-toolkit
+    hostname: ${TOOLKIT_HOSTNAME:-toolkit}
+    image: ps-microdep-toolkit-${DISTRO:-el9}
+    depends_on:
+      - systemd-image
+    build:
+      context: .
+      dockerfile: microdep/tests/Dockerfile-${DISTRO:-el9}
+      args:
+        TYPE: toolkit
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+      # Make misc data persist over "reboots"
+      - opensearch:/var/lib/opensearch
+      - grafana:/var/lib/grafana
+      - microdep-map-db:/usr/lib/perfsonar/microdep-map/mp-dragonlab/etc/
+      # Make opensearch data persist over "reboots"
+      # Add current dir as volum
+      - .:/root/ps-dev
+    tmpfs: 
+      - /run
+      - /tmp
+    tty: true
+    ports:
+#      - 80:80    # http-access
+#      - 8085:80    # http-access
+      - 8086:80    # http-access
+#      - 443:443   # https-access
+#      - 4435:443   # https-access
+      - 4436:443   # https-access
+#      - 5601:5601  # Opensearch Dashboard (Kibana)
+      - 5611:5601  # Opensearch Dashboard (Kibana)
+#      - 3000:3000  # Grafana
+      - 3030:3000  # Grafana
+#      - 861:861    # owamp control
+#      - 8760-8800:8760-8800 # owamp tests
+#      - 862:862    # twamp control
+#      - 18760-18800 # twamp tests
+#      - 5000:5000  # nuttcp
+#      - 5101:5101  # nuttcp
+#      - 5201:5201  # iperf3
+#      - 5001:5001  # iperf2
+#      - 5011:5001  # iperf2 alternative ports
+#      - 1123:123   # ntp
+    networks:
+      toolkit-net:
+        ipv4_address: 172.150.1.2
+        ipv6_address: fd00::150:1:2
+
+  ps-testpoint:
+#    entrypoint: ["echo", "Service testpoint disabled. See docker-compose.yml."]
+    container_name: ps-testpoint
+    hostname: ${TESTPOINT_HOSTNAME:-testpoint}
+    image: ps-microdep-testpoint-${DISTRO:-el9}
+    depends_on:
+      - systemd-image
+      - ps-toolkit
+    build:
+      context: .
+      dockerfile: microdep/tests/Dockerfile-${DISTRO:-el9}
+      args:
+        TYPE: testpoint 
+    volumes:
+       - /sys/fs/cgroup:/sys/fs/cgroup:ro
+    networks:
+      - testpoint-net
+
+  systemd-image:
+    container_name: ps-systemd
+    build:
+      context: .
+      dockerfile: microdep/tests/Dockerfile-systemd-${DISTRO:-el9}
+    image: systemd-image-${DISTRO:-el9}
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+    # Just make image "die" as it is only a parent image  
+    entrypoint: ["echo", "Service systemd-image only provides base image. See docker-compose.yml."]
+
+  net-emulator:
+#    entrypoint: ["echo", "Service net-emulator disabled. See docker-compose.yml."]
+    container_name: ps-netemulator
+    hostname: netemulator
+    depends_on:
+      - ps-testpoint
+      - ps-toolkit
+    build:
+      context: .
+      dockerfile: netem/Dockerfile
+    image: ottojwittner/netem-image
+    privileged: true     # Required (unfortunately) to enable network "hacking"
+    volumes:
+      - /proc:/proc
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      testpoint-net:
+        ipv4_address: 172.150.2.200
+        ipv6_address: fd00::150:2:200
+      toolkit-net:
+        ipv4_address: 172.150.1.200
+        ipv6_address: fd00::150:1:200
+        
+networks:
+  testpoint-net:
+    name: testpoint-net
+    enable_ipv6: true
+    ipam:
+      driver: default
+      config:
+        # To match ips given in psconfig files
+        - subnet: 172.150.2.0/24
+        - subnet: fd00::150:2:0/112
+          
+  toolkit-net:
+    name: toolkit-net
+    enable_ipv6: true
+    ipam:
+      driver: default
+      config:
+        # To match ips given in psconfig files
+        - subnet: 172.150.1.0/24
+        - subnet: fd00::150:1:0/112
+volumes:
+  opensearch:
+    name: opensearch-${DISTRO:-el9}
+  grafana:
+    name: grafana-${DISTRO:-el9}
+  microdep-map-db:
+    name: microdep-map-db-${DISTRO:-el9}
