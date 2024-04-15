@@ -26,6 +26,13 @@ Requires:               perfsonar-microdep-ana
 %description
 Meta-package pulling in packaged required for Microdep Analytics in perfSONAR
 
+%package geolite2
+Summary:		MaxMind's Geolite2 geoip databases
+Group:			Applications/Communications
+
+%description geolite2
+Geopositioning information from Maxmind to enrich datasets with AS numbers, city and country.
+
 %package map
 Summary:		Microdep map web GUI presenting analytic results
 Group:			Applications/Communications
@@ -45,13 +52,14 @@ Requires:		perl(URI)
 Requires:		perl(warnings)
 Requires:		perl(YAML)
 Requires:               js-jquery
-#Requires:               perfsonar-tracetree
+Requires:               js-jquery-ui
 Requires:               chartjs = 4.4.2
 Requires:               d3js = 4
 Requires:               hammerjs = 2.0.8
 Requires:               leafletjs = 1.0.3
 Requires:               momentjs = 2.27.0
 Requires:               select2js = 4.0.0
+#Requires:               perfsonar-tracetree
 %{?systemd_requires: %systemd_requires}
 #BuildRequires:          systemd
 
@@ -61,10 +69,11 @@ Web GUI presenting Microdep analytic results in a map view
 %package ana
 Summary:		Microdep analytic toolset to analize perfSONAR datasets
 Group:			Applications/Communications
-# Rabbit message queue
-#Requires:               perfsonar-toolkit >= 5.0.7
+
+# Rabbit message queue ... but since 'dnf update' is required between installing these two dependencies, things fail... hm
 BuildRequires:          centos-release-rabbitmq-38
 Requires:               rabbitmq-server
+
 Requires:		perl >= 5.32
 # qstream_gap_ana
 Requires:               perl(Socket)
@@ -91,6 +100,7 @@ Requires:               python3-psycopg2
 Requires:               python3-pytz
 #Requires:               py3-tzlocal
 Requires:               python3-tzlocal
+Requires:               perfsonar-microdep-geolite2
 
 # Potenial dependencies...
 #Requires:               python3-psycopg2
@@ -144,6 +154,8 @@ rm -rf %{buildroot}
 %post map
 # Make js libs available
 ln -s /usr/share/javascript/jquery/latest/jquery.min.js %{microdep_web_dir}/js/jquery.min.js
+ln -s /usr/share/javascript/jquery-ui/jquery-ui.min.js %{microdep_web_dir}/js/jquery-ui.min.js
+ln -s /usr/share/javascript/jquery-ui/jquery-ui.min.css %{microdep_web_dir}/css/jquery-ui.min.js
 ln -s /usr/share/javascript/d3js/d3.v4.js %{microdep_web_dir}/js/
 ln -s /usr/share/javascript/hammerjs/2.0.8/hammer.js %{microdep_web_dir}/js/
 ln -s /usr/share/javascript/leafletjs/1.0.3/leaflet.css %{microdep_web_dir}/css/
@@ -158,6 +170,9 @@ ln -s /usr/share/javascript/select2/4.0.0/css/select2.min.css %{microdep_web_dir
 ln -s /usr/share/javascript/select2/4.0.0/js/select2.min.js %{microdep_web_dir}/js/
 ln -s /usr/share/javascript/select2/4.0.0/css/select2.min.css %{microdep_web_dir}/css/
 ln -s /usr/share/javascript/select2/4.0.0/js/select2.min.js %{microdep_web_dir}/js/
+ln -s /usr/share/javascript/chartjs/4.4.2/chart.js %{microdep_web_dir}/js/
+ln -s /usr/share/javascript/chartjs-adapter-moment/0.1.1/chartjs-adapter-moment.js %{microdep_web_dir}/js/
+ln -s /usr/share/javascript/chartjs-plugin-zoom/1.2.1/chartjs-plugin-zoom.min.js %{microdep_web_dir}/js/
 
 # Adjust config path
 /usr/bin/sed -i 's|/var/lib/mircodep|%{configbase}|'  %{microdep_config_base}/microdep-config.yml
@@ -176,6 +191,8 @@ sed -i "s|curl -X POST|curl -X POST --insecure|g" %{command_base}/elastic-get-da
 %post ana
 # Create db
 %{command_base}/create_new_db.sh -t postgres -d routingmonitor
+# Install rabbitmq-server 
+#dnf -y install centos-release-rabbitmq-38 && dnf -y update && dnf -y install rabbitmq-server
 
 # Enable Microdep pipeline for logstash
 echo -e "- path.config: /usr/lib/perfsonar/logstash/pipeline/microdep/*.conf\n  pipeline.id: microdep" >> /etc/logstash/pipelines.yml
@@ -198,12 +215,19 @@ systemctl enable perfsonar-microdep-restart.timer
 %defattr(0644,perfsonar,perfsonar,0755)
 %license %{install_base}/LICENSE
 
+%files geolite2
+%defattr(0644,perfsonar,perfsonar,0755)
+%license %{microdep_config_base}/GeoLite2/LICENSE.txt
+%{microdep_config_base}/GeoLite2/COPYRIGHT.txt
+%{microdep_config_base}/GeoLite2/*.mmdb
+
 %files map
 %defattr(0644,perfsonar,perfsonar,0755)
 %license %{install_base}/LICENSE
 %attr(0644,perfsonar,perfsonar) %{microdep_web_dir}/*.html
 %attr(0644,perfsonar,perfsonar) %{microdep_web_dir}/*.gif
 %attr(0644,perfsonar,perfsonar) %{microdep_web_dir}/js/*
+%attr(0644,perfsonar,perfsonar) %{microdep_web_dir}/css/*
 %attr(0755,perfsonar,perfsonar) %{command_base}/elastic-get-date-type.pl
 %attr(0755,perfsonar,perfsonar) %{command_base}/microdep-config.cgi
 %attr(0755,perfsonar,perfsonar) %{command_base}/yaml-to-json.cgi

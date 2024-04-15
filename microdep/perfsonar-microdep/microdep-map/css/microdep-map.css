@@ -1,0 +1,37 @@
+    #mapid { height: 900px; z-index: 1;}
+    #midding {width:600px}
+    #busyx {  margin: auto;
+	      width: 5%; 
+	      /* border: 3px solid #2222aa; */
+	      padding: 10px;
+	   }
+    
+    /* css to customize Leaflet default styles  */
+    .popupCustom .leaflet-popup-tip,
+    .popupCustom .leaflet-popup-content-wrapper {
+	font-size:large;
+	background: #e0e0e0;
+	color: #234c5e;
+    }
+    .leaflet-popup, .leaflet-pane {
+	font-size:large;	
+    }
+    .knapp, select, td, th { font-size:x-large;   }
+    table td { padding:5px; }
+    .knapp { line-height: 1.3em; }
+    th {
+	cursor: pointer;
+    }
+    caption { font-size: x-large;  font-weight: bold; }
+    
+    table.sortable thead {
+	background-color:#eee;
+	color:#666666;
+	font-weight: bold;
+	cursor: default;
+    }
+    
+    
+    table.sortable th:not(.sorttable_sorted):not(.sorttable_sorted_reverse):not(.sorttable_nosort):after { 
+	content: " \25B4\25BE" 
+    } 

@@ -1,21 +1,26 @@
 # Mapping which specifis files to be synced from legacy Microdep development to current
+# NOTE: Single file implies that only "new" file is considered (i.e. no sync with legacy file location)
 # NOTE: Destination path need to include filename
 # ---- Last line of header - Do not remove or edit ----
 ../../microdep-dev/LICENSE LICENSE
 # Map frontend
-../../microdep-dev/microdep/server/script/microdep-map.html microdep-map/index.html
+#../../microdep-dev/microdep/server/script/microdep-map.html microdep-map/index.html
+microdep-map/index.html
 ../../microdep-dev/microdep/server/script/ajax-loader.gif microdep-map/ajax-loader.gif
 ../../microdep-dev/microdep/server/script/microdep-map.js microdep-map/js/microdep-map.js
 ../../microdep-dev/microdep/server/script/stats.js microdep-map/js/stats.js
 ../../microdep-dev/microdep/server/script/map-lib.js microdep-map/js/map-lib.js
 ../../microdep-dev/microdep/server/script/graph.js microdep-map/js/graph.js
-../../microdep-dev/microdep/server/script/curve-chart.html microdep-map/curve-chart.html
+#../../microdep-dev/microdep/server/script/curve-chart.html microdep-map/curve-chart.html
+microdep-map/curve-chart.html
 ../../microdep-dev/microdep/server/script/curve-chart.js microdep-map/js/curve-chart.js
 ../../microdep-dev/microdep/server/script/elastic-get-date-type.pl bin/microdep_commands/elastic-get-date-type.pl
 ../../microdep-dev/microdep/server/script/yaml-to-json.cgi bin/microdep_commands/yaml-to-json.cgi
 ../../microdep-dev/microdep/server/script/microdep-config.cgi bin/microdep_commands/microdep-config.cgi
 ../../microdep-dev/microdep/server/script/mapconfig.yml etc/mapconfig.yml
 ../../microdep-dev/microdep/server/script/microdep-config.yml etc/microdep-config.yml
+microdep-map/css/microdep-map.css
+microdep-map/css/curve-chart.css
 # ... in addition there are a list of external libs to be fetched ...
 # Map config
 ../../microdep-dev/microdep/server/script/microdep-psconfig-load.pl bin/microdep_commands/microdep-psconfig-load.pl
@@ -35,6 +40,11 @@
 ../../microdep-dev/etc/logstash/microdep/01-microdep-inputs.conf etc/logstash/microdep/01-microdep-inputs.conf
 ../../microdep-dev/etc/logstash/microdep/02-microdep-filter.conf etc/logstash/microdep/02-microdep-filter.conf
 ../../microdep-dev/etc/logstash/microdep/03-microdep-outputs.conf etc/logstash/microdep/03-microdep-outputs.conf
+etc/GeoLite2/GeoLite2-City.mmdb
+etc/GeoLite2/COPYRIGHT.txt
+etc/GeoLite2/GeoLite2-ASN.mmdb
+etc/GeoLite2/GeoLite2-Country.mmdb
+etc/GeoLite2/LICENSE.txt
 
 #../../microdep-dev/etc/opensearch/opensearch-security-admin.service scripts/opensearch-security-admin.service
 # New to-be-made psconfig-file monitoring (https://superuser.com/questions/1171751/restart-systemd-service-automatically-whenever-a-directory-changes-any-file-ins)

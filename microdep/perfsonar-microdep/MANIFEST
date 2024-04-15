@@ -25,4 +25,9 @@ scripts/perfsonar-microdep-restart.service
 etc/logstash/microdep/01-microdep-inputs.conf
 etc/logstash/microdep/02-microdep-filter.conf
 etc/logstash/microdep/03-microdep-outputs.conf
+etc/GeoLite2/GeoLite2-City.mmdb
+etc/GeoLite2/COPYRIGHT.txt
+etc/GeoLite2/GeoLite2-ASN.mmdb
+etc/GeoLite2/GeoLite2-Country.mmdb
+etc/GeoLite2/LICENSE.txt
 

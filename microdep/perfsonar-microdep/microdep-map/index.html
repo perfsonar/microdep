@@ -2,105 +2,48 @@
 <html lang="en">
 <head>
 
-  <!-- Latest compiled and minified CSS -->
-  <link rel="stylesheet" href="/uninett-bootstrap-theme/css/bootstrap.min.css">
-  <!-- Custom styles for this template -->
-  <link rel="stylesheet" href="/uninett-theme/css/uninett.css"> 
-  <link rel="shortcut icon" href="favicon.ico" type="image/x-icon" />
-  <!-- Bootstrap core JavaScript --> 
-  <!-- Placed at the end of the document so the pages load faster --> 
-
-  <script type="text/javascript" src="https://code.jquery.com/jquery-3.4.1.min.js"></script> 
+  <script type="text/javascript" src="js/jquery.min.js"></script> 
   <link rel="stylesheet" type="text/css" href="js/datatables.min.css"/>
   <script type="text/javascript" language="javascript" src="js/datatables.min.js"></script>
  
-  <script src="https://d3js.org/d3.v4.js"></script>
+  <script src="js/d3.v4.js"></script>
     
 <!-- empty meta method in autohandler -->
+  
+  <title>Micro dependability measurement node map</title>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
 
-<title>Micro dependability measurement node map</title>
-<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-<style type="text/css">
-; @import url("/styles.css"); 
-</style>
+  <link rel="author" href="mailto:microdep@sikt.no">
 
-<link rel="author" href="mailto:drift@uninett.no">
-
-<link rel="stylesheet" href="//code.jquery.com/ui/1.12.1/themes/smoothness/jquery-ui.css">
-<script src="//code.jquery.com/ui/1.12.1/jquery-ui.js"></script>
+  <link rel="stylesheet" href="css/jquery-ui.css">
+  <script src="js/jquery-ui.js"></script>
 
   <!--
-    <link href="//cdnjs.cloudflare.com/ajax/libs/select2/4.0.0/css/select2.min.css" rel="stylesheet" />
-    <script src="//cdnjs.cloudflare.com/ajax/libs/select2/4.0.0/js/select2.min.js"></script>
+  <link href="css/select2.min.css" rel="stylesheet" />
+  <script src="js/select2.min.js"></script>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/vis/4.21.0/vis.js" type="text/javascript"></script>
-    <script href="https://cdnjs.cloudflare.com/ajax/libs/vis/4.21.0/vis.css" rel="stylesheet" type="text/css"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/vis/4.21.0/vis-timeline-graph2d.min.css" rel="stylesheet" type="text/css" />
+  <script src="js/vis.js" type="text/javascript"></script>
+  <script href="css/vis.css" rel="stylesheet" type="text/css"></script>
+  <link href="css/vis-timeline-graph2d.min.css" rel="stylesheet" type="text/css" />
   -->
 
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.0.3/dist/leaflet.css" />
-<script src="https://unpkg.com/leaflet@1.0.3/dist/leaflet.js"></script>
-<script src="https://unpkg.com/leaflet.markercluster@1.0.3/dist/leaflet.markercluster-src.js"></script>
-<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.0.3/dist/MarkerCluster.css">
-<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.0.3/dist/MarkerCluster.Default.css">
-<!--
-<script src="js/leaflet/leaflet.js"></script>
-<link rel="stylesheet" href=js/leaflet/leaflet.css" />
-<script src="js/leaflet.markercluster/leaflet.markercluster-src.js"></script>
-<link rel="stylesheet"js/leaflet.markercluster/MarkerCluster.css">
-<link rel="stylesheet" href="js/leaflet.markercluster/MarkerCluster.Default.css">
--->
+  <link rel="stylesheet" href="css/leaflet.css" />
+  <script src="js/leaflet.js"></script>
+  <script src="js/leaflet.markercluster-src.js"></script>
+  <link rel="stylesheet" href="css/MarkerCluster.css">
+  <link rel="stylesheet" href="css/MarkerCluster.Default.css">
 
+  <link rel="stylesheet" href="css/leaflet.contextmenu.min.css">
+  <script src="js/leaflet.contextmenu.min.js"></script>
+  <script src="./js/leaflet.curve.js"></script>
+  <script src="./js/L.LatLng.UTM.js"></script>
+  <!-- <script src="./js/latlon-spherical.js"></script> -->
+  <script src="./js/stats.js"></script>
+  <script src="js/sorttable.js"></script>
+  <!-- <script src="js/map-lib-2.js"></script>  -->
+  <!-- script src="js/graph-2.js"></script-->
 
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet-contextmenu/1.2.1/leaflet.contextmenu.min.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-contextmenu/1.2.1/leaflet.contextmenu.min.js"></script>
-<script src="./js/leaflet.curve.js"></script>
-<script src="./js/L.LatLng.UTM.js"></script>
-<!-- <script src="./js/latlon-spherical.js"></script> -->
-<script src="./js/stats.js"></script>
-<script src="js/sorttable.js"></script>
-<!-- <script src="map-lib-2.js"></script>  -->
-<!-- script src="graph-2.js"></script-->
-
-<style type="text/css">
-#mapid { height: 900px; z-index: 1;}
-#midding {width:600px}
-#busyx {  margin: auto;
-	  width: 5%; 
-	  /* border: 3px solid #2222aa; */
-	  padding: 10px;
-       }
-
-/* css to customize Leaflet default styles  */
-    .popupCustom .leaflet-popup-tip,
-    .popupCustom .leaflet-popup-content-wrapper {
-	font-size:large;
-	background: #e0e0e0;
-	color: #234c5e;
-    }
-    .leaflet-popup, .leaflet-pane {
-	font-size:large;	
-    }
-    .knapp, select, td, th { font-size:x-large;   }
-    table td { padding:5px; }
-    .knapp { line-height: 1.3em; }
-    th {
-	cursor: pointer;
-    }
-    caption { font-size: x-large;  font-weight: bold; }
-
-    table.sortable thead {
-	background-color:#eee;
-	color:#666666;
-	font-weight: bold;
-	cursor: default;
-    }
-
-
-    table.sortable th:not(.sorttable_sorted):not(.sorttable_sorted_reverse):not(.sorttable_nosort):after { 
-	content: " \25B4\25BE" 
-    } 
-</style>
+  <link rel="stylesheet" href="css/microdep-map.css" />
 
 </head>
 
@@ -181,7 +124,7 @@
         *) The positons of sites are a guess and not official.
 <!-- <div id=dialog>testing dialog popup</div> -->
 
-<script src="microdep-map.js" type="module"></script>
+<script src="js/microdep-map.js" type="module"></script>
 
 </body>
 </html>

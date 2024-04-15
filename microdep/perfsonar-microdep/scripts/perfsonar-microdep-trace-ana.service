@@ -5,7 +5,7 @@ Requires=rabbitmq-server.service postgresql.service
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/trace_event_reader.py -O /var/lib/logstash/microdep/trace-ana.json --pssrc amqp://localhost/?queue=traceroute --dbtype postgresql --namemap /etc/perfsonar/psconfig/pscheduler.d/microdep-tests.json
+ExecStart=/usr/local/bin/trace_event_reader.py -O /var/lib/logstash/microdep/trace-ana.json --pssrc amqp://localhost/?queue=traceroute --dbtype postgresql --geodb /etc/perfsonar/microdep/GeoLite2/GeoLite2-ASN.mmdb --namemap /etc/perfsonar/psconfig/pscheduler.d/microdep-tests.json
 
 [Install]
 WantedBy=multi-user.target

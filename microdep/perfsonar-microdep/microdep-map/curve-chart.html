@@ -2,63 +2,27 @@
 <html lang="en">
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <link rel="author" href="mailto:microdep@sikt.no">
+
     <title>Micro dependability curves</title>
 
-    <script type="text/javascript" src="https://code.jquery.com/jquery-3.4.1.min.js"></script> 
-    <link rel="stylesheet" href="//code.jquery.com/ui/1.12.1/themes/smoothness/jquery-ui.css">
-    <script src="//code.jquery.com/ui/1.12.1/jquery-ui.js"></script>
-    <link rel="stylesheet" type="text/css" href="js/datatables.min.css"/>
+    <script type="text/javascript" src="js/jquery.min.js"></script> 
+    <link rel="stylesheet" href="css/jquery-ui.css">
+    <script src="js/jquery-ui.js"></script>
+    <link rel="stylesheet" type="text/css" href="css/datatables.min.css"/>
     <script type="text/javascript" language="javascript" src="js/datatables.min.js"></script>
     
-    <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>	
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@1.2.1/dist/chartjs-plugin-zoom.min.js"></script>
+    <script src="js/hammer.min.js"></script>	
+    <script src="js/chart.js"></script>
+    <script src="js/chartjs-plugin-zoom.min.js"></script>
 
-    <script src="https://cdn.jsdelivr.net/npm/moment@2.27.0"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-moment@0.1.1"></script>
-
-    <!-- empty meta method in autohandler -->
-
-    <style type="text/css">
-      ; @import url("/styles.css"); 
-    </style>
-
-    <link rel="author" href="mailto:nav-drift@uninett.no">
+    <script src="js/moment.js"></script>
+    <script src="js/chartjs-adapter-moment.js"></script>
 
     <script src="./js/stats.js"></script>
     <script src="js/sorttable.js"></script>
-<!--    <script src="map-lib-2.js"></script> -->
-    <!-- script src="graph-2.js"></script-->
 
-    <style type="text/css">
-      /* #tabs {width:90%;} */
-      #mapid { height: 900px; z-index: 1;}
-      #midding {width:600px}
-      #busyx {  margin: auto;
-		width: 5%; 
-		/* border: 3px solid #2222aa; */
-		padding: 10px;
-	     }
-      .graph {height:70%;width:90% }
-
-      /* css to customize Leaflet default styles  */
-      .popupCustom .leaflet-popup-tip,
-      .popupCustom .leaflet-popup-content-wrapper {
-	  font-size:large;
-	  background: #e0e0e0;
-	  color: #234c5e;
-      }
-      .leaflet-popup, .leaflet-pane {
-	  font-size:large;	
-      }
-      .knapp, select, td, th { font-size:x-large;   }
-      table td { padding:5px; }
-      .knapp { line-height: 1.3em; }
-      th {
-	  cursor: pointer;
-      }
-      caption { font-size: x-large;  font-weight: bold; }
-    </style>
+    <link rel="stylesheet" href="css/curve-chart.css">
 
   </head>
 
@@ -94,7 +58,7 @@
     <div id=missing></div>
 
 
-    <script type=module src=curve-chart.js> </script>
+    <script type=module src="js/curve-chart.js"> </script>
 
 
   </body>
