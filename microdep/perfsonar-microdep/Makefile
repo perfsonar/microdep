@@ -14,11 +14,15 @@ default:
 	BEGIN{ R=0 } \
 	{ \
 		if ( substr($$1,1,1) != "#" && NF == 2 ) { \
-			R=R + system("diff -q "$$1" "$$2); \
+			D= system("diff -q "$$1" "$$2); \
+			R=R + D; \
+			if ( D > 0 && system("test "$$1" -ot "$$2) == 0 ) {\
+				print("File  "$$1" is older than "$$2"\n") \
+			}\
 		} \
 	} \
 	END{ if ( R > 0) { \
-                print "Files in root environment are out-of-sync with /dev. run \"make resync\"" ;\
+                print "Files in root environment are out-of-sync with /dev. run \"make resync\". (Add \"-e FORCE=yes\" to sync older files too.)" ;\
              } else { \
                 print "No need to build the package. Just run \"make install\"."; \
 	     } \
@@ -31,8 +35,12 @@ resync:
 	{ \
 		if ( substr($$1,1,1) != "#" && NF == 2 ) { \
 			if ( system("diff -q "$$1" "$$2) > 0 || f == "yes" ) {\
-			   R=R + system("install -v -m 644 -TD "$$1" "$$2); \
-                        }\
+				if ( system("test "$$1" -nt "$$2) == 0 || f == "yes" ) {\
+					R=R + system("install -v -m 644 -TD "$$1" "$$2); \
+				} else {\
+					print("File  "$$1" is older than "$$2". Skipping update.\n") \
+				}\
+			}\
 		} \
 	} \
 	END{ if ( R > 0) { \
