@@ -15,7 +15,7 @@ changecom()dnl
 # we force it to be built only for RPM-based systems.
 #ifelse(PACKAGING,rpm,hello-rpm)
 
->>># Order-list
+# Order-list
 d3js
 hammerjs
 chartjs
@@ -26,6 +26,8 @@ perl_color_library
 perl_moosex_aliases
 perl_string_rewriteprefix
 perl_test_deep_type
+perl_exporter_lite
+perl_test_deep_json
 perl_moosex_storage
 perl_hash_util_fieldhash_compat
 perl_moosex_clone
