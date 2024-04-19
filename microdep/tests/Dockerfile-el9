@@ -69,18 +69,19 @@ RUN dnf clean all && rm -rf /var/cache/dnf/* && dnf -y update
 RUN if [ "$TYPE" = "toolkit" ]; then \
        dnf -y install opensearch-dashboards && systemctl enable opensearch-dashboards.service ; \
     fi
+
 # Add Grafana visualisation server    
-COPY microdep/tests/etc/grafana.repo /etc/yum.repos.d/grafana.repo
-RUN dnf -y install wget && wget -q -O gpg.key https://rpm.grafana.com/gpg.key && sudo rpm --import gpg.key
-RUN if [ "$TYPE" = "toolkit" ]; then \
-           dnf -y update && dnf -y install grafana; \
-           systemctl enable grafana-server.service; \
-    fi
+#COPY microdep/tests/etc/grafana.repo /etc/yum.repos.d/grafana.repo
+#RUN dnf -y install wget && wget -q -O gpg.key https://rpm.grafana.com/gpg.key && sudo rpm --import gpg.key
+#RUN if [ "$TYPE" = "toolkit" ]; then \
+#           dnf -y update && dnf -y install grafana; \
+#           systemctl enable grafana-server.service; \
+#    fi
 
 # Add Microdep packages (need postgres running)
-RUN dnf -y install centos-release-rabbitmq-38 && dnf -y update
 COPY unibuild-repo/RPMS/ /root/RPMS/
 RUN if [ "$TYPE" = "toolkit" ]; then \
+    dnf -y install centos-release-rabbitmq-38 && dnf -y update; \
     mkdir -p /var/run/postgresql && chown postgres.postgres /var/run/postgresql \
     && su - postgres -c "/usr/bin/pg_ctl -D /var/lib/pgsql/data start -w -t 120" \
     && dnf -y install /root/RPMS/*; \
