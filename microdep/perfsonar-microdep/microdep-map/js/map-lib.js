@@ -446,10 +446,12 @@ export function get_config( conffilename, call_back){
     // OJW 2021-12-09 BEGIN CONFIG FILE LOAD
     // Fetch config info and initialize page
     // var conffilename = parms.conffile;
-    if (! conffilename) conffilename = 'mapconfig.yml'
-    $.getJSON( "yaml-to-json.cgi?inputfile=" + conffilename, function(read_conffile) {
+//    if (! conffilename) conffilename = 'mapconfig.yml'
+//    $.getJSON( "yaml-to-json.cgi?inputfile=" + conffilename, function(read_conffile) {
+    $.getJSON( "get-mapconfig.cgi", function(read_conffile) {
 	if (Object.keys(read_conffile).length > 0) {
-	    console.log("Config file " + conffilename + " non-empty: " + read_conffile.msg);
+//	    console.log("Config file " + conffilename + " non-empty: " + read_conffile.msg);
+	    console.log("mapconfig file non-empty: " + read_conffile.msg);
 	    conffile = read_conffile.config;
 	    // Fetch measurment network/variant details from config
 	    for (const n in conffile) {

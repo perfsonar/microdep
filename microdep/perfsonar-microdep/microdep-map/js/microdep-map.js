@@ -1,6 +1,6 @@
 // main js for microdep-map to be included at bottom of html
 
-import LatLon from "./js/latlon-spherical.js";
+import LatLon from "./latlon-spherical.js";
 import {parms, conffile, reversed, prop_sum, update_url, stats_on,
 	event_names, event_desc, event_long_desc, event_index, event_sum_type,
 	prop_names, prop_names_list, prop_desc, prop_long_desc, prop_aggr,
@@ -345,11 +345,10 @@ function update_legend(title, threshes){
     }
 
     // TODO: Dashboard should be specified in map-config.yaml and fetch from there (rather than hardcoded here)
-    var dashboard={"uninett":'https://iou2.uninett.no/kibana/app/dashboards#/view/loss-uninett?_g=(filters%3A!()%2CrefreshInterval%3A(pause%3A!t%2Cvalue%3A0)%2Ctime%3A(from%3Anow%2Fd-1d%2Cto%3Anow%2Fd-1d))', 
-        "dragonlab":'https://iou2.uninett.no/kibana/app/dashboards#/view/dragonlab-loss?_g=(filters%3A!()%2CrefreshInterval%3A(pause%3A!t%2Cvalue%3A0)%2Ctime%3A(from%3Anow%2Fd-1d%2Cto%3Anow%2Fd-1d))'};
-     var myboard = dashboard[ $("#network").val() ];
-     html += '<td><button class=knapp title="Kibana dashboard(limited access)" onclick=\'window.open("' + myboard + '", "_blank");\'>Dashboard</button>';
-//    html+='<td><button class=knapp onclick=\'window.open("https://iou2.uninett.no/kibana/goto/3e8ccd748e38c4814abbc531de059f13", "_blank");\'>Dashboard</button>';
+//    var dashboard={"uninett":'https://iou2.uninett.no/kibana/app/dashboards#/view/loss-uninett?_g=(filters%3A!()%2CrefreshInterval%3A(pause%3A!t%2Cvalue%3A0)%2Ctime%3A(from%3Anow%2Fd-1d%2Cto%3Anow%2Fd-1d))', 
+//        "dragonlab":'https://iou2.uninett.no/kibana/app/dashboards#/view/dragonlab-loss?_g=(filters%3A!()%2CrefreshInterval%3A(pause%3A!t%2Cvalue%3A0)%2Ctime%3A(from%3Anow%2Fd-1d%2Cto%3Anow%2Fd-1d))'};
+//     var myboard = dashboard[ $("#network").val() ];
+//     html += '<td><button class=knapp title="Kibana dashboard(limited access)" onclick=\'window.open("' + myboard + '", "_blank");\'>Dashboard</button>';
     html +=  "</tr></table>";
     $("#legend").html(html);
     

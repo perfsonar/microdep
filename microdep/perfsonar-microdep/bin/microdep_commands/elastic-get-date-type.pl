@@ -1,9 +1,23 @@
 #!/usr/bin/perl
+#
+# Query Elastic search db for microdep events 
+#
+# Changelog:
+# - Created by Olav Kvittem
+# - 2024-04-17 Otto J Wittner: Added credentials from config file
+
 use CGI;
 #use CGI qw/:standard -debug/;
 #use WWW::Curl::Easy
 #use JSON;
+use YAML;
 
+# Fetch config file
+$config = YAML::LoadFile("/etc/perfsonar/microdep/microdep-config.yml");
+
+my $esurl='http://admin:no+nz+br@localhost:9200';
+$esurl = $config->{opensearch_url} if $config->{opensearch_url};
+    
 my $q = CGI->new;
 my $yesterday= `date --date yesterday "+%Y-%m-%d"`;
 chomp($yesterday);
@@ -231,7 +245,8 @@ if ( $stats_type){
 
 print $search."\n" if $debug > 0;
 
-my $url='http://admin:no+nz+br@localhost:9200/' . $index . '/_search?';
+#my $url='http://admin:no+nz+br@localhost:9200/' . $index . '/_search?';
+my $url=$esurl . '/' . $index . '/_search?';
 
 # $curl->setopt(CURLOPT_URL, $url);
 # my $response_body;
@@ -248,7 +263,7 @@ my $url='http://admin:no+nz+br@localhost:9200/' . $index . '/_search?';
 #    print("An error happened: $retcode ".$curl->strerror($retcode)." ".$curl->errbuf."\n");
 #}
 
-my $cmd='curl -X POST -H "Content-Type: application/json" "' . $url . '"  -d \'' . $search . '\' 2>/dev/null';
+my $cmd='curl -X POST --insecure -H "Content-Type: application/json" "' . $url . '"  -d \'' . $search . '\' 2>/dev/null';
 print "<p>$cmd\n" if $debug > 0;
 print `$cmd`;
 

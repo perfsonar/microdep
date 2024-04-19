@@ -22,7 +22,7 @@ use Data::Dumper;
 use CGI;
 use URI;
 use JSON;
-use YAML::XS;
+use YAML;
 
 # Filter duplicate from arrays
 sub uniq {

@@ -30,7 +30,7 @@ my $basedir="/var/lib/microdep";
 my $conf;      # Settings from config file
 
 # Read config file (if exists)
-my $conffile="microdep-config.yml";
+my $conffile="/etc/perfsonar/microdep/microdep-config.yml";
 if (parm('conffile')) {
     $conffile=parm('conffile');
 }

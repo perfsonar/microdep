@@ -16,12 +16,15 @@ changecom()dnl
 #ifelse(PACKAGING,rpm,hello-rpm)
 
 # Order-list
-d3js
-hammerjs
 chartjs
+d3js
+datatablesjs
+hammerjs
+latlon-sphericaljs
+leafletjs
 momentjs
-leaflet
 select2js
+sorttablejs
 perl_color_library
 perl_moosex_aliases
 perl_string_rewriteprefix

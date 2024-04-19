@@ -22,7 +22,7 @@ default:
 		} \
 	} \
 	END{ if ( R > 0) { \
-                print "Files in root environment are out-of-sync with /dev. run \"make resync\". (Add \"-e FORCE=yes\" to sync older files too.)" ;\
+                print "Files in root environment are out-of-sync with /dev. run \"make resync\"." ;\
              } else { \
                 print "No need to build the package. Just run \"make install\"."; \
 	     } \
@@ -34,8 +34,9 @@ resync:
 	BEGIN{ R=0 } \
 	{ \
 		if ( substr($$1,1,1) != "#" && NF == 2 ) { \
-			if ( system("diff -q "$$1" "$$2) > 0 || f == "yes" ) {\
-				if ( system("test "$$1" -nt "$$2) == 0 || f == "yes" ) {\
+			D=system("diff -q "$$1" "$$2); \
+			if (  D > 0 || f == "yes" ) {\
+				if ( D == 2 || system("test "$$1" -nt "$$2) == 0 || f == "yes" ) {\
 					R=R + system("install -v -m 644 -TD "$$1" "$$2); \
 				} else {\
 					print("File  "$$1" is older than "$$2". Skipping update.\n") \
@@ -47,12 +48,15 @@ resync:
                 print "Error: Resync failed." ;\
 		exit 1;\
              } else { \
-                print "Ready for \"make install\" or \"make dist\"."; \
+                print "Ready for \"make install\" or \"make dist\" ( or rerun \"make -e FORCE=yes resync\" to sync older files too.)"; \
 	     } \
         }'  DEV-PROD.map
 # Update MANIFEST file
 	@awk '{ if ( substr($$1,1,1) != "#") { print $$NF; } }'  DEV-PROD.map > MANIFEST
 
+manifest:
+# Update MANIFEST file
+	awk '{ if ( substr($$1,1,1) != "#") { print $$NF; } }'  DEV-PROD.map > MANIFEST
 
 dist:
 	mkdir /tmp/$(PACKAGE)-$(VERSION)

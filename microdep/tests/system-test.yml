@@ -112,8 +112,8 @@ services:
       - ps-toolkit
     build:
       context: .
-      dockerfile: netem/Dockerfile
-    image: ottojwittner/netem-image
+      dockerfile: microdep/tests/Dockerfile-netem
+    image: netem-image
     privileged: true     # Required (unfortunately) to enable network "hacking"
     volumes:
       - /proc:/proc
