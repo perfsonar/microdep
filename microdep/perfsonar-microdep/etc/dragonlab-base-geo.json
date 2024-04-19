@@ -1,0 +1,21 @@
+[
+    { "id":"testpoint_1","name":"Aalborg","url":"http://130.225.192.109/esmond/perfsonar/archive","lat":57.0483,"lon":9.9352},
+    { "id":"testpoint_2","name":"Talinn","url":"http://193.40.132.142/esmond/perfsonar/archive","lat":59.0000,"lon":26.0000},
+    { "id":"testpoint_3","name":"Lisbon","url":"http://194.210.0.1/esmond/perfsonar/archive","lat":38.7139,"lon":-9.1394},
+    { "id":"testpoint_4","name":"Slough","url":"http://194.81.236.227/esmond/perfsonar/archive","lat":51.4964,"lon":-0.1224},
+    { "id":"testpoint_5","name":"Dublin","url":"http://193.170.114.250/esmond/perfsonar/archive","lat":53.3472,"lon":-6.2439},
+    { "id":"testpoint_6","name":"Barcelona","url":"http://84.88.19.146/esmond/perfsonar/archive","lat":41.3873,"lon":2.1108},
+    { "id":"testpoint_7","name":"Italy","url":"https://193.206.127.163/esmond/perfsonar/archive","lat":43.1479,"lon":12.1097},
+    { "id":"testpoint_8","name":"Bucharest","url":"http://37.128.230.30/esmond/perfsonar/archive","lat":44.4443,"lon":26.0961},
+    { "id":"testpoint_9","name":"Yerevan","url":"http://37.26.173.34/esmond/perfsonar/archive","lat":40.1924,"lon":44.5066},
+    { "id":"testpoint_10","name":"Athens","url":"http://194.177.211.114/esmond/perfsonar/archive","lat":37.9833,"lon":23.7333},
+    { "id":"toolkit_1","name":"Poznan","url":"http://150.254.163.77/esmond/perfsonar/archive","lat":52.4073,"lon":16.9538},
+    { "id":"ps-sis.uninett.no","name":"Trondheim","url":"https://ps-sis.uninett.no/esmond/perfsonar/archive","lat":63.41594176538965, "lon": 10.394740104675295},
+    {"id":"saopaulo-mp", "name":"Sao Paulo", "url":"http://www.rnp.br", "lat":-23.5442517, "lon":-46.7304324},
+    {"id":"amazonuw3-mp.cn.uninett.no", "name":"Amazon US West", "url":"http://aws.amazon.com", "lat":45.839598, "lon":-119.658004},
+    {"id":"amazonff2-mp.cn.uninett.no", "name":"Amazon Frankfuhrt", "url":"http://aws.amazon.com", "lat":50.16068, "lon":8.68738},
+    {"id":"amazonie2-mp.cn.uninett.no", "name":"Amazon Dublin", "url":"http://aws.amazon.com", "lat":53.3307, "lon":-6.25833},
+    {"id":"amazonsth2-mp.cn.uninett.no", "name":"Amazon Eskilstuna", "url":"http://aws.amazon.com", "lat":59.3487387, "lon":16.7041466}
+
+]
+
