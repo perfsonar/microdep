@@ -11,6 +11,7 @@ Summary:		Simple Javascript charting library
 License:		MIT Licence
 Group:			Development/Libraries
 URL:			https://www.chartjs.org
+Source0:                chart.js-%{version}.tgz
 BuildRoot:		%{_tmppath}/%{name}-%{version}-root-%(%{__id_u} -n)
 BuildArch:		noarch
 
@@ -22,6 +23,7 @@ Summary:		Chartjs adaptor for Momentsjs
 Release:		0.1.1%{?dist}
 License:                MIT Licence
 Group:			Development/Libraries
+Source1:                chartjs-adapter-moment-0.1.1.tar.gz
 Requires:               chartjs
 
 %description adapter-moment
@@ -32,41 +34,50 @@ Summary:		Zoom and pan plugin for Chart.js
 Release:		1.1.2%{?dist}
 License:                MIT Licence
 Group:			Development/Libraries
+Source2:                chartjs-plugin-zoom-1.2.1.tgz
 Requires:               chartjs
 
 %description plugin-zoom
 A zoom and pan plugin for Chart.js
 
+%prep
+%setup -c -n chartjs-%{version}
+%setup -T -D -b 1 -n chartjs-adapter-moment-0.1.1
+%setup -T -D -a 2 -c -n chartjs-plugin-zoom-1.2.1
+
 %install
 
-rm -rf %{buildroot}
-# Fetch chartjs 
-curl --create-dirs -o %{buildroot}/%{install_base}/chartjs/4.4.2/chart.js https://cdn.jsdelivr.net/npm/chart.js@4.4.2
-curl --create-dirs -o %{buildroot}/%{install_base}/chartjs/LICENSE.md https://raw.githubusercontent.com/chartjs/Chart.js/master/LICENSE.md
-# Fetch adaptor-moment 0.1.1
-curl --create-dirs -o %{buildroot}/%{install_base}/chartjs-adapter-moment/0.1.1/chartjs-adapter-moment.js https://cdn.jsdelivr.net/npm/chartjs-adapter-moment@0.1.1
-curl --create-dirs -o %{buildroot}/%{install_base}/chartjs-adapter-moment/0.1.1/LICENSE.md https://raw.githubusercontent.com/chartjs/chartjs-adapter-moment/master/LICENSE.md
-# Fetch plugin-zoom 1.2.1
-curl --create-dirs -o %{buildroot}/%{install_base}/chartjs-plugin-zoom/1.2.1/chartjs-plugin-zoom.min.js https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@1.2.1/dist/chartjs-plugin-zoom.min.js
-curl --create-dirs -o %{buildroot}/%{install_base}/chartjs-plugin-zoom/1.2.1/LICENSE.md https://raw.githubusercontent.com/chartjs/Chart.js/master/LICENSE.md
+#rm -rf %{buildroot}
+# Install chartjs
+mkdir -p %{buildroot}/%{install_base}/chartjs/4.4.2/
+cp -a ../chartjs-%{version}/package/dist/* %{buildroot}/%{install_base}/chartjs/4.4.2/
+install -D -m 0644 ../chartjs-%{version}/package/LICENSE.md %{buildroot}/%{install_base}/chartjs/4.4.2/
+# Install adaptor-moment 0.1.1
+mkdir -p %{buildroot}/%{install_base}/chartjs-adapter-moment/0.1.1
+cp -a ../chartjs-adapter-moment-0.1.1/dist/* %{buildroot}/%{install_base}/chartjs-adapter-moment/0.1.1 
+install -D -m 0644 ../chartjs-adapter-moment-0.1.1/LICENSE.md %{buildroot}/%{install_base}/chartjs-adapter-moment/0.1.1
+# Install plugin-zoom 1.2.1
+mkdir -p %{buildroot}/%{install_base}/chartjs-plugin-zoom/1.2.1
+cp -a ../chartjs-plugin-zoom-1.2.1/package/dist/* %{buildroot}/%{install_base}/chartjs-plugin-zoom/1.2.1
+install -D -m 0644 ../chartjs-plugin-zoom-1.2.1/package/LICENSE.md %{buildroot}/%{install_base}/chartjs-plugin-zoom/1.2.1
 
 %clean
 rm -rf %{buildroot}
 
 %files 
 %defattr(0644,perfsonar,perfsonar,0755)
-%license %{install_base}/chartjs/LICENSE.md
-%attr(0644,perfsonar,perfsonar) %{install_base}/chartjs/4.4.2/chart.js
+%license %{install_base}/chartjs/4.4.2/LICENSE.md
+%attr(0644,perfsonar,perfsonar) %{install_base}/chartjs/4.4.2/
 
 %files adapter-moment 
 %defattr(0644,perfsonar,perfsonar,0755)
 %license %{install_base}/chartjs-adapter-moment/0.1.1/LICENSE.md
-%attr(0644,perfsonar,perfsonar) %{install_base}/chartjs-adapter-moment/0.1.1/chartjs-adapter-moment.js
+%attr(0644,perfsonar,perfsonar) %{install_base}/chartjs-adapter-moment/0.1.1/
 
 %files plugin-zoom
 %defattr(0644,perfsonar,perfsonar,0755)
 %license %{install_base}/chartjs-plugin-zoom/1.2.1/LICENSE.md
-%attr(0644,perfsonar,perfsonar) %{install_base}/chartjs-plugin-zoom/1.2.1/chartjs-plugin-zoom.min.js
+%attr(0644,perfsonar,perfsonar) %{install_base}/chartjs-plugin-zoom/1.2.1/
 
 %changelog
 * Thu Mar 14 2024 Otto J Wittner <otto.wittner@sikt.no>
