@@ -828,6 +828,7 @@ function duplex_topology(topo){
     return topo.concat(dup);
 }
 
+var mouseover=false; 
 
 function draw_topology(topo){
     if (topo.length == 0) {
@@ -850,12 +851,17 @@ function draw_topology(topo){
 		linkByName[ab]=l;
 		ends.push(abs);
 		l.on("mouseover", function(e){
-		    color_store[e.target.leaflet_id]=e.target.options.color;
-		    e.target.bringToFront();
-		    taint_link(e.target,"blue");
+		    if (! mouseover) {
+			mouseover = true;  // Flag required since mouseover is retriggered as long as the mouse hovers over a link
+
+			color_store[e.target.leaflet_id]=e.target.options.color;
+			e.target.bringToFront();
+			taint_link(e.target,"blue");
+		    }
 		});
 		l.on("mouseout", function(e){
 		    taint_link(e.target, color_store[e.target.leaflet_id]);
+		    mouseover=false;
 		});
 	    }
 	}  else { // no need to redraw
@@ -940,12 +946,18 @@ function taint_links( hits, prop){
 		    links.push(l);
 		    ends.push(abs);
 		    l.on("mouseover", function(e){
-			color_store[e.target.leaflet_id]=e.target.options.color;
-			e.target.bringToFront();
-			taint_link(e.target,"blue");
+			if (! mouseover) {
+			    mouseover = true;
+			    
+			    color_store[e.target.leaflet_id]=e.target.options.color;
+			    e.target.bringToFront();
+			    taint_link(e.target,"blue");
+			}
 		    });
 		    l.on("mouseout", function(e){
 			taint_link(e.target, color_store[e.target.leaflet_id]);
+			
+			mouseover = false;
 		    });
 		}
 	    }

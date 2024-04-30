@@ -22,9 +22,9 @@ Select2 is a jQuery-based replacement for select boxes. It supports searching, r
 
 rm -rf %{buildroot}
 # Fetch select2 4.0.0
-curl --create-dirs -o %{buildroot}/%{install_base}/select2/4.0.0/js/select2.min.js https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.0/js/select2.min.js
-curl --create-dirs -o %{buildroot}/%{install_base}/select2/4.0.0/css/select2.min.css https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.0/css/select2.min.js
-curl --create-dirs -o %{buildroot}/%{install_base}/select2/4.0.0/LICENSE.mp https://raw.githubusercontent.com/select2/select2/develop/LICENSE.md
+curl --create-dirs -Lo %{buildroot}/%{install_base}/select2/4.0.0/js/select2.min.js https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.0/js/select2.min.js
+curl --create-dirs -Lo %{buildroot}/%{install_base}/select2/4.0.0/css/select2.min.css https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.0/css/select2.min.js
+curl --create-dirs -Lo %{buildroot}/%{install_base}/select2/4.0.0/LICENSE.mp https://raw.githubusercontent.com/select2/select2/develop/LICENSE.md
 
 %clean
 rm -rf %{buildroot}

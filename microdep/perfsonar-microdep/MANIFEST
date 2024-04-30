@@ -1,6 +1,7 @@
 LICENSE
 microdep-map/index.html
 microdep-map/img/ajax-loader.gif
+microdep-map/img/favicon.ico
 microdep-map/js/microdep-map.js
 microdep-map/js/stats.js
 microdep-map/js/map-lib.js
@@ -12,8 +13,9 @@ bin/microdep_commands/yaml-to-json.cgi
 bin/microdep_commands/get-mapconfig.cgi
 bin/microdep_commands/microdep-config.cgi
 etc/mapconfig.yml
+etc/mapconfig.d/dragonlab.yml
 etc/microdep-config.yml
-etc/dragonlab-base-geo.json
+microdep-map/dragonlab/dragonlab-base-geo.json
 microdep-map/css/microdep-map.css
 microdep-map/css/curve-chart.css
 bin/microdep_commands/microdep-psconfig-load.pl

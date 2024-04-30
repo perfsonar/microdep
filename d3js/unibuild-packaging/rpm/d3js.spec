@@ -21,8 +21,8 @@ D3 is a free, open-source JavaScript library for visualizing data.
 
 rm -rf %{buildroot}
 # Fetch d3.js v4
-curl --create-dirs -o %{buildroot}/%{install_base}/d3js/d3.v4.js https://d3js.org/d3.v4.js
-curl --create-dirs -o %{buildroot}/%{install_base}/d3js/LICENSE https://raw.githubusercontent.com/d3/d3/main/LICENSE
+curl --create-dirs -Lo %{buildroot}/%{install_base}/d3js/d3.v4.js https://d3js.org/d3.v4.js
+curl --create-dirs -Lo %{buildroot}/%{install_base}/d3js/LICENSE https://raw.githubusercontent.com/d3/d3/main/LICENSE
 
 %clean
 rm -rf %{buildroot}

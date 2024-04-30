@@ -21,9 +21,9 @@ DataTables is a Javascript HTML table enhancing library.
 
 rm -rf %{buildroot}
 # Fetch d3.js v4
-curl --create-dirs -o %{buildroot}/%{install_base}/datatablesjs/1.13.1/datatables.min.js https://cdn.datatables.net/v/dt/dt-1.13.1/datatables.min.js
-curl --create-dirs -o %{buildroot}/%{install_base}/datatablesjs/1.13.1/datatables.min.css https://cdn.datatables.net/v/dt/dt-1.13.1/datatables.min.css
-curl --create-dirs -o %{buildroot}/%{install_base}/datatablesjs/LICENSE https://raw.githubusercontent.com/DataTables/DataTables/master/license.txt
+curl --create-dirs -Lo %{buildroot}/%{install_base}/datatablesjs/1.13.1/datatables.min.js https://cdn.datatables.net/v/dt/dt-1.13.1/datatables.min.js
+curl --create-dirs -Lo %{buildroot}/%{install_base}/datatablesjs/1.13.1/datatables.min.css https://cdn.datatables.net/v/dt/dt-1.13.1/datatables.min.css
+curl --create-dirs -Lo %{buildroot}/%{install_base}/datatablesjs/LICENSE https://raw.githubusercontent.com/DataTables/DataTables/master/license.txt
 
 %clean
 rm -rf %{buildroot}

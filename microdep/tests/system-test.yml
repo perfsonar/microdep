@@ -21,7 +21,7 @@
 
 #version: "3.7"
 #version: "3"
-version: "2.2"
+#version: "2.2"
 
 services:
   ps-toolkit:

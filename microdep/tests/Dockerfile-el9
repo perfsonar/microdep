@@ -139,11 +139,11 @@ RUN if [ "$TYPE" = "toolkit" ]; then \
 # Increase startup timeout and add auto restart for Opensearch
        sed -i 's|TimeoutStartSec=75|TimeoutStartSec=600\nRestart=on-failure\nRestartSec=10s|g' /usr/lib/systemd/system/opensearch.service; \
 # Fix template error for Logstash
-#       cp /usr/share/logstash/vendor/local_gems/022abded/logstash-output-opensearch/lib/logstash/outputs/opensearch/templates/ecs-disabled/1x.json /usr/share/logstash/vendor/local_gems/022abded/logstash-output-opensearch/lib/logstash/outputs/opensearch/templates/ecs-disabled/2x.json; \
+       cp /usr/share/logstash/vendor/bundle/jruby/2.5.0/gems/logstash-output-opensearch-1.2.0-java/lib/logstash/outputs/opensearch/templates/ecs-disabled/1x.json /usr/share/logstash/vendor/bundle/jruby/2.5.0/gems/logstash-output-opensearch-1.2.0-java/lib/logstash/outputs/opensearch/templates/ecs-disabled/2x.json \
 # Fix SSL problems with proxy towards Opensearch
-       cp /etc/opensearch/node.pem /etc/opensearch/both.pem; \
-       sed 's|PRI|RSA PRI|g' /etc/opensearch/node-key.pem >> /etc/opensearch/both.pem; \
-       sed -i 's|ProxyPass|    SSLProxyVerify none\n    SSLProxyCheckPeerCN off\n    SSLProxyCheckPeerName off\n    SSLProxyCheckPeerExpire off\n    SSLProxyMachineCertificateFile /etc/opensearch/both.pem\n    ProxyPass|' /etc/httpd/conf.d/apache-opensearch.conf; \
+#       cp /etc/opensearch/node.pem /etc/opensearch/both.pem; \
+#       sed 's|PRI|RSA PRI|g' /etc/opensearch/node-key.pem >> /etc/opensearch/both.pem; \
+#       sed -i 's|ProxyPass|    SSLProxyVerify none\n    SSLProxyCheckPeerCN off\n    SSLProxyCheckPeerName off\n    SSLProxyCheckPeerExpire off\n    SSLProxyMachineCertificateFile /etc/opensearch/both.pem\n    ProxyPass|' /etc/httpd/conf.d/apache-opensearch.conf; \
 # Fix access to local resources when external port mapping alters urls
        sed -i 's|Listen 443 https|Listen 443 https\nListen 4435 https\nListen 4436 https|' /etc/httpd/conf.d/ssl.conf; \
        sed -i 's|_default_:443|_default_:443 _default_:4435 _default_:4436|' /etc/httpd/conf.d/ssl.conf; \
@@ -170,6 +170,11 @@ fi
 #  M i c r o d e p - i n - p e r f s o n a r   a d d i t i o n s
 #
 
+# Update topology db with info from psconfig test description
+#RUN if [ "$TYPE" = "tootlkit" ]; then \
+#       /usr/lib/perfsonar/bin/microdep_commands/microdep-psconfig-load.pl --db /etc/perfsonar/microdep/mp-dragonlab/etc/microdep.db /etc/perfsonar/psconfig/pscheduler.d/microdep-tests.json; \
+#    fi
+       
 # Add subsession support for powstream (assuming powstream is compiled with patch from branch "subsession-owp")
 COPY microdep/tests/powstream /usr/bin/powstream
 COPY microdep/tests/pscheduler-latencybg-subcount.patch-with-runtime-paths /usr/libexec/pscheduler

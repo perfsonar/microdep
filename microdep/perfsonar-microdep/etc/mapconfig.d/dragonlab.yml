@@ -1,0 +1,26 @@
+#
+# Map config for Dragonlab
+#
+
+dragonlab:
+  # Measuremet network/variant parameters
+  title: "Global"
+  descr: "Interdomain global measurement network"
+  event_type:
+    # Event types for variant
+    gap:
+      index: "dragonlab"
+    jitter:
+      index: "dragonlab_jitter" 
+    routeerr:
+      index: "dragonlab_routemon" 
+    routechange:
+      index: "dragonlab_routemon" 
+    tcprouteerr:
+      index: "dragonlab_routemon" 
+    tcproutechange:
+      index: "dragonlab_routemon" 
+    correlation:
+      index: "dragonlab_correvents"
+          
+

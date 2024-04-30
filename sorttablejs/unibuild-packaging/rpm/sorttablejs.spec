@@ -17,8 +17,8 @@ Javascript library to make html tables sorttable. Developed by Stuart Langridge.
 
 rm -rf %{buildroot}
 # Fetch sorttable v2 (https://www.kryogenix.org/code/browser/sorttable)
-curl --create-dirs -o %{buildroot}/%{install_base}/sorttable/v2/sorttable.js https://www.kryogenix.org/code/browser/sorttable/sorttable.js
-curl --create-dirs -o %{buildroot}/%{install_base}/sorttable/v2/licence.html https://www.kryogenix.org/code/browser/licence.html
+curl --create-dirs -Lo %{buildroot}/%{install_base}/sorttable/v2/sorttable.js https://www.kryogenix.org/code/browser/sorttable/sorttable.js
+curl --create-dirs -Lo %{buildroot}/%{install_base}/sorttable/v2/licence.html https://www.kryogenix.org/code/browser/licence.html
 
 %clean
 rm -rf %{buildroot}

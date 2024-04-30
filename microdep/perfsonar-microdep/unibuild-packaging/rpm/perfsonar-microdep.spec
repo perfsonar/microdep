@@ -36,6 +36,11 @@ Geopositioning information from Maxmind to enrich datasets with AS numbers, city
 %package map
 Summary:		Microdep map web GUI presenting analytic results
 Group:			Applications/Communications
+BuildRequires:          perl >= 5.32
+BuildRequires:          perl(LWP::Simple)
+BuildRequires:          perl(JSON)
+BuildRequires:          perl(DBI)
+BuildRequires:          perl(DBD::SQLite)
 #Requires:               perfsonar-toolkit >= 5.0.7
 Requires:		httpd
 Requires:               mod_ssl
@@ -57,7 +62,7 @@ Requires:               chartjs = 4.4.2
 Requires:               d3js = 4
 Requires:               hammerjs = 2.0.8
 Requires:               leafletjs = 1.0.3
-Requires:               momentjs = 2.27.0
+Requires:               momentjs = 2.30.1
 Requires:               select2js = 4.0.0
 #Requires:               perfsonar-tracetree
 %{?systemd_requires: %systemd_requires}
@@ -142,7 +147,7 @@ make ROOTPATH=%{buildroot}/%{install_base} CONFIGPATH=%{buildroot}/%{microdep_co
 mkdir -p %{buildroot}/%{_unitdir}
 install -D -m 0644 -t %{buildroot}/%{_unitdir} %{buildroot}/%{install_base}/scripts/*.service
 # Move psconfig, httpd and logstash configs into correct folders
-install -D -m 0644 -t %{buildroot}/%{config_base}/psconfig/pscheduler.d/microdep-tests.json %{buildroot}/%{microdep_config_base}/microdep-tests.json
+install -D -m 0644 -t %{buildroot}/%{config_base}/psconfig/pscheduler.d/ %{buildroot}/%{microdep_config_base}/microdep-tests.json
 install -D -m 0644 -t %{buildroot}/etc/httpd/conf.d/ %{buildroot}/%{microdep_config_base}/apache-microdep-map.conf
 install -D -m 0644 -t %{buildroot}/%{install_base}/logstash/pipeline/microdep %{buildroot}/%{microdep_config_base}/logstash/microdep/*
 
@@ -154,23 +159,31 @@ rm -rf %{buildroot}/%{microdep_config_base}/apache-microdep-map.conf
 rm -rf %{buildroot}/%{microdep_config_base}/logstash/
 
 # Make js and css libs available in web folder
-ln -s /usr/share/javascript/chartjs/4.4.2/chart.js %{buildroot}/%{microdep_web_dir}/js/
+ln -s /usr/share/javascript/chartjs/4.4.2/chart.umd.js %{buildroot}/%{microdep_web_dir}/js
+ln -s /usr/share/javascript/chartjs/4.4.2/chart.umd.js.map %{buildroot}/%{microdep_web_dir}/js
 ln -s /usr/share/javascript/chartjs-adapter-moment/0.1.1/chartjs-adapter-moment.js %{buildroot}/%{microdep_web_dir}/js/
 ln -s /usr/share/javascript/chartjs-plugin-zoom/1.2.1/chartjs-plugin-zoom.min.js %{buildroot}/%{microdep_web_dir}/js/
+ln -s /usr/share/javascript/chartjs-plugin-zoom/1.2.1/chartjs-plugin-zoom.js %{buildroot}/%{microdep_web_dir}/js/
+ln -s /usr/share/javascript/chartjs-plugin-zoom/1.2.1/chartjs-plugin-zoom.esm.js %{buildroot}/%{microdep_web_dir}/js/
 ln -s /usr/share/javascript/d3js/d3.v4.js %{buildroot}/%{microdep_web_dir}/js/
 ln -s /usr/share/javascript/datatablesjs/1.13.1/datatables.min.js %{buildroot}/%{microdep_web_dir}/js/
 ln -s /usr/share/javascript/datatablesjs/1.13.1/datatables.min.css %{buildroot}/%{microdep_web_dir}/css/
 ln -s /usr/share/javascript/datatablesjs/1.13.1/datatables.min.css %{buildroot}/%{microdep_web_dir}/js/
 ln -s /usr/share/javascript/hammerjs/2.0.8/hammer.js %{buildroot}/%{microdep_web_dir}/js/
+ln -s /usr/share/javascript/hammerjs/2.0.8/hammer.min.js %{buildroot}/%{microdep_web_dir}/js/
+ln -s /usr/share/javascript/hammerjs/2.0.8/hammer.min.js.map %{buildroot}/%{microdep_web_dir}/js/
+ln -s /usr/share/javascript/hammerjs/2.0.8/hammer.min.map %{buildroot}/%{microdep_web_dir}/js/
 ln -s /usr/share/javascript/jquery/latest/jquery.min.js %{buildroot}/%{microdep_web_dir}/js/
 ln -s /usr/share/javascript/jquery/latest/jquery.min.map %{buildroot}/%{microdep_web_dir}/js/
+ln -s /usr/share/javascript/jquery/latest/jquery.js %{buildroot}/%{microdep_web_dir}/js/
+ln -s /usr/share/javascript/jquery-ui/jquery-ui.js %{buildroot}/%{microdep_web_dir}/js/
 ln -s /usr/share/javascript/jquery-ui/jquery-ui.min.js %{buildroot}/%{microdep_web_dir}/js/
 ln -s /usr/share/javascript/jquery-ui/jquery-ui.min.css %{buildroot}/%{microdep_web_dir}/css/
 ln -s /usr/share/javascript/latlon-sphericaljs/2.3.0/latlon-spherical.js %{buildroot}/%{microdep_web_dir}/js/
 ln -s /usr/share/javascript/latlon-sphericaljs/2.3.0/dms.js %{buildroot}/%{microdep_web_dir}/js/
 ln -s /usr/share/javascript/leafletjs/1.0.3/leaflet.css %{buildroot}/%{microdep_web_dir}/css/
 ln -s /usr/share/javascript/leafletjs/1.0.3/leaflet.js %{buildroot}/%{microdep_web_dir}/js/
-ln -s /usr/share/javascript/leafletjs/1.0.3/images %{buildroot}/%{microdep_web_dir}/js/
+ln -s /usr/share/javascript/leafletjs/1.0.3/images %{buildroot}/%{microdep_web_dir}/css/
 ln -s /usr/share/javascript/leaflet-contextmenu/1.2.1/leaflet.contextmenu.min.css %{buildroot}/%{microdep_web_dir}/css/
 ln -s /usr/share/javascript/leaflet-contextmenu/1.2.1/leaflet.contextmenu.min.js %{buildroot}/%{microdep_web_dir}/js/
 ln -s /usr/share/javascript/leaflet-markercluster/1.0.3/MarkerCluster.Default.css %{buildroot}/%{microdep_web_dir}/css/
@@ -186,12 +199,9 @@ ln -s /usr/share/javascript/sorttable/v2/sorttable.js %{buildroot}/%{microdep_we
 # Link mapconfig
 ln -s %{microdep_config_base}/mapconfig.yml %{buildroot}/%{microdep_web_dir}
 
-# Init Microdep config db
-echo "{}" > %{buildroot}/%{config_base}/empty.json
-perl %{buildroot}/%{command_base}/microdep-psconfig-load.pl -c --db %{buildroot}/%{microdep_config_base}/microdep.db %{buildroot}/%{config_base}/empty.json
-rm -f %{buildroot}/%{config_base}/empty.json
-mkdir -p %{buildroot}/%{microdep_config_base}/mp-dragonlab/etc/ 
-ln -s %{microdep_config_base}/microdep.db %{buildroot}/%{microdep_config_base}/mp-dragonlab/etc/
+# Init Microdep config db with start time set to beginnig of yesterday local time (** This needs redesign **)
+mkdir -p %{buildroot}/%{microdep_config_base}/mp-dragonlab/etc 
+perl %{buildroot}/%{command_base}/microdep-psconfig-load.pl -c --db %{buildroot}/%{microdep_config_base}/mp-dragonlab/etc/microdep.db --start-time $(date --date "yesterday 00:00:00" +%s) %{buildroot}/%{config_base}/psconfig/pscheduler.d/microdep-tests.json
 
 # Create perfsonar user
 id -u perfsonar &>/dev/null ||  useradd -rM -d /var/lib/perfsonar -s /sbin/nologin perfsonar
@@ -200,36 +210,6 @@ id -u perfsonar &>/dev/null ||  useradd -rM -d /var/lib/perfsonar -s /sbin/nolog
 rm -rf %{buildroot}
 
 %post map
-# Make js libs available
-#ln -s /usr/share/javascript/jquery/latest/jquery.min.js %{microdep_web_dir}/js/jquery.min.js
-#ln -s /usr/share/javascript/jquery-ui/jquery-ui.min.js %{microdep_web_dir}/js/jquery-ui.min.js
-#ln -s /usr/share/javascript/jquery-ui/jquery-ui.min.css %{microdep_web_dir}/css/jquery-ui.min.js
-#ln -s /usr/share/javascript/d3js/d3.v4.js %{microdep_web_dir}/js/
-#ln -s /usr/share/javascript/hammerjs/2.0.8/hammer.js %{microdep_web_dir}/js/
-#ln -s /usr/share/javascript/leafletjs/1.0.3/leaflet.css %{microdep_web_dir}/css/
-#ln -s /usr/share/javascript/leafletjs/1.0.3/leaflet.js %{microdep_web_dir}/js/
-#ln -s /usr/share/javascript/leaflet-contextmenu/1.2.1/leaflet.contextmenu.min.css %{microdep_web_dir}/css/
-#ln -s /usr/share/javascript/leaflet-contextmenu/1.2.1/leaflet.contextmenu.min.js %{microdep_web_dir}/js/
-#ln -s /usr/share/javascript/leaflet-markercluster/1.0.3/MarkerCluster.Default.css %{microdep_web_dir}/css/
-#ln -s /usr/share/javascript/leaflet-markercluster/1.0.3/MarkerCluster.css %{microdep_web_dir}/css/
-#ln -s /usr/share/javascript/leaflet-markercluster/1.0.3/leaflet.markercluster-src.js %{microdep_web_dir}/js/
-#ln -s /usr/share/javascript/momentjs/2.27.0/moment.js %{microdep_web_dir}/js/
-#ln -s /usr/share/javascript/select2/4.0.0/css/select2.min.css %{microdep_web_dir}/css/
-#ln -s /usr/share/javascript/select2/4.0.0/js/select2.min.js %{microdep_web_dir}/js/
-#ln -s /usr/share/javascript/chartjs/4.4.2/chart.js %{microdep_web_dir}/js/
-#ln -s /usr/share/javascript/chartjs-adapter-moment/0.1.1/chartjs-adapter-moment.js %{microdep_web_dir}/js/
-#ln -s /usr/share/javascript/chartjs-plugin-zoom/1.2.1/chartjs-plugin-zoom.min.js %{microdep_web_dir}/js/
-
-# Adjust config path
-#/usr/bin/sed -i 's|/var/lib/mircodep|%{configbase}|'  %{microdep_config_base}/microdep-config.yml
-
-# Init Microdep config db
-#if [ ! -f %{microdep_config_base}/microdep.db ]; then
-#    %{command_base}/microdep-psconfig-load.pl -c --db %{microdep_config_base}/microdep.db %{config_base}/psconfig/pscheduler.d/microdep-tests.json
-#fi
-#mkdir -p %{microdep_web_dir}/mp-dragonlab/etc/ 
-#ln -s %{microdep_web_dir}/mp-dragonlab/etc/ %{microdep_config_base}/microdep.db
-    
 # Fix credentials to ensure access to Opensearch
 if [ -f /etc/perfsonar/opensearch/opensearch_login ]; then
     USER=`awk -F " " '{print $1}' /etc/perfsonar/opensearch/opensearch_login`
@@ -253,7 +233,7 @@ if [ -f /etc/logstash/pipelines.yml ]; then
     PASSWD=`awk -F " " '{print $2}' /etc/perfsonar/opensearch/opensearch_login` && sed -i "s|\${opensearch_admin_password}|$PASSWD|g" %{install_base}/logstash/pipeline/microdep/03-microdep-outputs.conf
 fi
 # Prepare folder for json output from analytics scripts read by logstash
-mkdir -p /var/lib/logstash/microdep && chmod 770 /var/lib/logstash/microdep
+mkdir -p /var/lib/logstash/microdep && chown perfsonar:perfsonar /var/lib/logstash/microdep && chmod 755 /var/lib/logstash/microdep
 
 # Enable systemd services (probably not the recommended method)
 systemctl enable rabbitmq-server.service
@@ -275,9 +255,9 @@ systemctl enable perfsonar-microdep-restart.timer
 %defattr(0644,perfsonar,perfsonar,0755)
 %license %{install_base}/LICENSE
 %{microdep_web_dir}/*.html
-%{microdep_web_dir}/img/*.gif
-%{microdep_web_dir}/js/*
-%{microdep_web_dir}/css/*
+%{microdep_web_dir}/img
+%{microdep_web_dir}/js
+%{microdep_web_dir}/css
 %{microdep_web_dir}/*.yml
 %attr(0755,perfsonar,perfsonar) %{command_base}/elastic-get-date-type.pl
 %attr(0755,perfsonar,perfsonar) %{command_base}/microdep-config.cgi
@@ -288,11 +268,11 @@ systemctl enable perfsonar-microdep-restart.timer
 %attr(0755,perfsonar,perfsonar) %{command_base}/rabbitmq-consume.py
 %config %{microdep_config_base}/microdep-config.yml
 %config %{microdep_config_base}/mapconfig.yml
-%config %{microdep_config_base}/microdep.db
-%{microdep_config_base}/mp-dragonlab/etc/microdep.db
+%config %{microdep_config_base}/mapconfig.d/
+%config %{microdep_config_base}/mp-dragonlab/etc/microdep.db
 %config %{config_base}/psconfig/pscheduler.d/microdep-tests.json
 %config /etc/httpd/conf.d/apache-microdep-map.conf
-%config %{microdep_config_base}/dragonlab-base-geo.json
+%config %{microdep_web_dir}/dragonlab/dragonlab-base-geo.json
 
 %files ana
 %defattr(0644,perfsonar,perfsonar,0755)

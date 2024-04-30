@@ -3,7 +3,7 @@ Description=Restart perfSONAR Microdep services periodically
 
 [Timer]
 Unit=perfsonar-microdep-restart.service
-OnCalendar= 23:59:00
+OnCalendar= *-*-* 23:59:00
 
 [Install]
 WantedBy=timers.target

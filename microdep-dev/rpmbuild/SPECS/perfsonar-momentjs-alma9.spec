@@ -21,8 +21,8 @@ Parse, validate, manipulate, and display dates and times in JavaScript.
 
 rm -rf %{buildroot}
 # Fetch moment 2.27.0
-curl --create-dirs -o %{buildroot}/%{install_base}/momentjs/2.27.0/moment.js https://cdn.jsdelivr.net/npm/moment@2.27.0
-curl --create-dirs -o %{buildroot}/%{install_base}/momentjs/2.27.0/LICENSE https://github.com/moment/moment/raw/develop/LICENSE
+curl --create-dirs -Lo %{buildroot}/%{install_base}/momentjs/2.27.0/moment.js https://cdn.jsdelivr.net/npm/moment@2.27.0
+curl --create-dirs -Lo %{buildroot}/%{install_base}/momentjs/2.27.0/LICENSE https://github.com/moment/moment/raw/develop/LICENSE
 
 %clean
 rm -rf %{buildroot}

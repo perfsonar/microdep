@@ -39,18 +39,18 @@ Provides Beautiful Animated Marker Clustering functionality for Leaflet.
 
 rm -rf %{buildroot}
 # Fetch leafletjs 1.0.3
-curl --create-dirs -o %{buildroot}/%{install_base}/leafletjs/1.0.3/leaflet.js https://unpkg.com/leaflet@1.0.3/dist/leaflet.js
-curl --create-dirs -o %{buildroot}/%{install_base}/leafletjs/1.0.3/leaflet.css https://unpkg.com/leaflet@1.0.3/dist/leaflet.css
-curl --create-dirs -o %{buildroot}/%{install_base}/leafletjs/1.0.3/LICENSE https://raw.githubusercontent.com/Leaflet/Leaflet/main/LICENSE
+curl --create-dirs -Lo %{buildroot}/%{install_base}/leafletjs/1.0.3/leaflet.js https://unpkg.com/leaflet@1.0.3/dist/leaflet.js
+curl --create-dirs -Lo %{buildroot}/%{install_base}/leafletjs/1.0.3/leaflet.css https://unpkg.com/leaflet@1.0.3/dist/leaflet.css
+curl --create-dirs -Lo %{buildroot}/%{install_base}/leafletjs/1.0.3/LICENSE https://raw.githubusercontent.com/Leaflet/Leaflet/main/LICENSE
 # Fetch leaflet context menu
-curl --create-dirs -o %{buildroot}/%{install_base}/leaflet-contextmenu/1.2.1/leaflet.contextmenu.min.js https://cdnjs.cloudflare.com/ajax/libs/leaflet-contextmenu/1.2.1/leaflet.contextmenu.min.js
-curl --create-dirs -o %{buildroot}/%{install_base}/leaflet-contextmenu/1.2.1/leaflet.contextmenu.min.css https://cdnjs.cloudflare.com/ajax/libs/leaflet-contextmenu/1.2.1/leaflet.contextmenu.min.css
-curl --create-dirs -o %{buildroot}/%{install_base}/leaflet-contextmenu/1.0.3/license.html https://opensource.org/license/mit
+curl --create-dirs -Lo %{buildroot}/%{install_base}/leaflet-contextmenu/1.2.1/leaflet.contextmenu.min.js https://cdnjs.cloudflare.com/ajax/libs/leaflet-contextmenu/1.2.1/leaflet.contextmenu.min.js
+curl --create-dirs -Lo %{buildroot}/%{install_base}/leaflet-contextmenu/1.2.1/leaflet.contextmenu.min.css https://cdnjs.cloudflare.com/ajax/libs/leaflet-contextmenu/1.2.1/leaflet.contextmenu.min.css
+curl --create-dirs -Lo %{buildroot}/%{install_base}/leaflet-contextmenu/1.0.3/license.html https://opensource.org/license/mit
 # Fetch leaflet markercluster
-curl --create-dirs -o %{buildroot}/%{install_base}/leaflet-markercluster/1.0.3/leaflet.markercluster-src.js https://unpkg.com/leaflet.markercluster@1.0.3/dist/leaflet.markercluster-src.js
-curl --create-dirs -o %{buildroot}/%{install_base}/leaflet-markercluster/1.0.3/MarkerCluster.css https://unpkg.com/leaflet.markercluster@1.0.3/dist/MarkerCluster.css
-curl --create-dirs -o %{buildroot}/%{install_base}/leaflet-markercluster/1.0.3/MarkerCluster.Default.css https://unpkg.com/leaflet.markercluster@1.0.3/dist/MarkerCluster.Default.css
-curl --create-dirs -o %{buildroot}/%{install_base}/leaflet-markercluster/1.0.3/license.html https://mit-license.org/
+curl --create-dirs -Lo %{buildroot}/%{install_base}/leaflet-markercluster/1.0.3/leaflet.markercluster-src.js https://unpkg.com/leaflet.markercluster@1.0.3/dist/leaflet.markercluster-src.js
+curl --create-dirs -Lo %{buildroot}/%{install_base}/leaflet-markercluster/1.0.3/MarkerCluster.css https://unpkg.com/leaflet.markercluster@1.0.3/dist/MarkerCluster.css
+curl --create-dirs -Lo %{buildroot}/%{install_base}/leaflet-markercluster/1.0.3/MarkerCluster.Default.css https://unpkg.com/leaflet.markercluster@1.0.3/dist/MarkerCluster.Default.css
+curl --create-dirs -Lo %{buildroot}/%{install_base}/leaflet-markercluster/1.0.3/license.html https://mit-license.org/
 
 %clean
 rm -rf %{buildroot}

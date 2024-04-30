@@ -39,14 +39,14 @@ A zoom and pan plugin for Chart.js
 
 rm -rf %{buildroot}
 # Fetch chartjs 
-curl --create-dirs -o %{buildroot}/%{install_base}/chartjs/chart.js https://cdn.jsdelivr.net/npm/chart.js
-curl --create-dirs -o %{buildroot}/%{install_base}/chartjs/LICENSE.md https://raw.githubusercontent.com/chartjs/Chart.js/master/LICENSE.md
+curl --create-dirs -Lo %{buildroot}/%{install_base}/chartjs/chart.js https://cdn.jsdelivr.net/npm/chart.js
+curl --create-dirs -Lo %{buildroot}/%{install_base}/chartjs/LICENSE.md https://raw.githubusercontent.com/chartjs/Chart.js/master/LICENSE.md
 # Fetch adaptor-moment 0.1.1
-curl --create-dirs -o %{buildroot}/%{install_base}/chartjs-adapter-moment/0.1.1/chartjs-adapter-moment.js https://cdn.jsdelivr.net/npm/chartjs-adapter-moment@0.1.1
-curl --create-dirs -o %{buildroot}/%{install_base}/chartjs-adapter-moment/0.1.1/LICENSE.md https://raw.githubusercontent.com/chartjs/chartjs-adapter-moment/master/LICENSE.md
+curl --create-dirs -Lo %{buildroot}/%{install_base}/chartjs-adapter-moment/0.1.1/chartjs-adapter-moment.js https://cdn.jsdelivr.net/npm/chartjs-adapter-moment@0.1.1
+curl --create-dirs -Lo %{buildroot}/%{install_base}/chartjs-adapter-moment/0.1.1/LICENSE.md https://raw.githubusercontent.com/chartjs/chartjs-adapter-moment/master/LICENSE.md
 # Fetch plugin-zoom 1.2.1
-curl --create-dirs -o %{buildroot}/%{install_base}/chartjs-plugin-zoom/1.2.1/chartjs-plugin-zoom.min.js https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@1.2.1/dist/chartjs-plugin-zoom.min.js
-curl --create-dirs -o %{buildroot}/%{install_base}/chartjs-plugin-zoom/1.2.1/LICENSE.md https://raw.githubusercontent.com/chartjs/Chart.js/master/LICENSE.md
+curl --create-dirs -Lo %{buildroot}/%{install_base}/chartjs-plugin-zoom/1.2.1/chartjs-plugin-zoom.min.js https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@1.2.1/dist/chartjs-plugin-zoom.min.js
+curl --create-dirs -Lo %{buildroot}/%{install_base}/chartjs-plugin-zoom/1.2.1/LICENSE.md https://raw.githubusercontent.com/chartjs/Chart.js/master/LICENSE.md
 
 %clean
 rm -rf %{buildroot}

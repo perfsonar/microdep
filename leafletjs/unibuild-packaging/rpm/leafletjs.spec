@@ -65,32 +65,32 @@ ls -l
 
 rm -rf %{buildroot}
 # Fetch leafletjs 1.0.3
-#curl --create-dirs -o %{buildroot}/%{install_base}/leafletjs/1.0.3/leaflet.js https://unpkg.com/leaflet@1.0.3/dist/leaflet.js
-#curl --create-dirs -o %{buildroot}/%{install_base}/leafletjs/1.0.3/leaflet.css https://unpkg.com/leaflet@1.0.3/dist/leaflet.css
-#curl --create-dirs -o %{buildroot}/%{install_base}/leafletjs/1.0.3/LICENSE https://raw.githubusercontent.com/Leaflet/Leaflet/main/LICENSE
-curl --create-dirs -o %{buildroot}/%{install_base}/leafletjs/1.0.3/leaflet.js https://raw.githubusercontent.com/Leaflet/Leaflet/v1.0.3/dist/leaflet.js
-curl --create-dirs -o %{buildroot}/%{install_base}/leafletjs/1.0.3/leaflet.css https://raw.githubusercontent.com/Leaflet/Leaflet/v1.0.3/dist/leaflet.js
-curl --create-dirs -o %{buildroot}/%{install_base}/leafletjs/1.0.3/images/layers-2x.png https://github.com/Leaflet/Leaflet/blob/v1.0.3/dist/images/layers-2x.png?raw=true
-curl --create-dirs -o %{buildroot}/%{install_base}/leafletjs/1.0.3/images/layers.png https://github.com/Leaflet/Leaflet/blob/v1.0.3/dist/images/layers.png?raw=true
-curl --create-dirs -o %{buildroot}/%{install_base}/leafletjs/1.0.3/images/marker-icon-2x.png https://github.com/Leaflet/Leaflet/blob/v1.0.3/dist/images/marker-icon-2x.png?raw=true
-curl --create-dirs -o %{buildroot}/%{install_base}/leafletjs/1.0.3/images/marker-icon.png https://github.com/Leaflet/Leaflet/blob/v1.0.3/dist/images/marker-icon.png?raw=true
-curl --create-dirs -o %{buildroot}/%{install_base}/leafletjs/1.0.3/images/marker-shadow.png https://github.com/Leaflet/Leaflet/blob/v1.0.3/dist/images/marker-shadow.png?raw=true
-curl --create-dirs -o %{buildroot}/%{install_base}/leafletjs/1.0.3/LICENSE https://raw.githubusercontent.com/Leaflet/Leaflet/main/LICENSE
+#curl --create-dirs -Lo %{buildroot}/%{install_base}/leafletjs/1.0.3/leaflet.js https://unpkg.com/leaflet@1.0.3/dist/leaflet.js
+#curl --create-dirs -Lo %{buildroot}/%{install_base}/leafletjs/1.0.3/leaflet.css https://unpkg.com/leaflet@1.0.3/dist/leaflet.css
+#curl --create-dirs -Lo %{buildroot}/%{install_base}/leafletjs/1.0.3/LICENSE https://raw.githubusercontent.com/Leaflet/Leaflet/main/LICENSE
+curl --create-dirs -Lo %{buildroot}/%{install_base}/leafletjs/1.0.3/leaflet.js https://raw.githubusercontent.com/Leaflet/Leaflet/v1.0.3/dist/leaflet.js
+curl --create-dirs -Lo %{buildroot}/%{install_base}/leafletjs/1.0.3/leaflet.css https://raw.githubusercontent.com/Leaflet/Leaflet/v1.0.3/dist/leaflet.css
+curl --create-dirs -Lo %{buildroot}/%{install_base}/leafletjs/1.0.3/images/layers-2x.png https://github.com/Leaflet/Leaflet/blob/v1.0.3/dist/images/layers-2x.png?raw=true
+curl --create-dirs -Lo %{buildroot}/%{install_base}/leafletjs/1.0.3/images/layers.png https://github.com/Leaflet/Leaflet/blob/v1.0.3/dist/images/layers.png?raw=true
+curl --create-dirs -Lo %{buildroot}/%{install_base}/leafletjs/1.0.3/images/marker-icon-2x.png https://github.com/Leaflet/Leaflet/blob/v1.0.3/dist/images/marker-icon-2x.png?raw=true
+curl --create-dirs -Lo %{buildroot}/%{install_base}/leafletjs/1.0.3/images/marker-icon.png https://github.com/Leaflet/Leaflet/blob/v1.0.3/dist/images/marker-icon.png?raw=true
+curl --create-dirs -Lo %{buildroot}/%{install_base}/leafletjs/1.0.3/images/marker-shadow.png https://github.com/Leaflet/Leaflet/blob/v1.0.3/dist/images/marker-shadow.png?raw=true
+curl --create-dirs -Lo %{buildroot}/%{install_base}/leafletjs/1.0.3/LICENSE https://raw.githubusercontent.com/Leaflet/Leaflet/main/LICENSE
 # Fetch leaflet context menu
-curl --create-dirs -o %{buildroot}/%{install_base}/leaflet-contextmenu/1.2.1/leaflet.contextmenu.min.js https://cdnjs.cloudflare.com/ajax/libs/leaflet-contextmenu/1.2.1/leaflet.contextmenu.min.js
-curl --create-dirs -o %{buildroot}/%{install_base}/leaflet-contextmenu/1.2.1/leaflet.contextmenu.min.css https://cdnjs.cloudflare.com/ajax/libs/leaflet-contextmenu/1.2.1/leaflet.contextmenu.min.css
-curl --create-dirs -o %{buildroot}/%{install_base}/leaflet-contextmenu/1.2.1/license.html https://opensource.org/license/mit
+curl --create-dirs -Lo %{buildroot}/%{install_base}/leaflet-contextmenu/1.2.1/leaflet.contextmenu.min.js https://cdnjs.cloudflare.com/ajax/libs/leaflet-contextmenu/1.2.1/leaflet.contextmenu.min.js
+curl --create-dirs -Lo %{buildroot}/%{install_base}/leaflet-contextmenu/1.2.1/leaflet.contextmenu.min.css https://cdnjs.cloudflare.com/ajax/libs/leaflet-contextmenu/1.2.1/leaflet.contextmenu.min.css
+curl --create-dirs -Lo %{buildroot}/%{install_base}/leaflet-contextmenu/1.2.1/license.html https://opensource.org/license/mit
 # Fetch leaflet markercluster
-curl --create-dirs -o %{buildroot}/%{install_base}/leaflet-markercluster/1.0.3/leaflet.markercluster-src.js https://unpkg.com/leaflet.markercluster@1.0.3/dist/leaflet.markercluster-src.js
-curl --create-dirs -o %{buildroot}/%{install_base}/leaflet-markercluster/1.0.3/MarkerCluster.css https://unpkg.com/leaflet.markercluster@1.0.3/dist/MarkerCluster.css
-curl --create-dirs -o %{buildroot}/%{install_base}/leaflet-markercluster/1.0.3/MarkerCluster.Default.css https://unpkg.com/leaflet.markercluster@1.0.3/dist/MarkerCluster.Default.css
-curl --create-dirs -o %{buildroot}/%{install_base}/leaflet-markercluster/1.0.3/license.html https://mit-license.org/
+curl --create-dirs -Lo %{buildroot}/%{install_base}/leaflet-markercluster/1.0.3/leaflet.markercluster-src.js https://unpkg.com/leaflet.markercluster@1.0.3/dist/leaflet.markercluster-src.js
+curl --create-dirs -Lo %{buildroot}/%{install_base}/leaflet-markercluster/1.0.3/MarkerCluster.css https://unpkg.com/leaflet.markercluster@1.0.3/dist/MarkerCluster.css
+curl --create-dirs -Lo %{buildroot}/%{install_base}/leaflet-markercluster/1.0.3/MarkerCluster.Default.css https://unpkg.com/leaflet.markercluster@1.0.3/dist/MarkerCluster.Default.css
+curl --create-dirs -Lo %{buildroot}/%{install_base}/leaflet-markercluster/1.0.3/license.html https://mit-license.org/
 # Install leaflet curve source
-curl --create-dirs -o %{buildroot}/%{install_base}/leaflet-curve/0.9.2/leaflet.curve.js https://raw.githubusercontent.com/elfalem/Leaflet.curve/v0.9.2/src/leaflet.curve.js
-curl --create-dirs -o %{buildroot}/%{install_base}/leaflet-curve/0.9.2/LICENSE https://raw.githubusercontent.com/elfalem/Leaflet.curve/v0.9.2/LICENSE
+curl --create-dirs -Lo %{buildroot}/%{install_base}/leaflet-curve/0.9.2/leaflet.curve.js https://raw.githubusercontent.com/elfalem/Leaflet.curve/v0.9.2/src/leaflet.curve.js
+curl --create-dirs -Lo %{buildroot}/%{install_base}/leaflet-curve/0.9.2/LICENSE https://raw.githubusercontent.com/elfalem/Leaflet.curve/v0.9.2/LICENSE
 # Fetch leaflet L.LatLng.UTM source
-curl --create-dirs -o %{buildroot}/%{install_base}/leaflet-L.LatLng.UTM/1.0/L.LatLng.UTM.js https://raw.githubusercontent.com/jjimenezshaw/Leaflet.UTM/v1.0.0/L.LatLng.UTM.js
-curl --create-dirs -o %{buildroot}/%{install_base}/leaflet-L.LatLng.UTM/1.0/LICENSE https://raw.githubusercontent.com/jjimenezshaw/Leaflet.UTM/master/LICENSE
+curl --create-dirs -Lo %{buildroot}/%{install_base}/leaflet-L.LatLng.UTM/1.0/L.LatLng.UTM.js https://raw.githubusercontent.com/jjimenezshaw/Leaflet.UTM/v1.0.0/L.LatLng.UTM.js
+curl --create-dirs -Lo %{buildroot}/%{install_base}/leaflet-L.LatLng.UTM/1.0/LICENSE https://raw.githubusercontent.com/jjimenezshaw/Leaflet.UTM/master/LICENSE
 
 %clean
 rm -rf %{buildroot}

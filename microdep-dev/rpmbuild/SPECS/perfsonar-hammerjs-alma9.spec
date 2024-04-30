@@ -21,8 +21,8 @@ An open-source library that can recognize gestures made by touch, mouse and poin
 
 rm -rf %{buildroot}
 # Fetch hammerjs 2.0.8
-curl --create-dirs -o %{buildroot}/%{install_base}/hammerjs/2.0.8/hammer.js https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js
-curl --create-dirs -o %{buildroot}/%{install_base}/hammerjs/2.0.8/LICENSE.md https://raw.githubusercontent.com/hammerjs/hammer.js/master/LICENSE.md
+curl --create-dirs -Lo %{buildroot}/%{install_base}/hammerjs/2.0.8/hammer.js https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js
+curl --create-dirs -Lo %{buildroot}/%{install_base}/hammerjs/2.0.8/LICENSE.md https://raw.githubusercontent.com/hammerjs/hammer.js/master/LICENSE.md
 
 %clean
 rm -rf %{buildroot}
