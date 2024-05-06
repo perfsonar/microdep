@@ -80,11 +80,12 @@ RUN if [ "$TYPE" = "toolkit" ]; then \
 
 # Add Microdep packages (need postgres running)
 COPY unibuild-repo/RPMS/ /root/RPMS/
+COPY submodules/pstracetree/unibuild-repo/RPMS/ /root/RPMS/
 RUN if [ "$TYPE" = "toolkit" ]; then \
     dnf -y install centos-release-rabbitmq-38 && dnf -y update; \
     mkdir -p /var/run/postgresql && chown postgres.postgres /var/run/postgresql \
     && su - postgres -c "/usr/bin/pg_ctl -D /var/lib/pgsql/data start -w -t 120" \
-    && dnf -y install /root/RPMS/*; \
+    && dnf -y install --allowerasing --skip-broken /root/RPMS/*; \
 fi
 
 #RUN pip3 install multidict typing_extensions yarl async_timeout idna_ssl aiosignal cchardet charset_normalizer attrs
