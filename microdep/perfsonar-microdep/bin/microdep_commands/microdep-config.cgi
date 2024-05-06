@@ -80,7 +80,7 @@ if ( parm('start')){ # list active peers
     my $query_str = 'SELECT from_name, to_name FROM peers WHERE start < ' . $end . ' AND end > ' . $start . ' ORDER BY from_name, to_name LIMIT 10000;' ;
     if ($mode eq "nodes") {
 	# Fetch nodes (vertices) info 
-	$query_str = 'SELECT name, city, latitude, longitude FROM members WHERE timestamp < ' . $end . ' AND timestamp > ' . $start . ' ORDER BY name LIMIT 10000;' ;
+	$query_str = 'SELECT name, city, latitude, longitude, ip FROM members WHERE timestamp < ' . $end . ' AND timestamp > ' . $start . ' ORDER BY name LIMIT 10000;' ;
     }
     my @pairs = do_select( $query_str );
     print $q->header( -type=>'application/json'	);
