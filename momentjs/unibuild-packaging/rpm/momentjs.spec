@@ -24,13 +24,15 @@ Parse, validate, manipulate, and display dates and times in JavaScript.
 %install
 
 #rm -rf %{buildroot}
-# Install momentjs
+# Install momentjs 
 mkdir -p %{buildroot}/%{install_base}/momentjs/2.30.1/
 cp -a ../moment-%{version}/dist/* %{buildroot}/%{install_base}/momentjs/2.30.1/
 install -D -m 0644 ../moment-%{version}/LICENSE %{buildroot}/%{install_base}/momentjs/2.30.1/
 
-# Fetch moment 2.27.0
-#curl --create-dirs -Lo %{buildroot}/%{install_base}/momentjs/2.27.0/moment.js https://cdn.jsdelivr.net/npm/moment@2.27.0
+# ** SOMETHING STRANGE WITH SOURCE... FETCH FROM CDN INSTEAD ***
+# Fetch moment 2.30.1
+curl --create-dirs -Lo %{buildroot}/%{install_base}/momentjs/2.30.1/moment.js https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.30.1/moment.js
+curl --create-dirs -Lo %{buildroot}/%{install_base}/momentjs/2.30.1/moment.js https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.30.1/moment.min.js
 #curl --create-dirs -Lo %{buildroot}/%{install_base}/momentjs/2.27.0/LICENSE https://github.com/moment/moment/raw/develop/LICENSE
 
 %clean

@@ -56,6 +56,7 @@ Requires:		perl(strict)
 Requires:		perl(URI)
 Requires:		perl(warnings)
 Requires:		perl(YAML)
+Requires:               perl(Hash::Merge::Simple)
 Requires:               js-jquery
 Requires:               js-jquery-ui
 Requires:               chartjs = 4.4.2
@@ -130,7 +131,7 @@ Requires:               perfsonar-microdep-geolite2
 
 
 %{?systemd_requires: %systemd_requires}
-#BuildRequires:          systemd
+ #BuildRequires:          systemd
 
 %description ana
 Analytic scripts to process perfSONAR data sets and generate events. Events may be viualized by Microdep map.
@@ -146,6 +147,7 @@ make ROOTPATH=%{buildroot}/%{install_base} CONFIGPATH=%{buildroot}/%{microdep_co
 # Install systemd services
 mkdir -p %{buildroot}/%{_unitdir}
 install -D -m 0644 -t %{buildroot}/%{_unitdir} %{buildroot}/%{install_base}/scripts/*.service
+install -D -m 0644 -t %{buildroot}/%{_unitdir} %{buildroot}/%{install_base}/scripts/*.timer
 # Move psconfig, httpd and logstash configs into correct folders
 install -D -m 0644 -t %{buildroot}/%{config_base}/psconfig/pscheduler.d/ %{buildroot}/%{microdep_config_base}/microdep-tests.json
 install -D -m 0644 -t %{buildroot}/etc/httpd/conf.d/ %{buildroot}/%{microdep_config_base}/apache-microdep-map.conf
@@ -178,6 +180,7 @@ ln -s /usr/share/javascript/jquery/latest/jquery.min.map %{buildroot}/%{microdep
 ln -s /usr/share/javascript/jquery/latest/jquery.js %{buildroot}/%{microdep_web_dir}/js/
 ln -s /usr/share/javascript/jquery-ui/jquery-ui.js %{buildroot}/%{microdep_web_dir}/js/
 ln -s /usr/share/javascript/jquery-ui/jquery-ui.min.js %{buildroot}/%{microdep_web_dir}/js/
+ln -s /usr/share/javascript/jquery-ui/jquery-ui.css %{buildroot}/%{microdep_web_dir}/css/
 ln -s /usr/share/javascript/jquery-ui/jquery-ui.min.css %{buildroot}/%{microdep_web_dir}/css/
 ln -s /usr/share/javascript/latlon-sphericaljs/2.3.0/latlon-spherical.js %{buildroot}/%{microdep_web_dir}/js/
 ln -s /usr/share/javascript/latlon-sphericaljs/2.3.0/dms.js %{buildroot}/%{microdep_web_dir}/js/
@@ -191,7 +194,7 @@ ln -s /usr/share/javascript/leaflet-markercluster/1.0.3/MarkerCluster.css %{buil
 ln -s /usr/share/javascript/leaflet-markercluster/1.0.3/leaflet.markercluster-src.js %{buildroot}/%{microdep_web_dir}/js/
 ln -s /usr/share/javascript/leaflet-curve/0.9.2/leaflet.curve.js %{buildroot}/%{microdep_web_dir}/js/
 ln -s /usr/share/javascript/leaflet-L.LatLng.UTM/1.0/L.LatLng.UTM.js %{buildroot}/%{microdep_web_dir}/js/
-ln -s /usr/share/javascript/momentjs/2.27.0/moment.js %{buildroot}/%{microdep_web_dir}/js/
+ln -s /usr/share/javascript/momentjs/2.30.1/moment.js %{buildroot}/%{microdep_web_dir}/js/
 ln -s /usr/share/javascript/select2/4.0.0/css/select2.min.css %{buildroot}/%{microdep_web_dir}/css/
 ln -s /usr/share/javascript/select2/4.0.0/js/select2.min.js %{buildroot}/%{microdep_web_dir}/js/
 ln -s /usr/share/javascript/sorttable/v2/sorttable.js %{buildroot}/%{microdep_web_dir}/js/
@@ -280,6 +283,7 @@ systemctl enable perfsonar-microdep-restart.timer
 %{_unitdir}/perfsonar-microdep-gap-ana.service
 %{_unitdir}/perfsonar-microdep-trace-ana.service
 %{_unitdir}/perfsonar-microdep-restart.service
+%{_unitdir}/perfsonar-microdep-restart.timer
 %attr(0755,perfsonar,perfsonar) %{command_base}/qstream-gap-ana
 %attr(0755,perfsonar,perfsonar) %{command_base}/trace_event_reader.py
 %attr(0755,perfsonar,perfsonar) %{command_base}/create_new_db.sh
