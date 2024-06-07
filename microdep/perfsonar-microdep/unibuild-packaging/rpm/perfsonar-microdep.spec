@@ -8,7 +8,7 @@
 
 #Version variables set by automated scripts
 %define perfsonar_auto_version 5.1.0
-%define perfsonar_auto_relnum alfa1
+%define perfsonar_auto_relnum 1
 
 Name:			perfsonar-microdep
 Version:		%{perfsonar_auto_version}
@@ -59,13 +59,21 @@ Requires:		perl(YAML)
 Requires:               perl(Hash::Merge::Simple)
 Requires:               js-jquery
 Requires:               js-jquery-ui
+Requires:               datatablesjs 
 Requires:               chartjs = 4.4.2
+Requires:               chartjs-adapter-moment
+Requires:               chartjs-plugin-zoom
 Requires:               d3js = 4
 Requires:               hammerjs = 2.0.8
 Requires:               leafletjs = 1.0.3
+Requires:               leafletjs-contextmenu
+Requires:               leafletjs-markercluster
+Requires:               leafletjs-curve
+Requires:               leafletjs-L.LatLng.UTM
+Requires:               latlon-sphericaljs
 Requires:               momentjs = 2.30.1
 Requires:               select2js = 4.0.0
-#Requires:               perfsonar-tracetree
+Recommends:             perfsonar-tracetree
 %{?systemd_requires: %systemd_requires}
 #BuildRequires:          systemd
 

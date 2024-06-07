@@ -7,6 +7,3 @@
 [submodule "owamp"]
 	path = microdep-dev/owamp
 	url = git@github.com:perfsonar/owamp
-[submodule "submodules/pstracetree"]
-	path = submodules/pstracetree
-	url = git@github.com:perfsonar/pstracetree.git
