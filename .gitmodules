@@ -1,9 +1,0 @@
-[submodule "perfsonar-testpoint-docker"]
-	path = microdep-dev/perfsonar-testpoint-docker
-	url = https://github.com/perfsonar/perfsonar-testpoint-docker.git
-[submodule "pscheduler"]
-	path = microdep-dev/pscheduler
-	url = git@github.com:perfsonar/pscheduler.git
-[submodule "owamp"]
-	path = microdep-dev/owamp
-	url = git@github.com:perfsonar/owamp
