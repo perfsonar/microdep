@@ -23,3 +23,8 @@ multiarch_build
 
 # Detritus from the one-shot Docker builder
 DOSB/
+
+# Legacy microdep dependencies
+microdep-dev/microdep-legacy
+microdep-dev/pstracetree-now-in-nightly-build
+microdep-dev/routingmonitor-now-included-in-perfsonar-microdep

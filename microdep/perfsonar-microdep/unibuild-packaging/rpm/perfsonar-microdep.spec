@@ -144,6 +144,18 @@ Requires:               perfsonar-microdep-geolite2
 %description ana
 Analytic scripts to process perfSONAR data sets and generate events. Events may be viualized by Microdep map.
 
+%pre geolite2
+/usr/sbin/groupadd -r perfsonar 2> /dev/null || :
+/usr/sbin/useradd -g perfsonar -r -s /sbin/nologin -c "perfSONAR User" -d /tmp perfsonar 2> /dev/null || :
+
+%pre map
+/usr/sbin/groupadd -r perfsonar 2> /dev/null || :
+/usr/sbin/useradd -g perfsonar -r -s /sbin/nologin -c "perfSONAR User" -d /tmp perfsonar 2> /dev/null || :
+
+%pre ana
+/usr/sbin/groupadd -r perfsonar 2> /dev/null || :
+/usr/sbin/useradd -g perfsonar -r -s /sbin/nologin -c "perfSONAR User" -d /tmp perfsonar 2> /dev/null || :
+
 %prep
 %setup -q
 
@@ -213,9 +225,6 @@ ln -s %{microdep_config_base}/mapconfig.yml %{buildroot}/%{microdep_web_dir}
 # Init Microdep config db with start time set to beginnig of yesterday local time (** This needs redesign **)
 mkdir -p %{buildroot}/%{microdep_config_base}/mp-dragonlab/etc 
 perl %{buildroot}/%{command_base}/microdep-psconfig-load.pl -c --db %{buildroot}/%{microdep_config_base}/mp-dragonlab/etc/microdep.db --start-time $(date --date "yesterday 00:00:00" +%s) %{buildroot}/%{config_base}/psconfig/pscheduler.d/microdep-tests.json
-
-# Create perfsonar user
-id -u perfsonar &>/dev/null ||  useradd -rM -d /var/lib/perfsonar -s /sbin/nologin perfsonar
 
 %clean
 rm -rf %{buildroot}
