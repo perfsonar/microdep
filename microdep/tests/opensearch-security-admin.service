@@ -7,7 +7,9 @@ Requires=opensearch.service
 Type=oneshot
 # Wait a minute to ensure opensearch is ready
 ExecStartPre=/bin/sleep 60
-ExecStart=/usr/local/sbin/securityadmin.sh
+#ExecStart=/usr/local/sbin/securityadmin.sh
+Environment="OPENSEARCH_JAVA_HOME=/usr/share/opensearch/jdk"
+ExecStart=/usr/share/opensearch/plugins/opensearch-security/tools/securityadmin.sh -cd /etc/opensearch/opensearch-security -cert /etc/opensearch/admin.pem -cacert /etc/opensearch/root-ca.pem -key /etc/opensearch/admin-key.pem
 
 [Install]
 WantedBy=multi-user.target

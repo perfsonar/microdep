@@ -40,7 +40,7 @@ services:
       # Make misc data persist over "reboots"
       - opensearch:/var/lib/opensearch
       - grafana:/var/lib/grafana
-      - microdep-map-db:/usr/lib/perfsonar/microdep-map/mp-dragonlab/etc/
+      - microdep-map-db:/usr/lib/perfsonar/microdep-map/mp-dragonlab/etc
       # Make opensearch data persist over "reboots"
       # Add current dir as volum
       - .:/root/ps-dev
