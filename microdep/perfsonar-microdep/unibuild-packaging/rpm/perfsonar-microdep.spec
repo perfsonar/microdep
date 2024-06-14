@@ -75,7 +75,7 @@ Requires:               momentjs = 2.30.1
 Requires:               select2js = 4.0.0
 Recommends:             perfsonar-tracetree
 %{?systemd_requires: %systemd_requires}
-#BuildRequires:          systemd
+BuildRequires:          systemd
 
 %description map
 Web GUI presenting Microdep analytic results in a map view
@@ -86,6 +86,7 @@ Group:			Applications/Communications
 
 # Rabbit message queue ... but since 'dnf update' is required between installing these two dependencies, things fail... hm
 BuildRequires:          centos-release-rabbitmq-38
+Requires:               erlang < 26.0
 Requires:               rabbitmq-server
 
 BuildRequires:          perl >= 5.32
@@ -180,47 +181,47 @@ rm -rf %{buildroot}/%{microdep_config_base}/microdep-tests.json
 rm -rf %{buildroot}/%{microdep_config_base}/apache-microdep-map.conf
 rm -rf %{buildroot}/%{microdep_config_base}/logstash/
 
-# Make js and css libs available in web folder
-ln -s /usr/share/javascript/chartjs/4.4.2/chart.umd.js %{buildroot}/%{microdep_web_dir}/js
-ln -s /usr/share/javascript/chartjs/4.4.2/chart.umd.js.map %{buildroot}/%{microdep_web_dir}/js
-ln -s /usr/share/javascript/chartjs-adapter-moment/0.1.1/chartjs-adapter-moment.js %{buildroot}/%{microdep_web_dir}/js/
-ln -s /usr/share/javascript/chartjs-plugin-zoom/1.2.1/chartjs-plugin-zoom.min.js %{buildroot}/%{microdep_web_dir}/js/
-ln -s /usr/share/javascript/chartjs-plugin-zoom/1.2.1/chartjs-plugin-zoom.js %{buildroot}/%{microdep_web_dir}/js/
-ln -s /usr/share/javascript/chartjs-plugin-zoom/1.2.1/chartjs-plugin-zoom.esm.js %{buildroot}/%{microdep_web_dir}/js/
-ln -s /usr/share/javascript/d3js/d3.v4.js %{buildroot}/%{microdep_web_dir}/js/
-ln -s /usr/share/javascript/datatablesjs/1.13.1/datatables.min.js %{buildroot}/%{microdep_web_dir}/js/
-ln -s /usr/share/javascript/datatablesjs/1.13.1/datatables.min.css %{buildroot}/%{microdep_web_dir}/css/
-ln -s /usr/share/javascript/datatablesjs/1.13.1/datatables.min.css %{buildroot}/%{microdep_web_dir}/js/
-ln -s /usr/share/javascript/hammerjs/2.0.8/hammer.js %{buildroot}/%{microdep_web_dir}/js/
-ln -s /usr/share/javascript/hammerjs/2.0.8/hammer.min.js %{buildroot}/%{microdep_web_dir}/js/
-ln -s /usr/share/javascript/hammerjs/2.0.8/hammer.min.js.map %{buildroot}/%{microdep_web_dir}/js/
-ln -s /usr/share/javascript/hammerjs/2.0.8/hammer.min.map %{buildroot}/%{microdep_web_dir}/js/
-ln -s /usr/share/javascript/jquery/latest/jquery.min.js %{buildroot}/%{microdep_web_dir}/js/
-ln -s /usr/share/javascript/jquery/latest/jquery.min.map %{buildroot}/%{microdep_web_dir}/js/
-ln -s /usr/share/javascript/jquery/latest/jquery.js %{buildroot}/%{microdep_web_dir}/js/
-ln -s /usr/share/javascript/jquery-ui/jquery-ui.js %{buildroot}/%{microdep_web_dir}/js/
-ln -s /usr/share/javascript/jquery-ui/jquery-ui.min.js %{buildroot}/%{microdep_web_dir}/js/
-ln -s /usr/share/javascript/jquery-ui/jquery-ui.css %{buildroot}/%{microdep_web_dir}/css/
-ln -s /usr/share/javascript/jquery-ui/jquery-ui.min.css %{buildroot}/%{microdep_web_dir}/css/
-ln -s /usr/share/javascript/latlon-sphericaljs/2.3.0/latlon-spherical.js %{buildroot}/%{microdep_web_dir}/js/
-ln -s /usr/share/javascript/latlon-sphericaljs/2.3.0/dms.js %{buildroot}/%{microdep_web_dir}/js/
-ln -s /usr/share/javascript/leafletjs/1.0.3/leaflet.css %{buildroot}/%{microdep_web_dir}/css/
-ln -s /usr/share/javascript/leafletjs/1.0.3/leaflet.js %{buildroot}/%{microdep_web_dir}/js/
-ln -s /usr/share/javascript/leafletjs/1.0.3/images %{buildroot}/%{microdep_web_dir}/css/
-ln -s /usr/share/javascript/leaflet-contextmenu/1.2.1/leaflet.contextmenu.min.css %{buildroot}/%{microdep_web_dir}/css/
-ln -s /usr/share/javascript/leaflet-contextmenu/1.2.1/leaflet.contextmenu.min.js %{buildroot}/%{microdep_web_dir}/js/
-ln -s /usr/share/javascript/leaflet-markercluster/1.0.3/MarkerCluster.Default.css %{buildroot}/%{microdep_web_dir}/css/
-ln -s /usr/share/javascript/leaflet-markercluster/1.0.3/MarkerCluster.css %{buildroot}/%{microdep_web_dir}/css/
-ln -s /usr/share/javascript/leaflet-markercluster/1.0.3/leaflet.markercluster-src.js %{buildroot}/%{microdep_web_dir}/js/
-ln -s /usr/share/javascript/leaflet-curve/0.9.2/leaflet.curve.js %{buildroot}/%{microdep_web_dir}/js/
-ln -s /usr/share/javascript/leaflet-L.LatLng.UTM/1.0/L.LatLng.UTM.js %{buildroot}/%{microdep_web_dir}/js/
-ln -s /usr/share/javascript/momentjs/2.30.1/moment.js %{buildroot}/%{microdep_web_dir}/js/
-ln -s /usr/share/javascript/select2/4.0.0/css/select2.min.css %{buildroot}/%{microdep_web_dir}/css/
-ln -s /usr/share/javascript/select2/4.0.0/js/select2.min.js %{buildroot}/%{microdep_web_dir}/js/
-ln -s /usr/share/javascript/sorttable/v2/sorttable.js %{buildroot}/%{microdep_web_dir}/js/
+# Make js and css libs available in web folder (-r for relative paths ... to make rpmbuild happy)
+ln -sr /usr/share/javascript/chartjs/4.4.2/chart.umd.js %{buildroot}/%{microdep_web_dir}/js
+ln -sr /usr/share/javascript/chartjs/4.4.2/chart.umd.js.map %{buildroot}/%{microdep_web_dir}/js
+ln -sr /usr/share/javascript/chartjs-adapter-moment/0.1.1/chartjs-adapter-moment.js %{buildroot}/%{microdep_web_dir}/js/
+ln -sr /usr/share/javascript/chartjs-plugin-zoom/1.2.1/chartjs-plugin-zoom.min.js %{buildroot}/%{microdep_web_dir}/js/
+ln -sr /usr/share/javascript/chartjs-plugin-zoom/1.2.1/chartjs-plugin-zoom.js %{buildroot}/%{microdep_web_dir}/js/
+ln -sr /usr/share/javascript/chartjs-plugin-zoom/1.2.1/chartjs-plugin-zoom.esm.js %{buildroot}/%{microdep_web_dir}/js/
+ln -sr /usr/share/javascript/d3js/d3.v4.js %{buildroot}/%{microdep_web_dir}/js/
+ln -sr /usr/share/javascript/datatablesjs/1.13.1/datatables.min.js %{buildroot}/%{microdep_web_dir}/js/
+ln -sr /usr/share/javascript/datatablesjs/1.13.1/datatables.min.css %{buildroot}/%{microdep_web_dir}/css/
+ln -sr /usr/share/javascript/datatablesjs/1.13.1/datatables.min.css %{buildroot}/%{microdep_web_dir}/js/
+ln -sr /usr/share/javascript/hammerjs/2.0.8/hammer.js %{buildroot}/%{microdep_web_dir}/js/
+ln -sr /usr/share/javascript/hammerjs/2.0.8/hammer.min.js %{buildroot}/%{microdep_web_dir}/js/
+ln -sr /usr/share/javascript/hammerjs/2.0.8/hammer.min.js.map %{buildroot}/%{microdep_web_dir}/js/
+ln -sr /usr/share/javascript/hammerjs/2.0.8/hammer.min.map %{buildroot}/%{microdep_web_dir}/js/
+ln -sr /usr/share/javascript/jquery/latest/jquery.min.js %{buildroot}/%{microdep_web_dir}/js/
+ln -sr /usr/share/javascript/jquery/latest/jquery.min.map %{buildroot}/%{microdep_web_dir}/js/
+ln -sr /usr/share/javascript/jquery/latest/jquery.js %{buildroot}/%{microdep_web_dir}/js/
+ln -sr /usr/share/javascript/jquery-ui/jquery-ui.js %{buildroot}/%{microdep_web_dir}/js/
+ln -sr /usr/share/javascript/jquery-ui/jquery-ui.min.js %{buildroot}/%{microdep_web_dir}/js/
+ln -sr /usr/share/javascript/jquery-ui/jquery-ui.css %{buildroot}/%{microdep_web_dir}/css/
+ln -sr /usr/share/javascript/jquery-ui/jquery-ui.min.css %{buildroot}/%{microdep_web_dir}/css/
+ln -sr /usr/share/javascript/latlon-sphericaljs/2.3.0/latlon-spherical.js %{buildroot}/%{microdep_web_dir}/js/
+ln -sr /usr/share/javascript/latlon-sphericaljs/2.3.0/dms.js %{buildroot}/%{microdep_web_dir}/js/
+ln -sr /usr/share/javascript/leafletjs/1.0.3/leaflet.css %{buildroot}/%{microdep_web_dir}/css/
+ln -sr /usr/share/javascript/leafletjs/1.0.3/leaflet.js %{buildroot}/%{microdep_web_dir}/js/
+ln -sr /usr/share/javascript/leafletjs/1.0.3/images %{buildroot}/%{microdep_web_dir}/css/
+ln -sr /usr/share/javascript/leaflet-contextmenu/1.2.1/leaflet.contextmenu.min.css %{buildroot}/%{microdep_web_dir}/css/
+ln -sr /usr/share/javascript/leaflet-contextmenu/1.2.1/leaflet.contextmenu.min.js %{buildroot}/%{microdep_web_dir}/js/
+ln -sr /usr/share/javascript/leaflet-markercluster/1.0.3/MarkerCluster.Default.css %{buildroot}/%{microdep_web_dir}/css/
+ln -sr /usr/share/javascript/leaflet-markercluster/1.0.3/MarkerCluster.css %{buildroot}/%{microdep_web_dir}/css/
+ln -sr /usr/share/javascript/leaflet-markercluster/1.0.3/leaflet.markercluster-src.js %{buildroot}/%{microdep_web_dir}/js/
+ln -sr /usr/share/javascript/leaflet-curve/0.9.2/leaflet.curve.js %{buildroot}/%{microdep_web_dir}/js/
+ln -sr /usr/share/javascript/leaflet-L.LatLng.UTM/1.0/L.LatLng.UTM.js %{buildroot}/%{microdep_web_dir}/js/
+ln -sr /usr/share/javascript/momentjs/2.30.1/moment.js %{buildroot}/%{microdep_web_dir}/js/
+ln -sr /usr/share/javascript/select2/4.0.0/css/select2.min.css %{buildroot}/%{microdep_web_dir}/css/
+ln -sr /usr/share/javascript/select2/4.0.0/js/select2.min.js %{buildroot}/%{microdep_web_dir}/js/
+ln -sr /usr/share/javascript/sorttable/v2/sorttable.js %{buildroot}/%{microdep_web_dir}/js/
 
 # Link mapconfig
-ln -s %{microdep_config_base}/mapconfig.yml %{buildroot}/%{microdep_web_dir}
+ln -sr %{microdep_config_base}/mapconfig.yml %{buildroot}/%{microdep_web_dir}
 
 # Init Microdep config db with start time set to beginnig of yesterday local time (** This needs redesign **)
 mkdir -p %{buildroot}/%{microdep_config_base}/mp-dragonlab/etc 
@@ -260,6 +261,10 @@ systemctl enable rabbitmq-server.service
 systemctl enable perfsonar-microdep-gap-ana.service
 systemctl enable perfsonar-microdep-trace-ana.service
 systemctl enable perfsonar-microdep-restart.timer
+systemctl start rabbitmq-server.service
+systemctl start perfsonar-microdep-gap-ana.service
+systemctl start perfsonar-microdep-trace-ana.service
+systemctl start perfsonar-microdep-restart.timer
 
 %files 
 %defattr(0644,perfsonar,perfsonar,0755)
