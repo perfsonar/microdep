@@ -49,17 +49,19 @@ A zoom and pan plugin for Chart.js
 
 #rm -rf %{buildroot}
 # Install chartjs
-mkdir -p - m 755 %{buildroot}/%{install_base}/chartjs/4.4.2/
-cp -dR --preserve=mode,timestamps ../chartjs-%{version}/package/dist/* %{buildroot}/%{install_base}/chartjs/4.4.2/
+mkdir -p  %{buildroot}/%{install_base}/chartjs/4.4.2
+cp -dR ../chartjs-%{version}/package/dist/* %{buildroot}/%{install_base}/chartjs/4.4.2/
 install -D -m 0644 ../chartjs-%{version}/package/LICENSE.md %{buildroot}/%{install_base}/chartjs/4.4.2/
 # Install adaptor-moment 0.1.1
-mkdir -p -m 755 %{buildroot}/%{install_base}/chartjs-adapter-moment/0.1.1
-cp -dR --preserve=mode,timestamps ../chartjs-adapter-moment-0.1.1/dist/* %{buildroot}/%{install_base}/chartjs-adapter-moment/0.1.1 
+mkdir -p  %{buildroot}/%{install_base}/chartjs-adapter-moment/0.1.1
+cp -dR  ../chartjs-adapter-moment-0.1.1/dist/* %{buildroot}/%{install_base}/chartjs-adapter-moment/0.1.1 
 install -D -m 0644 ../chartjs-adapter-moment-0.1.1/LICENSE.md %{buildroot}/%{install_base}/chartjs-adapter-moment/0.1.1
 # Install plugin-zoom 1.2.1
-mkdir -p -m 755 %{buildroot}/%{install_base}/chartjs-plugin-zoom/1.2.1
-cp -dR --preserve=mode,timestamps ../chartjs-plugin-zoom-1.2.1/package/dist/* %{buildroot}/%{install_base}/chartjs-plugin-zoom/1.2.1
+mkdir -p %{buildroot}/%{install_base}/chartjs-plugin-zoom/1.2.1
+cp -dR  ../chartjs-plugin-zoom-1.2.1/package/dist/* %{buildroot}/%{install_base}/chartjs-plugin-zoom/1.2.1
 install -D -m 0644 ../chartjs-plugin-zoom-1.2.1/package/LICENSE.md %{buildroot}/%{install_base}/chartjs-plugin-zoom/1.2.1
+
+#chmod 755 %{buildroot}/%{install_base}/chartjs*/*
 
 %clean
 rm -rf %{buildroot}
@@ -67,17 +69,17 @@ rm -rf %{buildroot}
 %files 
 %defattr(0644,root,root,0755)
 %license %{install_base}/chartjs/4.4.2/LICENSE.md
-%attr(0644,root,root) %{install_base}/chartjs/4.4.2/
+%{install_base}/chartjs/4.4.2/
 
 %files adapter-moment 
 %defattr(0644,root,root,0755)
 %license %{install_base}/chartjs-adapter-moment/0.1.1/LICENSE.md
-%attr(0644,root,root) %{install_base}/chartjs-adapter-moment/0.1.1/
+%{install_base}/chartjs-adapter-moment/0.1.1/
 
 %files plugin-zoom
 %defattr(0644,root,root,0755)
 %license %{install_base}/chartjs-plugin-zoom/1.2.1/LICENSE.md
-%attr(0644,root,root) %{install_base}/chartjs-plugin-zoom/1.2.1/
+%{install_base}/chartjs-plugin-zoom/1.2.1/
 
 %changelog
 * Thu Mar 14 2024 Otto J Wittner <otto.wittner@sikt.no>

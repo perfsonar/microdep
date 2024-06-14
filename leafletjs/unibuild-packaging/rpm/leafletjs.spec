@@ -96,32 +96,32 @@ curl --create-dirs -Lo %{buildroot}/%{install_base}/leaflet-L.LatLng.UTM/1.0/LIC
 rm -rf %{buildroot}
 
 %files 
-%defattr(0644,perfsonar,perfsonar,0755)
+%defattr(0644,root,root,0755)
 %license %{install_base}/leafletjs/1.0.3/LICENSE
 %{install_base}/leafletjs/1.0.3/leaflet.js
 %{install_base}/leafletjs/1.0.3/leaflet.css
 %{install_base}/leafletjs/1.0.3/images/*.png
 
 %files contextmenu 
-%defattr(0644,perfsonar,perfsonar,0755)
+%defattr(0644,root,root,0755)
 %license %{install_base}/leaflet-contextmenu/1.2.1/license.html
 %{install_base}/leaflet-contextmenu/1.2.1/leaflet.contextmenu.min.js
 %{install_base}/leaflet-contextmenu/1.2.1/leaflet.contextmenu.min.css
 
 %files markercluster
-%defattr(0644,perfsonar,perfsonar,0755)
+%defattr(0644,root,root,0755)
 %license %{install_base}/leaflet-markercluster/1.0.3/license.html
 %{install_base}/leaflet-markercluster/1.0.3/leaflet.markercluster-src.js
 %{install_base}/leaflet-markercluster/1.0.3/MarkerCluster.css
 %{install_base}/leaflet-markercluster/1.0.3/MarkerCluster.Default.css
 
 %files curve
-%defattr(0644,perfsonar,perfsonar,0755)
+%defattr(0644,root,root,0755)
 %license %{install_base}/leaflet-curve/0.9.2/LICENSE
 %{install_base}/leaflet-curve/0.9.2/leaflet.curve.js
 
 %files L.LatLng.UTM
-%defattr(0644,perfsonar,perfsonar,0755)
+%defattr(0644,root,root,0755)
 %license %{install_base}/leaflet-L.LatLng.UTM/1.0/LICENSE
 %{install_base}/leaflet-L.LatLng.UTM/1.0/L.LatLng.UTM.js
 

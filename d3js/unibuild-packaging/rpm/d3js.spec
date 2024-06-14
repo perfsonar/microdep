@@ -28,9 +28,9 @@ curl --create-dirs -Lo %{buildroot}/%{install_base}/d3js/LICENSE https://raw.git
 rm -rf %{buildroot}
 
 %files 
-%defattr(0644,perfsonar,perfsonar,0755)
+%defattr(0644,root,root,0755)
 %license %{install_base}/d3js/LICENSE
-%attr(0644,perfsonar,perfsonar) %{install_base}/d3js/d3.v4.js
+%{install_base}/d3js/d3.v4.js
 
 %changelog
 * Thu Mar 14 2024 Otto J Wittner <otto.wittner@sikt.no>

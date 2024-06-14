@@ -30,10 +30,10 @@ curl --create-dirs -Lo %{buildroot}/%{install_base}/select2/4.0.0/LICENSE.mp htt
 rm -rf %{buildroot}
 
 %files 
-%defattr(0644,perfsonar,perfsonar,0755)
+%defattr(0644,root,root,0755)
 %license %{install_base}/select2/4.0.0/LICENSE.mp
-%attr(0644,perfsonar,perfsonar) %{install_base}/select2/4.0.0/js/select2.min.js
-%attr(0644,perfsonar,perfsonar) %{install_base}/select2/4.0.0/css/select2.min.css
+%{install_base}/select2/4.0.0/js/select2.min.js
+%{install_base}/select2/4.0.0/css/select2.min.css
 
 %changelog
 * Thu Mar 14 2024 Otto J Wittner <otto.wittner@sikt.no>

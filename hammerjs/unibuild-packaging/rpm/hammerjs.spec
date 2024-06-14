@@ -32,10 +32,10 @@ curl --create-dirs -Lo %{buildroot}/%{install_base}/hammerjs/2.0.8/LICENSE.md ht
 rm -rf %{buildroot}
 
 %files 
-%defattr(0644,perfsonar,perfsonar,0755)
+%defattr(0644,root,root,0755)
 %license %{install_base}/hammerjs/2.0.8/LICENSE.md
-%attr(0644,perfsonar,perfsonar) %{install_base}/hammerjs/2.0.8/*.js
-%attr(0644,perfsonar,perfsonar) %{install_base}/hammerjs/2.0.8/*.map
+%{install_base}/hammerjs/2.0.8/*.js
+%{install_base}/hammerjs/2.0.8/*.map
 
 %changelog
 * Thu Mar 14 2024 Otto J Wittner <otto.wittner@sikt.no>

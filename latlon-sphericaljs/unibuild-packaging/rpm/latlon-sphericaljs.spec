@@ -25,7 +25,7 @@ curl --create-dirs -Lo %{buildroot}/%{install_base}/latlon-sphericaljs/2.3.0/LIC
 rm -rf %{buildroot}
 
 %files 
-%defattr(0644,perfsonar,perfsonar,0755)
+%defattr(0644,root,root,0755)
 %license %{install_base}/latlon-sphericaljs/2.3.0/LICENSE
 %{install_base}/latlon-sphericaljs/2.3.0/*.js
 
