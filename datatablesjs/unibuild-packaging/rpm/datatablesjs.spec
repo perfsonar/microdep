@@ -29,7 +29,7 @@ curl --create-dirs -Lo %{buildroot}/%{install_base}/datatablesjs/LICENSE https:/
 rm -rf %{buildroot}
 
 %files 
-%defattr(0644,perfsonar,perfsonar,0755)
+%defattr(0644,root,root,0755)
 %license %{install_base}/datatablesjs/LICENSE
 %{install_base}/datatablesjs/1.13.1/*.js
 %{install_base}/datatablesjs/1.13.1/*.css

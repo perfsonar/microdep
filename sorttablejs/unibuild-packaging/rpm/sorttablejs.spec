@@ -24,9 +24,9 @@ curl --create-dirs -Lo %{buildroot}/%{install_base}/sorttable/v2/licence.html ht
 rm -rf %{buildroot}
 
 %files 
-%defattr(0644,perfsonar,perfsonar,0755)
+%defattr(0644,root,root,0755)
 %license %{install_base}/sorttable/v2/licence.html 
-%attr(0644,perfsonar,perfsonar) %{install_base}/sorttable/v2/sorttable.js
+%{install_base}/sorttable/v2/sorttable.js
 
 %changelog
 * Tue Mar 12 2024 Otto J Wittner <otto.wittner@sikt.no>
