@@ -110,8 +110,7 @@
              "source-node" : "{% pscheduler_address[0] %}",
 	     "data-ports": { "lower": 8760, "upper": 8800 },
             "output-raw" : true,
-            "packet-count" : 360000,
-            "packet-subcount" : 200,
+            "packet-count" : 6000,
 	    "packet-interval": 0.01
          },
          "type" : "latencybg"
