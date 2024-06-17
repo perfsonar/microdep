@@ -277,6 +277,11 @@ exit(0);
 
 ################################################################################
 sub handle_signals(){
+    # Update duration of each flow
+    foreach $id ( keys %t0 ) {
+	$duration{$id}=$last_tx{$id}-$t0{$id};
+    }
+    # Make and output summary
     make_summary();
     # while ( $#ARGV >= 0) { printf "Got signal %s\n", shift @ARGV }
     # die "Caught a signal $!";
