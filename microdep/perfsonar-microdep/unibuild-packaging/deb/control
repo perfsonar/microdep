@@ -1,0 +1,92 @@
+Source: perfsonar-microdep
+Section: misc
+Priority: optional
+Maintainer: perfSONAR developers <debian@perfsonar.net>
+Uploaders: Otto J Wittner <otto.wittner@sikt.no>
+Build-Depends: debhelper (>= 10),
+ perl (>= 5.32),
+ libwww-perl,
+ libjson-perl,
+ libdbi-perl,
+ libdbd-sqlite3-perl,
+ postgresql
+Standards-Version: 4.7.0.0
+Homepage: http://www.perfsonar.net
+Vcs-Git: https://github.com/perfsonar/microdep.git
+#Vcs-Browser: 
+
+Package: perfsonar-microdep
+Architecture: all
+Depends: ${misc:Depends}, ${perl:Depends},
+ perfsonar-microdep-map,
+ perfsonar-microdep-ana
+Description: perfSONAR Microdep Analysis
+ Meta-package pulling in packaged required for Microdep Analytics in perfSONAR
+
+Package: perfsonar-microdep-geolite2
+Architecture: all
+Description: MaxMind's Geolite2 geoip databases
+ Geopositioning information from Maxmind to enrich datasets with AS numbers, city and country.
+
+Package: perfsonar-microdep-map
+Architecture: all
+Depends: ${misc:Depends}, ${perl:Depends},
+ apache2,
+# libperl, perl-base, perl-modules, Getopt::Long, POSIX, Time::Local, Data:dumper 
+ perl (>= 5.32),
+ libcgi-pm-perl, 
+ libdbi-perl,
+ libjson-perl,
+ libwww-perl,
+ libsocket-perl,
+ liburi-perl,
+ libyaml-perl,
+ libhash-merge-simple-perl,
+ libjs-jquery,
+ libjs-jquery-ui,
+ libjs-jquery-datatables,
+ libjs-chart.js,
+ libjs-chart.js-adapter-moment,
+ libjs-chart.js-plugin-zoom,
+ libjs-d3,
+ libjs-hammer, 
+ libjs-leaflet,
+ libjs-leaflet-contextmenu,
+ libjs-leaflet-markercluster,
+ libjs-leaflet-curve,
+ libjs-leaflet-utm,
+ libjs-moment, 
+ libjs-select2.js,
+ libjs-sorttable
+Description: Microdep map web GUI presenting analytic results
+ Web GUI presenting Microdep analytic results in a map view
+
+Package: perfsonar-microdep-ana
+Architecture: all
+Depends: ${misc:Depends}, ${perl:Depends},
+## gap-ana
+# libperl, perl-base, perl-modules, Getopt::Long, POSIX, Time::Local, Data:Dumper, constant, sigtrap,  
+ perl (>= 5.32), 
+ libsocket-perl,
+ libstatistics-linefit-perl,
+ libstatistics-basic-perl,
+# LWP::Simple
+ libwww-perl,
+ rabbitmq-server, libanyevent-rabbitmq-perl,
+ liburi-perl,
+ libjson-perl,
+ libchart-clicker-perl,
+## trace-ana 
+ postgresql,
+ python3-geoip2,
+ python3-isodate,
+ python3-mysqldb,
+ python3-pika,
+ python3-psycopg2,
+# pytz
+ python3-tz,
+ python3-tzlocal,
+ perfsonar-microdep-geolite2
+Description: Microdep analytic toolset to analize perfSONAR datasets
+ Analytic scripts to process perfSONAR data sets and generate events. Events may be viualized by Microdep map.
+

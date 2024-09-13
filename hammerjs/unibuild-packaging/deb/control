@@ -1,0 +1,17 @@
+Source: hammer.js
+Section: misc
+Priority: optional
+Maintainer: perfSONAR developers <debian@perfsonar.net>
+Uploaders: Otto J Wittner <otto.wittner@sikt.no>
+Build-Depends: debhelper (>= 10)
+Standards-Version: 4.7.0.0
+Homepage: https://hammerjs.github.io/
+Vcs-Git: https://github.com/hammerjs/hammer.js
+#Vcs-Browser: 
+
+Package: libjs-hammer
+Architecture: all
+Description: JS lib to recognize gestures
+ An open-source library that can recognize gestures made by touch, mouse and pointerEvents.
+
+

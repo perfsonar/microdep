@@ -1,0 +1,5 @@
+geodesy (2.3.0-1) perfsonar-5.1; urgency=low
+
+  * Initial port to Debian.
+
+ -- Otto J Wittner <otto.wittner@sikt.no>  Fri, 6 Sep  2024 12:00:00 -0200

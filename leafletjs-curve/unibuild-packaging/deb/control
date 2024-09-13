@@ -1,0 +1,19 @@
+Source: leaflet.curve
+Section: misc
+Priority: optional
+Maintainer: perfSONAR developers <debian@perfsonar.net>
+Uploaders: Otto J Wittner <otto.wittner@sikt.no>
+Build-Depends: debhelper (>= 10)
+Standards-Version: 4.7.0.0
+Homepage: https://github.com/elfalem/Leaflet.curve
+Vcs-Git: https://github.com/elfalem/Leaflet.curve.git
+#Vcs-Browser: 
+
+Package: libjs-leaflet-curve
+Architecture: all
+Depends: libjs-leaflet
+Description: Leaflet plugin for Bézier curves.
+ A Leaflet plugin for drawing Bézier curves and other complex shapes.
+
+
+

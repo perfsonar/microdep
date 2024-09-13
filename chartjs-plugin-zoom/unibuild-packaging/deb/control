@@ -1,0 +1,18 @@
+Source: chartjs-plugin-zoom
+Section: misc
+Priority: optional
+Maintainer: perfSONAR developers <debian@perfsonar.net>
+Uploaders: Otto J Wittner <otto.wittner@sikt.no>
+Build-Depends: debhelper (>= 10)
+Standards-Version: 4.7.0.0
+Homepage: https://www.chartjs.org/chartjs-plugin-zoom
+Vcs-Git: https://github.com/chartjs/chartjs-adapter-moment.git
+#Vcs-Browser: 
+
+Package: libjs-chart.js-plugin-zoom
+Architecture: all
+Depends: libjs-chart.js
+Description: Zoom and pan plugin for Chart.js
+ A zoom and pan plugin for Chart.js
+
+

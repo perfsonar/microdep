@@ -1,0 +1,19 @@
+Source: leaflet.utm
+Section: misc
+Priority: optional
+Maintainer: perfSONAR developers <debian@perfsonar.net>
+Uploaders: Otto J Wittner <otto.wittner@sikt.no>
+Build-Depends: debhelper (>= 10)
+Standards-Version: 4.7.0.0
+Homepage: https://jjimenezshaw.github.io/Leaflet.UTM/
+Vcs-Git: https://jjimenezshaw.github.io/Leaflet.UTM.git
+#Vcs-Browser: 
+
+Package: libjs-leaflet-utm
+Architecture: all
+Depends: libjs-leaflet
+Description: UTM methods for L.LatLng
+ Simple UTM (WGS84) methods for L.LatLng.
+
+
+

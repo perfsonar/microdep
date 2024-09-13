@@ -1,0 +1,17 @@
+Source: geodesy
+Section: misc
+Priority: optional
+Maintainer: perfSONAR developers <debian@perfsonar.net>
+Uploaders: Otto J Wittner <otto.wittner@sikt.no>
+Build-Depends: debhelper (>= 10)
+Standards-Version: 4.7.0.0
+Homepage: https://github.com/chrisveness/geodesy
+Vcs-Git: https://github.com/chrisveness/geodesy.git
+#Vcs-Browser: 
+
+Package: libjs-geodesy
+Architecture: all
+Description: JS lib with Geodesy functions.
+ Simple ‘latitude/longitude’ js code fragments covering distances and bearings, intended to help people who had little experience of geodesy.
+
+

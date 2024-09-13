@@ -1,0 +1,5 @@
+leaflet.contextmenu (1.5.1-1) perfsonar-5.1; urgency=low
+
+  * Initial port to Debian.
+
+ -- Otto J Wittner <otto.wittner@sikt.no>  Mon, 9 Sep  2024 12:00:00 -0200

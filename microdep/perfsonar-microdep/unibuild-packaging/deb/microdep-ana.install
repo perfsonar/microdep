@@ -1,0 +1,10 @@
+etc/logstash/* usr/lib/perfsonar/logstash/pipeline/microdep/
+bin/microdep_commands/qstream-gap-ana usr/lib/perfsonar/bin/microdep_commands/
+bin/microdep_commands/trace_event_reader.py usr/lib/perfsonar/bin/microdep_commands/ 
+bin/microdep_commands/create_new_db.sh usr/lib/perfsonar/bin/microdep_commands/
+scripts/perfsonar-microdep-gap-ana.service lib/systemd/system
+scripts/perfsonar-microdep-trace-ana.service lib/systemd/system
+scripts/perfsonar-microdep-restart.service lib/systemd/system
+scripts/perfsonar-microdep-restart.timer lib/systemd/system
+
+

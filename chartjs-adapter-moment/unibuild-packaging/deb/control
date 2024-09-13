@@ -1,0 +1,17 @@
+Source: chartjs-adapter-moment
+Section: misc
+Priority: optional
+Maintainer: perfSONAR developers <debian@perfsonar.net>
+Uploaders: Otto J Wittner <otto.wittner@sikt.no>
+Build-Depends: debhelper (>= 10)
+Standards-Version: 4.7.0.0
+Homepage: https://github.com/chartjs/chartjs-adapter-moment
+Vcs-Git: https://github.com/chartjs/chartjs-adapter-moment.git
+#Vcs-Browser: 
+
+Package: libjs-chart.js-adapter-moment
+Architecture: all
+Depends: libjs-chart.js
+Description: Chartjs adaptor for Momentsjs
+ This adapter allows the use of Moment.js with Chart.js
+

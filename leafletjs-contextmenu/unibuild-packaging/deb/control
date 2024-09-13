@@ -1,0 +1,19 @@
+Source: leaflet.contextmenu
+Section: misc
+Priority: optional
+Maintainer: perfSONAR developers <debian@perfsonar.net>
+Uploaders: Otto J Wittner <otto.wittner@sikt.no>
+Build-Depends: debhelper (>= 10)
+Standards-Version: 4.7.0.0
+Homepage: https://github.com/aratcliffe/Leaflet.contextmenu
+Vcs-Git: https://github.com/aratcliffe/Leaflet.contextmenu.git
+#Vcs-Browser: 
+
+Package: libjs-leaflet-contextmenu
+Architecture: all
+Depends: libjs-leaflet
+Description: A context menu for Leaflet
+ A context menu for Leaflet
+
+
+
