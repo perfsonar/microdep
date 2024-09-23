@@ -16,12 +16,19 @@ changecom()dnl
 #ifelse(PACKAGING,rpm,hello-rpm)
 
 # Order-list
+#ifelse(DISTRO/MAJOR,el/9,chartjs)
 chartjs
+chartjs-adapter-moment
+chartjs-plugin-zoom
 d3js
 datatablesjs
 hammerjs
+geodesyjs
 latlon-sphericaljs
 leafletjs
+leafletjs-contextmenu
+leafletjs-curve
+leafletjs-utm
 momentjs
 select2js
 sorttablejs
