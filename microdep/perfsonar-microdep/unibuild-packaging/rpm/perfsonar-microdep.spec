@@ -7,7 +7,7 @@
 %define microdep_web_dir    %{install_base}/microdep-map
 
 #Version variables set by automated scripts
-%define perfsonar_auto_version 5.1.0
+%define perfsonar_auto_version 5.1.3
 %define perfsonar_auto_relnum 1
 
 Name:			perfsonar-microdep
@@ -86,7 +86,8 @@ Group:			Applications/Communications
 
 # Rabbit message queue ... but since 'dnf update' is required between installing these two dependencies, things fail... hm
 BuildRequires:          centos-release-rabbitmq-38
-Requires:               erlang < 26.0
+#Requires:               erlang < 26.0
+#Requires:               erlang 
 Requires:               rabbitmq-server
 
 BuildRequires:          perl >= 5.32
@@ -243,8 +244,9 @@ fi
 %{command_base}/create_new_db.sh -t postgres -d routingmonitor
 
 # Enable Microdep pipeline for logstash
-if [ -f /etc/logstash/pipelines.yml ]; then
-    echo -e "- path.config: /usr/lib/perfsonar/logstash/pipeline/microdep/*.conf\n  pipeline.id: microdep" >> /etc/logstash/pipelines.yml
+if [ -f /etc/logstash/pipelines.yml -a  -z "$(grep "pipeline.id: microdep" /etc/logstash/pipelines.yml)" ]; then
+    echo -e "- path.config: /usr/lib/perfsonar/logstash/pipeline/microdep/*.conf\n  pipeline.ecs_compatibility: disabled
+\n  pipeline.id: microdep\n" >> /etc/logstash/pipelines.yml
     # Add microdep index pattern to pscheduler user ... but this require opensearch to run...
     #sed -i "s|- 'pscheduler_\*'|- 'pscheduler_\*'\n      - 'dragonlab\*'|" opensearch/opensearch-security/roles.yml; \
 	#sed -i "s|- 'pscheduler\*'|- 'pscheduler\*'\n      - 'dragonlab\*'|" opensearch/opensearch-security/roles.yml; \
@@ -255,6 +257,10 @@ if [ -f /etc/logstash/pipelines.yml ]; then
 fi
 # Prepare folder for json output from analytics scripts read by logstash
 mkdir -p /var/lib/logstash/microdep && chown perfsonar:perfsonar /var/lib/logstash/microdep && chmod 755 /var/lib/logstash/microdep
+
+%postun
+# Clean up pipline for logstash
+sed -ie '/pipeline\/microdep/,+2d' /etc/logstash/pipelines.yml
 
 # Enable systemd services (probably not the recommended method)
 systemctl enable rabbitmq-server.service
@@ -312,7 +318,8 @@ systemctl start perfsonar-microdep-restart.timer
 %config %{install_base}/logstash/pipeline/microdep/01-microdep-inputs.conf
 %config %{install_base}/logstash/pipeline/microdep/02-microdep-filter.conf
 %config %{install_base}/logstash/pipeline/microdep/03-microdep-outputs.conf
-
+%config %{microdep_config_base}/os-template-gap-ana.json
+%config %{microdep_config_base}/os-template-trace-ana.json
 %changelog
 * Thu Jan 04 2024 Otto J Wittner <otto.wittner@sikt.no>
 - Initial spec file created

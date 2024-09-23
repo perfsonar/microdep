@@ -1,4 +1,6 @@
 etc/logstash/* usr/lib/perfsonar/logstash/pipeline/microdep/
+etc/os-template-gap-ana.json etc/perfsonar/microdep/
+etc/os-template-trace-ana.json etc/perfsonar/microdep/
 bin/microdep_commands/qstream-gap-ana usr/lib/perfsonar/bin/microdep_commands/
 bin/microdep_commands/trace_event_reader.py usr/lib/perfsonar/bin/microdep_commands/ 
 bin/microdep_commands/create_new_db.sh usr/lib/perfsonar/bin/microdep_commands/

@@ -33,6 +33,8 @@ scripts/perfsonar-microdep-restart.timer
 etc/logstash/microdep/01-microdep-inputs.conf
 etc/logstash/microdep/02-microdep-filter.conf
 etc/logstash/microdep/03-microdep-outputs.conf
+etc/os-template-gap-ana.json
+etc/os-template-trace-ana.json
 etc/GeoLite2/GeoLite2-City.mmdb
 etc/GeoLite2/COPYRIGHT.txt
 etc/GeoLite2/GeoLite2-ASN.mmdb

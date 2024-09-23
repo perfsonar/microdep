@@ -4,32 +4,32 @@
 # ---- Last line of header - Do not remove or edit ----
 ../../microdep-dev/LICENSE LICENSE
 # Map frontend
-#../../microdep-dev/microdep/server/script/microdep-map.html microdep-map/index.html
+#../../microdep-dev/microdep-legacy/server/script/microdep-map.html microdep-map/index.html
 microdep-map/index.html
-../../microdep-dev/microdep/server/script/ajax-loader.gif microdep-map/img/ajax-loader.gif
+../../microdep-dev/microdep-legacy/server/script/ajax-loader.gif microdep-map/img/ajax-loader.gif
 microdep-map/img/favicon.ico
-../../microdep-dev/microdep/server/script/microdep-map.js microdep-map/js/microdep-map.js
-../../microdep-dev/microdep/server/script/stats.js microdep-map/js/stats.js
-../../microdep-dev/microdep/server/script/map-lib.js microdep-map/js/map-lib.js
-../../microdep-dev/microdep/server/script/graph.js microdep-map/js/graph.js
-#../../microdep-dev/microdep/server/script/curve-chart.html microdep-map/curve-chart.html
+../../microdep-dev/microdep-legacy/server/script/microdep-map.js microdep-map/js/microdep-map.js
+../../microdep-dev/microdep-legacy/server/script/stats.js microdep-map/js/stats.js
+../../microdep-dev/microdep-legacy/server/script/map-lib.js microdep-map/js/map-lib.js
+../../microdep-dev/microdep-legacy/server/script/graph.js microdep-map/js/graph.js
+#../../microdep-dev/microdep-legacy/server/script/curve-chart.html microdep-map/curve-chart.html
 microdep-map/curve-chart.html
-../../microdep-dev/microdep/server/script/curve-chart.js microdep-map/js/curve-chart.js
-#../../microdep-dev/microdep/server/script/elastic-get-date-type.pl bin/microdep_commands/elastic-get-date-type.pl
+../../microdep-dev/microdep-legacy/server/script/curve-chart.js microdep-map/js/curve-chart.js
+#../../microdep-dev/microdep-legacy/server/script/elastic-get-date-type.pl bin/microdep_commands/elastic-get-date-type.pl
 bin/microdep_commands/elastic-get-date-type.pl
-../../microdep-dev/microdep/server/script/yaml-to-json.cgi bin/microdep_commands/yaml-to-json.cgi
+../../microdep-dev/microdep-legacy/server/script/yaml-to-json.cgi bin/microdep_commands/yaml-to-json.cgi
 bin/microdep_commands/get-mapconfig.cgi
-../../microdep-dev/microdep/server/script/microdep-config.cgi bin/microdep_commands/microdep-config.cgi
-#../../microdep-dev/microdep/server/script/mapconfig.yml etc/mapconfig.yml
+../../microdep-dev/microdep-legacy/server/script/microdep-config.cgi bin/microdep_commands/microdep-config.cgi
+#../../microdep-dev/microdep-legacy/server/script/mapconfig.yml etc/mapconfig.yml
 etc/mapconfig.yml
 etc/mapconfig.d/dragonlab.yml
-../../microdep-dev/microdep/server/script/microdep-config.yml etc/microdep-config.yml
+../../microdep-dev/microdep-legacy/server/script/microdep-config.yml etc/microdep-config.yml
 ../../microdep-dev/etc/microdep/dragonlab-base-geo.json microdep-map/dragonlab/dragonlab-base-geo.json
 microdep-map/css/microdep-map.css
 microdep-map/css/curve-chart.css
 # ... in addition there are a list of external libs to be fetched ...
 # Map config
-../../microdep-dev/microdep/server/script/microdep-psconfig-load.pl bin/microdep_commands/microdep-psconfig-load.pl
+../../microdep-dev/microdep-legacy/server/script/microdep-psconfig-load.pl bin/microdep_commands/microdep-psconfig-load.pl
 ../../microdep-dev/etc/psconfig/pscheduler.d/microdep-tests.json  etc/microdep-tests.json
 ../../microdep-dev/etc/httpd/apache-microdep-gui.conf etc/apache-microdep-map.conf
 # Debug-tools
@@ -38,16 +38,18 @@ microdep-map/css/curve-chart.css
 #bin/opensearch-query.sh bin/microdep_commands/opensearch-query.sh  "POST" action not fully implemented yet...
 #../../microdep-dev/etc/hostspecific-conf.service scripts/hostspecific-conf.service
 # Analytic tools
-../../microdep-dev/microdep/bin/qstream-gap-ana bin/microdep_commands/qstream-gap-ana
-../../microdep-dev/routingmonitor/trace_event_reader.py bin/microdep_commands/trace_event_reader.py
-../../microdep-dev/routingmonitor/create_new_db.sh bin/microdep_commands/create_new_db.sh
+../../microdep-dev/microdep-legacy/bin/qstream-gap-ana bin/microdep_commands/qstream-gap-ana
+../../microdep-dev/routingmonitor-now-included-in-perfsonar-microdep/trace_event_reader.py bin/microdep_commands/trace_event_reader.py
+../../microdep-dev/routingmonitor-now-included-in-perfsonar-microdep/create_new_db.sh bin/microdep_commands/create_new_db.sh
 ../../microdep-dev/etc/microdep/perfsonar-microdep-gap-ana.service scripts/perfsonar-microdep-gap-ana.service
 ../../microdep-dev/etc/microdep/perfsonar-microdep-trace-ana.service scripts/perfsonar-microdep-trace-ana.service
 ../../microdep-dev/etc/microdep/perfsonar-microdep-restart.service scripts/perfsonar-microdep-restart.service
 ../../microdep-dev/etc/microdep/perfsonar-microdep-restart.timer scripts/perfsonar-microdep-restart.timer
 ../../microdep-dev/etc/logstash/microdep/01-microdep-inputs.conf etc/logstash/microdep/01-microdep-inputs.conf
 ../../microdep-dev/etc/logstash/microdep/02-microdep-filter.conf etc/logstash/microdep/02-microdep-filter.conf
-../../microdep-dev/etc/logstash/microdep/03-microdep-outputs.conf etc/logstash/microdep/03-microdep-outputs.conf
+etc/logstash/microdep/03-microdep-outputs.conf
+etc/os-template-gap-ana.json
+etc/os-template-trace-ana.json
 etc/GeoLite2/GeoLite2-City.mmdb
 etc/GeoLite2/COPYRIGHT.txt
 etc/GeoLite2/GeoLite2-ASN.mmdb
