@@ -1,6 +1,6 @@
 FROM alpine:latest
 MAINTAINER Otto J Wittner <wittner@sikt.no>
 
-RUN apk update && apk add bash iproute2 docker
+RUN apk update && apk add bash iproute2 docker tcpdump
 COPY microdep/tests/netem-entrypoint.sh /entrypoint.sh
 ENTRYPOINT ["/entrypoint.sh"]

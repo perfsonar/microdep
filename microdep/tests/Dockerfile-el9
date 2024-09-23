@@ -17,7 +17,7 @@
 
 
 FROM systemd-image-el9:latest
-MAINTAINER Otto J Wittner <wittner@sikt.no>
+LABEL org.opencontainers.image.authors="Otto J Wittner <wittner@sikt.no>"
 
 # Fix default locals
 ENV LANG=en_US.UTF-8
@@ -31,11 +31,11 @@ ENV LC_CTYPE=en_US.UTF-8
 RUN dnf install -y epel-release && dnf config-manager --set-enabled crb
 
 # Point installation at the perfSONAR el9 main repository
-#RUN dnf install -y http://software.internet2.edu/rpms/el9/x86_64/latest/packages/perfsonar-repo-0.11-1.noarch.rpm
+RUN dnf install -y http://software.internet2.edu/rpms/el9/x86_64/latest/packages/perfsonar-repo-0.11-1.noarch.rpm
 # Point to perfsonar beta
 #RUN dnf install -y http://software.internet2.edu/rpms/el9/x86_64/latest/packages/perfsonar-repo-staging-0.11-1.noarch.rpm
 # Point to nightly builds
-RUN dnf install -y https://software.internet2.edu/rpms/el9/x86_64/latest/packages/perfsonar-repo-nightly-minor-0.11-1.noarch.rpm
+#RUN dnf install -y https://software.internet2.edu/rpms/el9/x86_64/latest/packages/perfsonar-repo-nightly-minor-0.11-1.noarch.rpm
 
 # Clean cache and update 
 RUN dnf clean all && rm -rf /var/cache/dnf/* && dnf -y update
@@ -53,9 +53,10 @@ RUN ln -s /usr/bin/tcpdump /usr/sbin/tcpdump
 # https://raw.githubusercontent.com/zokeber/docker-postgresql/master/Dockerfile
 # and
 # https://raw.githubusercontent.com/perfsonar/perfsonar-testpoint-docker/master/systemd/Dockerfile
+RUN useradd -l -r -h /var/lib/pgsql postgres
 RUN dnf install -y postgresql-server
 # Set the environment variables
-ENV PGDATA /var/lib/pgsql/data
+ENV PGDATA=/var/lib/pgsql/data
 # Initialize the database
 RUN su - postgres -c "/usr/bin/pg_ctl init"
 # Change own user
@@ -67,7 +68,7 @@ RUN mkdir -p /var/run/postgresql && chown postgres.postgres /var/run/postgresql 
     && dnf install -y perfsonar-$TYPE
 
 # Clean up 
-RUN dnf clean all && rm -rf /var/cache/dnf/* && dnf -y update
+#RUN dnf clean all && rm -rf /var/cache/dnf/* && dnf -y update
 
 
 # Add Opensearch dashboards ("Kibana")
@@ -77,30 +78,30 @@ RUN dnf clean all && rm -rf /var/cache/dnf/* && dnf -y update
 
 
 # Install perfsonar tracetree (from nightly build)
-RUN if [ "$TYPE" = "toolkit" ]; then \
-    dnf -y install perfsonar-tracetree; \
-fi
-
-# Prepare access to rabbitmq-repo and local repo
+##RUN if [ "$TYPE" = "toolkit" ]; then \
+##    dnf -y install perfsonar-tracetree; \
+##fi
+# Prepare access to extra and local repos
 RUN dnf -y install centos-release-rabbitmq-38 yum-utils rpm-sign createrepo nano
-COPY microdep/tests/pgp /root/pgp
-COPY unibuild-repo /var/lib/unibuild-repo
-RUN rm -r /var/lib/unibuild-repo/repodata; createrepo /var/lib/unibuild-repo
+##COPY microdep/tests/pgp /root/pgp
+COPY unibuild-repo/RPMS/*.rpm /var/lib/unibuild-repo/RPMS
+COPY pstracetree/unibuild-repo/RPMS/*.rpm /var/lib/unibuild-repo/RPMS
+RUN createrepo /var/lib/unibuild-repo
 RUN yum-config-manager --add-repo file:///var/lib/unibuild-repo
-#RUN gpg --import /root/pgp/pgp-key.private
-#RUN echo -e "%_signature gpg\n%_gpg_name $(gpg --list-signatures | grep "sig 3" | awk '{print $3}')"  > /root/.rpmmacros
-#RUN rpm --addsign /var/lib/unibuild-repo/RPMS/*.rpm 
-#RUN gpg --detach-sign --armor /var/lib/unibuild-repo/repodata/repomd.xml
-#RUN yum-config-manager --add-repo /root/pgp/unibuild.repo
-#RUN dnf -y update
+##RUN gpg --import /root/pgp/pgp-key.private
+##RUN echo -e "%_signature gpg\n%_gpg_name $(gpg --list-signatures | grep "sig 3" | awk '{print $3}')"  > /root/.rpmmacros
+##RUN rpm --addsign /var/lib/unibuild-repo/RPMS/*.rpm 
+##RUN gpg --detach-sign --armor /var/lib/unibuild-repo/repodata/repomd.xml
+##RUN yum-config-manager --add-repo /root/pgp/unibuild.repo
+##RUN dnf -y update
 RUN dnf -y update --nogpgcheck
 
 # Install microdep (needs postgres running)
-RUN if [ "$TYPE" = "toolkit" ]; then \
-    mkdir -p /var/run/postgresql && chown postgres.postgres /var/run/postgresql \
-    && su - postgres -c "/usr/bin/pg_ctl -D /var/lib/pgsql/data start -w -t 120" \
-    && dnf -y install --nogpgcheck perfsonar-microdep; \
-fi
+#RUN if [ "$TYPE" = "toolkit" ]; then \
+#    mkdir -p /var/run/postgresql && chown postgres.postgres /var/run/postgresql \
+#    && su - postgres -c "/usr/bin/pg_ctl -D /var/lib/pgsql/data start -w -t 120" \
+#    && dnf -y install --nogpgcheck perfsonar-microdep; \
+#fi
 
 # Add Microdep packages (need postgres running)
 # Install from repo

@@ -21,19 +21,27 @@ done
 # Enable ip forwarding in netem
 echo -n "Enabling forwarding ..."
 echo 1 > /proc/sys/net/ipv4/ip_forward
-if [ $? -eq 0 ]; then echo "done."; else echo "failed." ; fi
+if [ $? -eq 0 ]; then echo -n "ipv4 ok..."; else echo "ipv4 failed..." ; fi
+echo 1 > /proc/sys/net/ipv6/conf/all/forwarding
+if [ $? -eq 0 ]; then echo "ipv6 ok."; else echo "ipv6 failed." ; fi
 
-# Add required routes in testpoint and toolkit  contaniers to make netem transit node
+# Add required routes in testpoint and toolkit contaniers to make netem transit node
 docker ps -q -f name="testpoint" |
     while read pid; do
-	echo -n "Adding route to testpoint (pid $pid) ..."
+	echo -n "Adding ipv4 route to testpoint (pid $pid) ..."
 	nsenter -n -t $(docker inspect --format {{.State.Pid}} $pid) ip route add 172.150.1.0/24 via 172.150.2.200
+	if [ $? -eq 0 ]; then echo "done."; else echo "failed." ; fi
+	echo -n "Adding ipv6 route to testpoint (pid $pid) ..."
+	nsenter -n -t $(docker inspect --format {{.State.Pid}} $pid) ip -6 route add fd00::150:1:0/112 metric 1064 via fd00::150:2:200 
 	if [ $? -eq 0 ]; then echo "done."; else echo "failed." ; fi
     done
 docker ps -q -f name="toolkit" |
     while read pid; do
-	echo -n "Adding route to toolkit (pid $pid) ..."
+	echo -n "Adding ipv4 route to toolkit (pid $pid) ..."
 	nsenter -n -t $(docker inspect --format {{.State.Pid}} $pid) ip route add 172.150.2.0/24 via 172.150.1.200
+	if [ $? -eq 0 ]; then echo "done."; else echo "failed." ; fi
+	echo -n "Adding ipv6 route to testpoint (pid $pid) ..."
+	nsenter -n -t $(docker inspect --format {{.State.Pid}} $pid) ip -6 route add fd00::150:2:0/112 metric 1064 via fd00::150:1:200
 	if [ $? -eq 0 ]; then echo "done."; else echo "failed." ; fi
     done
 

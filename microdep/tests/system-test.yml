@@ -25,7 +25,7 @@
 
 services:
   ps-toolkit:
-    container_name: ps-toolkit
+    container_name: ps-toolkit-${DISTRO:-el9}
     hostname: ${TOOLKIT_HOSTNAME:-toolkit}
     image: ps-microdep-toolkit-${DISTRO:-el9}
     depends_on:
@@ -36,7 +36,7 @@ services:
       args:
         TYPE: toolkit
     volumes:
-      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+      - /sys/fs/cgroup:/sys/fs/cgroup
       # Make misc data persist over "reboots"
       - opensearch:/var/lib/opensearch
       - grafana:/var/lib/grafana
@@ -76,7 +76,7 @@ services:
 
   ps-testpoint:
 #    entrypoint: ["echo", "Service testpoint disabled. See docker-compose.yml."]
-    container_name: ps-testpoint
+    container_name: ps-testpoint-${DISTRO:-el9}
     hostname: ${TESTPOINT_HOSTNAME:-testpoint}
     image: ps-microdep-testpoint-${DISTRO:-el9}
     depends_on:
@@ -88,12 +88,12 @@ services:
       args:
         TYPE: testpoint 
     volumes:
-       - /sys/fs/cgroup:/sys/fs/cgroup:ro
+       - /sys/fs/cgroup:/sys/fs/cgroup
     networks:
       - testpoint-net
 
   systemd-image:
-    container_name: ps-systemd
+    container_name: ps-systemd-${DISTRO:-el9}
     build:
       context: .
       dockerfile: microdep/tests/Dockerfile-systemd-${DISTRO:-el9}
@@ -105,7 +105,7 @@ services:
 
   net-emulator:
 #    entrypoint: ["echo", "Service net-emulator disabled. See docker-compose.yml."]
-    container_name: ps-netemulator
+    container_name: ps-netemulator-${DISTRO:-el9}
     hostname: netemulator
     depends_on:
       - ps-testpoint
