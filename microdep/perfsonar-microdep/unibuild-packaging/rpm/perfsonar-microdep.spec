@@ -86,7 +86,7 @@ Group:			Applications/Communications
 
 # Rabbit message queue ... but since 'dnf update' is required between installing these two dependencies, things fail... hm
 BuildRequires:          centos-release-rabbitmq-38
-#Requires:               erlang < 26.0
+Requires:               erlang < 26.0
 #Requires:               erlang 
 Requires:               rabbitmq-server
 
@@ -258,10 +258,11 @@ fi
 # Prepare folder for json output from analytics scripts read by logstash
 mkdir -p /var/lib/logstash/microdep && chown perfsonar:perfsonar /var/lib/logstash/microdep && chmod 755 /var/lib/logstash/microdep
 
-%postun
-# Clean up pipline for logstash
-sed -ie '/pipeline\/microdep/,+2d' /etc/logstash/pipelines.yml
-
+# Enable executing of microdep ana scripts if SElinux is enabled
+if [ -f /sbin/restorecon ]; then
+    /sbin/restorecon -irv /usr/lib/perfsonar/bin/microdep_commands/
+fi
+    
 # Enable systemd services (probably not the recommended method)
 systemctl enable rabbitmq-server.service
 systemctl enable perfsonar-microdep-gap-ana.service
@@ -271,6 +272,11 @@ systemctl start rabbitmq-server.service
 systemctl start perfsonar-microdep-gap-ana.service
 systemctl start perfsonar-microdep-trace-ana.service
 systemctl start perfsonar-microdep-restart.timer
+
+%postun
+# Clean up pipline for logstash
+sed -ie '/pipeline\/microdep/,+2d' /etc/logstash/pipelines.yml
+
 
 %files 
 %defattr(0644,perfsonar,perfsonar,0755)
