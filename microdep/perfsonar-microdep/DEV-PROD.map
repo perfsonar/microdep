@@ -30,8 +30,9 @@ microdep-map/css/curve-chart.css
 # ... in addition there are a list of external libs to be fetched ...
 # Map config
 ../../microdep-dev/microdep-legacy/server/script/microdep-psconfig-load.pl bin/microdep_commands/microdep-psconfig-load.pl
-../../microdep-dev/etc/psconfig/pscheduler.d/microdep-tests.json  etc/microdep-tests.json
+../../microdep-dev/etc/psconfig/pscheduler.d/microdep-tests.json  etc/microdep-tests.json.example
 ../../microdep-dev/etc/httpd/apache-microdep-gui.conf etc/apache-microdep-map.conf
+etc/microdep.db
 # Debug-tools
 ../../microdep-dev/bin/rabbitmq-consume.py bin/microdep_commands/rabbitmq-consume.py
 ../../microdep-dev/bin/json2table.pl bin/microdep_commands/json2table.pl
@@ -41,10 +42,13 @@ microdep-map/css/curve-chart.css
 ../../microdep-dev/microdep-legacy/bin/qstream-gap-ana bin/microdep_commands/qstream-gap-ana
 ../../microdep-dev/routingmonitor-now-included-in-perfsonar-microdep/trace_event_reader.py bin/microdep_commands/trace_event_reader.py
 ../../microdep-dev/routingmonitor-now-included-in-perfsonar-microdep/create_new_db.sh bin/microdep_commands/create_new_db.sh
+bin/microdep_commands/fix-pgsql-access.sh
 ../../microdep-dev/etc/microdep/perfsonar-microdep-gap-ana.service scripts/perfsonar-microdep-gap-ana.service
 ../../microdep-dev/etc/microdep/perfsonar-microdep-trace-ana.service scripts/perfsonar-microdep-trace-ana.service
 ../../microdep-dev/etc/microdep/perfsonar-microdep-restart.service scripts/perfsonar-microdep-restart.service
 ../../microdep-dev/etc/microdep/perfsonar-microdep-restart.timer scripts/perfsonar-microdep-restart.timer
+scripts/perfsonar-microdep-watchconfig.service
+scripts/perfsonar-microdep-watchconfig.path
 ../../microdep-dev/etc/logstash/microdep/01-microdep-inputs.conf etc/logstash/microdep/01-microdep-inputs.conf
 ../../microdep-dev/etc/logstash/microdep/02-microdep-filter.conf etc/logstash/microdep/02-microdep-filter.conf
 etc/logstash/microdep/03-microdep-outputs.conf

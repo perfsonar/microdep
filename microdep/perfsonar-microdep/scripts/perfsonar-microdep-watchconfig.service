@@ -1,0 +1,11 @@
+[Unit]
+Description= ps Microdep - Handle updates of toolkit-webui.json
+
+[Service]
+Type=oneshot
+User=perfsonar
+Group=perfsonar
+ExecStart=/usr/lib/perfsonar/bin/microdep_commands/microdep-psconfig-load.pl -c --db /etc/perfsonar/microdep/mp-dragonlab/etc/microdep.db --start-time $(date --date "today 00:00:00" +%s) /etc/perfsonar/psconfig/pscheduler.d/toolkit-webui.json
+
+[Install]
+WantedBy=multi-user.target

@@ -7,7 +7,7 @@
 %define microdep_web_dir    %{install_base}/microdep-map
 
 #Version variables set by automated scripts
-%define perfsonar_auto_version 5.1.3
+%define perfsonar_auto_version 5.3.0
 %define perfsonar_auto_relnum 1
 
 Name:			perfsonar-microdep
@@ -153,10 +153,16 @@ Analytic scripts to process perfSONAR data sets and generate events. Events may 
 %pre map
 /usr/sbin/groupadd -r perfsonar 2> /dev/null || :
 /usr/sbin/useradd -g perfsonar -r -s /sbin/nologin -c "perfSONAR User" -d /tmp perfsonar 2> /dev/null || :
+# Stop services (ignore failures)
+systemctl stop perfsonar-microdep-watchconfig.path || true
 
 %pre ana
 /usr/sbin/groupadd -r perfsonar 2> /dev/null || :
 /usr/sbin/useradd -g perfsonar -r -s /sbin/nologin -c "perfSONAR User" -d /tmp perfsonar 2> /dev/null || :
+# Stop services (ignore failures)
+systemctl stop perfsonar-microdep-gap-ana.service || true
+systemctl stop perfsonar-microdep-trace-ana.service || true
+systemctl stop perfsonar-microdep-restart.timer || true
 
 %prep
 %setup -q
@@ -170,17 +176,19 @@ make ROOTPATH=%{buildroot}/%{install_base} CONFIGPATH=%{buildroot}/%{microdep_co
 mkdir -p %{buildroot}/%{_unitdir}
 install -D -m 0644 -t %{buildroot}/%{_unitdir} %{buildroot}/%{install_base}/scripts/*.service
 install -D -m 0644 -t %{buildroot}/%{_unitdir} %{buildroot}/%{install_base}/scripts/*.timer
-# Move psconfig, httpd and logstash configs into correct folders
-install -D -m 0644 -t %{buildroot}/%{config_base}/psconfig/pscheduler.d/ %{buildroot}/%{microdep_config_base}/microdep-tests.json
+install -D -m 0644 -t %{buildroot}/%{_unitdir} %{buildroot}/%{install_base}/scripts/*.path
+systemctl daemon-reload || true
+# Move mcirodep map, httpd and logstash configs into correct folders
+install -D -m 0644 -t %{buildroot}/%{microdep_config_base}/mp-dragonlab/etc/ %{buildroot}/%{microdep_config_base}/microdep.db
 install -D -m 0644 -t %{buildroot}/etc/httpd/conf.d/ %{buildroot}/%{microdep_config_base}/apache-microdep-map.conf
 install -D -m 0644 -t %{buildroot}/%{install_base}/logstash/pipeline/microdep %{buildroot}/%{microdep_config_base}/logstash/microdep/*
 
 # Clean up copied/unrequired files
 rm -rf %{buildroot}/%{install_base}/scripts
 rm -f %{buildroot}/%{install_base}/Makefile
-rm -rf %{buildroot}/%{microdep_config_base}/microdep-tests.json
 rm -rf %{buildroot}/%{microdep_config_base}/apache-microdep-map.conf
 rm -rf %{buildroot}/%{microdep_config_base}/logstash/
+rm -rf %{buildroot}/%{microdep_config_base}/microdep.db
 
 # Make js and css libs available in web folder (-r for relative paths ... to make rpmbuild happy)
 ln -sr /usr/share/javascript/chartjs/4.4.2/chart.umd.js %{buildroot}/%{microdep_web_dir}/js
@@ -224,9 +232,6 @@ ln -sr /usr/share/javascript/sorttable/v2/sorttable.js %{buildroot}/%{microdep_w
 # Link mapconfig
 ln -sr %{microdep_config_base}/mapconfig.yml %{buildroot}/%{microdep_web_dir}
 
-# Init Microdep config db with start time set to beginnig of yesterday local time (** This needs redesign **)
-mkdir -p %{buildroot}/%{microdep_config_base}/mp-dragonlab/etc 
-perl %{buildroot}/%{command_base}/microdep-psconfig-load.pl -c --db %{buildroot}/%{microdep_config_base}/mp-dragonlab/etc/microdep.db --start-time $(date --date "yesterday 00:00:00" +%s) %{buildroot}/%{config_base}/psconfig/pscheduler.d/microdep-tests.json
 
 %clean
 rm -rf %{buildroot}
@@ -238,10 +243,25 @@ if [ -f /etc/perfsonar/opensearch/opensearch_login ]; then
     PASSWD=`awk -F " " '{print $2}' /etc/perfsonar/opensearch/opensearch_login`
     sed -i "s|http://admin:no+nz+br|https://$USER:$PASSWD|g" %{microdep_config_base}/microdep-config.yml
 fi
-    
+
+# Init Microdep config db 
+if [ -f %{config_base}/psconfig/pscheduler.d/toolkit-webui.json ]; then
+    # Read psconfig-data and set start time set to beginnig of yesterday local time (later repeated by perfsonar-microdep-watchconfig.service)
+    %{command_base}/microdep-psconfig-load.pl -c --db %{microdep_config_base}/mp-dragonlab/etc/microdep.db --start-time $(date --date "today 00:00:00" +%s) %{config_base}/psconfig/pscheduler.d/toolkit-webui.json
+    # (Perhaps "systemctl start perfsonar-microdep-watchconfig.service" could be run instead...)
+fi
+
+# Enable systemd services (ignore failures)
+systemctl enable perfsonar-microdep-watchconfig.path || true
+systemctl start perfsonar-microdep-watchconfig.path || true
+
 %post ana
 # Create db
-%{command_base}/create_new_db.sh -t postgres -d routingmonitor
+%{command_base}/create_new_db.sh -s -t postgres -d routingmonitor
+# Fix access to db
+if [ -f /var/lib/pgsql/data/pg_hba.conf ]; then
+    %{command_base}/fix-pgsql-access.sh -i /var/lib/pgsql/data/pg_hba.conf
+fi
 
 # Enable Microdep pipeline for logstash
 if [ -f /etc/logstash/pipelines.yml -a  -z "$(grep "pipeline.id: microdep" /etc/logstash/pipelines.yml)" ]; then
@@ -263,21 +283,28 @@ if [ -f /sbin/restorecon ]; then
     /sbin/restorecon -irv /usr/lib/perfsonar/bin/microdep_commands/
 fi
     
-# Enable systemd services (probably not the recommended method)
-systemctl enable rabbitmq-server.service
-systemctl enable perfsonar-microdep-gap-ana.service
-systemctl enable perfsonar-microdep-trace-ana.service
-systemctl enable perfsonar-microdep-restart.timer
-systemctl start rabbitmq-server.service
-systemctl start perfsonar-microdep-gap-ana.service
-systemctl start perfsonar-microdep-trace-ana.service
-systemctl start perfsonar-microdep-restart.timer
-
-%postun
+# Enable systemd services (ignore failures)
+systemctl enable rabbitmq-server.service || true
+systemctl enable perfsonar-microdep-gap-ana.service || true
+systemctl enable perfsonar-microdep-trace-ana.service || true
+systemctl enable perfsonar-microdep-restart.timer || true
+systemctl start rabbitmq-server.service || true
+systemctl start perfsonar-microdep-gap-ana.service || true
+systemctl start perfsonar-microdep-trace-ana.service || true
+systemctl start perfsonar-microdep-restart.timer || true
+    
+%postun ana
 # Clean up pipline for logstash
 sed -ie '/pipeline\/microdep/,+2d' /etc/logstash/pipelines.yml
-
-
+# Clean up db access
+if [ -f /var/lib/pgsql/data/pg_hba.conf ]; then
+    %{command_base}/fix-pgsql-access.sh -ri /var/lib/pgsql/data/pg_hba.conf
+fi
+# Stop services (ignore failures)
+systemctl stop perfsonar-microdep-gap-ana.service || true
+systemctl stop perfsonar-microdep-trace-ana.service || true
+systemctl stop perfsonar-microdep-restart.timer || true
+    
 %files 
 %defattr(0644,perfsonar,perfsonar,0755)
 %license %{install_base}/LICENSE
@@ -303,11 +330,12 @@ sed -ie '/pipeline\/microdep/,+2d' /etc/logstash/pipelines.yml
 %attr(0755,perfsonar,perfsonar) %{command_base}/microdep-psconfig-load.pl
 %attr(0755,perfsonar,perfsonar) %{command_base}/json2table.pl
 %attr(0755,perfsonar,perfsonar) %{command_base}/rabbitmq-consume.py
+%{_unitdir}/perfsonar-microdep-watchconfig.path
+%{_unitdir}/perfsonar-microdep-watchconfig.service
 %config %{microdep_config_base}/microdep-config.yml
 %config %{microdep_config_base}/mapconfig.yml
 %config %{microdep_config_base}/mapconfig.d/
 %config %{microdep_config_base}/mp-dragonlab/etc/microdep.db
-%config %{config_base}/psconfig/pscheduler.d/microdep-tests.json
 %config /etc/httpd/conf.d/apache-microdep-map.conf
 %config %{microdep_web_dir}/dragonlab/dragonlab-base-geo.json
 
@@ -321,12 +349,16 @@ sed -ie '/pipeline\/microdep/,+2d' /etc/logstash/pipelines.yml
 %attr(0755,perfsonar,perfsonar) %{command_base}/qstream-gap-ana
 %attr(0755,perfsonar,perfsonar) %{command_base}/trace_event_reader.py
 %attr(0755,perfsonar,perfsonar) %{command_base}/create_new_db.sh
+%attr(0755,perfsonar,perfsonar) %{command_base}/fix-pgsql-access.sh
 %config %{install_base}/logstash/pipeline/microdep/01-microdep-inputs.conf
 %config %{install_base}/logstash/pipeline/microdep/02-microdep-filter.conf
 %config %{install_base}/logstash/pipeline/microdep/03-microdep-outputs.conf
 %config %{microdep_config_base}/os-template-gap-ana.json
 %config %{microdep_config_base}/os-template-trace-ana.json
+%config %{microdep_config_base}/microdep-tests.json.example
 %changelog
+* Thu Oct 24 2024 Otto J Wittner <otto.wittner@sikt.no>
+- Prepareing for release 5.3
 * Thu Jan 04 2024 Otto J Wittner <otto.wittner@sikt.no>
 - Initial spec file created
 

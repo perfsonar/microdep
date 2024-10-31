@@ -1,4 +1,4 @@
-leaflet.contextmenu (1.5.1-1) perfsonar-5.1; urgency=low
+leaflet.contextmenu (1.5.1-1) perfsonar-5.3; urgency=low
 
   * Initial port to Debian.
 

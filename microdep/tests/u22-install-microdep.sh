@@ -1,4 +1,5 @@
-
+# syntax=docker/dockerfile:1-labs
+#
 # Dockerfile to build perfSONAR  node
 # To build, cd to folder and run
 #
@@ -17,7 +18,7 @@
 #
 
 
-FROM systemd-image-el9:latest
+FROM systemd-image-u22:latest
 LABEL org.opencontainers.image.authors="Otto J Wittner <wittner@sikt.no>"
 
 # Fix default locals
@@ -26,27 +27,23 @@ ENV LANGUAGE=en_US.UTF-8
 ENV LC_COLLATE=C
 ENV LC_CTYPE=en_US.UTF-8
 
+ENV DEBIAN_FRONTEND=noninteractive
+
+# To install tzdata quietly 
+RUN ln -fs /usr/share/zoneinfo/Europe/Oslo /etc/localtime 
+
 # ---- D o w n l o a d   a n d   i n s t a l l   p a c k a g e s  ------
 
-# Install the EPEL RPM
-RUN dnf install -y epel-release && dnf config-manager --set-enabled crb
+# Add misc management stuff
+RUN apt-get update && apt-get -y upgrade && apt-get install -y apt-utils coreutils man-db nano emacs git openssh-client net-tools iputils-ping traceroute tcpdump curl bind9-host unzip gnupg software-properties-common tree
 
-# Point installation at the perfSONAR el9 main repository
-RUN dnf install -y http://software.internet2.edu/rpms/el9/x86_64/latest/packages/perfsonar-repo-0.11-1.noarch.rpm
-# Point to perfsonar beta
-#RUN dnf install -y http://software.internet2.edu/rpms/el9/x86_64/latest/packages/perfsonar-repo-staging-0.11-1.noarch.rpm
-# Point to nightly builds
-#RUN dnf install -y https://software.internet2.edu/rpms/el9/x86_64/latest/packages/perfsonar-repo-nightly-minor-0.11-1.noarch.rpm
+# Add required perfsonar repos
+RUN curl -o /etc/apt/sources.list.d/perfsonar-release.list https://downloads.perfsonar.net/debian/perfsonar-release.list
+RUN curl -s -o /etc/apt/trusted.gpg.d/perfsonar-release.gpg.asc https://downloads.perfsonar.net/debian/perfsonar-release.gpg.key
+RUN add-apt-repository universe
+RUN apt update
 
-# Clean cache and update 
-RUN dnf clean all && rm -rf /var/cache/dnf/* && dnf -y update
-
-# Install management packages
-RUN dnf install -y --allowerasing coreutils man-db nano emacs git patch openssh-clients net-tools iputils traceroute tcpdump curl bind-utils unzip gnupg
-
-# Fiks tcpdump issue for priveledge mode
-RUN mv /usr/sbin/tcpdump /usr/bin/tcpdump
-RUN ln -s /usr/bin/tcpdump /usr/sbin/tcpdump
+ARG TYPE
 
 # Install and explicitly init postgres before installing perfsonar packages
 #
@@ -54,94 +51,73 @@ RUN ln -s /usr/bin/tcpdump /usr/sbin/tcpdump
 # https://raw.githubusercontent.com/zokeber/docker-postgresql/master/Dockerfile
 # and
 # https://raw.githubusercontent.com/perfsonar/perfsonar-testpoint-docker/master/systemd/Dockerfile
-RUN useradd -l -r -h /var/lib/pgsql postgres
-RUN dnf install -y postgresql-server
+#RUN useradd -l -r -h /var/lib/pgsql postgres
+#RUN dnf install -y postgresql-server
 # Set the environment variables
-ENV PGDATA=/var/lib/pgsql/data
+#ENV PGDATA=/var/lib/pgsql/data
 # Initialize the database
-RUN su - postgres -c "/usr/bin/pg_ctl init"
+#RUN su - postgres -c "/usr/bin/pg_ctl init"
 # Change own user
-RUN chown -R postgres:postgres /var/lib/pgsql/data/*
+#RUN chown -R postgres:postgres /var/lib/pgsql/data/*
 #Start postgresql and install perfSONAR
-ARG TYPE
-RUN mkdir -p /var/run/postgresql && chown postgres.postgres /var/run/postgresql \
-    && su - postgres -c "/usr/bin/pg_ctl -D /var/lib/pgsql/data start -w -t 120" \
-    && dnf install -y perfsonar-$TYPE
+#RUN mkdir -p /var/run/postgresql && chown postgres.postgres /var/run/postgresql \
+#    && su - postgres -c "/usr/bin/pg_ctl -D /var/lib/pgsql/data start -w -t 120" \
+#    && dnf install -y perfsonar-$TYPE
 
-# Clean up 
-#RUN dnf clean all && rm -rf /var/cache/dnf/* && dnf -y update
 
+RUN apt --download-only  --no-install-recommends -y install perfsonar-$TYPE
+# Fix missing example conf file in perfsonar-lsregistrationdaemon package
+#RUN mkdir -p /usr/share/doc/perfsonar-lsregistrationdaemon/examples/
+#RUN curl -s -o /usr/share/doc/perfsonar-lsregistrationdaemon/examples/lsregistrationdaemon.conf https://raw.githubusercontent.com/perfsonar/ls-registration-daemon/master/etc/lsregistrationdaemon.conf
+# Make sure rsyslog and postgresql are installed before perfsonar install
+RUN apt -y install rsyslog postgresql firewalld
+COPY microdep/tests/rsyslog/u22/rsyslog.conf /etc/rsyslog.conf
+COPY microdep/tests/rsyslog/listen.conf /etc/rsyslog.d/listen.conf
+COPY microdep/tests/rsyslog/python-pscheduler.conf /etc/rsyslog.d/python-pscheduler.conf
+COPY microdep/tests/rsyslog/owamp-syslog.conf /etc/rsyslog.d/owamp-syslog.conf
+RUN printf '#!/bin/sh\nexit 0' > /usr/sbin/policy-rc.d
+
+#RUN --security=insecure /lib/systemd/systemd --user; echo "systemd running..."; sleep 10; systemctl --user status; echo "AVBRYT NUH!"; sleep 50000
+
+#RUN /usr/sbin/rsyslogd -iNONE && /usr/bin/pg_ctlcluster 14 main start && \
+#env OPENSEARCH_INITIAL_ADMIN_PASSWORD=perfSONAR123! RUNLEVEL=1 apt-get --no-install-recommends -y install perfsonar-$TYPE
+
+#COPY etc/perfsonar-$TYPE/lsregistrationdaemon.conf /etc/perfsonar/lsregistrationdaemon.conf
+# Set management gui user/password to admin/notadminnono
+RUN if [ "$TYPE" = "toolkit" ]; then htpasswd -b /etc/perfsonar/toolkit/psadmin.htpasswd admin notadminnono ; fi
+# Fix missing python package for applied by pscheduler
+#RUN apt-get -y install python3-cryptography
 
 # Add Opensearch dashboards ("Kibana")
 #RUN if [ "$TYPE" = "toolkit" ]; then \
-#       dnf -y install opensearch-dashboards && systemctl enable opensearch-dashboards.service ; \
+#       apt -y install opensearch-dashboards && systemctl enable opensearch-dashboards.service ; \
 #    fi
 
-
-# Install perfsonar tracetree (from nightly build)
-##RUN if [ "$TYPE" = "toolkit" ]; then \
-##    dnf -y install perfsonar-tracetree; \
-##fi
-# Prepare access to extra and local repos
-RUN dnf -y install centos-release-rabbitmq-38 yum-utils rpm-sign createrepo nano
-##COPY microdep/tests/pgp /root/pgp
-COPY unibuild-repo/RPMS/*.rpm /var/lib/unibuild-repo/RPMS
-COPY pstracetree/unibuild-repo/RPMS/*.rpm /var/lib/unibuild-repo/RPMS
-RUN createrepo /var/lib/unibuild-repo
-RUN yum-config-manager --add-repo file:///var/lib/unibuild-repo
-##RUN gpg --import /root/pgp/pgp-key.private
-##RUN echo -e "%_signature gpg\n%_gpg_name $(gpg --list-signatures | grep "sig 3" | awk '{print $3}')"  > /root/.rpmmacros
-##RUN rpm --addsign /var/lib/unibuild-repo/RPMS/*.rpm 
-##RUN gpg --detach-sign --armor /var/lib/unibuild-repo/repodata/repomd.xml
-##RUN yum-config-manager --add-repo /root/pgp/unibuild.repo
-##RUN dnf -y update
-RUN dnf -y update --nogpgcheck
+# Prepare access to local repos
+#RUN apt install dpkg-dev
+COPY unibuild-repo/*.deb /var/lib/unibuild-microdep-repo
+COPY unibuild-repo/Packages /var/lib/unibuild-microdep-repo
+COPY unibuild-repo/Release /var/lib/unibuild-microdep-repo
+#COPY pstracetree/unibuild-repo/*.deb /var/lib/unibuild-pstracetree-repo
+#COPY pstracetree/unibuild-repo/Packages /var/lib/unibuild-pstracetree-repo
+#COPY pstracetree/unibuild-repo/Release /var/lib/unibuild-pstracetree-repo
+RUN echo "deb file:/var/lib/unibuild-microdep-repo ./" > /etc/apt/sources.list.d/local-microdep-repo.list
+RUN echo "deb file:/var/lib/unibuild-pstracetree-repo ./" > /etc/apt/sources.list.d/local-pstracetree-repo.list
+RUN apt --allow-unauthenticated update -y
 
 # Install microdep (needs postgres running)
 #RUN if [ "$TYPE" = "toolkit" ]; then \
-#    mkdir -p /var/run/postgresql && chown postgres.postgres /var/run/postgresql \
-#    && su - postgres -c "/usr/bin/pg_ctl -D /var/lib/pgsql/data start -w -t 120" \
-#    && dnf -y install --nogpgcheck perfsonar-microdep; \
+#    apt --allow-unauthenticated -y install perfsonar-microdep; \
 #fi
-
-# Add Microdep packages (need postgres running)
-# Install from repo
-#RUN if [ "$TYPE" = "toolkit" ]; then \
-#    dnf -y install centos-release-rabbitmq-38 && dnf -y update; \
-#    mkdir -p /var/run/postgresql && chown postgres.postgres /var/run/postgresql \
-#    && su - postgres -c "/usr/bin/pg_ctl -D /var/lib/pgsql/data start -w -t 120" \
-#    dnf -y install perfsonar-microdep perfsonar-tracetree
-#fi
-# Install for local folder
-#COPY unibuild-repo/RPMS/ /root/RPMS/
-#COPY submodules/pstracetree/unibuild-repo/RPMS/ /root/RPMS/
-#RUN if [ "$TYPE" = "toolkit" ]; then \
-#    dnf -y install centos-release-rabbitmq-38 && dnf -y update; \
-#    mkdir -p /var/run/postgresql && chown postgres.postgres /var/run/postgresql \
-#    && su - postgres -c "/usr/bin/pg_ctl -D /var/lib/pgsql/data start -w -t 120" \
-#    && dnf -y install --allowerasing --skip-broken /root/RPMS/*; \
-#fi
-
-#RUN pip3 install multidict typing_extensions yarl async_timeout idna_ssl aiosignal cchardet charset_normalizer attrs
-#RUN pip3 install geoip2
 
 # ----  E n d   d o w n l o a d s   a n d   p a c k a g e   i n s t a l l   ----
 
 # POSTGRES
 # Reconfigure prefsonar Postgres DB (start db server first)
 RUN mkdir -p /var/run/postgresql && chown postgres.postgres /var/run/postgresql \
-    && su - postgres -c "/usr/bin/pg_ctl -D /var/lib/pgsql/data start -w -t 120" \
+    && su - postgres -c "/usr/bin/pg_ctlcluster 14 main start" \
     && /usr/libexec/pscheduler/internals/db-update \
     && /usr/libexec/pscheduler/internals/db-change-password
-
-# Rsyslog
-# Note: need to modify default rsyslog configuration to work with Docker, 
-# as described here: http://www.projectatomic.io/blog/2014/09/running-syslog-within-a-docker-container/
-# (relevant for Centos7, but also for almalinux 9?)
-#COPY microdep-dev/perfsonar-testpoint-docker/rsyslog/rsyslog.conf /etc/rsyslog.conf
-#COPY microdep-dev/perfsonar-testpoint-docker/rsyslog/listen.conf /etc/rsyslog.d/listen.conf
-#COPY microdep-dev/perfsonar-testpoint-docker/rsyslog/python-pscheduler.conf /etc/rsyslog.d/python-pscheduler.conf
-#COPY microdep-dev/perfsonar-testpoint-docker/rsyslog/owamp-syslog.conf /etc/rsyslog.d/owamp-syslog.conf
 
 # Make ntdp stay root and stop attempting to update system clock
 #RUN sed -i 's|-u ntp:ntp ||g' /usr/lib/systemd/system/ntpd.service

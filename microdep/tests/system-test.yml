@@ -33,10 +33,12 @@ services:
     build:
       context: .
       dockerfile: microdep/tests/Dockerfile-${DISTRO:-el9}
+#      entitlements:
+#        - security.insecure
       args:
         TYPE: toolkit
     volumes:
-      - /sys/fs/cgroup:/sys/fs/cgroup
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
       # Make misc data persist over "reboots"
       - opensearch:/var/lib/opensearch
       - grafana:/var/lib/grafana
@@ -46,8 +48,10 @@ services:
       - .:/root/ps-dev
     tmpfs: 
       - /run
+      - /run/lock
       - /tmp
     tty: true
+#    privileged: true
     ports:
 #      - 80:80    # http-access
 #      - 8085:80    # http-access
@@ -89,6 +93,10 @@ services:
         TYPE: testpoint 
     volumes:
        - /sys/fs/cgroup:/sys/fs/cgroup
+    tmpfs: 
+      - /run
+      - /tmp
+#    privileged: true
     networks:
       - testpoint-net
 
