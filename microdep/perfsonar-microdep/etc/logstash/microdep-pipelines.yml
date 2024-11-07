@@ -1,0 +1,4 @@
+# Logstash pipeline config for perfsonar-microdep. (Belongs inside /etc/logstash/pipelines.yml)
+- path.config: /usr/lib/perfsonar/logstash/microdep_pipeline/*.conf
+  pipeline.ecs_compatibility: disabled 
+  pipeline.id: microdep

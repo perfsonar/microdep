@@ -1,4 +1,5 @@
-etc/logstash/* usr/lib/perfsonar/logstash/pipeline/microdep/
+etc/logstash/microdep/* usr/lib/perfsonar/logstash/microdep_pipeline/
+etc/logstash/microdep-pipelines.yml etc/perfsonar/microdep/logstash/
 etc/os-template-gap-ana.json etc/perfsonar/microdep/
 etc/os-template-trace-ana.json etc/perfsonar/microdep/
 etc/microdep-tests.json.example etc/perfsonar/microdep/

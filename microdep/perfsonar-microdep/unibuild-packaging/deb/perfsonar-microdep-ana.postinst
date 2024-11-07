@@ -26,20 +26,9 @@ case "$1" in
 	if [ -f /var/lib/pgsql/data/pg_hba.conf ]; then
 	    /usr/lib/perfsonar/bin/microdep_commands/fix-pgsql-access.sh -i /var/lib/pgsql/data/pg_hba.conf || true
 	fi
-	
-	if [ -f /etc/logstash/pipelines.yml -a  -z "$(grep "pipeline.id: microdep" /etc/logstash/pipelines.yml)" ]; then
-	    echo -e "- path.config: /usr/lib/perfsonar/logstash/pipeline/microdep/*.conf\n  pipeline.ecs_compatibility: disabled
-\n  pipeline.id: microdep\n" >> /etc/logstash/pipelines.yml
-	    # Add microdep index pattern to pscheduler user ... but this require opensearch to run...
-	    #sed -i "s|- 'pscheduler_\*'|- 'pscheduler_\*'\n      - 'dragonlab\*'|" /etc/opensearch/opensearch-security/roles.yml; \
-	    #sed -i "s|- 'pscheduler\*'|- 'pscheduler\*'\n      - 'dragonlab\*'|" /etc/opensearch/opensearch-security/roles.yml; \
-	    #/usr/share/opensearch/plugins/opensearch-security/tools/securityadmin.sh -f /etc/opensearch/opensearch-security/roles.yml -icl -nhnv -cert /etc/opensearch/admin.pem -cacert /etc/opensearch/root-ca.pem -key /etc/opensearch/admin-key.pem -t config 
-            # ... substitute in user+passwd instead
-	    USER=`awk -F " " '{print $1}' /etc/perfsonar/opensearch/opensearch_login` && sed -i "s|\${opensearch_admin_user}|$USER|g" %{install_base}/logstash/pipeline/microdep/03-microdep-outputs.conf
-	    PASSWD=`awk -F " " '{print $2}' /etc/perfsonar/opensearch/opensearch_login` && sed -i "s|\${opensearch_admin_password}|$PASSWD|g" %{install_base}/logstash/pipeline/microdep/03-microdep-outputs.conf
-	fi
-	# Prepare folder for json output from analytics scripts read by logstash
-	mkdir -p /var/lib/logstash/microdep && chown perfsonar:perfsonar /var/lib/logstash/microdep && chmod 755 /var/lib/logstash/microdep
+
+	# Enable Microdep pipeline for logstash (by adding content of /etc/perfsonar/microdep/microdep-pipelines.yml if not already present)
+grep -q -x -F -f /etc/perfsonar/microdep/logstash/microdep-pipelines.yml /etc/logstash/pipelines.yml || ( cat /etc/perfsonar/microdep/logstash/microdep-pipelines.yml >> /etc/logstash/pipelines.yml )
 
 	# Enable executing of microdep ana scripts if SElinux is enabled
 	if [ -f /sbin/restorecon ]; then

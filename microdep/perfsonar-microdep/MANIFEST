@@ -16,6 +16,7 @@ etc/mapconfig.yml
 etc/mapconfig.d/dragonlab.yml
 etc/microdep-config.yml
 microdep-map/dragonlab/dragonlab-base-geo.json
+etc/dragonlab-base-geo.json.example
 microdep-map/css/microdep-map.css
 microdep-map/css/curve-chart.css
 bin/microdep_commands/microdep-psconfig-load.pl
@@ -37,6 +38,7 @@ scripts/perfsonar-microdep-watchconfig.path
 etc/logstash/microdep/01-microdep-inputs.conf
 etc/logstash/microdep/02-microdep-filter.conf
 etc/logstash/microdep/03-microdep-outputs.conf
+etc/logstash/microdep-pipelines.yml
 etc/os-template-gap-ana.json
 etc/os-template-trace-ana.json
 etc/GeoLite2/GeoLite2-City.mmdb

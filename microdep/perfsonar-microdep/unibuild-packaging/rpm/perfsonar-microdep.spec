@@ -181,7 +181,10 @@ systemctl daemon-reload || true
 # Move mcirodep map, httpd and logstash configs into correct folders
 install -D -m 0644 -t %{buildroot}/%{microdep_config_base}/mp-dragonlab/etc/ %{buildroot}/%{microdep_config_base}/microdep.db
 install -D -m 0644 -t %{buildroot}/etc/httpd/conf.d/ %{buildroot}/%{microdep_config_base}/apache-microdep-map.conf
-install -D -m 0644 -t %{buildroot}/%{install_base}/logstash/pipeline/microdep %{buildroot}/%{microdep_config_base}/logstash/microdep/*
+install -D -m 0644 -t %{buildroot}/%{install_base}/logstash/microdep_pipeline/ %{buildroot}/%{microdep_config_base}/logstash/microdep/*
+
+# Prepare folder for json output from analytics scripts read by logstash
+mkdir -p %{buildroot}/var/lib/logstash/microdep 
 
 # Clean up copied/unrequired files
 rm -rf %{buildroot}/%{install_base}/scripts
@@ -263,20 +266,8 @@ if [ -f /var/lib/pgsql/data/pg_hba.conf ]; then
     %{command_base}/fix-pgsql-access.sh -i /var/lib/pgsql/data/pg_hba.conf
 fi
 
-# Enable Microdep pipeline for logstash
-if [ -f /etc/logstash/pipelines.yml -a  -z "$(grep "pipeline.id: microdep" /etc/logstash/pipelines.yml)" ]; then
-    echo -e "- path.config: /usr/lib/perfsonar/logstash/pipeline/microdep/*.conf\n  pipeline.ecs_compatibility: disabled
-\n  pipeline.id: microdep\n" >> /etc/logstash/pipelines.yml
-    # Add microdep index pattern to pscheduler user ... but this require opensearch to run...
-    #sed -i "s|- 'pscheduler_\*'|- 'pscheduler_\*'\n      - 'dragonlab\*'|" opensearch/opensearch-security/roles.yml; \
-	#sed -i "s|- 'pscheduler\*'|- 'pscheduler\*'\n      - 'dragonlab\*'|" opensearch/opensearch-security/roles.yml; \
-	#/usr/share/opensearch/plugins/opensearch-security/tools/securityadmin.sh -f /etc/opensearch/opensearch-security/roles.yml -icl -nhnv -cert /etc/opensearch/admin.pem -cacert /etc/opensearch/root-ca.pem -key /etc/opensearch/admin-key.pem -t config
-    # ... substitute in user+passwd instead
-    USER=`awk -F " " '{print $1}' /etc/perfsonar/opensearch/opensearch_login` && sed -i "s|\${opensearch_admin_user}|$USER|g" %{install_base}/logstash/pipeline/microdep/03-microdep-outputs.conf
-    PASSWD=`awk -F " " '{print $2}' /etc/perfsonar/opensearch/opensearch_login` && sed -i "s|\${opensearch_admin_password}|$PASSWD|g" %{install_base}/logstash/pipeline/microdep/03-microdep-outputs.conf
-fi
-# Prepare folder for json output from analytics scripts read by logstash
-mkdir -p /var/lib/logstash/microdep && chown perfsonar:perfsonar /var/lib/logstash/microdep && chmod 755 /var/lib/logstash/microdep
+# Enable Microdep pipeline for logstash (by adding content of /etc/perfsonar/microdep/microdep-pipelines.yml if not already present)
+grep -q -x -F -f /etc/perfsonar/microdep/logstash/microdep-pipelines.yml /etc/logstash/pipelines.yml || ( cat /etc/perfsonar/microdep/logstash/microdep-pipelines.yml >> /etc/logstash/pipelines.yml )
 
 # Enable executing of microdep ana scripts if SElinux is enabled
 if [ -f /sbin/restorecon ]; then
@@ -294,8 +285,9 @@ systemctl start perfsonar-microdep-trace-ana.service || true
 systemctl start perfsonar-microdep-restart.timer || true
     
 %postun ana
-# Clean up pipline for logstash
-sed -ie '/pipeline\/microdep/,+2d' /etc/logstash/pipelines.yml
+# Clean up pipeline for logstash
+TMPPIPELINE=$(mktemp)
+grep -v -x -F -f /etc/perfsonar/microdep/logstash/microdep-pipelines.yml /etc/logstash/pipelines.yml > $TMPPIPELINE && mv $TMPPIPELINE /etc/logstash/pipelines.yml
 # Clean up db access
 if [ -f /var/lib/pgsql/data/pg_hba.conf ]; then
     %{command_base}/fix-pgsql-access.sh -ri /var/lib/pgsql/data/pg_hba.conf
@@ -335,6 +327,7 @@ systemctl stop perfsonar-microdep-restart.timer || true
 %config %{microdep_config_base}/microdep-config.yml
 %config %{microdep_config_base}/mapconfig.yml
 %config %{microdep_config_base}/mapconfig.d/
+%config %{microdep_config_base}/dragonlab-base-geo.json.example
 %config %{microdep_config_base}/mp-dragonlab/etc/microdep.db
 %config /etc/httpd/conf.d/apache-microdep-map.conf
 %config %{microdep_web_dir}/dragonlab/dragonlab-base-geo.json
@@ -350,9 +343,11 @@ systemctl stop perfsonar-microdep-restart.timer || true
 %attr(0755,perfsonar,perfsonar) %{command_base}/trace_event_reader.py
 %attr(0755,perfsonar,perfsonar) %{command_base}/create_new_db.sh
 %attr(0755,perfsonar,perfsonar) %{command_base}/fix-pgsql-access.sh
-%config %{install_base}/logstash/pipeline/microdep/01-microdep-inputs.conf
-%config %{install_base}/logstash/pipeline/microdep/02-microdep-filter.conf
-%config %{install_base}/logstash/pipeline/microdep/03-microdep-outputs.conf
+%config %{install_base}/logstash/microdep_pipeline/01-microdep-inputs.conf
+%config %{install_base}/logstash/microdep_pipeline/02-microdep-filter.conf
+%config %{install_base}/logstash/microdep_pipeline/03-microdep-outputs.conf
+%config %{microdep_config_base}/logstash/microdep-pipelines.yml
+%config /var/lib/logstash/microdep 
 %config %{microdep_config_base}/os-template-gap-ana.json
 %config %{microdep_config_base}/os-template-trace-ana.json
 %config %{microdep_config_base}/microdep-tests.json.example
