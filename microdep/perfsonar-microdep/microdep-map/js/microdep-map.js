@@ -188,6 +188,11 @@ function make_markers ( network, points, focus) {
 
     }
 
+    if ( points.length == 0 ){
+	// No markers to focus on. Show the whole world (repeated as many times as necessary)
+        bounds =  [[-90,-180],   [90,180]];
+    }
+    
     if ( focus ){
 	mymap.fitBounds(bounds);
     }
