@@ -31,6 +31,10 @@ case "$1" in
     	   sed -i "s|http://admin:no+nz+br|https://$USER:$PASSWD|g" /etc/perfsonar/microdep/microdep-config.yml
 	fi
 
+	# Enable apache config
+	a2enconf apache-microdep-map
+	systemctl reload apache2.service || true
+	
 	# Enable systemd services (ignore failures)
 	systemctl daemon-reload || true
 	systemctl enable perfsonar-microdep-watchconfig.path || true

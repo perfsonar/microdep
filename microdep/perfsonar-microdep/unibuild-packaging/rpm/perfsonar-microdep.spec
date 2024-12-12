@@ -178,10 +178,11 @@ install -D -m 0644 -t %{buildroot}/%{_unitdir} %{buildroot}/%{install_base}/scri
 install -D -m 0644 -t %{buildroot}/%{_unitdir} %{buildroot}/%{install_base}/scripts/*.timer
 install -D -m 0644 -t %{buildroot}/%{_unitdir} %{buildroot}/%{install_base}/scripts/*.path
 systemctl daemon-reload || true
-# Move mcirodep map, httpd and logstash configs into correct folders
+# Move microdep map, httpd and logstash configs into correct folders
 install -D -m 0644 -t %{buildroot}/%{microdep_config_base}/mp-dragonlab/etc/ %{buildroot}/%{microdep_config_base}/microdep.db
 install -D -m 0644 -t %{buildroot}/etc/httpd/conf.d/ %{buildroot}/%{microdep_config_base}/apache-microdep-map.conf
 install -D -m 0644 -t %{buildroot}/%{install_base}/logstash/microdep_pipeline/ %{buildroot}/%{microdep_config_base}/logstash/microdep/*
+install -D -m 0644 -t %{buildroot}/%{config_base}/psconfig/archives.d/ %{buildroot}/%{microdep_config_base}/psconfig/archives.d/*
 
 # Prepare folder for json output from analytics scripts read by logstash
 mkdir -p %{buildroot}/var/lib/logstash/microdep 
@@ -190,8 +191,9 @@ mkdir -p %{buildroot}/var/lib/logstash/microdep
 rm -rf %{buildroot}/%{install_base}/scripts
 rm -f %{buildroot}/%{install_base}/Makefile
 rm -rf %{buildroot}/%{microdep_config_base}/apache-microdep-map.conf
-rm -rf %{buildroot}/%{microdep_config_base}/logstash/
+rm -rf %{buildroot}/%{microdep_config_base}/logstash/microdep
 rm -rf %{buildroot}/%{microdep_config_base}/microdep.db
+rm -rf %{buildroot}/%{microdep_config_base}/psconfig
 
 # Make js and css libs available in web folder (-r for relative paths ... to make rpmbuild happy)
 ln -sr /usr/share/javascript/chartjs/4.4.2/chart.umd.js %{buildroot}/%{microdep_web_dir}/js
@@ -267,8 +269,9 @@ if [ -f /var/lib/pgsql/data/pg_hba.conf ]; then
 fi
 
 # Enable Microdep pipeline for logstash (by adding content of /etc/perfsonar/microdep/microdep-pipelines.yml if not already present)
-grep -q -x -F -f /etc/perfsonar/microdep/logstash/microdep-pipelines.yml /etc/logstash/pipelines.yml || ( cat /etc/perfsonar/microdep/logstash/microdep-pipelines.yml >> /etc/logstash/pipelines.yml )
-
+if [ -f /etc/logstash/pipelines.yml ]; then
+    grep -q -x -F -f /etc/perfsonar/microdep/logstash/microdep-pipelines.yml /etc/logstash/pipelines.yml || ( cat /etc/perfsonar/microdep/logstash/microdep-pipelines.yml >> /etc/logstash/pipelines.yml )
+fi
 # Enable executing of microdep ana scripts if SElinux is enabled
 if [ -f /sbin/restorecon ]; then
     /sbin/restorecon -irv /usr/lib/perfsonar/bin/microdep_commands/
@@ -351,6 +354,8 @@ systemctl stop perfsonar-microdep-restart.timer || true
 %config %{microdep_config_base}/os-template-gap-ana.json
 %config %{microdep_config_base}/os-template-trace-ana.json
 %config %{microdep_config_base}/microdep-tests.json.example
+%config %{config_base}/psconfig/archives.d/microdep-gap-ana-rmq.json
+%config %{config_base}/psconfig/archives.d/microdep-trace-ana-rmq.json
 %changelog
 * Thu Oct 24 2024 Otto J Wittner <otto.wittner@sikt.no>
 - Prepareing for release 5.3

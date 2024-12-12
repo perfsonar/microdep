@@ -10,8 +10,8 @@ bin/microdep_commands/rabbitmq-consume.py usr/lib/perfsonar/bin/microdep_command
 etc/mapconfig.yml etc/perfsonar/microdep/
 etc/mapconfig.d/* etc/perfsonar/microdep/mapconfig.d/
 etc/microdep-config.yml etc/perfsonar/microdep/
-etc/microdep.db etc/perfsonar/microdep/mp-dragonlab/etc/microdep.db
-etc/apache-microdep-map.conf etc/httpd/conf.d/
+etc/microdep.db etc/perfsonar/microdep/mp-dragonlab/etc/
+etc/apache-microdep-map.conf etc/apache2/conf-available/
 scripts/perfsonar-microdep-watchconfig.path lib/systemd/system
 scripts/perfsonar-microdep-watchconfig.service lib/systemd/system
 
