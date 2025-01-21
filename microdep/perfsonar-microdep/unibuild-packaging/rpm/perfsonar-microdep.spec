@@ -354,8 +354,8 @@ systemctl stop perfsonar-microdep-restart.timer || true
 %config %{microdep_config_base}/os-template-gap-ana.json
 %config %{microdep_config_base}/os-template-trace-ana.json
 %config %{microdep_config_base}/microdep-tests.json.example
-%config %{config_base}/psconfig/archives.d/microdep-gap-ana-rmq.json
-%config %{config_base}/psconfig/archives.d/microdep-trace-ana-rmq.json
+%config %{microdep_config_base}/microdep-tests-packet-subcount.json.example
+%config %{config_base}/psconfig/archives.d/microdep-ana-rmq.json
 %changelog
 * Thu Oct 24 2024 Otto J Wittner <otto.wittner@sikt.no>
 - Prepareing for release 5.3
