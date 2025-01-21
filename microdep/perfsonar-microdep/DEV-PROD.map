@@ -31,7 +31,8 @@ microdep-map/css/curve-chart.css
 # ... in addition there are a list of external libs to be fetched ...
 # Map config
 ../../microdep-dev/microdep-legacy/server/script/microdep-psconfig-load.pl bin/microdep_commands/microdep-psconfig-load.pl
-../../microdep-dev/etc/psconfig/pscheduler.d/microdep-tests.json  etc/microdep-tests.json.example
+../../microdep-dev/etc/psconfig/pscheduler.d/microdep-tests.json  etc/microdep-tests-packet-subcount.json.example
+etc/microdep-tests.json.example
 ../../microdep-dev/etc/httpd/apache-microdep-gui.conf etc/apache-microdep-map.conf
 etc/microdep.db
 # Debug-tools
@@ -54,6 +55,7 @@ scripts/perfsonar-microdep-watchconfig.path
 ../../microdep-dev/etc/logstash/microdep/02-microdep-filter.conf etc/logstash/microdep/02-microdep-filter.conf
 etc/logstash/microdep/03-microdep-outputs.conf
 etc/logstash/microdep-pipelines.yml
+etc/psconfig/archives.d/microdep-ana-rmq.json
 etc/os-template-gap-ana.json
 etc/os-template-trace-ana.json
 etc/GeoLite2/GeoLite2-City.mmdb
