@@ -117,6 +117,8 @@ param = {
     'verbose': 0,                 # Verbosity level for message output
     'profiler': 0,                # Output performance profile per file
     'maxprocs': 1,                # Max no of parallel processes in batch mode
+    'topoevents': 0,              # Flag to enable detection and output of topology events
+    'topointerval': 3600,         # Min no of seconds between topology events
 }
 
 # State constants
@@ -179,22 +181,42 @@ class Tracesummary:
         }
         self.parse_errors = 0                  # Traceroute parse errors
         self.current_pair= ""
-
-    def set_current_pair(self, src_dst, timestamp=0):
+        self.last_topology_event=0             # Timestamp when last topology event was output
+        
+    def set_current_pair(self, src_dst, timestamp=0, thread=0):
         # Set current relevant src dst pair
         self.current_pair= src_dst
         self.enable_pair(self.current_pair)
-        if timestamp < self.summary[self.current_pair]['t_first'] or self.summary[self.current_pair]['t_first'] == 0:
+        first_appearance = (self.summary[self.current_pair]['t_first'] == 0)
+        
+        if timestamp < self.summary[self.current_pair]['t_first'] or first_appearance:
             # Newest traceroute so far
             self.summary[self.current_pair]['t_first'] = timestamp
-        if timestamp > self.summary[self.current_pair]['t_last']:
+        if timestamp >= self.summary[self.current_pair]['t_last']:
             # Oldest traceroute so far
             self.summary[self.current_pair]['t_last'] = timestamp
-        if timestamp == 0:
-            # Apply current time
+        if timestamp == 0 and first_appearance:
+            # Timestamp missing.
+            # Apply current time.
             self.summary[self.current_pair]['t_first'] = time.time()
             self.summary[self.current_pair]['t_last'] = time.time()
             
+        if param["topoevents"] and first_appearance:
+            # Output topology event
+            p_list = [
+                self.current_pair,
+                self.summary[self.current_pair]["t_first"],
+                self.summary[self.current_pair]["t_last"]
+            ]
+            # Output topology event for src dest pair
+            printAlert( thread, self.summary[self.current_pair]['route_type'], p_list, self.summary[self.current_pair]["t_last"], "topology")
+            self.last_topology_event = time.time()
+
+        if param["topoevents"] and time.time() - self.last_topology_event > float(param['topointerval']):
+            # Output complete topology
+            self.print_topology()
+            self.last_topology_event = time.time()
+                
         
     def enable_pair(self, src_dst):
         # Make sure src-dst pair exists in summary table
@@ -281,7 +303,8 @@ class Tracesummary:
         # Remove lists of hosts since this causes trouble when serializing dictionary
         ret_dict.pop("unique_hosts_list")
         return ret_dict
-        
+
+    
     def print_all_pairs(self, thread=0):
         # Output summary for all src-dst pairs
         backup_current_pair = self.current_pair
@@ -296,6 +319,17 @@ class Tracesummary:
             printAlert( thread, self.summary[pair]['route_type'], p_list, self.summary[pair]["t_last"], "summary")
         # Restore current pair    
         self.current_pair = backup_current_pair
+
+    def print_topology(self, thread=0):
+        # Output topology discovery event for all src-dst pairs
+        for pair in self.summary.keys():
+            p_list = [
+                pair,
+                self.summary[pair]["t_first"],
+                self.summary[pair]["t_last"]
+            ]
+            # Output topology event for src dest pair
+            printAlert( thread, self.summary[pair]['route_type'], p_list, self.summary[pair]["t_last"], "topology")
         
 tracesummary = Tracesummary()  # Summary info for collection of traceroute runs
 
@@ -331,6 +365,8 @@ def parse_cmd(param):
     cmdparser.add_argument('--verbose', '-v', action='count', default=param['verbose'], help='Verbose output to stderr. Apply multiple to increase level.')
     cmdparser.add_argument('--profiler', '-P', action='count', default=param['profiler'], help='Run performance profiling per file.')
     cmdparser.add_argument('--maxprocs', '-m', default=param['maxprocs'], help='Max no of processes in batch mode.')
+    cmdparser.add_argument('--topoevents', '-t', action='count', default=param['topoevents'], help='Detect and output events when topology changes are detected.')
+    cmdparser.add_argument('--topointerval', default=param['topointerval'], help='Min no of seconds between topology events.')
     
     # Run parser
     args = cmdparser.parse_args()
@@ -360,6 +396,10 @@ def connect_db(param):
             db=param['dbname'],
         )
         list_cursor = connection.cursor()
+        # Adjust some timeout values
+        list_cursor.execute('SET GLOBAL connect_timeout=28800')
+        list_cursor.execute('SET GLOBAL interactive_timeout=86400')
+        list_cursor.execute('SET GLOBAL wait_timeout=86400')
     elif param["dbtype"] == "postgresql":
         connection = psycopg2.connect(
             host=param['dbhost'],
@@ -490,7 +530,6 @@ class Resolver:
 
         try:
             file = open(mapfile, "r")
-        
             
             psconfig_data={}
             try:
@@ -499,7 +538,7 @@ class Resolver:
                 if 'addresses' in psconfig_data:
                     # Addresses found. Init map.
                     for name in psconfig_data['addresses']:
-                        ip = psconfig_data['addresses'][name]['address'];
+                        ip = self.validate_ip(psconfig_data['addresses'][name]['address']);
                         # Add mappings 
                         self.ip[name] = ip
                         self.name[ip] = name
@@ -512,6 +551,7 @@ class Resolver:
                 Lines = file.readlines()
                 for line in Lines:
                     (name,ip) = line.split()
+                    ip = self.validate_ip(ip);
                     # Add mappings 
                     self.ip[name] = ip
                     self.name[ip] = name
@@ -526,13 +566,32 @@ class Resolver:
             print("Initial resolver cache:")
             pprint(self.ip)
             pprint(self.name)
-            
+
+    def validate_ip(self, ip):
+        """ Check if ip address is valid. If not, attempt to resolve it.
+        """
+        try:
+            # Check if the ip is valid
+            socket.inet_aton(ip)
+        except socket.error:
+            # Invalid ip. Maybe a domain name? Attempt lookup.
+            try:
+                maybe_name = ip
+                ip = socket.gethostbyname(maybe_name)   #NOTE: Needs to be replaced by socket.getaddrinfo() to support ipv6
+            except socket.error:
+                # Give up and leave foney ip as is
+                if param['verbose'] > 2:
+                    print("Warning: Invalid ip address '%s' applied." % (ip))
+                pass
+        return ip
+        
     def get_name(self, ip):
         """ Translates from ip to name
         """
         if ip in self.name.keys():
             return self.name[ip]
         else:
+            ip = self.validate_ip(ip)
             try:
                 name, alias, addresslist = socket.gethostbyaddr(ip)
                 # Add mapping
@@ -542,7 +601,7 @@ class Resolver:
                 if param["verbose"] > 2:
                     print("Warning: Cannot resolve ip " + ip + ". Returning " + ip + " as name.")
                 # Add "emergency" mapping
-                self.name[ip] = ip
+#                self.name[ip] = ip
                 return ip
 
     def get_ip(self, name):
@@ -552,7 +611,7 @@ class Resolver:
             return self.ip[name]
         else:
             try:
-                ip = socket.gethostbyname(name)
+                ip = socket.gethostbyname(name)   #NOTE: Needs to be replaced by socket.getaddrinfo() to support ipv6
                 # Add mapping
                 self.ip[name] = ip
                 return ip
@@ -560,9 +619,38 @@ class Resolver:
                 if param["verbose"] > 2:
                     print("Warning: Cannot resolve name " + name + ". Returning " + name + " as ip.")
                 # Add "emergency" mapping
-                self.ip[name] = name
+#                self.ip[name] = name
                 return name
-
+            
+    def add(self, name, ip=''):
+        """ Add name-ip entry
+        """
+        if not ip:
+            if name in self.ip.keys():
+                ip = self.ip[name]
+            else:
+                # Missing ip for name. Attempt lookup.
+                try:
+                    # lookup name
+                    ip = socket.gethostbyname(name)
+                except:
+                    # Maybe name is really an ip...
+                    if not name in self.name.keys():
+                        try:
+                            # try reverse lookup
+                            maybe_ip = name
+                            name, alias, addresslist = socket.gethostbyaddr(maybe_ip)
+                            ip = maybe_ip
+                        except:
+                            pass
+        if ip:
+            # Add mapping
+            self.ip[name] = ip
+            self.name[ip] = name
+        else:
+            if param["verbose"] > 2:
+                print("Warning: Cannot resolve name " + name + ". No mapping added.")
+        
 def classifyOutage(errors):
     """ Finds the most common error if a traceroute returns multiple errors
     """
@@ -933,6 +1021,17 @@ def printAlert(threadid, tr_type, n, time, mode, normal=None, new=None):
         createJSON(alert)
         return
         
+    if mode == "topology":
+        # Output topology-discovery event
+        
+        #alert["anomaly_state"] = "topology"
+        alert["event_type"] = "topology"
+        alert["test_type"] = tr_type + "trace"
+        alert["start_time"] = n[1]
+        alert["duration"] = int(n[2]) - int(n[1])
+
+        createJSON(alert)
+        return
         
     #For a warning or complete-state we need more information
     data = json.loads(n[7])
@@ -1876,6 +1975,7 @@ def flush_analysis_state(cursor):
         # Insert "jumps" state in DB (i.e. per hop analysis results)
         for hop in traceroute_analysis_state_jumps:
             cursor.execute( build_sql_insert(hop, "jumps") )
+        traceroute_analysis_state_current_unique_pair_is_new = False 
     else:
         # Update DB for end-state analysis
         if  len(traceroute_analysis_state_routes)>0:
@@ -1917,8 +2017,8 @@ def analyze(traceroute, time, cursor):
     tracesummary.set_max('max_ttl', traceroute['maxhops'])
 
     if traceroute_analysis_state_current_unique_pair and traceroute_analysis_state_current_unique_pair != unique_pair:
-        # Update state for previouse end-state-analysis in DB
-        if param['verbose'] > 2:
+        # Update state for previous end-state-analysis in DB
+        if param['verbose'] > 3:
             pprint(traceroute_analysis_state_routes)
             pprint(traceroute_analysis_state_jumps)
         flush_analysis_state(cursor)
@@ -2017,7 +2117,7 @@ def read(path, srchost, mode="batch", thread=0, starttime=0):
     """ Parse raw log file and run analysis on each found traceroute run
         2022-01-20: Renovated to properly parse both traceroute and tcptraceroute logs
     """  
-    
+
     if mode == "live":
         # Runs gztools in Linux and grabs the stdout
         p = subprocess.Popen(["gztool", "-v0", "-WT", path], stdout=subprocess.PIPE)
@@ -2029,7 +2129,12 @@ def read(path, srchost, mode="batch", thread=0, starttime=0):
     else:
         print ("Error: Unknown mode '" + mode + "'.")
         sys.exit()
-        
+
+    # Check if filehandel really is open
+    if(p.closed):
+        print("Error: Accessing source '" + path + "' failed (file descriptor closed).")
+        return
+    
     # Update thread-inputfile mapping
     filename = os.path.basename(path)
     input_file[thread] = filename
@@ -2086,7 +2191,7 @@ def read(path, srchost, mode="batch", thread=0, starttime=0):
 
             if word[0] == "ps_testid":
                 # Strip off perfsonar test id
-                ps_testip = word[1]
+                ps_testid = word[1]
                 word.pop(1)
                 word.pop(0)
                 
@@ -2109,7 +2214,7 @@ def read(path, srchost, mode="batch", thread=0, starttime=0):
                             # Update maxhops
                             traceroutes[time]["maxhops"] = len(traceroutes[time]["result"])
 
-                        if param['verbose'] > 3:
+                        if param['verbose'] > 2:
                             print ("New traceroute run found at time ", time ,", analysing...")
                         analyze(traceroutes[time], time, cursor)
 
@@ -2127,12 +2232,17 @@ def read(path, srchost, mode="batch", thread=0, starttime=0):
                 if MICRODEPLOG:
                     traceroutes[time]["src"] = srchost
                     traceroutes[time]["dst"] = dsthost
-                    tracesummary.set_current_pair(srchost + "/" + dsthost, time)
+                    tracesummary.set_current_pair(traceroutes[time]["src"] + "/" + traceroutes[time]["dst"], time, thread)
                 elif PERFSONARLOG:
                     traceroutes[time]["src"] = word[6]
                     traceroutes[time]["dst"] = word[10]
-                    tracesummary.set_current_pair(srchost + "/" + dsthost, time)
+                    tracesummary.set_current_pair(traceroutes[time]["src"] + "/" + traceroutes[time]["dst"], time, thread)
                     tracesummary.set_pstestid(ps_testid)
+                else:
+                    if param['verbose'] > 2:
+                        print ("Warning: Unrecognized start line format, skipping input.")
+                    continue
+
                 tracesummary.set_routetype(traceroute_type)
                 traceroutes[time]["maxhops"] = 0
                 traceroutes[time]["type"] = traceroute_type
@@ -2201,9 +2311,9 @@ def read(path, srchost, mode="batch", thread=0, starttime=0):
                 # Unrecognized line in traceroute
                 tracesummary.parse_error()
 
-        if "src" in traceroutes[time] and "dst" in traceroutes[time]:
+        if time > 0 and "src" in traceroutes[time] and "dst" in traceroutes[time]:
             # Analyse also last traceroute in file
-            if param['verbose'] > 3:
+            if param['verbose'] > 2:
                 print ("New traceroute run found at time ", time ,", analysing...")
             if len(traceroutes[time]["result"]) > traceroutes[time]["maxhops"]:
                 # Update maxhops
@@ -2262,7 +2372,8 @@ def amqp_read(url, mode, thread):
         "host": "localhost",
         "port": 5672,
         "vhost": "/",
-        "queue": "traceroute",
+        "exchange": "microdep-ana",
+        "queue" : "",
         "user" : "guest",
         "passwd" : "guest"
     }
@@ -2291,6 +2402,8 @@ def amqp_read(url, mode, thread):
     query = dict(parse_qsl(pssrc_url.query))
     if "queue" in query:
         rmq_param["queue"] = query["queue"]
+    if "exchange" in query:
+        rmq_param["exchange"] = query["exchange"]
 
     if param['verbose'] > 2:
         print("Connecting to Rabbit message queue applying:'");
@@ -2306,8 +2419,21 @@ def amqp_read(url, mode, thread):
         sys.exit(1)
 
     channel = connection.channel()
-    # Create queue (in case it does not yet exist)
-    channel.queue_declare(queue=rmq_param["queue"])
+    if rmq_param["exchange"]:
+        # Create exchange and queue
+        channel.exchange_declare(exchange=rmq_param["exchange"], exchange_type='fanout')
+        result = channel.queue_declare(queue=rmq_param["queue"], exclusive=True)
+        # Update queue name in case of one-time-queue-name when only exchange is specified
+        rmq_param["queue"] = result.method.queue
+        channel.queue_bind(exchange=rmq_param["exchange"], queue=rmq_param["queue"])
+        if param["verbose"] > 2:
+            print("Exchange '%s' and queue '%s' declared and bound." % (rmq_param["exchange"],rmq_param["queue"],)) 
+    elif rmq_param["queue"]:
+        # Create queue (in case it does not yet exist)
+        channel.queue_declare(queue=rmq_param["queue"])
+        if param["verbose"] > 2:
+            print("Default exchange and queue '%s' declared." % rmq_param["queue"]) 
+
     # Setup callback function
     #channel.basic_consume(amqp_read_callback, queue=rmq_param["queue"], no_ack=True)
     channel.basic_consume(rmq_param["queue"], amqp_read_callback)
@@ -2334,11 +2460,26 @@ def amqp_read_callback(_ch, _method, _properties, body):
     """
     Callback function for Rabbit message queue reader
     """
-    if param['verbose'] > 3:
+    if param['verbose'] > 4:
         print ("Element fetched from Rabbit mq:")
         print("%s" % (body.decode("ascii")))
 
     element = json.loads(body.decode("ascii")) 
+      
+    # Add to resolver
+    resolver.add(element["test"]["spec"]["source"])
+    resolver.add(element["test"]["spec"]["dest"])
+
+    if element["test"]["type"] != "trace":
+        # Ignore results from other test types
+        if param['verbose'] > 2:
+            print ("Unrelevant test-type '%s' found. Ignoring." % (element["test"]["type"]))
+        return
+    
+    if param['verbose'] > 3:
+        print ("Traceroute test results from Rabbit mq:")
+        print("%s" % (body.decode("ascii")))
+
     # Get timestamp
     starttime  = str(int(isodate.parse_datetime(element["run"]["start-time"]).timestamp()))
     # Generate pcheduler test id/checksum (based on /usr/lib/perfsonar/logstash/ruby/pscheduler_test_checksum.rb)
@@ -2447,26 +2588,15 @@ if __name__ == "__main__":
         #print(str(int(time.time())))
         path = param['path']     # Base path to search for relevant traceroute files (given date)
             
-        #This is cool if you just want to analyze one node. Comment out what's under
-        #read("/var/lib/microdep/mp-dragonlab/data/ytelse-trd/2021-06-25/traceroute_35.246.8.199.gz", "traceroute_35.246.8.199.gz")
-        #read("aleksjek.gz", "ytelse-tos", "batch", 0)
-    
-        datacenters = {"amazon-ff", "amazonff-mp", "amazonie-mp", "amazon-mp", "amazonsth-mp", "amazonuw2-mp", "azure-mp", "azurene-mp", "googleeu-mp", "googlefi-mp", "google-mp"}
-        datacenterIP = {"18.195.175.203","34.246.185.57", "13.53.187.135", "18.236.63.8", "13.82.53.167", "13.79.144.22", "35.246.8.199", "35.228.220.215", "104.196.241.36", "34.246.185.57"}
-            
-            
         thr = 0       # No of prallell procs strated
         thr_done = 0  # Procs completed
         # Find relevant traceroute files based on date and start analysis for each
         for srcfolder in os.listdir(path):
-            #if str(srcfolder) in datacenters:
-            #    continue
             for datefolder in os.listdir(path + "/" + srcfolder + "/"):
                 if str(datefolder) != str(date): #Skips logs from other dates
                     continue
 
                 for filename in os.listdir(path + "/" + srcfolder + "/" + datefolder + "/"):
-                    #if filename.startswith("traceroute") and str(filename)[11:-3] not in datacenterIP:
                     prefix = "tcp" if param["tcp"] > 0 else ""
                     if filename.startswith(prefix + "traceroute"):
                         filepath = str(path + "/" + srcfolder + "/" + datefolder + "/" + filename)

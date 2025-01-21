@@ -1,4 +1,21 @@
 #!/usr/bin/perl
+#
+#  Qstream Gap Analysis analyse flows of packet received by
+#  the probing packet tool Rude & Crude (https://rude.sourceforge.net/ and
+#  (https://gitlab.sikt.no/rude/rude)
+#
+#  The analysis attempts to detect events of different types, e.g. gaps in
+#  the probe packet flows, and outputs statistics of packets observed before
+#  and after such events.
+#
+#  Qstream Gap Analysis also accepts input reported by perfSONAR's latencybg
+#  tests (in json-structures).
+#
+#  Authors: Olav Kvittem (olav.kvittem@sikt.no), Otto J Wittner (otto.wittner@sikt.no)
+#  Copyright: Sikt AS
+#  License: GPLv3
+#
+
 # use strict;
 # use warnings 'all';
 # use PDL;
@@ -69,6 +86,10 @@ my $opt_batchsize = 0;   # Override batch size (packet count) of measurement res
 my %seqnum_base;       # Base for sequence numbers of current batch from powstream
 my %pre_seqnum_base;   # Base for sequence numbers of previous batch of each flow
 
+my $last_topoevent = time(); # Epoch time when last topology event was output
+my $opt_topoevents = 0;       # Flag enabling toplogy events
+my $opt_topointerval = 3600;  # Min interval between topology events
+
 my $usage="$0 '[-title text] [-minloss n] [-win n] [-graph file] [max-small-graphs n]  [-outdir dir] [-head|-rhead] [-id id] [-names file] [-addresses file] [-json file] [-v] [-version] [-esmond url] [file]...
 Analyse gaps in a crude packet log
   - output a list of statistical qos parameters as text or json
@@ -88,6 +109,8 @@ Parameters
   -threshold vector    Threshold values for reporting, in form of a vector ala  \"<min-jitter>,<min-ddelay>,<min-slope>\" ($min_jit,$min_ddelay,$min_slop)
   -debug n             Level of debug info to output ($opt_debug)
   -batchsize n         Override batch size (packet count) expected when reading owamp subsession data sets
+  -topoevents	       Enable output of topology events whenever a topology change is detected
+  -topointerval n      Min interval (sec) between topology events (default is $opt_topointerval)
     ";
 
 my ($opt_h, $opt_help, $opt_id, $opt_slep, $opt_format, $opt_minloss, $opt_win, $opt_recover, $opt_max_small_graphs, $opt_head, $opt_rhead, $opt_graph, $opt_outdir, $opt_title, $opt_addresses, $opt_names, $opt_threshold, $opt_owamp, $opt_json, $opt_jitter, $opt_rtp, $opt_change_factor, $opt_index, $opt_v, $opt_version);
@@ -101,8 +124,9 @@ GetOptions( 'h' => \$opt_h, 'help' => \$opt_help, 'id=s' => \$opt_id, 'slep=s' =
 	    'jitter=s' => \$opt_jitter, 'threshold' => \$opt_threshold, 'owamp=s' => \$opt_owamp,
 	    'rtp=s' => \$opt_rtp, 'ddelay_low=s' => $opt_ddelay_low, 'ddelay_high=s' => \$opt_ddelay_high,
 	    'debug=s' => \$opt_debug, 'batchsize=s' => $opt_batchsize,
-	    'change_factor=s' => \$opt_change_factor, 'v' => \$opt_v, 'version' => \$opt_version )
-    or die $usage;
+	    'change_factor=s' => \$opt_change_factor, 'v' => \$opt_v, 'version' => \$opt_version,
+	    'topoevents' => \$opt_topoevents, 'topointerval=s' => \$opt_topointerval
+    ) or die $usage;
 # &NGetOpt( 'h', 'help', 'id=s', 'slep=s', 'minloss=s', 'win=s', 'max-small-graphs=s', 'head', 'rhead', 'graph=s', 'outdir=s', 'title=s', 'names=s', 'json=s', 'index=s', 'v', 'version') || die "$!" . $usage ."\n";
 
 if ( $opt_h || $opt_help) {
@@ -455,7 +479,8 @@ sub get_addresses {
 	if ( !$@ && $psconfig_content->{'addresses'}) {
 	    # PSconfig address mapping structure found. Load it into "resolver cache".
 	    foreach my $addr (keys %{$psconfig_content->{'addresses'}}) {
-		$hostname{$psconfig_content->{'addresses'}->{$addr}->{'address'}} = $addr; 
+		my $ip_ = validate_ip($psconfig_content->{'addresses'}->{$addr}->{'address'}); 
+		$hostname{$ip} = $addr; 
 	    }
 	} else {
 	    # No PSconfig content. Reread file assuming host-file format ("<hostname> <ip>")
@@ -463,7 +488,7 @@ sub get_addresses {
 	    while(<ADRS>){
 		next if /^\s*#/;
 		my ($name, $ip)=split;
-		$hostname{$ip}=$name;
+		$hostname{validate_ip($ip)}=$name;
 	    }
 	}
 	close ADRS;
@@ -504,6 +529,33 @@ sub get_name{
     return $name;
 }
 
+sub validate_ip{
+    # Check validity of ipv4 address, and attempt to fix if possible
+    my $ip = shift;
+    $ip =~ s/^\s+|\s+$//g ; # Trim off white space
+    if ( $ip =~ /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/ ) {
+	print "validat_ip Ok:", $ip, "\n" if $opt_debug > 3;
+	return $ip;
+    } else {
+	print "Strange ip:", $ip, "\n" if $opt_debug > 3;
+	# Maybe ip is really a name? Attempt lookup
+	my $packed_ip = gethostbyname($ip);
+	if (defined $packed_ip) {
+	    # Lookup succeeded.
+	    $ip = inet_ntoa($packed_ip);
+	    print "validate_ip lookup: ", $ip, "\n" if $opt_debug > 3;
+	#eval{ (undef, undef, undef, undef, @ip_addr) = gethostbyname($ip) };
+	#if ( !$@ && @ip_addr > 0 ) {
+	    # Lookup succeeded.
+	    #print "Ip found,", Dumper(@ip_addr) if $opt_debug > 3;
+	    #return $ip_addr[0];
+	} else {
+	    # Give up.
+	    warn "Unrecognized ip address '". $ip . "', applying anyway.";
+	}
+    }
+    return $ip
+}
 
 ################################################################################
 sub owptime2datetime {
@@ -590,8 +642,8 @@ sub owamp_ana($){
     # Batch of json data ready for analysis
     my $data = decode_json($payload);
     print Dumper($data) if $opt_debug > 3;
-    if ( $data && $data->{'run'}->{'state'} eq 'finished' ){
-	# Stats is "finished". Get results
+    if ( $data && $data->{'run'}->{'state'} eq 'finished' && $data->{'test'}->{'type'} eq 'latencybg' ){
+	# State is "finished" and powstream / latencybg results are available.
 	my $batchsize = $opt_batchsize;
 	if (! $batchsize) {
 	    $batchsize = $data->{'test'}->{'spec'}->{'packet-count'};
@@ -620,11 +672,13 @@ sub owamp_ana($){
 	    } else {
 		# Packet from current batch
 		$uniq_seq = $seq + $seqnum_base{$opt_id};
-	    }					    
+	    }
+	    my $src_addr = validate_ip($src);
+	    my $dst_addr = validate_ip($dst);
 	    $_= sprintf "ID=%s SEQ=%d SRC=%s DST=%s Tx=%.3f Rx=%.3f SIZE=%d HOPLIMIT=%d",
-		0, $uniq_seq, $src, $dst, $tx, $rx, 64, $probepacket->{'ip-ttl'};
-	    analyze_packet($uniq_seq, $src, $dst, $tx, $rx);
-	    print $uniq_seq, " ", $src, " ", $dst, " ", $tx, " ", $rx, "\n" if $opt_debug > 3; 
+		0, $uniq_seq, $src_addr, $dst_addr, $tx, $rx, 64, $probepacket->{'ip-ttl'};
+	    analyze_packet($uniq_seq, $src_addr, $dst_addr, $tx, $rx);
+	    print $uniq_seq, " ", $src_addr, " ", $dst_addr, " ", $tx, " ", $rx, "\n" if $opt_debug > 3; 
 	    $pre_tx = $tx;
 	    # } else {
 	    #	if ( $opt_debug > 0) { warn "Invalid OWAMP timestamps for peers $opt_id"; }
@@ -645,7 +699,7 @@ sub read_owamp_rabbitmq{
 	user       => 'guest',
 	pass       => 'guest',
 	vhost      => '/',
-	exchange   => 'gap-ana',
+	exchange   => 'microdep-ana',
 	queue      => ''
 	);
     my $payload;
@@ -851,12 +905,28 @@ sub analyze_packet {
     } else {
 	$id=get_name($src);
     }
-    
+
+    my $new_flow = ! $src_adr{$id} || ! $dst_adr{$id} ;
     $src_adr{$id}=$src if ! $src_adr{$id} ;
     $dst_adr{$id}=$dst if ! $dst_adr{$id} ;
     $src_name{$id}=get_name($src);
     $dst_name{$id}=get_name($dst);
-    
+
+    if($opt_topoevents) {
+	# Report topology change events
+	if ($new_flow) {
+	    # Output record with timestamp and src + dst info
+	    emit_topology_json($id);
+	}
+	if (time() - $last_topoevent > $opt_topointerval) {
+	    # Output topology events for all observed src + dst pair
+	    foreach my $id_ (keys  %src_adr) {
+		emit_topology_json($id_);
+	    }
+	    $last_topoevent = time();
+	}
+    }
+	
     if ( $rx <= 0 ){ # assume lost packet
 	return 1; #==== return
     }
@@ -1662,4 +1732,15 @@ sub timestamp {
     my $tzmin= ( timegm(@tlocal) - timelocal(@tlocal) ) / 60 ;
     my $ts  = strftime("%Y-%m-%dT%H:%M:%S", @tlocal);
     return sprintf "%s.%03d%+03d%02d", $ts,  ( $tgmt - int($tgmt) ) * 1000, $tzmin / 60, abs($tzmin) % 60;
+}
+
+sub emit_topology_json{
+    # Output JSON structure for a "topology discovered"-event
+    # Parameters: flow-id
+    my $id=shift;
+    my $json= {
+	"event_type" => "topology"
+    };
+
+    emit_json($json, $id, time()); 
 }
