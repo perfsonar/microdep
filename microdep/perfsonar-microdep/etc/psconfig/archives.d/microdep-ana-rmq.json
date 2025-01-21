@@ -1,0 +1,14 @@
+{
+    "archiver": "rabbitmq",
+    "data": {
+        "schema": 2,
+        "_url": "amqp://guest:guest@localhost//",
+        "exchange": "microdep-ana",
+        "connection-expires": "PT60S",
+        "retry-policy": [
+	    { "attempts": 5,  "wait": "PT5S" }
+        ]
+    },
+    "ttl": "PT1H"
+}
+
