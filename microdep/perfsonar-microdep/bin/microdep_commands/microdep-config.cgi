@@ -13,6 +13,8 @@ use YAML;
 use CGI;
 #use CGI::Carp 'fatalsToBrowser';
 
+my $vpn_host = "10.0.0.1"; # if traffic is rerouted
+
 my $q = CGI->new;
 
 my $debug=parm('debug');
@@ -20,10 +22,12 @@ if ( $debug > 0 ){
     print $q->header('text/html');
 }
 my $r_ip= parm("ip");  $r_ip =  $q->remote_addr() if !$r_ip;
-my $r_host= parm("name");  $r_host = $q->remote_host() if !$r_host;
+my $local_ip =  parm("local_ip") || "unknown";
+my $r_host= parm("node_name");  # no no: $r_host = $q->remote_host() if !$r_host;
 my $variant=parm('variant');
 my $file=parm('file');
 
+printf "remote_host: %s\n",  $q->remote_host();
 printf " $r_ip $r_host $variant %s %s\n", $q->remote_addr(), $q->remote_host() if $debug;
 
 my $basedir="/var/lib/microdep";
@@ -49,6 +53,10 @@ $mp_list=$conf->{mp_list} if $conf && $conf->{mp_list};
 $database=$conf->{database} if $conf && $conf->{database};
 
 print "<p>$config_dir $mp_list\n" if $debug;
+
+if ( ! $r_host && ! $file){
+    $r_host = guess_node_name($r_ip);
+}
 
 my $dbh;
 my @names=();
@@ -107,6 +115,7 @@ if ( parm('start')){ # list active peers
 	for (my $i=0; $i<= $#name_by_name; $i++){
 	    push(@names, $name_by_name[$i][0]); 
 	}
+	my $row = $name_by_name[$#name_by_name]; # last one
 
 	
 	if ( $debug ) {
@@ -114,12 +123,12 @@ if ( parm('start')){ # list active peers
 	    printf "names : " . join(",", @names) . "\n";
 	}
 
-	if ( $#ips < 0){ # IP not found
+	if ( $#ips < 0 && !$file){ # IP not found
 	    if ( $#names >= 0){ # and we will add address for name if already existing
-		my $rec=$names[$#names];
+		my $name=$names[$#names];
 		my $pfx=length($r_ip) / 2;
 		# if ( substr( $r_ip, 0, $pfx) eq substr( $rec->[7], 0, $pfx) ){ # only update if half prefix is same
-		    if ( update_record( $r_ip, $rec ) ){ # take last record
+		    if ( update_record( $r_ip, $row ) ){ # take last record
 			my @n=($r_host);
 			push(@ips, \@n);
 		    }
@@ -150,7 +159,12 @@ if ( parm('start')){ # list active peers
 	    push(@ips, $name);
 	}
     }
-
+    # Give config to anyone with param node_name from vpn.example.org
+    if ( $r_host && $r_ip eq $vpn_host ){
+	push( @ips, $r_ip );
+	warn "### microdep-config.cgi allowing $r_host from $vpn_host";
+    }
+    
 
     if (  $#ips >= 0 || parm('secret') eq 'virre-virre-vapp'){ # ready to serve 
 	if ( $file ){
@@ -173,12 +187,14 @@ if ( parm('start')){ # list active peers
 	    } else {
 		print $q->header(-type => 'text/plain' );
 		print "### File not found $file\n";
-		print STDERR "### File not found for $file host $r_host ip $r_ip file $file\n";
+		print STDERR "### File not found for $file host $r_host ip $r_ip local_ip $local_ip file $file\n";
 
 	    }
 	    $found=1;
 	} else { # found client in list - send config_files
-	    $r_host=$ips[$#ips];  # use last entry
+	    if ( ! $r_host ){
+		$r_host=$ips[$#ips];  # use last entry
+	    }
 	    my $client_dir="$config_dir/mp/$r_host";
 	    print "client_dir $client_dir\n" if $debug;
 
@@ -202,8 +218,10 @@ if ( parm('start')){ # list active peers
     if ( $found < 1 ){
 	print $q->header(
 	    -type=>'text/plain' );
-	print "### No match found for host $r_host ip $r_ip file $file\n";
-	print STDERR "### No match found for host $r_host ip $r_ip file $file\n";
+	my $msg="### No match found for host $r_host ip $r_ip local_ip $local_ip file $file\n";
+	print $msg;
+	print STDERR $msg;
+
     }
 }
 
@@ -248,7 +266,7 @@ sub do_select{
 
 sub update_record{  # mark old record and add new record with new address
     my $new_ip=shift;
-    my $row=shift;
+    my $row=shift; # name
 
     my $datetime=`date +%FT%T`;
     my $epoch=time;
@@ -260,6 +278,7 @@ sub update_record{  # mark old record and add new record with new address
     $row->[10]=$epoch;
 
     my $insert= sprintf( "INSERT INTO members VALUES ( NULL,'%s', '%s','%s', '%s', '%s', %s, %s, %s, '%s', %d );", @$row );
+    print "$insert\n" if $debug > 0; 
     if ($dbh->do($insert)){
 	my $update= sprintf( "UPDATE members SET status = 'old' WHERE id = '%s';", $row->[0] );
 	if ($dbh->do($update)){
@@ -271,4 +290,26 @@ sub update_record{  # mark old record and add new record with new address
 	print "ERROR:\t" . $DBI::errstr . " : " . $insert . "\n";
     }
     return 0;
+}
+
+sub guess_node_name{
+    my $ip=shift;
+    my $node_name;
+    
+    my @lines=`grep "$ip" $mp_list`; # find by address first
+    if ( $#lines >= 0 ){
+	foreach my $line( @lines){
+	    chomp($line);
+	    my ($name, $adr)=split(/\s+/, $line);
+	    print "mp_list name $name ip $adr\n" if $debug;
+	    $node_name = $name; # last one stands
+	}
+    } else { # try inverse dns
+	print "node address missing in mp_list : r_ip $ip\n" if $debug;
+	my $iaddr=inet_aton($ip);
+	$node_name=gethostbyaddr($iaddr, AF_INET);
+	$node_name=~ s/\.$//;
+	print "rev dns rhost $node_name\n" if $debug;
+    }
+    return $node_name;
 }
