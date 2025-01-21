@@ -4,7 +4,7 @@ import { parms, conffile,
 	 colors, make_palette,
 	 prop_desc, prop_names, prop_names_list, make_prop_select,
 	 periods, get_period, period_units, anhour, aday, aweek,
-	 selected_date_is_today_or_future }
+	 selected_date_is_today_or_future, adjust_to_timezone }
 from "./map-lib.js" ;
 import {chart_curve, chart} from "./graph.js";
 
@@ -74,7 +74,7 @@ function make_curve(tab_id, property, start, end){
     $("#period").val(xunit);
 
     var url="elastic-get-date-type.pl?index=" + parms.index + "&event_type=" + parms.event
-	+ "&start=" + start + "&end=" + end
+	+ "&start=" + adjust_to_timezone(start) + "&end=" + adjust_to_timezone(end)
 	+ "&from=" + parms.from + "&to=" + parms.to;
 
     let title = parms.title.length !== 0 ? parms.title : "From " + parms.from + " to " + parms.to;
