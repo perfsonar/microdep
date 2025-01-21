@@ -165,7 +165,6 @@ elif [ $DBTYPE = "postgres" ]; then
     CREATE ROLE $USERNAME WITH PASSWORD '$PASSWD' LOGIN;
 " > $SQLCMD
     su postgres -c "psql -f $SQLCMD $DBNAME"  
-
 fi    
 rm $SQLCMD
 msg "done."
