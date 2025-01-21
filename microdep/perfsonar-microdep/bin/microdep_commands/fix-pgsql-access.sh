@@ -9,7 +9,7 @@ TAG="perfsonar-microdep-ana"
 
 usage() {
     echo  "Usage: $0 [options] pg-conf-file" 1>&2;
-    echo  "  -r           Remove access-config." 1>&2;
+    echo  "  -r           Only remove access-config (if existant)." 1>&2;
     echo  "  -i           Do it in file, i.e. edit given config file." 1>&2;
     echo  "  -u string    Set user name. Default is $USER." 1>&2;
     echo  "  -d string    Set database name. Default is $DBNAME." 1>&2;
@@ -42,12 +42,20 @@ while getopts ":u:d:t:ir" o; do
 done
 shift $((OPTIND-1))
 
-
-if [ "$REMOVE"  ]; then
-    sed $INFILE "/^#BEGIN-$TAG/,/^#END-$TAG/d" $1
-    exit $?
+if [ $# -lt 1 ]; then
+    echo "Missing filename for pg-conf-file."
+    exit 2
 fi
 
+# Always remove exiting entry (if any)
+sed $INFILE "/^#BEGIN-$TAG/,/^#END-$TAG/d" $1
+
+if [ "$REMOVE"  ]; then
+    # Only remove.
+    exit 0
+fi
+
+# Add entry
 sed $INFILE "/^# TYPE  DATABASE.*/a\\
 #BEGIN-$TAG\\
 #\\
