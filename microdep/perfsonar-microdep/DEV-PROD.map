@@ -4,8 +4,8 @@
 # ---- Last line of header - Do not remove or edit ----
 ../../microdep-dev/LICENSE LICENSE
 # Map frontend
-#../../microdep-dev/microdep-legacy/server/script/microdep-map.html microdep-map/index.html
-microdep-map/index.html
+../../microdep-dev/microdep-legacy/server/script/microdep-map.html microdep-map/index.html
+#microdep-map/index.html
 ../../microdep-dev/microdep-legacy/server/script/ajax-loader.gif microdep-map/img/ajax-loader.gif
 microdep-map/img/favicon.ico
 ../../microdep-dev/microdep-legacy/server/script/microdep-map.js microdep-map/js/microdep-map.js
