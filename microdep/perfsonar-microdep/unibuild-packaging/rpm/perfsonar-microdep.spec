@@ -270,8 +270,25 @@ fi
 
 # Enable Microdep pipeline for logstash (by adding content of /etc/perfsonar/microdep/microdep-pipelines.yml if not already present)
 if [ -f /etc/logstash/pipelines.yml ]; then
-    grep -q -x -F -f /etc/perfsonar/microdep/logstash/microdep-pipelines.yml /etc/logstash/pipelines.yml || ( cat /etc/perfsonar/microdep/logstash/microdep-pipelines.yml >> /etc/logstash/pipelines.yml )
+    grep -q -x -F -f %{microdep_config_base}/logstash/microdep-pipelines.yml /etc/logstash/pipelines.yml || ( cat %{microdep_config_base}/logstash/microdep-pipelines.yml >> /etc/logstash/pipelines.yml )
 fi
+
+# Add open read access to Microdep opensearch indices
+if [ -f /usr/lib/perfsonar/archive/config/roles.yml ]; then
+    grep -q -x -F -f %{microdep_config_base}/roles_yml_patch /usr/lib/perfsonar/archive/config/roles.yml
+    if [ $? -eq 1 ]; then
+	# Microdep index missing. Add.
+	sed -i '/prometheus\*/r %{microdep_config_base}/roles_yml_patch' /usr/lib/perfsonar/archive/config/roles.yml
+    fi
+    # Refresh config of opensearch security
+    /usr/lib/perfsonar/archive/perfsonar-scripts/pselastic_secure_pre.sh
+    /usr/lib/perfsonar/archive/perfsonar-scripts/pselastic_secure_pos.sh
+    # Restart some services
+    #systemctl start logstash.service || true
+    #systemctl start opensearch-dashboards.service || true
+fi
+
+
 # Enable executing of microdep ana scripts if SElinux is enabled
 if [ -f /sbin/restorecon ]; then
     /sbin/restorecon -irv /usr/lib/perfsonar/bin/microdep_commands/
@@ -290,11 +307,20 @@ systemctl start perfsonar-microdep-restart.timer || true
 %postun ana
 # Clean up pipeline for logstash
 TMPPIPELINE=$(mktemp)
-grep -v -x -F -f /etc/perfsonar/microdep/logstash/microdep-pipelines.yml /etc/logstash/pipelines.yml > $TMPPIPELINE && mv $TMPPIPELINE /etc/logstash/pipelines.yml
+grep -v -x -F -f %{microdep_config_base}/logstash/microdep-pipelines.yml /etc/logstash/pipelines.yml > $TMPPIPELINE && mv $TMPPIPELINE /etc/logstash/pipelines.yml
+
+# Clean up open access to Microdep opensearch index
+TMPROLESYML=$(mktemp)
+grep -v -x -F -f %{microdep_config_base}/roles_yml_patch /usr/lib/perfsonar/archive/config/roles.yml > $TMPPIPELINE && mv $TMPROLESYML /usr/lib/perfsonar/archive/config/roles.yml
+# Restart some services
+#systemctl start logstash.service || true
+#systemctl start opensearch-dashboards.service || true
+
 # Clean up db access
 if [ -f /var/lib/pgsql/data/pg_hba.conf ]; then
     %{command_base}/fix-pgsql-access.sh -ri /var/lib/pgsql/data/pg_hba.conf
 fi
+
 # Stop services (ignore failures)
 systemctl stop perfsonar-microdep-gap-ana.service || true
 systemctl stop perfsonar-microdep-trace-ana.service || true
