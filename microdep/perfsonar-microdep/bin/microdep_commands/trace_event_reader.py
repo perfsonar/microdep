@@ -44,6 +44,7 @@ import geoip2.database
 import socket
 #import pika
 from urllib.parse import urlparse, parse_qsl
+import urllib.request
 from io import StringIO
 import hashlib
 from operator import itemgetter
@@ -119,6 +120,8 @@ param = {
     'maxprocs': 1,                # Max no of parallel processes in batch mode
     'topoevents': 0,              # Flag to enable detection and output of topology events
     'topointerval': 3600,         # Min no of seconds between topology events
+    'pslookup': 'http://ps-west.es.net/lookup/activehosts.json',  # Source of perfSONAR Lookup Service hosts
+    'pslookupwait': 3600         # Min no of seconds to wait between refreshing info fetched from pslookup-service
 }
 
 # State constants
@@ -367,7 +370,9 @@ def parse_cmd(param):
     cmdparser.add_argument('--maxprocs', '-m', default=param['maxprocs'], help='Max no of processes in batch mode.')
     cmdparser.add_argument('--topoevents', '-t', action='count', default=param['topoevents'], help='Detect and output events when topology changes are detected.')
     cmdparser.add_argument('--topointerval', default=param['topointerval'], help='Min no of seconds between topology events.')
-    
+    cmdparser.add_argument('--pslookup', default=param['pslookup'], help='Source of perfSONAR Lookup Service hosts.')
+    cmdparser.add_argument('--pslookupwait', default=param['pslookupwait'], help='Min interval between attempts to fetch info from ps-lookup service.')
+
     # Run parser
     args = cmdparser.parse_args()
     # Extract parameters
@@ -528,6 +533,10 @@ class Resolver:
         self.ip = {}
         self.name = {}
 
+        # Geopos info
+        self.geopos = {}
+        self.pslookuphost = {}
+        
         try:
             file = open(mapfile, "r")
             
@@ -583,8 +592,78 @@ class Resolver:
                 if param['verbose'] > 2:
                     print("Warning: Invalid ip address '%s' applied." % (ip))
                 pass
+            
+        self.refresh_geopos(ip)
+
         return ip
-        
+
+    def refresh_geopos(self, ip):
+        """ Attempt to fetch geopos-info from perfsonar's lookupservice.
+            Lookup frequency is trottled.
+        """
+        if ip not in self.geopos.keys():
+            # Init dict entry compatible with Geolite2 (Maxmine)
+            self.geopos[ip] = {
+                'latitude': '0.0',
+                'longitude': '0.0',
+                'location': { 'lat': '0,0', 'lon': '0,0' },
+                'city_name': 'Unknown',
+                'postal_code': 'Unknown',
+                'region_name': 'Unknown',
+                'country_code2': 'Unknown',
+                'country_code3': 'Unknown',
+		'geo_src': 'pslookup',
+                'ip': "",
+                'refresh': time.time() - 1 
+                }
+            
+        if self.geopos[ip]['refresh'] < time.time():
+            # Attempt to fetch geopos info from perfSONAR's Lookup Service
+            if not self.pslookuphost:
+                try:
+                    pslookuphost_str = urllib.request.urlopen(param['pslookup']).read()
+                    self.pslookuphost = json.loads(pslookuphost_str)
+                except urllib.error.URLError:
+                    pass
+
+            for pshost in self.pslookuphost['hosts']:
+                # Fetch list of lookup service hosts
+                try:
+                    pslookup_str = urllib.request.urlopen(pshost['locator'] + "/?host-name=" + ip).read()
+                    if param['verbose'] > 3:
+                        print("pslookup-data:")
+                        print(pslookup_str)
+                    pslookup = json.loads(pslookup_str)
+                    if pslookup:
+                        # Position available. Store applying Geolite2 (Maxmine) tags / keys
+                        if 'location-latitude' in pslookup[0]: self.geopos[ip]['latitude'] = pslookup[0]['location-latitude'][0] 
+                        if 'location-longitude' in pslookup[0]: self.geopos[ip]['longitude'] = pslookup[0]['location-longitude'][0]
+                        self.geopos[ip]['location'] = { 'lat': self.geopos[ip]['latitude'], 'lon': self.geopos[ip]['longitude'] }
+                        if 'location-city' in pslookup[0]: self.geopos[ip]['city_name'] = pslookup[0]['location-city'][0]
+                        if 'location-code' in pslookup[0]: self.geopos[ip]['postal_code'] = pslookup[0]['location-code'][0]
+                        if 'location-state' in pslookup[0]: self.geopos[ip]['region_name'] = pslookup[0]['location-state'][0]
+                        if 'location-country' in pslookup[0]: self.geopos[ip]['country_code2'] = pslookup[0]['location-country'][0]
+                        self.geopos[ip]['country_code3'] = self.geopos[ip]['country_code2']
+                        self.geopos[ip]['ip'] = ip 
+                        if param['verbose'] > 3:
+                            print("Added geopos:")
+                            pprint(self.geopos[ip])
+                        break
+                except urllib.error.URLError:
+                    pass
+
+            # Set refresh interval for geopos info.
+            self.geopos[ip]['refresh'] = time.time() + float(param['pslookupwait'])
+
+    def get_geopos(self, ip):
+        """ Return dictionary with geopos-info 
+        """
+        if ip in self.geopos and self.geopos[ip]["ip"]:
+            return self.geopos[ip]
+        else:
+            # No gepos available
+            return {}
+            
     def get_name(self, ip):
         """ Translates from ip to name
         """
@@ -1030,6 +1109,12 @@ def printAlert(threadid, tr_type, n, time, mode, normal=None, new=None):
         alert["start_time"] = n[1]
         alert["duration"] = int(n[2]) - int(n[1])
 
+        # Add geopos-info if available
+        for pfx in [ "from", "to"]:
+            geopos = resolver.get_geopos(alert[pfx + "_adr"])
+            if geopos:
+                alert[pfx + "_geo"]=geopos
+            
         createJSON(alert)
         return
         
@@ -2131,7 +2216,7 @@ def read(path, srchost, mode="batch", thread=0, starttime=0):
         sys.exit()
 
     # Check if filehandel really is open
-    if(p.closed):
+    if (hasattr(p,'closed') and p.closed ) or (hasattr(p,'poll') and p.poll() is not None ):
         print("Error: Accessing source '" + path + "' failed (file descriptor closed).")
         return
     

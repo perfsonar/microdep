@@ -29,7 +29,7 @@ use Time::Local;
 use POSIX(strftime);
 use Data::Dumper;
     
-#use LWP::Simple;
+use LWP::Simple;
 
 # use Math::Int64 qw(uint64 uint64_to_number);
 use constant JAN_1970 => 0x83aa7e80;
@@ -53,9 +53,10 @@ my $gap_limit={'big'=>5000, 'small'=>50, 'tiny'=>0}; # lost packets of that kind
 my $max_gaps={'big'=>1000, 'small'=>1000, 'tiny'=>1000}; # count of that kind
 my $late_delay=3000; # ms to doom a packet late
 my %src_adr=(),  my %dst_adr=();
-my %least_delay; # least delay observed
-my %hostname=();
-
+my %least_delay;  # least delay observed
+my %hostname=();  # List of hostnames indexed by ip-address (ipv4 only?) 
+my %geopos=();    # Geopositions for ip-addresses 
+    
 my %bad_lines=(); # count invalid input lines tat resemble crude fmt
 my $bad_line=0; # signal previous line was bad
 my $unknown_lines=0; # lines that does not match any RE
@@ -90,6 +91,10 @@ my $last_topoevent = time(); # Epoch time when last topology event was output
 my $opt_topoevents = 0;       # Flag enabling toplogy events
 my $opt_topointerval = 3600;  # Min interval between topology events
 
+my $opt_pslookup = "http://ps-west.es.net/lookup/activehosts.json";  # Source of perfSONAR Lookup Service hosts;
+my $pslookuphost;                # Ref to hash of perfSONAR Lookup Service hosts;
+my $opt_psloookup_wait = 3600;   # Min interval between attempts to fetch info from ps-lookup service
+
 my $usage="$0 '[-title text] [-minloss n] [-win n] [-graph file] [max-small-graphs n]  [-outdir dir] [-head|-rhead] [-id id] [-names file] [-addresses file] [-json file] [-v] [-version] [-esmond url] [file]...
 Analyse gaps in a crude packet log
   - output a list of statistical qos parameters as text or json
@@ -111,6 +116,8 @@ Parameters
   -batchsize n         Override batch size (packet count) expected when reading owamp subsession data sets
   -topoevents	       Enable output of topology events whenever a topology change is detected
   -topointerval n      Min interval (sec) between topology events (default is $opt_topointerval)
+  -pslookup url        Source url for perfSONAR lookup service hosts (default is $opt_pslookup)
+  -wait seconds        Min no of seconds to wait between refreshing info fetched from pslookup-service (default is $opt_pslookup_wait)
     ";
 
 my ($opt_h, $opt_help, $opt_id, $opt_slep, $opt_format, $opt_minloss, $opt_win, $opt_recover, $opt_max_small_graphs, $opt_head, $opt_rhead, $opt_graph, $opt_outdir, $opt_title, $opt_addresses, $opt_names, $opt_threshold, $opt_owamp, $opt_json, $opt_jitter, $opt_rtp, $opt_change_factor, $opt_index, $opt_v, $opt_version);
@@ -125,7 +132,8 @@ GetOptions( 'h' => \$opt_h, 'help' => \$opt_help, 'id=s' => \$opt_id, 'slep=s' =
 	    'rtp=s' => \$opt_rtp, 'ddelay_low=s' => $opt_ddelay_low, 'ddelay_high=s' => \$opt_ddelay_high,
 	    'debug=s' => \$opt_debug, 'batchsize=s' => $opt_batchsize,
 	    'change_factor=s' => \$opt_change_factor, 'v' => \$opt_v, 'version' => \$opt_version,
-	    'topoevents' => \$opt_topoevents, 'topointerval=s' => \$opt_topointerval
+	    'topoevents' => \$opt_topoevents, 'topointerval=s' => \$opt_topointerval,
+	    'pslookup=s' => \$opt_pslookup, 'wait=s' => \$opt_pslookup_wait
     ) or die $usage;
 # &NGetOpt( 'h', 'help', 'id=s', 'slep=s', 'minloss=s', 'win=s', 'max-small-graphs=s', 'head', 'rhead', 'graph=s', 'outdir=s', 'title=s', 'names=s', 'json=s', 'index=s', 'v', 'version') || die "$!" . $usage ."\n";
 
@@ -488,7 +496,7 @@ sub get_addresses {
 	    while(<ADRS>){
 		next if /^\s*#/;
 		my ($name, $ip)=split;
-		$hostname{validate_ip($ip)}=$name;
+		$hostname{$ip}=$name;
 	    }
 	}
 	close ADRS;
@@ -531,11 +539,11 @@ sub get_name{
 
 sub validate_ip{
     # Check validity of ipv4 address, and attempt to fix if possible
+    # Attempt to find geo-position also
     my $ip = shift;
     $ip =~ s/^\s+|\s+$//g ; # Trim off white space
     if ( $ip =~ /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/ ) {
 	print "validat_ip Ok:", $ip, "\n" if $opt_debug > 3;
-	return $ip;
     } else {
 	print "Strange ip:", $ip, "\n" if $opt_debug > 3;
 	# Maybe ip is really a name? Attempt lookup
@@ -544,15 +552,47 @@ sub validate_ip{
 	    # Lookup succeeded.
 	    $ip = inet_ntoa($packed_ip);
 	    print "validate_ip lookup: ", $ip, "\n" if $opt_debug > 3;
-	#eval{ (undef, undef, undef, undef, @ip_addr) = gethostbyname($ip) };
-	#if ( !$@ && @ip_addr > 0 ) {
-	    # Lookup succeeded.
-	    #print "Ip found,", Dumper(@ip_addr) if $opt_debug > 3;
-	    #return $ip_addr[0];
 	} else {
 	    # Give up.
 	    warn "Unrecognized ip address '". $ip . "', applying anyway.";
 	}
+    }
+    if (! exists($geopos{$ip}) || $geopos{$ip}{'refresh'} < time() ) {
+	# Attempt to fetch geo coordinates from perfSONAR's Lookup Service
+	if (@{$pslookuphost->{'hosts'}} == 0) {
+	    my $pslookuphost_str = get( $opt_pslookup );
+	    $pslookuphost = decode_json $pslookuphost_str;
+	    print "pslookup hosts:\n", Dumper($pslookuphost) if $opt_debug > 1;
+	}
+	foreach (@{$pslookuphost->{'hosts'}}) {
+	    # Ask a Lookup Service host for data
+	    my $pslookup_str = get( $_->{'locator'} . "/?host-name=" . $ip);
+	    if (defined $pslookup_str) {
+		print "pslookup for ", $ip, ":\n", Dumper($pslookup_str) if $opt_debug > 3;
+		my $pslookup = decode_json $pslookup_str;
+		if (@{$pslookup}) {
+		    # Position available. Store.
+		    my $latitude = $$pslookup[0]{'location-latitude'}[0] || "0.0";
+		    my $longitude = $$pslookup[0]{'location-longitude'}[0] || "0.0";
+		    my $city = $$pslookup[0]{'location-city'}[0] || "Unknown" ;
+		    # Store applying Geolite2 (Maxmine) tags / keys
+		    $geopos{$ip}{'latitude'} = $$pslookup[0]{'location-latitude'}[0] || "0.0";
+		    $geopos{$ip}{'longitude'} = $$pslookup[0]{'location-longitude'}[0] || "0.0";
+		    $geopos{$ip}{'location'}{'lat'} = $geopos{$ip}{'latitude'};
+		    $geopos{$ip}{'location'}{'lon'} = $geopos{$ip}{'longitude'};
+		    $geopos{$ip}{'city_name'} = $$pslookup[0]{'location-city'}[0] || "Unknown" ;
+		    $geopos{$ip}{'postal_code'} = $$pslookup[0]{'location-code'}[0] || "Unknown" ;
+		    $geopos{$ip}{'region_name'} = $$pslookup[0]{'location-state'}[0] || "Unknown" ;
+		    $geopos{$ip}{'country_code2'} = $$pslookup[0]{'location-country'}[0] || "Unknown" ;
+		    $geopos{$ip}{'country_code3'} = $geopos{$ip}{'country_code2'};
+		    $geopos{$ip}{'geo_src'} = "pslookup";
+		    $geopos{$ip}{'ip'} = $ip;
+		    last;
+		}
+	    }
+	}
+	# Set refresh interval for geopos info.
+	$geopos{$ip}{'refresh'} = time() + $opt_pslookup_wait;
     }
     return $ip
 }
@@ -744,7 +784,7 @@ sub read_owamp_rabbitmq{
     #
     my $consume_from_queue = sub {
 	# Create queue (either with specifies name or temporary name)
-	my $auto_delete = ( $rmq_params{'queue'} == '');   # Ensure temp queues are deleted
+	my $auto_delete = ( $rmq_params{'queue'} eq '');   # Ensure temp queues are deleted
 	print "Declaring queue '", $rmq_params{'queue'}, "'...\n" if $opt_debug > 2;
 	$channel->declare_queue(
 	    queue => $rmq_params{'queue'},
@@ -1739,8 +1779,12 @@ sub emit_topology_json{
     # Parameters: flow-id
     my $id=shift;
     my $json= {
-	"event_type" => "topology"
+	"event_type" => "topology",
+        "test_type" => "latencybg",
     };
+    # Add geoip data (but only if available)
+    $json->{'from_geo'} = $geopos{$src_adr{$id}} if ( exists $geopos{$src_adr{$id}}{'ip'} );
+    $json->{'to_geo'} = $geopos{$dst_adr{$id}} if ( exists $geopos{$dst_adr{$id}}{'ip'} );
 
     emit_json($json, $id, time()); 
 }
