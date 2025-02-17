@@ -18,11 +18,10 @@ microdep-map/curve-chart.html
 #../../microdep-dev/microdep-legacy/server/script/elastic-get-date-type.pl bin/microdep_commands/elastic-get-date-type.pl
 bin/microdep_commands/elastic-get-date-type.pl
 ../../microdep-dev/microdep-legacy/server/script/yaml-to-json.cgi bin/microdep_commands/yaml-to-json.cgi
-bin/microdep_commands/get-mapconfig.cgi
+../../microdep-dev/microdep-legacy/server/script/get-mapconfig.cg bin/microdep_commands/get-mapconfig.cgi
 ../../microdep-dev/microdep-legacy/server/script/microdep-config.cgi bin/microdep_commands/microdep-config.cgi
-#../../microdep-dev/microdep-legacy/server/script/mapconfig.yml etc/mapconfig.yml
-etc/mapconfig.yml
-etc/mapconfig.d/dragonlab.yml
+../../microdep-dev/microdep-legacy/server/script/mapconfig.yml etc/mapconfig.yml
+../../microdep-dev/microdep-legacy/server/script/mapconfig.d/dragonlab.yml etc/mapconfig.d/dragonlab.yml
 ../../microdep-dev/microdep-legacy/server/script/microdep-config.yml etc/microdep-config.yml
 ../../microdep-dev/etc/microdep/dragonlab-base-geo.json microdep-map/dragonlab/dragonlab-base-geo.json
 etc/dragonlab-base-geo.json.example
