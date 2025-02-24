@@ -68,6 +68,11 @@ if [ "$DISTRO"="auto" ]; then
     $RSH $USER@$HOST grep ID_LIKE /etc/os-release | grep -q debian && DISTRO="deb"
 fi
 
+if [ "$DISTRO"="auto" ]; then
+    echo "Error: Failed to detect distro." >&2
+    exit 1
+if 
+
 read -p "Sync $DISTRO-repos to $USER@$HOST (y/N)? " YESNO
 if [  "$YESNO" != "y" -a  "$YESNO" != "Y" ]; then exit 0; fi
 
