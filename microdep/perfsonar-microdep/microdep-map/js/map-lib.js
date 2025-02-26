@@ -418,7 +418,6 @@ export var prop_desc= {};
 
 
 export function get_config( conffilename, call_back){
-    // OJW 2021-12-09 BEGIN CONFIG FILE LOAD
     // Fetch config info and initialize page
     $.getJSON( "get-mapconfig.cgi", function(read_conffile) {
 	if (Object.keys(read_conffile).length > 0) {
@@ -435,17 +434,13 @@ export function get_config( conffilename, call_back){
 	    call_back();
 	}
 
-	// OJW 2021-12-09 CONTINUES AT END OF "document ready"
-
-	//OJW 2021-12-09 CONTINUED CONFIG FILE LOAD
-        })
+    })
     .fail( function(e, textStatus, error ) {
 	// Config not avaiable
         console.log("Failed to get conf.json :" + textStatus + ", " + error);
     });
-    
-    //OJW 2021-12-09 END CONFIG FILE LOAD
 }
+
 export function update_props() {
     // Repopulate property structures based on given measuerment network variant and config file
     // Also re-init event type and variable select-lists
