@@ -1,5 +1,15 @@
 {
-  "dragonlab_routemon" : {
+  "index_patterns": [
+    "dragonlab_routemon*"
+  ],
+  "template": {
+    "settings": {
+      "number_of_shards": 1,
+      "number_of_replicas": 0
+    },
+    "aliases": {
+      "dragonlab_routemon": {}
+    },
     "mappings" : {
       "properties" : {
         "@date" : {
