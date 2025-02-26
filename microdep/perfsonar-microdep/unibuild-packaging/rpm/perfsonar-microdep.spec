@@ -73,9 +73,11 @@ Requires:               leafletjs-L.LatLng.UTM
 Requires:               latlon-sphericaljs
 Requires:               momentjs = 2.30.1
 Requires:               select2js = 4.0.0
+Requires:               sorttablejs = 2.0
 Recommends:             perfsonar-tracetree
-%{?systemd_requires: %systemd_requires}
+#%{?systemd_requires: %systemd_requires}
 BuildRequires:          systemd
+BuildRequires:          systemd-rpm-macros       # ... but macros are not yet utilized below
 
 %description map
 Web GUI presenting Microdep analytic results in a map view
@@ -119,29 +121,11 @@ Requires:               python3-mysqlclient
 Requires:               python3-pika
 Requires:               python3-psycopg2
 Requires:               python3-pytz
-#Requires:               py3-tzlocal
 Requires:               python3-tzlocal
 Requires:               perfsonar-microdep-geolite2
-
-# Potenial dependencies...
-#Requires:               python3-psycopg2
-#Requires:               python3-mysqlclient
-#Requires:               gcc
-#Requires:               python3-devel
-#Requires:               python3-multidict
-##Requires:               typing_extensions
-#Requires:               python3-yarl
-##Requires:               async_timeout
-##Requires:               idna_ssl
-#Requires:               python3-aiosignal
-##Requires:               cchardet
-##Requires:               charset_normalizer
-#Requires:               python3-attrs
-#Requires:               python3-pika
-
-
-%{?systemd_requires: %systemd_requires}
- #BuildRequires:          systemd
+#%{?systemd_requires: %systemd_requires}
+BuildRequires:          systemd
+BuildRequires:          systemd-rpm-macros       # ... but macros are not yet utilized below
 
 %description ana
 Analytic scripts to process perfSONAR data sets and generate events. Events may be viualized by Microdep map.
@@ -232,7 +216,7 @@ ln -sr /usr/share/javascript/leaflet-L.LatLng.UTM/1.0/L.LatLng.UTM.js %{buildroo
 ln -sr /usr/share/javascript/momentjs/2.30.1/moment.js %{buildroot}/%{microdep_web_dir}/js/
 ln -sr /usr/share/javascript/select2/4.0.0/css/select2.min.css %{buildroot}/%{microdep_web_dir}/css/
 ln -sr /usr/share/javascript/select2/4.0.0/js/select2.min.js %{buildroot}/%{microdep_web_dir}/js/
-ln -sr /usr/share/javascript/sorttable/v2/sorttable.js %{buildroot}/%{microdep_web_dir}/js/
+ln -sr /usr/share/javascript/sorttable/2.0/sorttable.js %{buildroot}/%{microdep_web_dir}/js/
 
 # Link mapconfig
 ln -sr %{microdep_config_base}/mapconfig.yml %{buildroot}/%{microdep_web_dir}
@@ -256,9 +240,26 @@ if [ -f %{config_base}/psconfig/pscheduler.d/toolkit-webui.json ]; then
     # (Perhaps "systemctl start perfsonar-microdep-watchconfig.service" could be run instead...)
 fi
 
+# Add open read access to Microdep opensearch indices
+if [ -f /usr/lib/perfsonar/archive/config/roles.yml ]; then
+    grep -q -x -F -f %{microdep_config_base}/roles_yml_patch /usr/lib/perfsonar/archive/config/roles.yml
+    if [ $? -eq 1 ]; then
+	# Microdep index missing. Add.
+	sed -i '/prometheus\*/r %{microdep_config_base}/roles_yml_patch' /usr/lib/perfsonar/archive/config/roles.yml
+    fi
+    # Refresh config of opensearch security
+    /usr/lib/perfsonar/archive/perfsonar-scripts/pselastic_secure_pre.sh
+    /usr/lib/perfsonar/archive/perfsonar-scripts/pselastic_secure_pos.sh
+    echo "##################################"
+    echo "# Restart of Opensearch required #"
+    echo "##################################"
+fi
+
 # Enable systemd services (ignore failures)
 systemctl enable perfsonar-microdep-watchconfig.path || true
 systemctl start perfsonar-microdep-watchconfig.path || true
+# Reload web server config
+systemctl reload httpd.service || true
 
 %post ana
 # Create db
@@ -272,22 +273,6 @@ fi
 if [ -f /etc/logstash/pipelines.yml ]; then
     grep -q -x -F -f %{microdep_config_base}/logstash/microdep-pipelines.yml /etc/logstash/pipelines.yml || ( cat %{microdep_config_base}/logstash/microdep-pipelines.yml >> /etc/logstash/pipelines.yml )
 fi
-
-# Add open read access to Microdep opensearch indices
-if [ -f /usr/lib/perfsonar/archive/config/roles.yml ]; then
-    grep -q -x -F -f %{microdep_config_base}/roles_yml_patch /usr/lib/perfsonar/archive/config/roles.yml
-    if [ $? -eq 1 ]; then
-	# Microdep index missing. Add.
-	sed -i '/prometheus\*/r %{microdep_config_base}/roles_yml_patch' /usr/lib/perfsonar/archive/config/roles.yml
-    fi
-    # Refresh config of opensearch security
-    /usr/lib/perfsonar/archive/perfsonar-scripts/pselastic_secure_pre.sh
-    /usr/lib/perfsonar/archive/perfsonar-scripts/pselastic_secure_pos.sh
-    # Restart some services
-    #systemctl start logstash.service || true
-    #systemctl start opensearch-dashboards.service || true
-fi
-
 
 # Enable executing of microdep ana scripts if SElinux is enabled
 if [ -f /sbin/restorecon ]; then
@@ -303,18 +288,26 @@ systemctl start rabbitmq-server.service || true
 systemctl start perfsonar-microdep-gap-ana.service || true
 systemctl start perfsonar-microdep-trace-ana.service || true
 systemctl start perfsonar-microdep-restart.timer || true
-    
-%postun ana
-# Clean up pipeline for logstash
-TMPPIPELINE=$(mktemp)
-grep -v -x -F -f %{microdep_config_base}/logstash/microdep-pipelines.yml /etc/logstash/pipelines.yml > $TMPPIPELINE && mv $TMPPIPELINE /etc/logstash/pipelines.yml
 
+%preun map
 # Clean up open access to Microdep opensearch index
 TMPROLESYML=$(mktemp)
 grep -v -x -F -f %{microdep_config_base}/roles_yml_patch /usr/lib/perfsonar/archive/config/roles.yml > $TMPPIPELINE && mv $TMPROLESYML /usr/lib/perfsonar/archive/config/roles.yml
-# Restart some services
-#systemctl start logstash.service || true
-#systemctl start opensearch-dashboards.service || true
+
+# Refresh config of opensearch security
+/usr/lib/perfsonar/archive/perfsonar-scripts/pselastic_secure_pre.sh
+/usr/lib/perfsonar/archive/perfsonar-scripts/pselastic_secure_pos.sh
+echo "##################################"
+echo "# Restart of Opensearch required #"
+echo "##################################"
+
+%postun map
+systemctl reload httpd.service || true
+
+%preun ana
+# Clean up pipeline for logstash
+TMPPIPELINE=$(mktemp)
+grep -v -x -F -f %{microdep_config_base}/logstash/microdep-pipelines.yml /etc/logstash/pipelines.yml > $TMPPIPELINE && mv $TMPPIPELINE /etc/logstash/pipelines.yml
 
 # Clean up db access
 if [ -f /var/lib/pgsql/data/pg_hba.conf ]; then
@@ -358,6 +351,7 @@ systemctl stop perfsonar-microdep-restart.timer || true
 %config %{microdep_config_base}/mapconfig.d/
 %config %{microdep_config_base}/dragonlab-base-geo.json.example
 %config %{microdep_config_base}/mp-dragonlab/etc/microdep.db
+%config %{microdep_config_base}/roles_yml_patch
 %config /etc/httpd/conf.d/apache-microdep-map.conf
 %config %{microdep_web_dir}/dragonlab/dragonlab-base-geo.json
 

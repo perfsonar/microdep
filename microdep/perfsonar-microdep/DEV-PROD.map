@@ -34,6 +34,7 @@ microdep-map/css/curve-chart.css
 etc/microdep-tests.json.example
 ../../microdep-dev/etc/httpd/apache-microdep-gui.conf etc/apache-microdep-map.conf
 etc/microdep.db
+etc/roles_yml_patch
 # Debug-tools
 ../../microdep-dev/bin/rabbitmq-consume.py bin/microdep_commands/rabbitmq-consume.py
 ../../microdep-dev/bin/json2table.pl bin/microdep_commands/json2table.pl
