@@ -868,21 +868,62 @@ function draw_links(hits, prop){
     taint_links(hits, prop);
 }
 
-function get_topology(){
+function get_topology(source = "archive"){
+    // Fetch topology data from relevant source
+    // and initiate drawing of topology
+    
     let start = new Date($("#datepicker").val() + " 00:00:00").getTime()/1000;
+    let start_iso = new Date($("#datepicker").val() + " 00:00:00").toISOString();
     let end= new Date($("#datepicker").val() + " 23:59:59").getTime()/1000;
+    let end_iso = new Date($("#datepicker").val() + " 23:59:59").toISOString();
     var network=parms.net;
-    var url="microdep-config.cgi?secret=\"" + conffile[parms.net].database_secret + "\"&variant=mp-" + network + "&start=" + start + "&end=" + end;
-    $.getJSON( url,
-	       function(topology){
-		   draw_topology( topology );
-		   get_connections();
-		   // draw_topology( duplex_topology( topology) ); 
-	       }).fail( function( jqxhr, textStatus, error ) {
-		  var err = textStatus + ", " + error;
-		   console.log( "Request" + url + " Failed: " + err );
-	      });
 
+    switch (source) {
+	
+    case "sqlite-db":
+	// Ask for topology-info from (legacy) sqllite db 
+	var url="microdep-config.cgi?secret=\"" + conffile[parms.net].database_secret + "\"&variant=mp-" + network + "&start=" + start + "&end=" + end;
+	$.getJSON( url,
+		   function(topology){
+		       draw_topology( topology );
+		       get_connections();
+		       // draw_topology( duplex_topology( topology) ); 
+		   }).fail( function( jqxhr, textStatus, error ) {
+		       var err = textStatus + ", " + error;
+		       console.log( "Request" + url + " Failed: " + err );
+		   });
+	break;
+	
+    case "archive": 
+	// Fetch all unique from-to peers (flows) for time period from Opensearch archive
+	var url = conffile[parms.net].archive + "/" + conffile[parms.net].event_type.topology.index + "/_search";
+	var query = JSON.stringify ({ "query": { "range": { "@date": { "gte": start_iso,  "lt": end_iso  } } },
+		      "size": 0,
+		      "aggs": { "peer": { "terms": { "field": "from_to.keyword", "size" : 1000000  } } }
+				    });
+	$.post( {url: url, data: query, contentType: "application/json", dataType: "json", success: 
+		   function(result){
+		       var topology = [];
+		       if (! result.aggregations.peer.buckets.length) {
+			   console.log("No topology data returned from archive for time period " + start + " to " + end + ". Trying sqlite db ...");
+			   // No topology data returned. Try sqlite-db instead.
+			   get_topology("sqlite-db");
+		       } else {
+			   for (var p=0; p < result.aggregations.peer.buckets.length; p++) {
+			       topology.push(result.aggregations.peer.buckets[p].key.split("_"));
+			   }
+			   draw_topology( topology );
+			   get_connections();
+			   // draw_topology( duplex_topology( topology) );
+		       }
+		   }, fail: function( jqxhr, textStatus, error ) {
+		       var err = textStatus + ", " + error;
+		       console.log( "Request" + url + " Failed: " + err );
+		   } } );
+
+	break;
+    }
+	
 }
 
 // done by api
@@ -1168,8 +1209,64 @@ function draw_link( ends, color, tooltip, popup){
     return(line);
 }
 
+function get_node_query(tofrom, start, end) {
+    // Produce a JSON string for querying node info from Opensearch
+    return JSON.stringify( { "query": { "range": { "@date": { "gte": start, "lt": end } } }, "size": 0, "aggs": { "nodes": { "terms": { "field": tofrom + ".keyword", "size" : 10000  }, "aggs": { "ip": { "terms": { "field": tofrom + "_adr.keyword"}}, "city": { "terms": { "field": tofrom + "_geo.city_name.keyword"}}, "lat": { "avg":  { "field": tofrom + "_geo.latitude" } },  "lon": { "avg":  { "field": tofrom + "_geo.longitude" } } } } } } );
+}
 function load_coords(network, service, goal){
     // Load global coordinate for nodes in topology
+
+    if ( service === "topoevents" ) {
+	// Extract and load coordinates from topology-events fetched from archive db (Opensearch)
+	var start_iso = new Date($("#datepicker").val() + " 00:00:00").toISOString();
+	var end_iso = new Date($("#datepicker").val() + " 23:59:59").toISOString();
+	// Query for both source (from) nodes and destination (to) nodes
+	var query_index = JSON.stringify( { "index": conffile[parms.net].event_type.topology.index }); 
+	var query_fromnodes = get_node_query( "from", start_iso, end_iso);
+	var query_tonodes = get_node_query( "to", start_iso, end_iso);
+	var query = query_index + '\n' + query_fromnodes + '\n' + query_index + '\n' + query_tonodes + '\n';
+	var url = conffile[parms.net].archive + "/_msearch";
+
+	$.post( {url: url, data: query, contentType: "application/json", dataType: "json", success: 
+		   function(result){
+		       for (var r = 0; r < result.responses.length; r++) {
+			   for (var n=0; n < result.responses[r].aggregations.nodes.buckets.length; n++) {
+			       // Add node info to points structure
+			       var p={};
+			       p.id = result.responses[r].aggregations.nodes.buckets[n].key;
+			       if (typeof result.responses[r].aggregations.nodes.buckets[n].city.buckets[0] != "undefined" ) {
+				   p.name = result.responses[r].aggregations.nodes.buckets[n].city.buckets[0].key;  // Grab first city in list (if any)
+			       } else {
+				   p.name = p.id;
+			       }
+			       p.lat = result.responses[r].aggregations.nodes.buckets[n].lat.value ?? "0.0" ;  
+			       p.lon = result.responses[r].aggregations.nodes.buckets[n].lon.value ?? "0.0" ;
+			       reg_ip_adr(p.id, result.responses[r].aggregations.nodes.buckets[n].ip.buckets[0].key );  // Register first ip in list (and forget the rest, if any)
+			       let point_already_loaded = points.find(o => o.id === p.id);
+			       if (! point_already_loaded) {
+				   points.push( p);
+			       } else {
+				   console.log( "Duplicate node info for node " + p.id );
+			       }
+			   }
+		       }
+		       if ( ! result.responses.length ) {
+			   console.log("No node data returned from archive for time period " + start_iso + " to " + end_iso + ".");
+		       }
+		       loads++;
+		       if (loads >= goal) {
+			   // All other calls to load_coords() have completed.
+			   loads=0;
+			   show_map(network);
+			   get_topology();
+		       }
+		   }, fail:  function( jqxhr, textStatus, error ) {
+		       var err = textStatus + ", " + error;
+		       console.log( "Request" + url + " Failed: " + err );
+		       loads++;
+		   } } );
+	return;
+    } 
 
     if ( service === "db" ) {
 	// Load coordinates from config db
@@ -1198,10 +1295,12 @@ function load_coords(network, service, goal){
 		       if (loads >= goal) { // i.e. wait until data loaded
 			   loads=0;
 			   show_map(network);
+			   get_topology();
 		       }  
 		   }).fail( function( jqxhr, textStatus, error ) {
 		       var err = textStatus + ", " + error;
 		       console.log( "Request" + url + " Failed: " + err );
+		       loads++;
 		   });
 	return;
     } 
@@ -1240,11 +1339,13 @@ function load_coords(network, service, goal){
 	    if (loads >= goal) { // i.e. wait until data loaded
 		loads=0;
 		show_map(network);
+		get_topology();
 	    }  
 
 	}).fail( function( jqxhr, textStatus, error ) {
 	    var err = textStatus + ", " + error;
 	    console.log( "Request" + url + " Failed: " + err );
+	    loads++;
 	});
 
 }
@@ -1256,10 +1357,15 @@ function show_network(network){
 	points=points_cache[network];
 	show_map(network);
     } else {
-	load_coords(network, "db",2);   // Load node coordinates from config db
-	load_coords(network, "base",2);
-//	load_coords(network, "extra",2);
-//	load_coords(network, "cnaas",2);
+	// Exctract node coordinates from topology events
+	load_coords(network, "topoevents", 5);
+	// Load node coordinates from config db
+	load_coords(network, "db", 5);
+	// Load node coordinates from json files
+	load_coords(network, "base", 5);
+	load_coords(network, "extra", 5);
+	load_coords(network, "cnaas", 5);
+	// NOTE: Last arg (int) must equal no of consequtive calls to 'load_coords'
     }
 }
 
@@ -1267,8 +1373,6 @@ function show_network(network){
 function get_coords(end){
     var coords, i;
 
-    if ( end.indexOf("ytelse") >= 0 && end.indexOf("uninett.no") >= 0 )
-	end = end.slice( 0, end.indexOf(".uninett.no") );
     for (i=0; i < points.length; i++){
 	var p=points[i];
 	if ( p.id === end ){
@@ -1479,7 +1583,8 @@ function change_date(delta){
     $("#datepicker").datepicker('setDate', p);
     //$("#draw").click();
     update_url();
-    get_topology();
+    show_network(parms.net);
+    //get_topology();
     get_connections();
     update_url();
  
@@ -1829,7 +1934,8 @@ function hhmmss(d){
 	      $("#next").prop('dsabled', selected_hour_is_future() ); // Make next-button available if relevant
 	      //ok update_props();
 	      update_url();
-	      get_topology();
+	      show_network(parms.net);
+	      //get_topology();
 	      get_connections();
 	  });
 
@@ -1904,19 +2010,19 @@ function hhmmss(d){
 	  }
       });
 
-
       // network change
-      $("#network").change( function(){
+      $("#network").change( async function(){
 	  parms.net= $("#network").val();
 	  update_props();
 	  remove_links(links);
 	  load_name_to_address();
 	  show_network(parms.net);
-	  get_topology();
+	  // await new Promise(r => setTimeout(r, 5000)); // Sleep 5 sec for loading of node-data to complete. WARNING! THIS DESPERATELY NEEDS REDESIGN.
+	  // get_topology();
 	  update_url();
 	  $("#tabs").tabs("option", "active", 0);
       });
-
+      
       // event_type parameter change
       $("#event_type").change( function(){
 	  parms.event = $("#event_type").val()    

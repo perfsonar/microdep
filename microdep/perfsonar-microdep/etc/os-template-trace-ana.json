@@ -165,6 +165,15 @@
             }
           }
         },
+        "from_to" : {
+            "type" : "text",
+            "fields" : {
+		"keyword" : {
+		    "type" : "keyword",
+		    "ignore_above" : 256
+		}
+            }
+        },
         "host" : {
           "properties" : {
             "name" : {
