@@ -385,7 +385,8 @@ sub GetOwampDataFromEsmond($$$$$) {
 
 sub emit_summary_json{
     
-    foreach $id ( sort keys %npackets){
+#    foreach $id ( sort keys %npackets){
+    foreach $id ( sort keys %src_adr){
 	my $latems=0;
 	$latems=$late_sum{$id}/$late_n{$id} if $late_n{$id} > 0;
 	my $down_pmm=0;
@@ -682,7 +683,38 @@ sub owamp_ana($){
     # Batch of json data ready for analysis
     my $data = decode_json($payload);
     print Dumper($data) if $opt_debug > 3;
+
+
+    if ( $data && $data->{'test'}->{'type'} eq 'latencybg' ){
+	# (At least) Meta data from a powstream / latencybg test is available
+	(my $src, my $dst)=($data->{'test'}->{'spec'}->{'source-node'}, $data->{'test'}->{'spec'}->{'dest-node'} );
+
+	# Record/update source and dest data 
+	$opt_id = $src . "-" . $dst;   # Set global id for flow since analyze_packet() also can rely on this
+	my $new_flow = ! $src_adr{$opt_id} || ! $dst_adr{$opt_id} ;
+	$src_adr{$opt_id}=$src if ! $src_adr{$opt_id} ;
+	$dst_adr{$opt_id}=$dst if ! $dst_adr{$opt_id} ;
+	$src_name{$opt_id}=get_name($opt_src);
+	$dst_name{$opt_id}=get_name($opt_dst);
+
+	if($opt_topoevents) {
+	    # Report topology change events
+	    if ($new_flow) {
+		# Output record with timestamp and src + dst info
+		emit_topology_json($id);
+	    }
+	    if (time() - $last_topoevent > $opt_topointerval) {
+		# Output topology events for all observed src + dst pair
+		foreach my $id_ (keys  %src_adr) {
+		    emit_topology_json($id_);
+		}
+		$last_topoevent = time();
+	    }
+	}
+    }
+
     if ( $data && $data->{'run'}->{'state'} eq 'finished' && $data->{'test'}->{'type'} eq 'latencybg' ){
+	
 	# State is "finished" and powstream / latencybg results are available.
 	my $batchsize = $opt_batchsize;
 	if (! $batchsize) {
