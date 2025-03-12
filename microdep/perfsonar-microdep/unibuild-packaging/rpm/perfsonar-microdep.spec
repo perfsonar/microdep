@@ -77,7 +77,8 @@ Requires:               sorttablejs = 2.0
 Recommends:             perfsonar-tracetree
 #%{?systemd_requires: %systemd_requires}
 BuildRequires:          systemd
-BuildRequires:          systemd-rpm-macros       # ... but macros are not yet utilized below
+BuildRequires:          systemd-rpm-macros       
+# ... but macros are not yet utilized below
 
 %description map
 Web GUI presenting Microdep analytic results in a map view
@@ -125,7 +126,8 @@ Requires:               python3-tzlocal
 Requires:               perfsonar-microdep-geolite2
 #%{?systemd_requires: %systemd_requires}
 BuildRequires:          systemd
-BuildRequires:          systemd-rpm-macros       # ... but macros are not yet utilized below
+BuildRequires:          systemd-rpm-macros    
+# ... but macros are not yet utilized below
 
 %description ana
 Analytic scripts to process perfSONAR data sets and generate events. Events may be viualized by Microdep map.
@@ -250,9 +252,21 @@ if [ -f /usr/lib/perfsonar/archive/config/roles.yml ]; then
     # Refresh config of opensearch security
     /usr/lib/perfsonar/archive/perfsonar-scripts/pselastic_secure_pre.sh
     /usr/lib/perfsonar/archive/perfsonar-scripts/pselastic_secure_pos.sh
-    echo "##################################"
-    echo "# Restart of Opensearch required #"
-    echo "##################################"
+fi
+
+# Add Microdep button on main grafana dashboard (if not already present)
+grep -q  "Microdep map" /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json
+if [ $? -gt 0 ]; then
+    # Find next available panel id
+    NEXTID=$(jq .panels[].id /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json | sort -n | tail -n 1)
+    let NEXTID++
+    # Set new id in dashboard patch
+    PATCHFILE=$(mktemp)
+    jq --argjson nextid "$NEXTID" '.id = $nextid' grafana_dashboard_patch > $PATCHFILE
+    # Add new panel to main dashboard
+    DASHBOARDFILE=$(mktemp)
+    jq '.panels += [input]' /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json  $PATCHFILE > $DASHBOARDFILE
+    mv $DASHBOARDFILE /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json
 fi
 
 # Enable systemd services (ignore failures)
@@ -297,11 +311,17 @@ grep -v -x -F -f %{microdep_config_base}/roles_yml_patch /usr/lib/perfsonar/arch
 # Refresh config of opensearch security
 /usr/lib/perfsonar/archive/perfsonar-scripts/pselastic_secure_pre.sh
 /usr/lib/perfsonar/archive/perfsonar-scripts/pselastic_secure_pos.sh
-echo "##################################"
-echo "# Restart of Opensearch required #"
-echo "##################################"
+
+# Remove Microdep button from Grafana main dashboard (if present)
+grep -q  "Microdep map" /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json
+if [ $? -eq 0 ]; then
+    DASHBOARDFILE=$(mktemp)
+    jq  'del( .panels[] | select(.options.content != null ) | select (.options.content | contains("Microdep map")))' /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json > $DASHBOARDFILE
+    mv $DASHBOARDFILE /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json
+fi
 
 %postun map
+# Reload web server (since web configs have been uninstalled)
 systemctl reload httpd.service || true
 
 %preun ana
