@@ -708,17 +708,10 @@ sub owamp_ana($){
 	# Record/update source and dest data 
 	$opt_id = $src . "-" . $dst;   # Set global id for flow since analyze_packet() also can rely on this
 	my $new_flow = ! $src_adr{$opt_id} || ! $dst_adr{$opt_id} ;
-<<<<<<< HEAD
 	$src_adr{$opt_id}=validate_ip($src) if ! $src_adr{$opt_id} ;
 	$dst_adr{$opt_id}=validate_ip($dst) if ! $dst_adr{$opt_id} ;
 	$src_name{$opt_id}=get_name($src_adr{$opt_id});
 	$dst_name{$opt_id}=get_name($dst_adr{$opt_id});
-=======
-	$src_adr{$opt_id}=$src if ! $src_adr{$opt_id} ;
-	$dst_adr{$opt_id}=$dst if ! $dst_adr{$opt_id} ;
-	$src_name{$opt_id}=get_name($opt_src);
-	$dst_name{$opt_id}=get_name($opt_dst);
->>>>>>> afe895ea0cbdad43a433db840913b02fc6c2b45d
 
 	if($opt_topoevents) {
 	    # Report topology change events
