@@ -55,6 +55,7 @@ my $late_delay=3000; # ms to doom a packet late
 my %src_adr=(),  my %dst_adr=();
 my %least_delay;  # least delay observed
 my %hostname=();  # List of hostnames indexed by ip-address (ipv4 only?) 
+my %ip_addr=();   # List of ip-addresses indexed by hostnames (ipv4 only?) 
 my %geopos=();    # Geopositions for ip-addresses 
     
 my %bad_lines=(); # count invalid input lines tat resemble crude fmt
@@ -526,11 +527,17 @@ sub get_name{
     my $adr=shift;
     my $name;
     if ($hostname{$adr}){
+	# Name in cache
 	$name=$hostname{$adr};
     } else {
+	# Attempt to lookup name
 	if ( $hostname = gethostbyaddr(inet_aton($adr), AF_INET)  ){
+	    # Name found
 	    $name=$hostname;
+	    # Update reverse cache also
+	    $ip_addr{$name}=$adr;
 	} else {
+	    # Give up. Apply address as name.
 	    $name=$adr;
 	}
 	$hostname{$adr}=$name;
@@ -547,15 +554,24 @@ sub validate_ip{
 	print "validat_ip Ok:", $ip, "\n" if $opt_debug > 3;
     } else {
 	print "Strange ip:", $ip, "\n" if $opt_debug > 3;
-	# Maybe ip is really a name? Attempt lookup
-	my $packed_ip = gethostbyname($ip);
-	if (defined $packed_ip) {
-	    # Lookup succeeded.
-	    $ip = inet_ntoa($packed_ip);
-	    print "validate_ip lookup: ", $ip, "\n" if $opt_debug > 3;
+	# Maybe ip is really a name? 
+	my $maybe_name = $ip;
+	if ( exists($ip_addr{$maybe_name} ) ) {
+	    # Ip already cached
+	    $ip = $ip_addr{$maybe_name};
+	    print "validate_ip in cache: ", $ip, "\n" if $opt_debug > 3;
 	} else {
-	    # Give up.
-	    warn "Unrecognized ip address '". $ip . "', applying anyway.";
+	    # Attempt lookup
+	    my $packed_ip = gethostbyname($maybe_name);
+	    if (defined $packed_ip) {
+		# Lookup succeeded.
+		$ip = inet_ntoa($packed_ip);
+		print "validate_ip lookup: ", $ip, "\n" if $opt_debug > 3;
+		$ip_addr{$maybe_name} = $ip;
+	    } else {
+		# Give up.
+		warn "Unrecognized ip address '". $ip . "', applying anyway.";
+	    }
 	}
     }
     if (! exists($geopos{$ip}) || $geopos{$ip}{'refresh'} < time() ) {
@@ -692,10 +708,17 @@ sub owamp_ana($){
 	# Record/update source and dest data 
 	$opt_id = $src . "-" . $dst;   # Set global id for flow since analyze_packet() also can rely on this
 	my $new_flow = ! $src_adr{$opt_id} || ! $dst_adr{$opt_id} ;
+<<<<<<< HEAD
+	$src_adr{$opt_id}=validate_ip($src) if ! $src_adr{$opt_id} ;
+	$dst_adr{$opt_id}=validate_ip($dst) if ! $dst_adr{$opt_id} ;
+	$src_name{$opt_id}=get_name($src_adr{$opt_id});
+	$dst_name{$opt_id}=get_name($dst_adr{$opt_id});
+=======
 	$src_adr{$opt_id}=$src if ! $src_adr{$opt_id} ;
 	$dst_adr{$opt_id}=$dst if ! $dst_adr{$opt_id} ;
 	$src_name{$opt_id}=get_name($opt_src);
 	$dst_name{$opt_id}=get_name($opt_dst);
+>>>>>>> afe895ea0cbdad43a433db840913b02fc6c2b45d
 
 	if($opt_topoevents) {
 	    # Report topology change events
@@ -841,10 +864,12 @@ sub read_owamp_rabbitmq{
 				on_consume => sub {
 				    # Message consumed from queue
 				    my $msg = shift;
-				    $payload = $msg->{body}->payload;
-				    print "Read data from rmq. Analysing...\n" if $opt_debug > 2;
-				    owamp_ana($payload);
-				    
+				    if ( exists $msg->{body}) {
+					# Analyse message payload
+					$payload = $msg->{body}->payload;
+					print "Read data from rmq. Analysing...\n" if $opt_debug > 2;
+					owamp_ana($payload);
+				    }
 				    # Tell "main loop" to stop waiting for more, i.e. consume only single message
 				    #$rmq_cv->send;
 				}
@@ -859,10 +884,12 @@ sub read_owamp_rabbitmq{
 			on_consume => sub {
 			    # Message consumed from queue
 			    my $msg = shift;
-			    $payload = $msg->{body}->payload;
-			    print "Read data from rmq. Analysing...\n" if $opt_debug > 2;
-			    owamp_ana($payload);
-			    
+			    if ( exists $msg->{body}) {
+				# Analyse message payload
+				$payload = $msg->{body}->payload;
+				print "Read data from rmq. Analysing...\n" if $opt_debug > 2;
+				owamp_ana($payload);
+			    }
 			    # Tell "main loop" to stop waiting for more, i.e. consume only single message
 			    #$rmq_cv->send;
 			}
