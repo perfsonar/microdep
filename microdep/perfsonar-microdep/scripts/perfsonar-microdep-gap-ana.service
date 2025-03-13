@@ -8,6 +8,7 @@ Type=simple
 User=perfsonar
 Group=perfsonar
 ExecStart=/usr/lib/perfsonar/bin/microdep_commands/qstream-gap-ana -minloss 5 -head -win 50 -jitter 600 -rtp 5 -addresses /etc/perfsonar/psconfig/pscheduler.d/toolkit-webui.json -owamp amqp:// -json /var/lib/logstash/microdep/gap-ana.json -topoevents 
+Restart=on-failure
 
 [Install]
 WantedBy=multi-user.target
