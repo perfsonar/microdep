@@ -25,6 +25,7 @@ etc/microdep-tests.json.example
 etc/apache-microdep-map.conf
 etc/microdep.db
 etc/roles_yml_patch
+etc/grafana_dashboard_patch
 bin/microdep_commands/rabbitmq-consume.py
 bin/microdep_commands/json2table.pl
 bin/microdep_commands/qstream-gap-ana
