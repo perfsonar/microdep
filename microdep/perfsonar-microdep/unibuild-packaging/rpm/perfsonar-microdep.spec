@@ -262,7 +262,7 @@ if [ $? -gt 0 ]; then
     let NEXTID++
     # Set new id in dashboard patch
     PATCHFILE=$(mktemp)
-    jq --argjson nextid "$NEXTID" '.id = $nextid' grafana_dashboard_patch > $PATCHFILE
+    jq --argjson nextid "$NEXTID" '.id = $nextid' %{microdep_config_base}/grafana_dashboard_patch > $PATCHFILE
     # Add new panel to main dashboard
     DASHBOARDFILE=$(mktemp)
     jq '.panels += [input]' /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json  $PATCHFILE > $DASHBOARDFILE
