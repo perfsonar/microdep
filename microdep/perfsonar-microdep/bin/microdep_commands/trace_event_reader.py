@@ -102,7 +102,9 @@ param = {
     'all': 0,                 # Flag to enable processing of older-than-latest traceroutes
     'tcp': 0,                 # Flag to enable processing tcptraceroute files
     'pssrc': '',              # Url to perfsonar data source, e.g. amqp://<user:passwd@localhost>/<vhost>/queue=<traceroute>
-    'path': '/var/lib/microdep/mp-dragonlab/data/',               # Path to apply when searching based on date               
+    'path': '/var/lib/microdep/mp-dragonlab/data',             # Path to apply when searching based on date               
+    'reportpath': '/var/lib/microdep/mp-dragonlab/report/mp',  # Path to apply for output files when searching based on date               
+    'reportpostpath': 'trace-ana',                             # Finale path level to add below reportpath,  source host and date               
     'output':'',                 # Output filename.
     'oneoutput':'',              # Output filename for single file output.
     'samepath': 0,                 # Flag to enable placement of outputfile in same folder as input file 
@@ -354,6 +356,8 @@ def parse_cmd(param):
     cmdparser.add_argument('--tcp', '-T', action='count', default=param['tcp'], help='Look for tcptraceroute files.')
     cmdparser.add_argument('--pssrc', default=param['pssrc'], help='URL to perfsonar data source.')
     cmdparser.add_argument('--path', '-p', default=param['path'], help='Base path to apply when searching based on date')
+    cmdparser.add_argument('--reportpath', '-r', default=param['reportpath'], help='Base path to apply when storing output for date based input.')
+    cmdparser.add_argument('--reportpostpath', '-R', default=param['reportpostpath'], help='Finale path level to add below reportpath, source host and date.')
     cmdparser.add_argument('--output', '-o', default=param['output'], help='Filename for output. Default is timestamp+"R"+hash')
     cmdparser.add_argument('--oneoutput', '-O', default=param['oneoutput'], help='All output to single file.')
     cmdparser.add_argument('--samepath', '-s', action='count', default=param['samepath'], help='Place output file in same path as input file')
@@ -795,7 +799,10 @@ def classifyOutage(errors):
 
 def createJSON(alert):
 
-    path = alert["timestamp"] + "R" + str(random.randint(100, 999)) + str(random.randint(100, 999))
+    # Prepare filename
+
+    # Generate default unique filename
+    filename = alert["timestamp"] + "R" + str(random.randint(100, 999)) + str(random.randint(100, 999))
 
     if param['output']:
         # Prepare postfix
@@ -807,18 +814,27 @@ def createJSON(alert):
             
         if param['output'].find(".") != -1:
             # Add postfix before dot
-            path = param['output'].replace(".",  "-" + postfix + ".")
+            filename = param['output'].replace(".",  "-" + postfix + ".")
         else:
             # Add postfix at end
-            path = param['output'] + "-" + str(alert["thread"])
+            filename = param['output'] + "-" + str(alert["thread"])
     elif param['oneoutput']:
         # Output all to single (given) file
-        path = param['oneoutput']
-        
+        filename = param['oneoutput']
+
+    # Add path to filename      
+
+    if filename.find("/") != -1 and param["verbose"] > 2:
+        print ("Warning: Output filename contains path. Adjust '-r' and 's' to avoid additional output path to be added.")
+    
     if param['samepath'] > 0:
-        # Apply outputfile in same folder as inputfile
-        path = input_dir[alert["thread"]] + "/" + path
-            
+        # Place outputfile in same folder as inputfile
+        path = input_dir[alert["thread"]] + "/" + filename
+    else:
+        # Place outputfile in report folder
+        os.makedirs(report_dir[alert["thread"]], exist_ok=True)  # Create folders if required
+        path = report_dir[alert["thread"]] + "/" + filename
+    
     with open(path, "a") as outfile:
         if param['verbose'] > 2:
             print(json.dumps(alert) + "\n")
@@ -2192,13 +2208,14 @@ def analyze(traceroute, time, cursor):
     
 input_file = {}  # Filenames of inputfiles, indexed by thread  
 input_dir = {}  # Folders for inputfiles, indexed by thread  
+report_dir = {}  # Folders for outputfiles, indexed by thread  
 
 # Prepare communication between Rabbitmq receive proccess and analysis process
 pssrc_r, pssrc_w = os.pipe()                # Pipe from Rabbitmq reader to analysis process
 pssrc_pipe_input = os.fdopen(pssrc_w, "w")  # File descriptor for writing data to analysis process 
 pssrc_pipe_output = os.fdopen(pssrc_r)      # File descriptor for reading data inside analysis process  
 
-def read(path, srchost, mode="batch", thread=0, starttime=0):
+def read(path, srchost, srcdate, mode="batch", thread=0, starttime=0):
     """ Parse raw log file and run analysis on each found traceroute run
         2022-01-20: Renovated to properly parse both traceroute and tcptraceroute logs
     """  
@@ -2224,6 +2241,7 @@ def read(path, srchost, mode="batch", thread=0, starttime=0):
     filename = os.path.basename(path)
     input_file[thread] = filename
     input_dir[thread] = os.path.dirname(path)
+    report_dir[thread] = param['reportpath'] + "/" + srchost + "/" + srcdate + "/" + param['reportpostpath']
     
     # Extract info from filename
     dsthost = str(filename)[filename.find("_")+1:-3]  # Assume "..._<ipv4-addr>.gz" filename format
@@ -2528,7 +2546,7 @@ def amqp_read(url, mode, thread):
     if pid == 0:
         # Child process. Reading only from pipe
         os.close(pssrc_w)
-        read("from pipe", "", mode)
+        read("from pipe", "", "", mode)
         sys.exit()
 
     # Parent process. No need to read from pipe
@@ -2620,8 +2638,12 @@ if __name__ == "__main__":
         thr = 0
         for tracefile in param['file']:
             srchost = tracefile.split("/")[-3]    # Extract source host (?)
+            srcdate = tracefile.split("/")[-2]    # Extract date for source host (?)
             if not srchost :
                 print ("Error: No sourcehost found in file path")
+                sys.exit()
+            if not srcdate :
+                print ("Error: No source date found in file path")
                 sys.exit()
             if param['live'] > 0:
                 thr += 1
@@ -2630,17 +2652,17 @@ if __name__ == "__main__":
                 if pid == 0:
                     # Child process
                     os.nice(5)    # Give process a bit lower priority than normal
-                    read(tracefile, srchost, "nosummary", thr)  # Analyse whole file
-                    read(tracefile, srchost, "live", thr)  # Analyse tail and follow file
+                    read(tracefile, srchost, srcdate, "nosummary", thr)  # Analyse whole file
+                    read(tracefile, srchost, srcdate, "live", thr)  # Analyse tail and follow file
                     sys.exit()
                     
                 # Parent process
                 if param['verbose'] > 1:
                     print("Forked child ", pid)
             elif param['profiler'] > 0:
-                cProfile.run('read(tracefile, srchost, "batch", thr)' ) # Analyse
+                cProfile.run('read(tracefile, srchost, srcdate, "batch", thr)' ) # Analyse
             else:
-                read(tracefile, srchost, "batch", thr)  # Analyse
+                read(tracefile, srchost, srcdate, "batch", thr)  # Analyse
         if thr > 0:
             try:
                 # Wait for child processes to finish
@@ -2693,8 +2715,8 @@ if __name__ == "__main__":
                             if pid == 0:
                                 # Child process
 #                                os.nice(5)    # Give process a bit lower priority than normal
-                                read(filepath, srcfolder, "nosummary", thr)  # Analyse whole file
-                                read(filepath, srcfolder, "live", thr)  # Analyse tail and follow file
+                                read(filepath, srcfolder, datefolder, "nosummary", thr)  # Analyse whole file
+                                read(filepath, srcfolder, datefolder, "live", thr)  # Analyse tail and follow file
                                 sys.exit()
                                 
                             # Parent process
@@ -2713,7 +2735,7 @@ if __name__ == "__main__":
                             if pid == 0:
                                 # Child process
 #                                os.nice(5)    # Give process a bit lower priority than normal
-                                read(filepath, srcfolder, "batch", thr)  # Analyse whole file
+                                read(filepath, srcfolder, datefolder, "batch", thr)  # Analyse whole file
                                 sys.exit()
                                 
                             # Parent process
