@@ -16,8 +16,8 @@
 #  License: GPLv3
 #
 
-# use strict;
-# use warnings 'all';
+#use strict;
+#use warnings 'all';
 # use PDL;
 # use PDL::Ops;
 # use PDL::Fit::Polynomial;
@@ -26,7 +26,7 @@ use Statistics::LineFit;
 use Statistics::Basic qw(:all);
 use Getopt::Long;
 use Time::Local;
-use POSIX(strftime);
+use POSIX qw(strftime);
 use Data::Dumper;
     
 use LWP::Simple;
@@ -85,16 +85,16 @@ my $packet_interval=(); # packet interval guestimate per id
 my $opt_debug = 0;   # Debug level     
 my $opt_batchsize = 0;   # Override batch size (packet count) of measurement result set produced by owamp source. 
 
-my %seqnum_base;       # Base for sequence numbers of current batch from powstream
-my %pre_seqnum_base;   # Base for sequence numbers of previous batch of each flow
+my %owamp_batch;      # Memory for sequence numbers data for owamp sessions. Applied to handle seq num wrap-arround cases.
 
 my $last_topoevent = time(); # Epoch time when last topology event was output
 my $opt_topoevents = 0;       # Flag enabling toplogy events
 my $opt_topointerval = 3600;  # Min interval between topology events
 
 my $opt_pslookup = "http://ps-west.es.net/lookup/activehosts.json";  # Source of perfSONAR Lookup Service hosts;
-my $pslookuphost;                # Ref to hash of perfSONAR Lookup Service hosts;
-my $opt_psloookup_wait = 3600;   # Min interval between attempts to fetch info from ps-lookup service
+my $pslookuphost;               # Ref to hash of perfSONAR Lookup Service hosts;
+my $opt_pslookup_wait = 3600;   # Min interval between attempts to fetch info from ps-lookup service
+my $opt_ipv6 = 0;  # Flag to turn on ipv6 packet analysis
 
 my $usage="$0 '[-title text] [-minloss n] [-win n] [-graph file] [max-small-graphs n]  [-outdir dir] [-head|-rhead] [-id id] [-names file] [-addresses file] [-json file] [-v] [-version] [-esmond url] [file]...
 Analyse gaps in a crude packet log
@@ -112,16 +112,17 @@ Parameters
   -jitter secs         Emit jitter stats with secs interval
   -rtp n               RTP jitter algorithm with 1/n change of average (5)
   -change_factor f     Fraction change to cause threshold jitter report (0.3)
-  -threshold vector    Threshold values for reporting, in form of a vector ala  \"<min-jitter>,<min-ddelay>,<min-slope>\" ($min_jit,$min_ddelay,$min_slop)
+  -threshold vector    Threshold values for reporting, in form of a vector ala  \"<min-jitter>,<min-ddelay>,<min-slope>\" ($min_jit,$min_ddelay,$min_slope)
   -debug n             Level of debug info to output ($opt_debug)
   -batchsize n         Override batch size (packet count) expected when reading owamp subsession data sets
   -topoevents	       Enable output of topology events whenever a topology change is detected
   -topointerval n      Min interval (sec) between topology events (default is $opt_topointerval)
   -pslookup url        Source url for perfSONAR lookup service hosts (default is $opt_pslookup)
   -wait seconds        Min no of seconds to wait between refreshing info fetched from pslookup-service (default is $opt_pslookup_wait)
+  -6                   Analyse ipv6 packets (and ignore ipv4). Default is the opposite.
     ";
 
-my ($opt_h, $opt_help, $opt_id, $opt_slep, $opt_format, $opt_minloss, $opt_win, $opt_recover, $opt_max_small_graphs, $opt_head, $opt_rhead, $opt_graph, $opt_outdir, $opt_title, $opt_addresses, $opt_names, $opt_threshold, $opt_owamp, $opt_json, $opt_jitter, $opt_rtp, $opt_change_factor, $opt_index, $opt_v, $opt_version);
+my ($opt_h, $opt_help, $opt_id, $opt_slep, $opt_format, $opt_minloss, $opt_win, $opt_recover, $opt_max_small_graphs, $opt_head, $opt_rhead, $opt_graph, $opt_outdir, $opt_title, $opt_addresses, $opt_names, $opt_threshold, $opt_owamp, $opt_json, $opt_jitter, $opt_change_factor, $opt_index, $opt_v, $opt_version);
 
 
 GetOptions( 'h' => \$opt_h, 'help' => \$opt_help, 'id=s' => \$opt_id, 'slep=s' => \$opt_slep, 'format=s'=>\$opt_format,
@@ -134,7 +135,7 @@ GetOptions( 'h' => \$opt_h, 'help' => \$opt_help, 'id=s' => \$opt_id, 'slep=s' =
 	    'debug=s' => \$opt_debug, 'batchsize=s' => $opt_batchsize,
 	    'change_factor=s' => \$opt_change_factor, 'v' => \$opt_v, 'version' => \$opt_version,
 	    'topoevents' => \$opt_topoevents, 'topointerval=s' => \$opt_topointerval,
-	    'pslookup=s' => \$opt_pslookup, 'wait=s' => \$opt_pslookup_wait
+	    'pslookup=s' => \$opt_pslookup, 'wait=s' => \$opt_pslookup_wait, '6' =>\$opt_ipv6
     ) or die $usage;
 # &NGetOpt( 'h', 'help', 'id=s', 'slep=s', 'minloss=s', 'win=s', 'max-small-graphs=s', 'head', 'rhead', 'graph=s', 'outdir=s', 'title=s', 'names=s', 'json=s', 'index=s', 'v', 'version') || die "$!" . $usage ."\n";
 
@@ -145,6 +146,10 @@ if ( $opt_h || $opt_help) {
 }
 if ( $opt_version) {
     printf "Version $version\n";
+    exit(0);
+}
+if ( $opt_ipv6) {
+    printf "Ipv6 is not yet supported.\n";
     exit(0);
 }
 
@@ -467,6 +472,7 @@ sub emit_json{
 	"timestamp"=> $tunix * 1.0,
 	"timestamp_zone" => "GMT",
 	"datetime"=> $datems,
+	"ip_version" => ($opt_ipv6 ? 6 : 4),
 	"from"=> $from, "to"=> $to,
 	"from_adr" => $src_adr{$id},
 	"to_adr" => $dst_adr{$id}};
@@ -705,26 +711,26 @@ sub owamp_ana($){
 	# (At least) Meta data from a powstream / latencybg test is available
 	(my $src, my $dst)=($data->{'test'}->{'spec'}->{'source-node'}, $data->{'test'}->{'spec'}->{'dest-node'} );
 
+	my $ip_version = $data->{'test'}->{'spec'}->{'ip-version'} || 4;
+	if ( $opt_ipv6 && $ip_version == 4  || ! $opt_ipv6 && $ip_version != 4 ) {
+	    # Wrong ip version. Ignore batch.
+	    print("Wrong ip version. Ignoring batch of results.\n") if $opt_debug > 3;
+	    return;
+	}
+	
 	# Record/update source and dest data 
 	$opt_id = $src . "-" . $dst;   # Set global id for flow since analyze_packet() also can rely on this
 	my $new_flow = ! $src_adr{$opt_id} || ! $dst_adr{$opt_id} ;
-<<<<<<< HEAD
 	$src_adr{$opt_id}=validate_ip($src) if ! $src_adr{$opt_id} ;
 	$dst_adr{$opt_id}=validate_ip($dst) if ! $dst_adr{$opt_id} ;
 	$src_name{$opt_id}=get_name($src_adr{$opt_id});
 	$dst_name{$opt_id}=get_name($dst_adr{$opt_id});
-=======
-	$src_adr{$opt_id}=$src if ! $src_adr{$opt_id} ;
-	$dst_adr{$opt_id}=$dst if ! $dst_adr{$opt_id} ;
-	$src_name{$opt_id}=get_name($opt_src);
-	$dst_name{$opt_id}=get_name($opt_dst);
->>>>>>> afe895ea0cbdad43a433db840913b02fc6c2b45d
 
 	if($opt_topoevents) {
 	    # Report topology change events
 	    if ($new_flow) {
 		# Output record with timestamp and src + dst info
-		emit_topology_json($id);
+		emit_topology_json($opt_id);
 	    }
 	    if (time() - $last_topoevent > $opt_topointerval) {
 		# Output topology events for all observed src + dst pair
@@ -741,47 +747,48 @@ sub owamp_ana($){
 	# State is "finished" and powstream / latencybg results are available.
 	my $batchsize = $opt_batchsize;
 	if (! $batchsize) {
-	    $batchsize = $data->{'test'}->{'spec'}->{'packet-count'};
+	    $batchsize = $data->{'result'}->{'packets-sent'};
 	}
 	(my $src, my $dst)=($data->{'test'}->{'spec'}->{'source-node'}, $data->{'test'}->{'spec'}->{'dest-node'} );
 	$opt_id = $src . "-" . $dst;   # Set global id for flow since analyze_packet() also can rely on this
 	my $results=$data->{'result'}->{'raw-packets'};
-	my $pre_tx = 0;    # Last tx observed for current flow
-	my $pre_seq = 0;   # Last seq num observed for current flow
 	foreach $probepacket (@$results){
-	    # if ( $probepacket->{'src-ts'} > 0 && $probepacket->{'dst-ts'} > 0 ){
-	    
-	    my $tx=owptime2datetime($probepacket->{'src-ts'});
-	    my $rx=owptime2datetime($probepacket->{'dst-ts'});
-	    my $seq=$probepacket->{'seq-num'};
-	    my $uniq_seq;
-	    # Adjust seq num attempting to make it unique across batches
-	    if ( $pre_tx > 0 && $tx < $pre_tx && $seq > $pre_seq ) {
-		# Packet from previous batch
-		$uniq_seq = $seq + $pre_seqnum_base{$opt_id};
-	    } elsif ($tx > $pre_tx && $seq < $prev_seq) {
-		# New batch / session. Increase base seq num to add.
-		$pre_seqnum_base{$opt_id} = $seqnum_base{$opt_id};
-		$seqnum_base{$opt_id} += $batchsize;
-		$uniq_seq = $seq + $seqnum_base{$opt_id};
+	    if ( $probepacket->{'src-ts'} == 0 && $opt_debug > 3) {
+		print "Packet with tx = 0 for peers $opt_id\n";
+	    } elsif ( $probepacket->{'dst-ts'} == 0 && $opt_debug > 3) {
+		print "Packet with rx = 0 for peers $opt_id\n";
 	    } else {
-		# Packet from current batch
-		$uniq_seq = $seq + $seqnum_base{$opt_id};
-	    }
-	    my $src_addr = validate_ip($src);
-	    my $dst_addr = validate_ip($dst);
-	    $_= sprintf "ID=%s SEQ=%d SRC=%s DST=%s Tx=%.3f Rx=%.3f SIZE=%d HOPLIMIT=%d",
-		0, $uniq_seq, $src_addr, $dst_addr, $tx, $rx, 64, $probepacket->{'ip-ttl'};
-	    analyze_packet($uniq_seq, $src_addr, $dst_addr, $tx, $rx);
-	    print $uniq_seq, " ", $src_addr, " ", $dst_addr, " ", $tx, " ", $rx, "\n" if $opt_debug > 3; 
-	    $pre_tx = $tx;
-	    # } else {
-	    #	if ( $opt_debug > 0) { warn "Invalid OWAMP timestamps for peers $opt_id"; }
-	    # }
-	    $pre_seq = $seq;
+		# Sane time stamps. Prepare packet data for analysis.
+		my $tx=owptime2datetime($probepacket->{'src-ts'});
+		my $rx=owptime2datetime($probepacket->{'dst-ts'});
+		my $seq=$probepacket->{'seq-num'};
+		my $uniq_seq;
+		# Adjust seq num attempting to make it unique across batches...
+		$owamp_batch{$opt_id} = { 'pre_tx' => 0, 'pre_seq' => 0, 'seq_base' => 0, 'pre_seq_base' => 0 } if ( ! exists($owamp_batch{$opt_id}) );
+		if ( $owamp_batch{$opt_id}->{'pre_tx'} > 0 && $tx < $owamp_batch{$opt_id}->{'pre_tx'} && $seq > $owamp_batch{$opt_id}->{'pre_seq'} ) {
+		    # Packet from previous batch
+		    $uniq_seq = $seq + $owamp_batch{$opt_id}->{'pre_seq_base'};
+		} elsif ($tx > $owamp_batch{$opt_id}->{'pre_tx'} && $seq < $owamp_batch{$opt_id}->{'pre_seq'} ) {
+		    # New batch / session. Increase base seq num to be added.
+		    $owamp_batch{$opt_id}->{'pre_seq_base'} = $owamp_batch{$opt_id}->{'seq_base'};
+		    $owamp_batch{$opt_id}->{'seq_base'} += $batchsize;
+		    $uniq_seq = $seq + $owamp_batch{$opt_id}->{'seq_base'};
+		} else {
+		    # Packet from current batch
+		    $uniq_seq = $seq + $owamp_batch{$opt_id}->{'seq_base'};
+		}
+		my $src_addr = validate_ip($src);
+		my $dst_addr = validate_ip($dst);
+		$_= sprintf "ID=%s SEQ=%d SRC=%s DST=%s Tx=%.3f Rx=%.3f SIZE=%d HOPLIMIT=%d",
+		    0, $uniq_seq, $src_addr, $dst_addr, $tx, $rx, 64, $probepacket->{'ip-ttl'};
+		analyze_packet($uniq_seq, $src_addr, $dst_addr, $tx, $rx);
+		print "Analyzed packet: ", $uniq_seq, " ", $src_addr, " ", $dst_addr, " ", $tx, " ", $rx, "\n" if $opt_debug > 3; 
+
+		$owamp_batch{$opt_id}->{'pre_tx'} = $tx;
+		$owamp_batch{$opt_id}->{'pre_seq'} = $seq;
+	    } 
 	}
     }
-
 }
 
 
