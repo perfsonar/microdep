@@ -1211,7 +1211,7 @@ function draw_link( ends, color, tooltip, popup){
 
 function get_node_query(tofrom, start, end) {
     // Produce a JSON string for querying node info from Opensearch
-    return JSON.stringify( { "query": { "range": { "@date": { "gte": start, "lt": end } } }, "size": 0, "aggs": { "nodes": { "terms": { "field": tofrom + ".keyword", "size" : 10000  }, "aggs": { "ip": { "terms": { "field": tofrom + "_adr.keyword"}}, "city": { "terms": { "field": tofrom + "_geo.city_name.keyword"}}, "lat": { "avg":  { "field": tofrom + "_geo.latitude" } },  "lon": { "avg":  { "field": tofrom + "_geo.longitude" } } } } } } );
+    return JSON.stringify( { "query": { "range": { "@date": { "gte": start, "lt": end } } }, "size": 0, "aggs": { "nodes": { "terms": { "field": tofrom + ".keyword", "size" : 10000  }, "aggs": { "ip": { "terms": { "field": tofrom + "_adr.keyword"}}, "city": { "terms": { "field": tofrom + "_geo.city_name.keyword"}}, "lat": { "terms":  { "field": tofrom + "_geo.latitude" } },  "lon": { "terms":  { "field": tofrom + "_geo.longitude" } } } } } } );
 }
 function load_coords(network, service, goal){
     // Load global coordinate for nodes in topology
@@ -1232,16 +1232,23 @@ function load_coords(network, service, goal){
 		       for (var r = 0; r < result.responses.length; r++) {
 			   for (var n=0; n < result.responses[r].aggregations.nodes.buckets.length; n++) {
 			       // Add node info to points structure
-			       var p={};
+			       var p={ id: "", name: "Unknown", lat: 0, lon: 0, ip: "n/a"};
 			       p.id = result.responses[r].aggregations.nodes.buckets[n].key;
 			       if (typeof result.responses[r].aggregations.nodes.buckets[n].city.buckets[0] != "undefined" ) {
-				   p.name = result.responses[r].aggregations.nodes.buckets[n].city.buckets[0].key;  // Grab first city in list (if any)
+//				   p.name = result.responses[r].aggregations.nodes.buckets[n].city.buckets[0].key;  // Grab first city in list
+				   p.name = result.responses[r].aggregations.nodes.buckets[n].city.buckets.at(-1).key;  // Grab last city in list
 			       } else {
 				   p.name = p.id;
-			       }
-			       p.lat = result.responses[r].aggregations.nodes.buckets[n].lat.value ?? "0.0" ;  
-			       p.lon = result.responses[r].aggregations.nodes.buckets[n].lon.value ?? "0.0" ;
-			       reg_ip_adr(p.id, result.responses[r].aggregations.nodes.buckets[n].ip.buckets[0].key );  // Register first ip in list (and forget the rest, if any)
+			       }			       
+			       //p.lat = result.responses[r].aggregations.nodes.buckets[n].lat.value ?? 0 ;
+			       if (typeof result.responses[r].aggregations.nodes.buckets[n].lat.buckets[0] != "undefined")
+				   p.lat = result.responses[r].aggregations.nodes.buckets[n].lat.buckets.at(-1).key ?? 0 ; // Get last value seen
+			       //p.lon = result.responses[r].aggregations.nodes.buckets[n].lon.value ?? 0 ;
+			       if (typeof result.responses[r].aggregations.nodes.buckets[n].lon.buckets[0] != "undefined") 
+				   p.lon = result.responses[r].aggregations.nodes.buckets[n].lon.buckets.at(-1).key ?? 0 ; // Get last value seen
+			       if (typeof result.responses[r].aggregations.nodes.buckets[n].ip.buckets[0] != "undefined") 
+//				   reg_ip_adr(p.id, result.responses[r].aggregations.nodes.buckets[n].ip.buckets[0].key );  // Register first ip in list (and forget the rest, if any)
+				   reg_ip_adr(p.id, result.responses[r].aggregations.nodes.buckets[n].ip.buckets.at(-1).key );  // Register last ip in list
 			       let point_already_loaded = points.find(o => o.id === p.id);
 			       if (! point_already_loaded) {
 				   points.push( p);
