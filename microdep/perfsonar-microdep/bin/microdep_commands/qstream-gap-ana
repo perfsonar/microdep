@@ -551,6 +551,28 @@ sub get_name{
     return $name;
 }
 
+sub store_geopos{
+    # Store geopost data from pslookup structure
+    my $ip = shift;
+    my $posdata = shift;
+    
+    my $latitude = $$posdata[0]{'location-latitude'}[0] || "0.0";
+    my $longitude = $$posdata[0]{'location-longitude'}[0] || "0.0";
+    my $city = $$posdata[0]{'location-city'}[0] || "Unknown" ;
+    # Store applying Geolite2 (Maxmine) tags / keys
+    $geopos{$ip}{'latitude'} = $latitude * 1.0;           # Ensure float
+    $geopos{$ip}{'longitude'} = $longitude * 1.0;         # Ensure float
+    $geopos{$ip}{'location'}{'lat'} = $latitude * 1.0;    # Ensure float
+    $geopos{$ip}{'location'}{'lon'} = $longitude * 1.0;   # Ensure float
+    $geopos{$ip}{'city_name'} = $$posdata[0]{'location-city'}[0] || "Unknown" ;
+    $geopos{$ip}{'postal_code'} = $$posdata[0]{'location-code'}[0] || "Unknown" ;
+    $geopos{$ip}{'region_name'} = $$posdata[0]{'location-state'}[0] || "Unknown" ;
+    $geopos{$ip}{'country_code2'} = $$posdata[0]{'location-country'}[0] || "Unknown" ;
+    $geopos{$ip}{'country_code3'} = $geopos{$ip}{'country_code2'};
+    $geopos{$ip}{'geo_src'} = "pslookup";
+    $geopos{$ip}{'ip'} = $ip;
+}
+
 sub validate_ip{
     # Check validity of ipv4 address, and attempt to fix if possible
     # Attempt to find geo-position also
@@ -595,22 +617,22 @@ sub validate_ip{
 		my $pslookup = decode_json $pslookup_str;
 		if (@{$pslookup}) {
 		    # Position available. Store.
-		    my $latitude = $$pslookup[0]{'location-latitude'}[0] || "0.0";
-		    my $longitude = $$pslookup[0]{'location-longitude'}[0] || "0.0";
-		    my $city = $$pslookup[0]{'location-city'}[0] || "Unknown" ;
-		    # Store applying Geolite2 (Maxmine) tags / keys
-		    $geopos{$ip}{'latitude'} = $$pslookup[0]{'location-latitude'}[0] || "0.0";
-		    $geopos{$ip}{'longitude'} = $$pslookup[0]{'location-longitude'}[0] || "0.0";
-		    $geopos{$ip}{'location'}{'lat'} = $geopos{$ip}{'latitude'};
-		    $geopos{$ip}{'location'}{'lon'} = $geopos{$ip}{'longitude'};
-		    $geopos{$ip}{'city_name'} = $$pslookup[0]{'location-city'}[0] || "Unknown" ;
-		    $geopos{$ip}{'postal_code'} = $$pslookup[0]{'location-code'}[0] || "Unknown" ;
-		    $geopos{$ip}{'region_name'} = $$pslookup[0]{'location-state'}[0] || "Unknown" ;
-		    $geopos{$ip}{'country_code2'} = $$pslookup[0]{'location-country'}[0] || "Unknown" ;
-		    $geopos{$ip}{'country_code3'} = $geopos{$ip}{'country_code2'};
-		    $geopos{$ip}{'geo_src'} = "pslookup";
-		    $geopos{$ip}{'ip'} = $ip;
+		    store_geopos($ip, $pslookup);
 		    last;
+		} elsif ( get_name($ip) =~ /^psmp-\S*.geant.org$/ ) {
+		    # Assume a Geant PMP node. Attempt lookup for "neigbour" management node (with "-mgmt-" in host name).
+		    my @hostname_split = split("-", get_name($ip) );
+		    $hostname_split[2] = "mgmt";
+		    my $pslookup_str = get( $_->{'locator'} . "/?host-name=" . join("-", @hostname_split) );
+		    if (defined $pslookup_str) {
+			print "pslookup for mgmt neighbour of ", $ip, ":\n", Dumper($pslookup_str) if $opt_debug > 3;
+			my $pslookup = decode_json $pslookup_str;
+			if (@{$pslookup}) {
+			    # Position available. Store.
+			    store_geopos($ip, $pslookup);
+			    last;
+			}
+		    }
 		}
 	    }
 	}

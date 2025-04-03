@@ -123,7 +123,8 @@ param = {
     'topoevents': 0,              # Flag to enable detection and output of topology events
     'topointerval': 3600,         # Min no of seconds between topology events
     'pslookup': 'http://ps-west.es.net/lookup/activehosts.json',  # Source of perfSONAR Lookup Service hosts
-    'pslookupwait': 3600         # Min no of seconds to wait between refreshing info fetched from pslookup-service
+    'pslookupwait': 3600,         # Min no of seconds to wait between refreshing info fetched from pslookup-service
+    'ipv6': 0                     # Flag enabling ipv6 address parsing
 }
 
 # State constants
@@ -376,6 +377,7 @@ def parse_cmd(param):
     cmdparser.add_argument('--topointerval', default=param['topointerval'], help='Min no of seconds between topology events.')
     cmdparser.add_argument('--pslookup', default=param['pslookup'], help='Source of perfSONAR Lookup Service hosts.')
     cmdparser.add_argument('--pslookupwait', default=param['pslookupwait'], help='Min interval between attempts to fetch info from ps-lookup service.')
+    cmdparser.add_argument('--ipv6', '-6', action='count', default=param['ipv6'], help='Enable parsing of ipv6 addresses.')
 
     # Run parser
     args = cmdparser.parse_args()
@@ -608,9 +610,9 @@ class Resolver:
         if ip not in self.geopos.keys():
             # Init dict entry compatible with Geolite2 (Maxmine)
             self.geopos[ip] = {
-                'latitude': '0.0',
-                'longitude': '0.0',
-                'location': { 'lat': '0,0', 'lon': '0,0' },
+                'latitude': 0.0,
+                'longitude': 0.0,
+                'location': { 'lat': 0.0, 'lon': 0.0 },
                 'city_name': 'Unknown',
                 'postal_code': 'Unknown',
                 'region_name': 'Unknown',
@@ -640,25 +642,46 @@ class Resolver:
                     pslookup = json.loads(pslookup_str)
                     if pslookup:
                         # Position available. Store applying Geolite2 (Maxmine) tags / keys
-                        if 'location-latitude' in pslookup[0]: self.geopos[ip]['latitude'] = pslookup[0]['location-latitude'][0] 
-                        if 'location-longitude' in pslookup[0]: self.geopos[ip]['longitude'] = pslookup[0]['location-longitude'][0]
-                        self.geopos[ip]['location'] = { 'lat': self.geopos[ip]['latitude'], 'lon': self.geopos[ip]['longitude'] }
-                        if 'location-city' in pslookup[0]: self.geopos[ip]['city_name'] = pslookup[0]['location-city'][0]
-                        if 'location-code' in pslookup[0]: self.geopos[ip]['postal_code'] = pslookup[0]['location-code'][0]
-                        if 'location-state' in pslookup[0]: self.geopos[ip]['region_name'] = pslookup[0]['location-state'][0]
-                        if 'location-country' in pslookup[0]: self.geopos[ip]['country_code2'] = pslookup[0]['location-country'][0]
-                        self.geopos[ip]['country_code3'] = self.geopos[ip]['country_code2']
-                        self.geopos[ip]['ip'] = ip 
-                        if param['verbose'] > 3:
-                            print("Added geopos:")
-                            pprint(self.geopos[ip])
+                        self.store_geopos(ip, pslookup[0])
                         break
+                    elif self.get_name(ip, False).startswith("psmp") and self.get_name(ip, False).endswith(".geant.org"):
+                        # Assume a Geant PMP node. Attmpt lookup for "neigbour" management node (with "-mgmt-" in host name).
+                        hostname_split = self.get_name(ip, False).split("-")
+                        hostname_split[2] = "mgmt"
+                        pslookup_str = urllib.request.urlopen(pshost['locator'] + "/?host-name=" + join( "-", @hostname_split).read()
+                        if param['verbose'] > 3:
+                            print("pslookup-data:")
+                            print(pslookup_str)
+                        pslookup = json.loads(pslookup_str)
+                        if pslookup:
+                            # Position available. Store applying Geolite2 (Maxmine) tags / keys
+                            self.store_geopos(ip, pslookup[0])
+                            break
+                        
                 except urllib.error.URLError:
                     pass
 
             # Set refresh interval for geopos info.
             self.geopos[ip]['refresh'] = time.time() + float(param['pslookupwait'])
 
+    def store_geopos(self, ip, posdata):
+        """ Store geopos data from pslookup structure
+        """
+        # Store applying Geolite2 (Maxmine) tags / keys
+        if 'location-latitude' in posdata: self.geopos[ip]['latitude'] = float(posdata['location-latitude'][0]) 
+        if 'location-longitude' in posdata: self.geopos[ip]['longitude'] = float(posdata['location-longitude'][0])
+        self.geopos[ip]['location'] = { 'lat': self.geopos[ip]['latitude'], 'lon': self.geopos[ip]['longitude'] }
+        if 'location-city' in posdata: self.geopos[ip]['city_name'] = posdata['location-city'][0]
+        if 'location-code' in posdata: self.geopos[ip]['postal_code'] = posdata['location-code'][0]
+        if 'location-state' in posdata: self.geopos[ip]['region_name'] = posdata['location-state'][0]
+        if 'location-country' in posdata: self.geopos[ip]['country_code2'] = posdata['location-country'][0]
+        self.geopos[ip]['country_code3'] = self.geopos[ip]['country_code2']
+        self.geopos[ip]['ip'] = ip 
+        if param['verbose'] > 3:
+            print("Added geopos:")
+            pprint(self.geopos[ip])
+            
+            
     def get_geopos(self, ip):
         """ Return dictionary with geopos-info 
         """
@@ -668,13 +691,14 @@ class Resolver:
             # No gepos available
             return {}
             
-    def get_name(self, ip):
+    def get_name(self, ip, validate=True):
         """ Translates from ip to name
         """
         if ip in self.name.keys():
             return self.name[ip]
         else:
-            ip = self.validate_ip(ip)
+            if validate:
+                ip = self.validate_ip(ip)
             try:
                 name, alias, addresslist = socket.gethostbyaddr(ip)
                 # Add mapping
@@ -2013,7 +2037,7 @@ def build_sql_insert(state, table):
     for field in state:
         insert_fields += field + ", "
         if field in DB_STRINGFIELDS:
-            insert_values += "'" + str(state[field]) + "', "
+            insert_values += "'" + str(state[field]).strip() + "', "
         else:
             insert_values += str(state[field]) + ", "
     insert_fields = insert_fields[:-2] + ")" 
@@ -2030,7 +2054,7 @@ def build_sql_update(state, table, cond_keys):
         if not field in cond_keys:
             if field in DB_STRINGFIELDS:
                 # Add quotes to strings
-                update_key_values += field + " = '" + str(state[field]) + "', "
+                update_key_values += field + " = '" + str(state[field]).strip() + "', "
             else:
                 update_key_values += field + " = " + str(state[field]) + ", "
     update_key_values = update_key_values[:-2]
@@ -2339,6 +2363,13 @@ def read(path, srchost, srcdate, mode="batch", thread=0, starttime=0):
                 elif PERFSONARLOG:
                     traceroutes[time]["src"] = word[6]
                     traceroutes[time]["dst"] = word[10]
+                    traceroutes[time]["ipversion"] = int(word[4][-1])
+                    if traceroutes[time]["ipversion"] == 6 and not param["ipv6"]:
+                        # Do not parse ipv6 traceroutes
+                        if param["verbose"] > 2:
+                            print("Unsupported ipv6 traceroute. Skipping.")
+                        parser_state = PS_INIT
+                        continue
                     tracesummary.set_current_pair(traceroutes[time]["src"] + "/" + traceroutes[time]["dst"], time, thread)
                     tracesummary.set_pstestid(ps_testid)
                 else:
@@ -2546,7 +2577,7 @@ def amqp_read(url, mode, thread):
     if pid == 0:
         # Child process. Reading only from pipe
         os.close(pssrc_w)
-        read("from pipe", "", "", mode)
+        read("", "", "", mode)
         sys.exit()
 
     # Parent process. No need to read from pipe
@@ -2568,7 +2599,10 @@ def amqp_read_callback(_ch, _method, _properties, body):
         print("%s" % (body.decode("ascii")))
 
     element = json.loads(body.decode("ascii")) 
-      
+
+    # Acknowledge the rmq-message manually
+    _ch.basic_ack(delivery_tag=_method.delivery_tag)
+
     # Add to resolver
     resolver.add(element["test"]["spec"]["source"])
     resolver.add(element["test"]["spec"]["dest"])
@@ -2625,6 +2659,10 @@ if __name__ == "__main__":
         import isodate
         import pika        
 
+    if param["ipv6" ]:
+        print("Error: Parsing of Ipv6 addresses not yet supported.")
+        sys.exit()
+        
     asn_lookup = geoip2.database.Reader(param['geodb'])  # Instansiate ASN lookup object
     resolver = Resolver(param['namemap'])  # Initiate ip-to-name and name-to-ip resolver 
 
