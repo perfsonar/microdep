@@ -847,6 +847,6 @@ event_type:
     enable: false               # Do not show explicitly in map
     title: "Topology-data"
     descr: "Info about peer nodes with flow configured between them."
-    index: "topology-index"          # NEEDS TO BE OVERRIDDEN
+    index: ""                   # Empty index here triggers map to use index for currently selected measurement type (data set event_type)
    
 

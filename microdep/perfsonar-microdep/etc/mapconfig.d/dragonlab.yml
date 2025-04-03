@@ -23,7 +23,5 @@ dragonlab:
       index: "dragonlab_routemon" 
     correlation:
       index: "dragonlab_correvents"
-    topology:
-      index: "dragonlab"
           
 

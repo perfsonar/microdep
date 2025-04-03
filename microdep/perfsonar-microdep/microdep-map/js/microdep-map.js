@@ -896,7 +896,11 @@ function get_topology(source = "archive"){
 	
     case "archive": 
 	// Fetch all unique from-to peers (flows) for time period from Opensearch archive
-	var url = conffile[parms.net].archive + "/" + conffile[parms.net].event_type.topology.index + "/_search";
+	var query_index = event_index[parms.event];
+	if ( conffile[parms.net].event_type.topology.index )
+	    // Override with index from config
+	    query_index = JSON.stringify( { "index": conffile[parms.net].event_type.topology.index }); 
+	var url = conffile[parms.net].archive + "/" + query_index + "/_search";
 	var query = JSON.stringify ({ "query": { "range": { "@date": { "gte": start_iso,  "lt": end_iso  } } },
 		      "size": 0,
 		      "aggs": { "peer": { "terms": { "field": "from_to.keyword", "size" : 1000000  } } }
@@ -1211,7 +1215,7 @@ function draw_link( ends, color, tooltip, popup){
 
 function get_node_query(tofrom, start, end) {
     // Produce a JSON string for querying node info from Opensearch
-    return JSON.stringify( { "query": { "range": { "@date": { "gte": start, "lt": end } } }, "size": 0, "aggs": { "nodes": { "terms": { "field": tofrom + ".keyword", "size" : 10000  }, "aggs": { "ip": { "terms": { "field": tofrom + "_adr.keyword"}}, "city": { "terms": { "field": tofrom + "_geo.city_name.keyword"}}, "lat": { "terms":  { "field": tofrom + "_geo.latitude" } },  "lon": { "terms":  { "field": tofrom + "_geo.longitude" } } } } } } );
+    return JSON.stringify( { "query": { "bool": { "filter": [ { "term": { "event_type": "topology" } }, { "range": { "@date": { "gte": start, "lt": end } } } ] } }, "size": 0, "aggs": { "nodes": { "terms": { "field": tofrom + ".keyword", "size" : 10000  }, "aggs": { "ip": { "terms": { "field": tofrom + "_adr.keyword"}}, "city": { "terms": { "field": tofrom + "_geo.city_name.keyword"}}, "lat": { "terms":  { "field": tofrom + "_geo.latitude" } },  "lon": { "terms":  { "field": tofrom + "_geo.longitude" } } } } } } );
 }
 function load_coords(network, service, goal){
     // Load global coordinate for nodes in topology
@@ -1221,7 +1225,10 @@ function load_coords(network, service, goal){
 	var start_iso = new Date($("#datepicker").val() + " 00:00:00").toISOString();
 	var end_iso = new Date($("#datepicker").val() + " 23:59:59").toISOString();
 	// Query for both source (from) nodes and destination (to) nodes
-	var query_index = JSON.stringify( { "index": conffile[parms.net].event_type.topology.index }); 
+	var query_index = JSON.stringify( { "index": event_index[parms.event] }); 
+	if ( conffile[parms.net].event_type.topology.index )
+	    // Override with index from config
+	    query_index = JSON.stringify( { "index": conffile[parms.net].event_type.topology.index }); 
 	var query_fromnodes = get_node_query( "from", start_iso, end_iso);
 	var query_tonodes = get_node_query( "to", start_iso, end_iso);
 	var query = query_index + '\n' + query_fromnodes + '\n' + query_index + '\n' + query_tonodes + '\n';
@@ -1235,20 +1242,18 @@ function load_coords(network, service, goal){
 			       var p={ id: "", name: "Unknown", lat: 0, lon: 0, ip: "n/a"};
 			       p.id = result.responses[r].aggregations.nodes.buckets[n].key;
 			       if (typeof result.responses[r].aggregations.nodes.buckets[n].city.buckets[0] != "undefined" ) {
-//				   p.name = result.responses[r].aggregations.nodes.buckets[n].city.buckets[0].key;  // Grab first city in list
 				   p.name = result.responses[r].aggregations.nodes.buckets[n].city.buckets.at(-1).key;  // Grab last city in list
 			       } else {
 				   p.name = p.id;
 			       }			       
-			       //p.lat = result.responses[r].aggregations.nodes.buckets[n].lat.value ?? 0 ;
 			       if (typeof result.responses[r].aggregations.nodes.buckets[n].lat.buckets[0] != "undefined")
 				   p.lat = result.responses[r].aggregations.nodes.buckets[n].lat.buckets.at(-1).key ?? 0 ; // Get last value seen
-			       //p.lon = result.responses[r].aggregations.nodes.buckets[n].lon.value ?? 0 ;
 			       if (typeof result.responses[r].aggregations.nodes.buckets[n].lon.buckets[0] != "undefined") 
 				   p.lon = result.responses[r].aggregations.nodes.buckets[n].lon.buckets.at(-1).key ?? 0 ; // Get last value seen
-			       if (typeof result.responses[r].aggregations.nodes.buckets[n].ip.buckets[0] != "undefined") 
-//				   reg_ip_adr(p.id, result.responses[r].aggregations.nodes.buckets[n].ip.buckets[0].key );  // Register first ip in list (and forget the rest, if any)
+			       if (typeof result.responses[r].aggregations.nodes.buckets[n].ip.buckets[0] != "undefined") { 
 				   reg_ip_adr(p.id, result.responses[r].aggregations.nodes.buckets[n].ip.buckets.at(-1).key );  // Register last ip in list
+				   p.ip = result.responses[r].aggregations.nodes.buckets[n].ip.buckets.at(-1).key;
+			       }
 			       let point_already_loaded = points.find(o => o.id === p.id);
 			       if (! point_already_loaded) {
 				   points.push( p);
