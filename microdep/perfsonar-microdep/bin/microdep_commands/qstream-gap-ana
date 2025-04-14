@@ -556,18 +556,17 @@ sub store_geopos{
     my $ip = shift;
     my $posdata = shift;
     
-    my $latitude = $$posdata[0]{'location-latitude'}[0] || "0.0";
-    my $longitude = $$posdata[0]{'location-longitude'}[0] || "0.0";
-    my $city = $$posdata[0]{'location-city'}[0] || "Unknown" ;
+    my $latitude = $posdata->{'location-latitude'}[0] || "0.0";
+    my $longitude = $posdata->{'location-longitude'}[0] || "0.0";
     # Store applying Geolite2 (Maxmine) tags / keys
     $geopos{$ip}{'latitude'} = $latitude * 1.0;           # Ensure float
     $geopos{$ip}{'longitude'} = $longitude * 1.0;         # Ensure float
     $geopos{$ip}{'location'}{'lat'} = $latitude * 1.0;    # Ensure float
     $geopos{$ip}{'location'}{'lon'} = $longitude * 1.0;   # Ensure float
-    $geopos{$ip}{'city_name'} = $$posdata[0]{'location-city'}[0] || "Unknown" ;
-    $geopos{$ip}{'postal_code'} = $$posdata[0]{'location-code'}[0] || "Unknown" ;
-    $geopos{$ip}{'region_name'} = $$posdata[0]{'location-state'}[0] || "Unknown" ;
-    $geopos{$ip}{'country_code2'} = $$posdata[0]{'location-country'}[0] || "Unknown" ;
+    $geopos{$ip}{'city_name'} = $posdata->{'location-city'}[0] || "Unknown" ;
+    $geopos{$ip}{'postal_code'} = $posdata->{'location-code'}[0] || "Unknown" ;
+    $geopos{$ip}{'region_name'} = $posdata->{'location-state'}[0] || "Unknown" ;
+    $geopos{$ip}{'country_code2'} = $posdata->{'location-country'}[0] || "Unknown" ;
     $geopos{$ip}{'country_code3'} = $geopos{$ip}{'country_code2'};
     $geopos{$ip}{'geo_src'} = "pslookup";
     $geopos{$ip}{'ip'} = $ip;
@@ -617,20 +616,35 @@ sub validate_ip{
 		my $pslookup = decode_json $pslookup_str;
 		if (@{$pslookup}) {
 		    # Position available. Store.
-		    store_geopos($ip, $pslookup);
+		    store_geopos($ip, $pslookup->[0]);
 		    last;
-		} elsif ( get_name($ip) =~ /^psmp-\S*.geant.org$/ ) {
-		    # Assume a Geant PMP node. Attempt lookup for "neigbour" management node (with "-mgmt-" in host name).
-		    my @hostname_split = split("-", get_name($ip) );
-		    $hostname_split[2] = "mgmt";
-		    my $pslookup_str = get( $_->{'locator'} . "/?host-name=" . join("-", @hostname_split) );
-		    if (defined $pslookup_str) {
-			print "pslookup for mgmt neighbour of ", $ip, ":\n", Dumper($pslookup_str) if $opt_debug > 3;
-			my $pslookup = decode_json $pslookup_str;
-			if (@{$pslookup}) {
-			    # Position available. Store.
-			    store_geopos($ip, $pslookup);
-			    last;
+		} else {
+		    # No host found. Search for ip among interface addresses (applying opensearch api at port 80)
+		    my $opensearch_api = $_->{'locator'};
+		    $opensearch_api =~ s/:8090//g;
+		    $opensearch_api =~ s/records/_search/g;
+		    my $iso_now = strftime("%Y-%m-%dT%H:%M:%S%z", localtime); # ISO formatted current time with timezone
+		    # Prepare to post json query string
+                    my $query_data = '{ "query": { "bool": { "filter": [ { "term": { "interface-addresses": "' . $ip . '" } }, { "range": { "expires" : { "gt" : "' . $iso_now . '" } } } ] } }, "size": 1 }';
+		    # Run query
+		    my $query_req = LWP::UserAgent->new;
+		    my $pslookup_resp = $query_req->post($opensearch_api, 'Content-Type' => 'application/json', Content => $query_data );
+		    if (defined $pslookup_resp) {
+			print "pslookup for ", $ip, ":\n", Dumper($pslookup_resp) if $opt_debug > 3;
+			$pslookup = decode_json $pslookup_resp->{'_content'};
+			if (%{$pslookup} && $pslookup->{'hits'} && $pslookup->{'hits'}->{'total'}{'value'} > 0 && $pslookup->{'hits'}->{'hits'}[0]->{'_source'}->{'uri'} ) {
+			    # Interface with ip found. Apply uri to find parent host for interface
+			    $query_data = '{ "query": { "bool": { "filter": [ { "term": { "host-net-interfaces": "' . $pslookup->{'hits'}->{'hits'}[0]->{'_source'}->{'uri'}  . '" } }, { "range": { "expires" : { "gt" : "' . $iso_now . '" } } } ] } }, "size": 1 }';
+			    $pslookup_resp = $query_req->post($opensearch_api, 'Content-Type' => 'application/json', Content => $query_data );
+			    if (defined $pslookup_resp) {
+				print "pslookup for ", $ip, ":\n", Dumper($pslookup_resp) if $opt_debug > 3;
+				$pslookup = decode_json $pslookup_resp->{'_content'};
+				if (%{$pslookup} && $pslookup->{'hits'} && $pslookup->{'hits'}->{'total'}{'value'} > 0 && $pslookup->{'hits'}->{'hits'}[0]->{'_source'} ) {
+				    # Parent host found. Store position if available
+				    store_geopos($ip, $pslookup->{'hits'}->{'hits'}[0]->{'_source'});
+				    last;
+				}
+			    }
 			}
 		    }
 		}

@@ -627,14 +627,15 @@ class Resolver:
             # Attempt to fetch geopos info from perfSONAR's Lookup Service
             if not self.pslookuphost:
                 try:
+                    # Fetch list of lookup service hosts
                     pslookuphost_str = urllib.request.urlopen(param['pslookup']).read()
                     self.pslookuphost = json.loads(pslookuphost_str)
                 except urllib.error.URLError:
                     pass
 
             for pshost in self.pslookuphost['hosts']:
-                # Fetch list of lookup service hosts
                 try:
+                    # Lookup host name (via pslookup api at port 8090)
                     pslookup_str = urllib.request.urlopen(pshost['locator'] + "/?host-name=" + ip).read()
                     if param['verbose'] > 3:
                         print("pslookup-data:")
@@ -644,20 +645,33 @@ class Resolver:
                         # Position available. Store applying Geolite2 (Maxmine) tags / keys
                         self.store_geopos(ip, pslookup[0])
                         break
-                    elif self.get_name(ip, False).startswith("psmp") and self.get_name(ip, False).endswith(".geant.org"):
-                        # Assume a Geant PMP node. Attmpt lookup for "neigbour" management node (with "-mgmt-" in host name).
-                        hostname_split = self.get_name(ip, False).split("-")
-                        hostname_split[2] = "mgmt"
-                        pslookup_str = urllib.request.urlopen(pshost['locator'] + "/?host-name=" + join( "-", @hostname_split).read()
+                    else:
+                        # Search for host name among interface addresses (applying opensearch api at port 80)
+                        opensearch_api = pshost['locator'].replace(":8090","").replace("records","_search")
+                        iso_now = datetime.fromtimestamp(datetime.now(), pytz.timezone(str(get_localzone()))).isoformat()    # ISO formatted current time with timezone
+                        query_data = { 'query': { 'bool': { 'filter': [ { 'term': { 'interface-addresses': ip } }, { 'range': { 'expires' : { 'gt' : iso_now  } } } ] } }, 'size': 1 }
+                        query_req = urllib.request.Request(opensearch_api, data=bytes(json.dumps(query_data), encoding='utf-8') )
+                        query_req.add_header('Content-Type', 'application/json')
+                        pslookup_str = urllib.request.urlopen(query_req).read()
                         if param['verbose'] > 3:
                             print("pslookup-data:")
                             print(pslookup_str)
                         pslookup = json.loads(pslookup_str)
-                        if pslookup:
-                            # Position available. Store applying Geolite2 (Maxmine) tags / keys
-                            self.store_geopos(ip, pslookup[0])
-                            break
-                        
+                        if pslookup and pslookup['hits'] and pslookup['hits']['total']['value'] > 0 and pslookup['hits']['hits'][0]['_source']['uri']:
+                            # Apply uri to find parent host for interface
+                            query_data = { 'query': { 'bool': { 'filter': [ { 'term': { 'host-net-interfaces': pslookup['hits']['hits'][0]['_source']['uri'] } } ] } }, 'size': 1 }
+                            query_req = urllib.request.Request(opensearch_api, data=bytes(json.dumps(query_data), encoding='utf-8') )
+                            query_req.add_header('Content-Type', 'application/json')
+                            pslookup_str = urllib.request.urlopen(query_req).read()
+                            if param['verbose'] > 3:
+                                print("pslookup-data:")
+                                print(pslookup_str)
+                            pslookup = json.loads(pslookup_str)
+                            if pslookup and pslookup['hits'] and pslookup['hits']['total']['value'] > 0:
+                                # Parent host found. Store position if available
+                                self.store_geopos(ip, pslookup['hits']['hits'][0]['_source'])
+                                break
+
                 except urllib.error.URLError:
                     pass
 
