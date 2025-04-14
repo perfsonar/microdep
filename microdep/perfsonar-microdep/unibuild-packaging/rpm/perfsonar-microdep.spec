@@ -268,6 +268,8 @@ if [ $? -gt 0 ]; then
     jq '.panels += [input]' /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json  $PATCHFILE > $DASHBOARDFILE
     mv $DASHBOARDFILE /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json
 fi
+# Clean up
+rm %{microdep_config_base}/grafana_dashboard_patch
 
 # Enable systemd services (ignore failures)
 systemctl enable perfsonar-microdep-watchconfig.path || true
@@ -393,8 +395,8 @@ systemctl stop perfsonar-microdep-restart.timer || true
 %config /var/lib/logstash/microdep 
 %config %{microdep_config_base}/os-template-gap-ana.json
 %config %{microdep_config_base}/os-template-trace-ana.json
-%config %{microdep_config_base}/microdep-tests.json.example
-%config %{microdep_config_base}/microdep-tests-packet-subcount.json.example
+%{microdep_config_base}/microdep-tests.json.example
+%{microdep_config_base}/microdep-tests-packet-subcount.json.example
 %config %{config_base}/psconfig/archives.d/microdep-ana-rmq.json
 %changelog
 * Thu Oct 24 2024 Otto J Wittner <otto.wittner@sikt.no>
