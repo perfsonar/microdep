@@ -12,6 +12,7 @@ etc/mapconfig.d/* etc/perfsonar/microdep/mapconfig.d/
 etc/microdep-config.yml etc/perfsonar/microdep/
 etc/microdep.db etc/perfsonar/microdep/mp-dragonlab/etc/
 etc/apache-microdep-map.conf etc/apache2/conf-available/
+etc/perfsonar/microdep/grafana_dashboard_patch
 scripts/perfsonar-microdep-watchconfig.path lib/systemd/system
 scripts/perfsonar-microdep-watchconfig.service lib/systemd/system
 

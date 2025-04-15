@@ -268,8 +268,6 @@ if [ $? -gt 0 ]; then
     jq '.panels += [input]' /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json  $PATCHFILE > $DASHBOARDFILE
     mv $DASHBOARDFILE /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json
 fi
-# Clean up
-rm %{microdep_config_base}/grafana_dashboard_patch
 
 # Enable systemd services (ignore failures)
 systemctl enable perfsonar-microdep-watchconfig.path || true
@@ -371,9 +369,10 @@ systemctl stop perfsonar-microdep-restart.timer || true
 %config %{microdep_config_base}/microdep-config.yml
 %config %{microdep_config_base}/mapconfig.yml
 %config %{microdep_config_base}/mapconfig.d/
-%config %{microdep_config_base}/dragonlab-base-geo.json.example
+%{microdep_config_base}/dragonlab-base-geo.json.example
 %config %{microdep_config_base}/mp-dragonlab/etc/microdep.db
-%config %{microdep_config_base}/roles_yml_patch
+%{microdep_config_base}/roles_yml_patch
+%{microdep_config_base}/grafana_dashboard_patch
 %config /etc/httpd/conf.d/apache-microdep-map.conf
 %config %{microdep_web_dir}/dragonlab/dragonlab-base-geo.json
 
