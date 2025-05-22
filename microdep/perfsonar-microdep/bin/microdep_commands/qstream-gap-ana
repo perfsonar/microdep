@@ -108,14 +108,14 @@ Parameters
   -slep n              Number(1000) of crude lines in the circular buffer
   -index name          Elastic Search index name to use
   -owamp url           Get json owamp data from pscheduler (http://) og from rabbit message queue (ampq://)
-  -json file           Filename to store json event documents (intended for logstash ?)
+  -json file           Filename to store json event documents 
   -jitter secs         Emit jitter stats with secs interval
   -rtp n               RTP jitter algorithm with 1/n change of average (5)
   -change_factor f     Fraction change to cause threshold jitter report (0.3)
   -threshold vector    Threshold values for reporting, in form of a vector ala  \"<min-jitter>,<min-ddelay>,<min-slope>\" ($min_jit,$min_ddelay,$min_slope)
   -debug n             Level of debug info to output ($opt_debug)
   -batchsize n         Override batch size (packet count) expected when reading owamp subsession data sets
-  -topoevents	       Enable output of topology events whenever a topology change is detected
+  -topoevents	       Enable output of topology events whenever a topology change is detected. Requires -json. 
   -topointerval n      Min interval (sec) between topology events (default is $opt_topointerval)
   -pslookup url        Source url for perfSONAR lookup service hosts (default is $opt_pslookup)
   -wait seconds        Min no of seconds to wait between refreshing info fetched from pslookup-service (default is $opt_pslookup_wait)
@@ -148,9 +148,13 @@ if ( $opt_version) {
     printf "Version $version\n";
     exit(0);
 }
+if ( $opt_topoevents && ! $opt_json ) {
+    printf "Topology events only output in JSON format. Apply -json <filename>.\n";
+    exit(1);
+}	
 if ( $opt_ipv6) {
     printf "Ipv6 is not yet supported.\n";
-    exit(0);
+    exit(1);
 }
 
 if ($opt_owamp){
@@ -595,6 +599,7 @@ sub validate_ip{
 		$ip = inet_ntoa($packed_ip);
 		print "validate_ip lookup: ", $ip, "\n" if $opt_debug > 3;
 		$ip_addr{$maybe_name} = $ip;
+		$hostname{$ip} = $maybe_name;
 	    } else {
 		# Give up.
 		warn "Unrecognized ip address '". $ip . "', applying anyway.";
@@ -745,7 +750,8 @@ sub owamp_ana($){
 
     if ( $data && $data->{'test'}->{'type'} eq 'latencybg' ){
 	# (At least) Meta data from a powstream / latencybg test is available
-	(my $src, my $dst)=($data->{'test'}->{'spec'}->{'source-node'}, $data->{'test'}->{'spec'}->{'dest-node'} );
+#	(my $src, my $dst)=($data->{'test'}->{'spec'}->{'source-node'}, $data->{'test'}->{'spec'}->{'dest-node'} );
+	(my $src, my $dst)=($data->{'test'}->{'spec'}->{'source'}, $data->{'test'}->{'spec'}->{'dest'} );
 
 	my $ip_version = $data->{'test'}->{'spec'}->{'ip-version'} || 4;
 	if ( $opt_ipv6 && $ip_version == 4  || ! $opt_ipv6 && $ip_version != 4 ) {
@@ -755,7 +761,7 @@ sub owamp_ana($){
 	}
 	
 	# Record/update source and dest data 
-	$opt_id = $src . "-" . $dst;   # Set global id for flow since analyze_packet() also can rely on this
+	$opt_id = $src . "_" . $dst;   # Set global id for flow since analyze_packet() also can rely on this
 	my $new_flow = ! $src_adr{$opt_id} || ! $dst_adr{$opt_id} ;
 	$src_adr{$opt_id}=validate_ip($src) if ! $src_adr{$opt_id} ;
 	$dst_adr{$opt_id}=validate_ip($dst) if ! $dst_adr{$opt_id} ;
@@ -785,8 +791,9 @@ sub owamp_ana($){
 	if (! $batchsize) {
 	    $batchsize = $data->{'result'}->{'packets-sent'};
 	}
-	(my $src, my $dst)=($data->{'test'}->{'spec'}->{'source-node'}, $data->{'test'}->{'spec'}->{'dest-node'} );
-	$opt_id = $src . "-" . $dst;   # Set global id for flow since analyze_packet() also can rely on this
+#	(my $src, my $dst)=($data->{'test'}->{'spec'}->{'source-node'}, $data->{'test'}->{'spec'}->{'dest-node'} );
+	(my $src, my $dst)=($data->{'test'}->{'spec'}->{'source'}, $data->{'test'}->{'spec'}->{'dest'} );
+	$opt_id = $src . "_" . $dst;   # Set global id for flow since analyze_packet() also can rely on this
 	my $results=$data->{'result'}->{'raw-packets'};
 	foreach $probepacket (@$results){
 	    if ( $probepacket->{'src-ts'} == 0 && $opt_debug > 3) {
