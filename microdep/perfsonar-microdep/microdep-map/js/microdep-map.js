@@ -440,7 +440,7 @@ function link_popup(link){
 //	// Add traceroute type prefix
 //	url += "&prefix=" + conffile[parms.net].event_type[parms.event].popup.see_routes;
 //    }
-    var url = '/pstracetree/ls.html?mahost=localhost:443&verify_SSL=0&from=' + name_to_ip[link.from] + '&to=' + name_to_ip[link.to] +'&time-start=' +  dato;
+    var url = '/pstracetree/ls.html?mahost=localhost:443&verify_SSL=0&api=opensearch&from=' + link.from + '&to=' + link.to +'&time-start=' + dato;
     html +='\nSee ';
     html += '\n<button class=knapp onclick="window.open(\'' + url +'\');" title="See the routes graph and stats in this period">Routes'  + '</button>' + "\n";
 
