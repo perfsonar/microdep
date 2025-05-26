@@ -1,0 +1,15 @@
+# Clean up open access to Microdep opensearch index
+TMPROLESYML=$(mktemp)
+grep -v -x -F -f /etc/perfsonar/microdep/roles_yml_patch /usr/lib/perfsonar/archive/config/roles.yml > $TMPPIPELINE && mv $TMPROLESYML /usr/lib/perfsonar/archive/config/roles.yml
+
+# Refresh config of opensearch security
+/usr/lib/perfsonar/archive/perfsonar-scripts/pselastic_secure_pre.sh
+/usr/lib/perfsonar/archive/perfsonar-scripts/pselastic_secure_pos.sh
+
+# Remove Microdep button from Grafana main dashboard (if present)
+grep -q  "Microdep map" /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json
+if [ $? -eq 0 ]; then
+    DASHBOARDFILE=$(mktemp)
+    jq  'del( .panels[] | select(.options.content != null ) | select (.options.content | contains("Microdep map")))' /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json > $DASHBOARDFILE
+    mv $DASHBOARDFILE /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json
+fi
