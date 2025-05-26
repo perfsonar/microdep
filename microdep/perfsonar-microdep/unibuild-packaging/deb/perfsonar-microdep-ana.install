@@ -12,5 +12,5 @@ scripts/perfsonar-microdep-gap-ana.service lib/systemd/system
 scripts/perfsonar-microdep-trace-ana.service lib/systemd/system
 scripts/perfsonar-microdep-restart.service lib/systemd/system
 scripts/perfsonar-microdep-restart.timer lib/systemd/system
-
+etc/logrotate.d/microdep /etc/logrotate.d/microdep
 

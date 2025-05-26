@@ -42,6 +42,7 @@ etc/logstash/microdep/01-microdep-inputs.conf
 etc/logstash/microdep/02-microdep-filter.conf
 etc/logstash/microdep/03-microdep-outputs.conf
 etc/logstash/microdep-pipelines.yml
+etc/logrotate.d/microdep
 etc/psconfig/archives.d/microdep-ana-rmq.json
 etc/os-template-gap-ana.json
 etc/os-template-trace-ana.json

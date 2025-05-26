@@ -19,7 +19,8 @@ pstracetree:
 pstracetree/unibuild-repo/RPMS: pstracetree unibuild-compose.yml
 	@echo "Build pstracetree EL9 rpms..."
 	cp unibuild-compose.yml pstracetree/
-	cd pstracetree && docker compose -f unibuild-compose.yml run el9 bash -c "dnf -y update && unibuild build"
+	cd pstracetree && docker compose -f unibuild-compose.yml run el9 bash -c "unibuild build"
+#	cd pstracetree && docker compose -f unibuild-compose.yml run el9 bash -c "dnf -y update && unibuild build"
 
 pstracetree/unibuild-repo/Packages: pstracetree unibuild-compose.yml
 	@echo "Build pstracetree U22 deb packages..."
@@ -28,7 +29,8 @@ pstracetree/unibuild-repo/Packages: pstracetree unibuild-compose.yml
 
 unibuild-repo/RPMS: unibuild-compose.yml
 	@echo "Build Microdep EL9 rpms..."
-	docker compose -f unibuild-compose.yml run el9 bash -c "dnf -y update && unibuild build"
+	docker compose -f unibuild-compose.yml run el9 bash -c "unibuild build"
+#	docker compose -f unibuild-compose.yml run el9 bash -c "dnf -y update && unibuild build"
 
 unibuild-repo/Packages: unibuild-compose.yml
 	@echo "Build Microdep U22 deb packages..."

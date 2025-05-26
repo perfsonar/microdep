@@ -88,6 +88,8 @@ Depends: ${misc:Depends}, ${perl:Depends},
  python3-tz,
  python3-tzlocal,
  perfsonar-microdep-geolite2
+## Both
+ logrotate
 Description: Microdep analytic toolset to analize perfSONAR datasets
  Analytic scripts to process perfSONAR data sets and generate events. Events may be viualized by Microdep map.
 

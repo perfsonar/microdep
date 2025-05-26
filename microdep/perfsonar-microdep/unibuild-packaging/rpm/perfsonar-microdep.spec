@@ -124,6 +124,7 @@ Requires:               python3-psycopg2
 Requires:               python3-pytz
 Requires:               python3-tzlocal
 Requires:               perfsonar-microdep-geolite2
+Requires:               logrotate
 #%{?systemd_requires: %systemd_requires}
 BuildRequires:          systemd
 BuildRequires:          systemd-rpm-macros    
@@ -169,6 +170,7 @@ install -D -m 0644 -t %{buildroot}/%{microdep_config_base}/mp-dragonlab/etc/ %{b
 install -D -m 0644 -t %{buildroot}/etc/httpd/conf.d/ %{buildroot}/%{microdep_config_base}/apache-microdep-map.conf
 install -D -m 0644 -t %{buildroot}/%{install_base}/logstash/microdep_pipeline/ %{buildroot}/%{microdep_config_base}/logstash/microdep/*
 install -D -m 0644 -t %{buildroot}/%{config_base}/psconfig/archives.d/ %{buildroot}/%{microdep_config_base}/psconfig/archives.d/*
+install -D -m 0644 -t %{buildroot}/etc/logrotate.d/ %{buildroot}/%{microdep_config_base}/logrotate.d/microdep
 
 # Prepare folder for json output from analytics scripts read by logstash
 mkdir -p %{buildroot}/var/lib/logstash/microdep 
@@ -180,6 +182,7 @@ rm -rf %{buildroot}/%{microdep_config_base}/apache-microdep-map.conf
 rm -rf %{buildroot}/%{microdep_config_base}/logstash/microdep
 rm -rf %{buildroot}/%{microdep_config_base}/microdep.db
 rm -rf %{buildroot}/%{microdep_config_base}/psconfig
+rm -rf %{buildroot}/%{microdep_config_base}/logrotate.d
 
 # Make js and css libs available in web folder (-r for relative paths ... to make rpmbuild happy)
 ln -sr /usr/share/javascript/chartjs/4.4.2/chart.umd.js %{buildroot}/%{microdep_web_dir}/js
@@ -228,14 +231,14 @@ ln -sr %{microdep_config_base}/mapconfig.yml %{buildroot}/%{microdep_web_dir}
 rm -rf %{buildroot}
 
 %post map
-# Fix credentials to ensure access to Opensearch
+# Fix credentials to ensure access to Opensearch *** NEEDS TO MADE OBSOLETE ***
 if [ -f /etc/perfsonar/opensearch/opensearch_login ]; then
     USER=`awk -F " " '{print $1}' /etc/perfsonar/opensearch/opensearch_login`
     PASSWD=`awk -F " " '{print $2}' /etc/perfsonar/opensearch/opensearch_login`
     sed -i "s|http://admin:no+nz+br|https://$USER:$PASSWD|g" %{microdep_config_base}/microdep-config.yml
 fi
 
-# Init Microdep config db 
+# Init Microdep config db. *** Obsolete since topology events now produce topology info ****
 if [ -f %{config_base}/psconfig/pscheduler.d/toolkit-webui.json ]; then
     # Read psconfig-data and set start time set to beginnig of yesterday local time (later repeated by perfsonar-microdep-watchconfig.service)
     %{command_base}/microdep-psconfig-load.pl -c --db %{microdep_config_base}/mp-dragonlab/etc/microdep.db --start-time $(date --date "today 00:00:00" +%s) %{config_base}/psconfig/pscheduler.d/toolkit-webui.json
@@ -248,6 +251,7 @@ if [ -f /usr/lib/perfsonar/archive/config/roles.yml ]; then
     if [ $? -eq 1 ]; then
 	# Microdep index missing. Add.
 	sed -i '/prometheus\*/r %{microdep_config_base}/roles_yml_patch' /usr/lib/perfsonar/archive/config/roles.yml
+	sed -i '/prometheus_\*/r %{microdep_config_base}/roles_yml_patch' /usr/lib/perfsonar/archive/config/roles.yml
     fi
     # Refresh config of opensearch security
     /usr/lib/perfsonar/archive/perfsonar-scripts/pselastic_secure_pre.sh
@@ -306,7 +310,7 @@ systemctl start perfsonar-microdep-restart.timer || true
 %preun map
 # Clean up open access to Microdep opensearch index
 TMPROLESYML=$(mktemp)
-grep -v -x -F -f %{microdep_config_base}/roles_yml_patch /usr/lib/perfsonar/archive/config/roles.yml > $TMPPIPELINE && mv $TMPROLESYML /usr/lib/perfsonar/archive/config/roles.yml
+grep -v -x -F -f %{microdep_config_base}/roles_yml_patch /usr/lib/perfsonar/archive/config/roles.yml > $TMPROLESYML && mv $TMPROLESYML /usr/lib/perfsonar/archive/config/roles.yml
 
 # Refresh config of opensearch security
 /usr/lib/perfsonar/archive/perfsonar-scripts/pselastic_secure_pre.sh
@@ -397,6 +401,7 @@ systemctl stop perfsonar-microdep-restart.timer || true
 %{microdep_config_base}/microdep-tests.json.example
 %{microdep_config_base}/microdep-tests-packet-subcount.json.example
 %config %{config_base}/psconfig/archives.d/microdep-ana-rmq.json
+%config /etc/logrotate.d/microdep
 %changelog
 * Thu Oct 24 2024 Otto J Wittner <otto.wittner@sikt.no>
 - Prepareing for release 5.3
