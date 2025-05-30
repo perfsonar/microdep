@@ -65,7 +65,8 @@ fi
 if [ "$DISTRO" = "auto" ]; then
     # Attempt to detect relevant distro
     $RSH $USER@$HOST grep ID_LIKE /etc/os-release | grep -q rhel && DISTRO="rpm"
-    $RSH $USER@$HOST grep ID_LIKE /etc/os-release | grep -q debian && DISTRO="deb"
+    $RSH $USER@$HOST grep "ID=" /etc/os-release | grep -q debian && DISTRO="deb"
+    $RSH $USER@$HOST grep "ID=" /etc/os-release | grep -q ubuntu && DISTRO="deb"
 fi
 
 if [ "$DISTRO" = "auto" ]; then

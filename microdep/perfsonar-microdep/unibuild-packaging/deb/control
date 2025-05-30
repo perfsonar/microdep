@@ -87,7 +87,7 @@ Depends: ${misc:Depends}, ${perl:Depends},
 # pytz
  python3-tz,
  python3-tzlocal,
- perfsonar-microdep-geolite2
+ perfsonar-microdep-geolite2,
 ## Both
  logrotate
 Description: Microdep analytic toolset to analize perfSONAR datasets

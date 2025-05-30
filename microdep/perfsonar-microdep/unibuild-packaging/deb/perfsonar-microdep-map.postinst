@@ -1,5 +1,5 @@
 #!/bin/sh
-# postinst script for perfsonar-psconfig-maddash
+# postinst script for perfsonar-microdep-map
 #
 # see: dh_installdeb(1)
 
@@ -21,20 +21,20 @@ set -e
 case "$1" in
     configure)
 	# Fix credentials to ensure access to Opensearch
-	if [ -f /etc/perfsonar/opensearch/opensearch_login ]; then
+	if [ -e /etc/perfsonar/opensearch/opensearch_login ]; then
     	   USER=`awk -F " " '{print $1}' /etc/perfsonar/opensearch/opensearch_login`
     	   PASSWD=`awk -F " " '{print $2}' /etc/perfsonar/opensearch/opensearch_login`
     	   sed -i "s|http://admin:no+nz+br|https://$USER:$PASSWD|g" /etc/perfsonar/microdep/microdep-config.yml
 	fi
 
 	# Init Microdep config db 
-	if [ -f /etc/perfsonar/psconfig/pscheduler.d/toolkit-webui.json ]; then
+	if [ -e /etc/perfsonar/psconfig/pscheduler.d/toolkit-webui.json ]; then
 	    # Read psconfig-data and set start time set to beginnig of yesterday local time (later repeated by perfsonar-microdep-watchconfig.service)
 	    /usr/lib/perfsonar/bin/microdep_commands/microdep-psconfig-load.pl -c --db /etc/perfsonar/microdep/mp-dragonlab/etc/microdep.db --start-time $(date --date "today 00:00:00" +%s) /etc/perfsonar/psconfig/pscheduler.d/toolkit-webui.json
 	fi
 
 	# Add open read access to Microdep opensearch indices
-	if [ -f /usr/lib/perfsonar/archive/config/roles.yml ]; then
+	if [ -e /usr/lib/perfsonar/archive/config/roles.yml ]; then
 	    grep -q -x -F -f /etc/perfsonar/microdep/roles_yml_patch /usr/lib/perfsonar/archive/config/roles.yml
 	    if [ $? -eq 1 ]; then
 		# Microdep index missing. Add.
@@ -46,18 +46,20 @@ case "$1" in
 	fi
 
 	# Add Microdep button on main grafana dashboard (if not already present)
-	grep -q  "Microdep map" /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json
-	if [ $? -gt 0 ]; then
-	    # Find next available panel id
-	    NEXTID=$(jq .panels[].id /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json | sort -n | tail -n 1)
-	    let NEXTID++
-	    # Set new id in dashboard patch
-	    PATCHFILE=$(mktemp)
-	    jq --argjson nextid "$NEXTID" '.id = $nextid' /etc/perfsonar/microdep/grafana_dashboard_patch > $PATCHFILE
-	    # Add new panel to main dashboard
-	    DASHBOARDFILE=$(mktemp)
-	    jq '.panels += [input]' /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json  $PATCHFILE > $DASHBOARDFILE
-	    mv $DASHBOARDFILE /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json
+	if [ -e /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json ]; then
+	    grep -q  "Microdep map" /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json
+	    if [ $? -gt 0 ]; then
+		# Find next available panel id
+		NEXTID=$(jq .panels[].id /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json | sort -n | tail -n 1)
+		let NEXTID++
+		# Set new id in dashboard patch
+		PATCHFILE=$(mktemp)
+		jq --argjson nextid "$NEXTID" '.id = $nextid' /etc/perfsonar/microdep/grafana_dashboard_patch > $PATCHFILE
+		# Add new panel to main dashboard
+		DASHBOARDFILE=$(mktemp)
+		jq '.panels += [input]' /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json  $PATCHFILE > $DASHBOARDFILE
+		mv $DASHBOARDFILE /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json
+	    fi
 	fi
 	
 	# Enable apache config

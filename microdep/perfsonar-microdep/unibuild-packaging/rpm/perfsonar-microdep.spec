@@ -252,25 +252,28 @@ if [ -f /usr/lib/perfsonar/archive/config/roles.yml ]; then
 	# Microdep index missing. Add.
 	sed -i '/prometheus\*/r %{microdep_config_base}/roles_yml_patch' /usr/lib/perfsonar/archive/config/roles.yml
 	sed -i '/prometheus_\*/r %{microdep_config_base}/roles_yml_patch' /usr/lib/perfsonar/archive/config/roles.yml
+
+	# Refresh config of opensearch security
+	/usr/lib/perfsonar/archive/perfsonar-scripts/pselastic_secure_pre.sh
+	/usr/lib/perfsonar/archive/perfsonar-scripts/pselastic_secure_pos.sh
     fi
-    # Refresh config of opensearch security
-    /usr/lib/perfsonar/archive/perfsonar-scripts/pselastic_secure_pre.sh
-    /usr/lib/perfsonar/archive/perfsonar-scripts/pselastic_secure_pos.sh
 fi
 
 # Add Microdep button on main grafana dashboard (if not already present)
-grep -q  "Microdep map" /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json
-if [ $? -gt 0 ]; then
-    # Find next available panel id
-    NEXTID=$(jq .panels[].id /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json | sort -n | tail -n 1)
-    let NEXTID++
-    # Set new id in dashboard patch
-    PATCHFILE=$(mktemp)
-    jq --argjson nextid "$NEXTID" '.id = $nextid' %{microdep_config_base}/grafana_dashboard_patch > $PATCHFILE
-    # Add new panel to main dashboard
-    DASHBOARDFILE=$(mktemp)
-    jq '.panels += [input]' /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json  $PATCHFILE > $DASHBOARDFILE
-    mv $DASHBOARDFILE /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json
+if [ -e /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json ]; then
+    grep -q  "Microdep map" /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json
+    if [ $? -gt 0 ]; then
+	# Find next available panel id
+	NEXTID=$(jq .panels[].id /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json | sort -n | tail -n 1)
+	let NEXTID++
+	# Set new id in dashboard patch
+	PATCHFILE=$(mktemp)
+	jq --argjson nextid "$NEXTID" '.id = $nextid' %{microdep_config_base}/grafana_dashboard_patch > $PATCHFILE
+	# Add new panel to main dashboard
+	DASHBOARDFILE=$(mktemp)
+	jq '.panels += [input]' /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json  $PATCHFILE > $DASHBOARDFILE
+	mv $DASHBOARDFILE /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json
+    fi
 fi
 
 # Enable systemd services (ignore failures)

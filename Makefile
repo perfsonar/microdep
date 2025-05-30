@@ -5,7 +5,14 @@
 include $(wildcard unibuild/unibuild.make)
 
 default:
-	@echo "Run 'make rpm-test' or 'make deb-test' to initiate container based test environment running PS Microdep."
+	@echo "*** Building packages for Microdep ***"
+	@echo "Run 'make rpm-build' or 'make deb-build' to build packages for a distribution (applying 'unibuild' in containers)."
+	@echo "Run 'make clean-rpm-build' or 'make clean-deb-build' to clean away build files (applying 'unibuild' in containers)."
+	@echo "Run 'bin/refresh-remote-repos.sh <hostname>' to install distribution on a remote perfsonar toolkit host (ssh access required)."
+	@echo
+	@echo "*** Running Microdep in container test environment ***"
+	@echo "NOTE: CURRENTLY UNSTABLE/NOT WORKING 100%"
+	@echo "Run 'make rpm-test' or 'make deb-test' to initiate container based test environment."
 	@echo "Run 'make clean-test' to bring down running system test environment."
 
 unibuild-compose.yml:
