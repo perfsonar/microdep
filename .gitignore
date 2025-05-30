@@ -28,3 +28,8 @@ DOSB/
 microdep-dev/microdep-legacy
 microdep-dev/pstracetree-now-in-nightly-build
 microdep-dev/routingmonitor-now-included-in-perfsonar-microdep
+
+# Other run-time stuff
+make.log
+docker-compose.yml
+unibuild-compose.yml
