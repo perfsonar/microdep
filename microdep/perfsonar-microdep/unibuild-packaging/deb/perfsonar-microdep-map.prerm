@@ -30,8 +30,7 @@ case "$1" in
 	
 	# Remove Microdep button from Grafana main dashboard (if present)
 	if [ -e /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json ]; then
-	    grep -q  "Microdep map" /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json
-	    if [ $? -eq 0 ]; then
+	    if grep -q  "Microdep map" /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json; then
 		DASHBOARDFILE=$(mktemp)
 		jq  'del( .panels[] | select(.options.content != null ) | select (.options.content | contains("Microdep map")))' /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json > $DASHBOARDFILE
 		mv $DASHBOARDFILE /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json

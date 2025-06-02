@@ -247,8 +247,7 @@ fi
 
 # Add open read access to Microdep opensearch indices
 if [ -f /usr/lib/perfsonar/archive/config/roles.yml ]; then
-    grep -q -x -F -f %{microdep_config_base}/roles_yml_patch /usr/lib/perfsonar/archive/config/roles.yml
-    if [ $? -eq 1 ]; then
+    if ! grep -q -x -F -f %{microdep_config_base}/roles_yml_patch /usr/lib/perfsonar/archive/config/roles.yml; then
 	# Microdep index missing. Add.
 	sed -i '/prometheus\*/r %{microdep_config_base}/roles_yml_patch' /usr/lib/perfsonar/archive/config/roles.yml
 	sed -i '/prometheus_\*/r %{microdep_config_base}/roles_yml_patch' /usr/lib/perfsonar/archive/config/roles.yml
@@ -261,8 +260,7 @@ fi
 
 # Add Microdep button on main grafana dashboard (if not already present)
 if [ -e /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json ]; then
-    grep -q  "Microdep map" /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json
-    if [ $? -gt 0 ]; then
+    if grep -q  "Microdep map" /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json; then
 	# Find next available panel id
 	NEXTID=$(jq .panels[].id /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json | sort -n | tail -n 1)
 	let NEXTID++
@@ -320,8 +318,7 @@ grep -v -x -F -f %{microdep_config_base}/roles_yml_patch /usr/lib/perfsonar/arch
 /usr/lib/perfsonar/archive/perfsonar-scripts/pselastic_secure_pos.sh
 
 # Remove Microdep button from Grafana main dashboard (if present)
-grep -q  "Microdep map" /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json
-if [ $? -eq 0 ]; then
+if grep -q  "Microdep map" /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json; then
     DASHBOARDFILE=$(mktemp)
     jq  'del( .panels[] | select(.options.content != null ) | select (.options.content | contains("Microdep map")))' /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json > $DASHBOARDFILE
     mv $DASHBOARDFILE /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json

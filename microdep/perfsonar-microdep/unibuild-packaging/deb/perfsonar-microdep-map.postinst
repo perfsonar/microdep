@@ -35,8 +35,7 @@ case "$1" in
 
 	# Add open read access to Microdep opensearch indices
 	if [ -e /usr/lib/perfsonar/archive/config/roles.yml ]; then
-	    grep -q -x -F -f /etc/perfsonar/microdep/roles_yml_patch /usr/lib/perfsonar/archive/config/roles.yml
-	    if [ $? -eq 1 ]; then
+	    if ! grep -q -x -F -f /etc/perfsonar/microdep/roles_yml_patch /usr/lib/perfsonar/archive/config/roles.yml; then
 		# Microdep index missing. Add.
 		sed -i '/prometheus\*/r /etc/perfsonar/microdep/roles_yml_patch' /usr/lib/perfsonar/archive/config/roles.yml
 	    fi
@@ -47,8 +46,7 @@ case "$1" in
 
 	# Add Microdep button on main grafana dashboard (if not already present)
 	if [ -e /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json ]; then
-	    grep -q  "Microdep map" /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json
-	    if [ $? -gt 0 ]; then
+	    if grep -q  "Microdep map" /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json; then
 		# Find next available panel id
 		NEXTID=$(jq .panels[].id /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json | sort -n | tail -n 1)
 		let NEXTID++
