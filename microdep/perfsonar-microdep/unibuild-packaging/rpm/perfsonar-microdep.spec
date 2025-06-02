@@ -169,7 +169,7 @@ systemctl daemon-reload || true
 install -D -m 0644 -t %{buildroot}/%{microdep_config_base}/mp-dragonlab/etc/ %{buildroot}/%{microdep_config_base}/microdep.db
 install -D -m 0644 -t %{buildroot}/etc/httpd/conf.d/ %{buildroot}/%{microdep_config_base}/apache-microdep-map.conf
 install -D -m 0644 -t %{buildroot}/%{install_base}/logstash/microdep_pipeline/ %{buildroot}/%{microdep_config_base}/logstash/microdep/*
-install -D -m 0644 -t %{buildroot}/etc/pscheduler/default-archives/ %{buildroot}/%{microdep_config_base}/psconfig/archives.d/*
+install -D -m 0644 -t %{buildroot}/etc/pscheduler/default-archives/ %{buildroot}/%{microdep_config_base}/psconfig/archives.d/microdep-ana-rmq.json
 install -D -m 0644 -t %{buildroot}/etc/logrotate.d/ %{buildroot}/%{microdep_config_base}/logrotate.d/microdep
 
 # Prepare folder for json output from analytics scripts read by logstash
