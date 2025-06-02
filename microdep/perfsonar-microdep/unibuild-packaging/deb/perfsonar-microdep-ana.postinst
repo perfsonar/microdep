@@ -30,6 +30,7 @@ case "$1" in
 	# Enable Microdep pipeline for logstash (by adding content of /etc/perfsonar/microdep/microdep-pipelines.yml if not already present)
 	if [ -f /etc/logstash/pipelines.yml ]; then
 	    grep -q -x -F -f /etc/perfsonar/microdep/logstash/microdep-pipelines.yml /etc/logstash/pipelines.yml || ( cat /etc/perfsonar/microdep/logstash/microdep-pipelines.yml >> /etc/logstash/pipelines.yml )
+	    systemctl restart logstash.service || true
 	fi
 	# Enable executing of microdep ana scripts if SElinux is enabled
 	if [ -f /sbin/restorecon ]; then
