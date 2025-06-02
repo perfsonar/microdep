@@ -115,7 +115,7 @@ elif [ "$DISTRO" = "deb" ]; then
     $RSH $USER@$HOST apt-get -y update
     echo "Done!"
     echo "Packages in local repo:"
-    $RSH $USER@$HOST apt list | grep "/unknown"
+    $RSH $USER@$HOST apt list | grep "/unibuild"
    
 else
     echo "Error: Unknown distro $DISTRO."
