@@ -8,7 +8,9 @@ VERSION=${PERFSONAR_AUTO_VERSION}
 RELEASE=${PERFSONAR_AUTO_RELNUM}
 FORCE=no
 
-default:
+default: dist
+
+check-dev-prod:
 # Check if files in current dev env are in sync with files in legacy dev env
 	@awk '\
 	BEGIN{ R=0 } \
@@ -54,11 +56,13 @@ resync:
 # Update MANIFEST file
 	@awk '{ if ( substr($$1,1,1) != "#") { print $$NF; } }'  DEV-PROD.map > MANIFEST
 
-manifest:
+MANIFEST: DEV-PROD.map 
 # Update MANIFEST file
+	@read -p "DEV-PROD.map is newer than MANIFEST. Update MANIFEST? Enter to continue or Ctrl-C to cancel." dummy
 	awk '{ if ( substr($$1,1,1) != "#") { print $$NF; } }'  DEV-PROD.map > MANIFEST
 
-dist:
+dist: MANIFEST
+	@echo "Creating tar-package of project..."
 	mkdir /tmp/$(PACKAGE)-$(VERSION)
 # Create tar based on list of files in MANIFEST
 	tar ch -T MANIFEST | tar x -C /tmp/$(PACKAGE)-$(VERSION)

@@ -19,7 +19,6 @@ microdep-map/dragonlab/dragonlab-base-geo.json
 etc/dragonlab-base-geo.json.example
 microdep-map/css/microdep-map.css
 microdep-map/css/curve-chart.css
-bin/microdep_commands/microdep-psconfig-load.pl
 etc/microdep-tests-packet-subcount.json.example
 etc/microdep-tests.json.example
 etc/apache-microdep-map.conf
@@ -36,8 +35,6 @@ scripts/perfsonar-microdep-gap-ana.service
 scripts/perfsonar-microdep-trace-ana.service
 scripts/perfsonar-microdep-restart.service
 scripts/perfsonar-microdep-restart.timer
-scripts/perfsonar-microdep-watchconfig.service
-scripts/perfsonar-microdep-watchconfig.path
 etc/logstash/microdep/01-microdep-inputs.conf
 etc/logstash/microdep/02-microdep-filter.conf
 etc/logstash/microdep/03-microdep-outputs.conf
