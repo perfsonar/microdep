@@ -291,6 +291,7 @@ fi
 # Enable Microdep pipeline for logstash (by adding content of /etc/perfsonar/microdep/microdep-pipelines.yml if not already present)
 if [ -f /etc/logstash/pipelines.yml ]; then
     grep -q -x -F -f %{microdep_config_base}/logstash/microdep-pipelines.yml /etc/logstash/pipelines.yml || ( cat %{microdep_config_base}/logstash/microdep-pipelines.yml >> /etc/logstash/pipelines.yml )
+    systemctl restart logstash.service || true
 fi
 
 # Enable executing of microdep ana scripts if SElinux is enabled
@@ -332,6 +333,7 @@ systemctl reload httpd.service || true
 # Clean up pipeline for logstash
 TMPPIPELINE=$(mktemp)
 grep -v -x -F -f %{microdep_config_base}/logstash/microdep-pipelines.yml /etc/logstash/pipelines.yml > $TMPPIPELINE && mv $TMPPIPELINE /etc/logstash/pipelines.yml
+systemctl restart logstash.service || true
 
 # Clean up db access
 if [ -f /var/lib/pgsql/data/pg_hba.conf ]; then
@@ -401,7 +403,7 @@ systemctl stop perfsonar-microdep-restart.timer || true
 %{microdep_config_base}/microdep-tests.json.example
 %{microdep_config_base}/microdep-tests-packet-subcount.json.example
 %config /etc/pscheduler/default-archives/microdep-ana-rmq.json
-%config /etc/logrotate.d/microdep
+%config(0644,root,root) /etc/logrotate.d/microdep
 %changelog
 * Thu Oct 24 2024 Otto J Wittner <otto.wittner@sikt.no>
 - Prepareing for release 5.3

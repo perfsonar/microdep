@@ -27,6 +27,10 @@ case "$1" in
 	    /usr/lib/perfsonar/bin/microdep_commands/fix-pgsql-access.sh -i /var/lib/pgsql/data/pg_hba.conf || true
 	fi
 
+	# Fix permissions 
+	chown -R perfsonar:perfsonar /usr/lib/perfsonar/logstash/microdep_pipeline
+	chown perfsonar:perfsonar /var/lib/logstash/microdep/
+
 	# Enable Microdep pipeline for logstash (by adding content of /etc/perfsonar/microdep/microdep-pipelines.yml if not already present)
 	if [ -f /etc/logstash/pipelines.yml ]; then
 	    grep -q -x -F -f /etc/perfsonar/microdep/logstash/microdep-pipelines.yml /etc/logstash/pipelines.yml || ( cat /etc/perfsonar/microdep/logstash/microdep-pipelines.yml >> /etc/logstash/pipelines.yml )

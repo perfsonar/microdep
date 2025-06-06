@@ -22,6 +22,7 @@ case "$1" in
 	if [ -e /etc/logstash/pipelines.yml ]; then
 	    TMPPIPELINE=$(mktemp)
 	    grep -v -x -F -f /etc/perfsonar/microdep/logstash/microdep-pipelines.yml /etc/logstash/pipelines.yml > $TMPPIPELINE && mv $TMPPIPELINE /etc/logstash/pipelines.yml
+	    systemctl restart logstash.service || true
 	fi
 	# Clean up db access
 	if [ -f /var/lib/pgsql/data/pg_hba.conf ]; then
