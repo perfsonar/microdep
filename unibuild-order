@@ -39,6 +39,7 @@ perl_test_deep_type
 perl_exporter_lite
 perl_test_deep_json
 perl_moosex_storage
+perl_tie_refhash_weak
 perl_hash_util_fieldhash_compat
 perl_moosex_clone
 perl_graphics_color
@@ -47,13 +48,16 @@ perl_check_isa
 perl_geometry_primitive
 perl_graphics_primitive
 perl_text_flow
+perl_cairo
 perl_graphics_primitive_driver_cairo
 perl_layout_manager
 perl_color_scheme
+perl_set_infinite
+perl_datetime_set
 perl_chart_clicker
+perl_number_format
 perl_statistics_basic
 perl_statistics_linefit
 perl_net_amqp
 perl_anyevent_rabbitmq
 microdep
-

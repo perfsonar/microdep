@@ -2,9 +2,10 @@
 # Makefile for Any Package
 #
 
-include $(wildcard unibuild/unibuild.make)
+include unibuild/toplevel.make
 
-default:
+
+old-default:
 	@echo "*** Building packages for Microdep ***"
 	@echo "Run 'make rpm-build' or 'make deb-build' to build packages for a distribution (applying 'unibuild' in containers)."
 	@echo "Run 'make clean-rpm-build' or 'make clean-deb-build' to clean away build files (applying 'unibuild' in containers)."
