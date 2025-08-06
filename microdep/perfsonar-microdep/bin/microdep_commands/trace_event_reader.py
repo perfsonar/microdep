@@ -483,7 +483,7 @@ def prepare_db(cursor, param):
         if param['dbtype'] == 'postgresql':
             cursor.execute("CREATE TABLE routes (unique_pair VARCHAR(200), success INTEGER, failed INTEGER, partialfail INTEGER, anomaly TEXT, normal INTEGER, count TEXT, report TEXT, bookmark INTEGER)")
         else:
-            cursor.execute("CREATE TABLE routes (unique_pair VARCHAR(200), success INT, failed INT, partialfail INT, anomaly MEDIUMTEXT, normal INT, count MEDIUMTEXT, report MEDIUMTEXT, bookmark INT)")
+            cursor.execute("CREATE TABLE routes (unique_pair VARCHAR(200), success INT, failed INT, partialfail INT, anomaly MEDIUMTEXT, normal INT, count MEDIUMTEXT, report LONGTEXT, bookmark INT)")
         cursor.execute("CREATE UNIQUE INDEX idx_key1 ON routes (unique_pair)")
         cursor.execute(('COMMIT'));
     except Exception as err:
@@ -492,7 +492,18 @@ def prepare_db(cursor, param):
 #        if param['dbtype'] == 'postgresql':
 #           print_psycopg2_exception(err)
 #        exit()
-    
+
+
+    # Alter legacy tables to conform with current table format
+    try:
+        if param['dbtype'] == 'postgresql':
+            pass
+        else:
+            cursor.execute("ALTER TABLE routes MODIFY report LONGTEXT")
+        cursor.execute(('COMMIT'));
+    except Exception as err:
+        pass
+
     try:
         if param['dbtype'] == 'postgresql':
             cursor.execute("CREATE TABLE jumps (unique_pair VARCHAR(200), hop INTEGER, destinations TEXT, frequencies TEXT, count INTEGER, normal TEXT, memory TEXT, anomaly TEXT, trcrt INTEGER, betweens INTEGER, cross_entropy REAL, timestamp INTEGER)")
@@ -534,7 +545,10 @@ class Resolver:
         """Read resolver db file
            Format per line assumed is "<node-name> <ip>"
         """
-
+        
+        if param["verbose"] > 2:
+            print("Initiating resolver cache...")
+            
         # Resolver DBs
         self.ip = {}
         self.name = {}
@@ -623,7 +637,7 @@ class Resolver:
                 'refresh': time.time() - 1 
                 }
             
-        if self.geopos[ip]['refresh'] < time.time():
+        if param['pslookup'] and self.geopos[ip]['refresh'] < time.time():
             # Attempt to fetch geopos info from perfSONAR's Lookup Service
             if not self.pslookuphost:
                 try:
@@ -648,7 +662,7 @@ class Resolver:
                     else:
                         # Search for host name among interface addresses (applying opensearch api at port 80)
                         opensearch_api = pshost['locator'].replace(":8090","").replace("records","_search")
-                        iso_now = datetime.fromtimestamp(datetime.now(), pytz.timezone(str(get_localzone()))).isoformat()    # ISO formatted current time with timezone
+                        iso_now = datetime.fromtimestamp(time.time(), pytz.timezone(str(get_localzone()))).isoformat()    # ISO formatted current time with timezone
                         query_data = { 'query': { 'bool': { 'filter': [ { 'term': { 'interface-addresses': ip } }, { 'range': { 'expires' : { 'gt' : iso_now  } } } ] } }, 'size': 1 }
                         query_req = urllib.request.Request(opensearch_api, data=bytes(json.dumps(query_data), encoding='utf-8') )
                         query_req.add_header('Content-Type', 'application/json')
@@ -2098,38 +2112,44 @@ def flush_analysis_state(cursor):
     """ Flush state currently in memory to DB
     """
 
-    global traceroute_analysis_state_routes
-    global traceroute_analysis_state_jumps
-    global traceroute_analysis_state_current_unique_pair_is_new
+    try:
+        global traceroute_analysis_state_routes
+        global traceroute_analysis_state_jumps
+        global traceroute_analysis_state_current_unique_pair_is_new
 
-    if param['all']:
-        # Older traceroutes than the last traceroute applied to update state in DB may have been analized. Skip storing new state.
-        return
+        if param['all']:
+            # Older traceroutes than the last traceroute applied to update state in DB may have been analized. Skip storing new state.
+            return
     
-    cursor.execute("START TRANSACTION")
-    if traceroute_analysis_state_current_unique_pair_is_new:
-        # Insert "route" state in DB (i.e. end-state analysis results)
-        if  len(traceroute_analysis_state_routes)>0:
-            cursor.execute( build_sql_insert(traceroute_analysis_state_routes, "routes") )
-        # Insert "jumps" state in DB (i.e. per hop analysis results)
-        for hop in traceroute_analysis_state_jumps:
-            cursor.execute( build_sql_insert(hop, "jumps") )
-        traceroute_analysis_state_current_unique_pair_is_new = False 
-    else:
-        # Update DB for end-state analysis
-        if  len(traceroute_analysis_state_routes)>0:
-            cursor.execute( build_sql_update(traceroute_analysis_state_routes, "routes", ['unique_pair']) )
-        # Update DB for per-hop-analysis
-        for hop in traceroute_analysis_state_jumps:
-            cursor.execute( "SELECT unique_pair, hop FROM jumps WHERE unique_pair = '" + hop['unique_pair'] + "' AND hop = " + str(hop['hop']) )
-            if cursor.rowcount == 0:
-                # Row is non-exitant. Insert new row instead
+        cursor.execute("START TRANSACTION")
+        if traceroute_analysis_state_current_unique_pair_is_new:
+            # Insert "route" state in DB (i.e. end-state analysis results)
+            if  len(traceroute_analysis_state_routes)>0:
+                cursor.execute( build_sql_insert(traceroute_analysis_state_routes, "routes") )
+                # Insert "jumps" state in DB (i.e. per hop analysis results)
+            for hop in traceroute_analysis_state_jumps:
                 cursor.execute( build_sql_insert(hop, "jumps") )
-            else:
-                # Udate row
-                cursor.execute( build_sql_update(hop, "jumps", ['unique_pair', 'hop']) )
+            traceroute_analysis_state_current_unique_pair_is_new = False 
+        else:
+            # Update DB for end-state analysis
+            if  len(traceroute_analysis_state_routes)>0:
+                cursor.execute( build_sql_update(traceroute_analysis_state_routes, "routes", ['unique_pair']) )
+            # Update DB for per-hop-analysis
+            for hop in traceroute_analysis_state_jumps:
+                cursor.execute( "SELECT unique_pair, hop FROM jumps WHERE unique_pair = '" + hop['unique_pair'] + "' AND hop = " + str(hop['hop']) )
+                if cursor.rowcount == 0:
+                    # Row is non-exitant. Insert new row instead
+                    cursor.execute( build_sql_insert(hop, "jumps") )
+                else:
+                    # Udate row
+                    cursor.execute( build_sql_update(hop, "jumps", ['unique_pair', 'hop']) )
             
-    cursor.execute(('COMMIT'));
+        cursor.execute(('COMMIT'));
+
+    except (KeyboardInterrupt, SystemExit) as e :
+        # Ignore and quit
+        pass 
+
     return
 
 def analyze(traceroute, time, cursor):
