@@ -12,5 +12,7 @@ bin/microdep_commands/trace_event_reader.py usr/lib/perfsonar/bin/microdep_comma
 bin/microdep_commands/create_new_db.sh usr/lib/perfsonar/bin/microdep_commands/
 bin/microdep_commands/fix-pgsql-access.sh usr/lib/perfsonar/bin/microdep_commands/
 bin/microdep_commands/opensearch_config_microdep.sh usr/lib/perfsonar/bin/microdep_commands/
+bin/microdep_commands/rabbitmq-consume.py usr/lib/perfsonar/bin/microdep_commands/
+bin/microdep_commands/json2table.pl usr/lib/perfsonar/bin/microdep_commands/
 etc/logrotate.d/microdep /etc/logrotate.d/
 

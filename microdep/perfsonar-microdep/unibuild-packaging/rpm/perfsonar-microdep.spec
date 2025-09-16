@@ -226,6 +226,12 @@ ln -sr /usr/share/javascript/sorttable/2.0/sorttable.js %{buildroot}/%{microdep_
 # Link mapconfig
 ln -sr %{microdep_config_base}/mapconfig.yml %{buildroot}/%{microdep_web_dir}
 
+# Link up some handy tools
+mkdir -p %{buildroot}/usr/local/bin/ || true
+ln -sr %{command_base}/opensearch_config_microdep.sh  %{buildroot}/usr/local/bin/opensearch_config_microdep.sh
+ln -sr %{command_base}/rabbitmq-consume.py  %{buildroot}/usr/local/bin/rabbitmq-consume.py
+ln -sr %{command_base}/microdep_commands/json2table.pl  %{buildroot}/usr/local/bin/json2table.pl
+
 
 %clean
 rm -rf %{buildroot}
@@ -339,8 +345,6 @@ systemctl stop perfsonar-microdep-restart.timer || true
 %attr(0755,perfsonar,perfsonar) %{command_base}/yaml-to-json.cgi
 %attr(0755,perfsonar,perfsonar) %{command_base}/get-mapconfig.cgi
 %attr(0755,perfsonar,perfsonar) %{command_base}/microdep-psconfig-load.pl
-%attr(0755,perfsonar,perfsonar) %{command_base}/json2table.pl
-%attr(0755,perfsonar,perfsonar) %{command_base}/rabbitmq-consume.py
 %{_unitdir}/perfsonar-microdep-watchconfig.path
 %{_unitdir}/perfsonar-microdep-watchconfig.service
 %config %{microdep_config_base}/microdep-config.yml
@@ -364,6 +368,11 @@ systemctl stop perfsonar-microdep-restart.timer || true
 %attr(0755,perfsonar,perfsonar) %{command_base}/create_new_db.sh
 %attr(0755,perfsonar,perfsonar) %{command_base}/fix-pgsql-access.sh
 %attr(0755,perfsonar,perfsonar) %{command_base}/opensearch_config_microdep.sh
+%attr(0755,perfsonar,perfsonar) %{command_base}/json2table.pl
+%attr(0755,perfsonar,perfsonar) %{command_base}/rabbitmq-consume.py
+%attr(0755,perfsonar,perfsonar) /usr/local/bin/opensearch_config_microdep.sh
+%attr(0755,perfsonar,perfsonar) /usr/local/bin/rabbitmq-consume.py
+%attr(0755,perfsonar,perfsonar) /usr/local/bin/json2table.pl
 %config %{install_base}/logstash/microdep_pipeline/01-microdep-inputs.conf
 %config %{install_base}/logstash/microdep_pipeline/02-microdep-filter.conf
 %config %{install_base}/logstash/microdep_pipeline/03-microdep-outputs.conf
