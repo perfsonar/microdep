@@ -74,7 +74,7 @@ Requires:               latlon-sphericaljs
 Requires:               momentjs = 2.30.1
 Requires:               select2js = 4.0.0
 Requires:               sorttablejs = 2.0
-Recommends:             perfsonar-tracetree
+Requires:               perfsonar-tracetree
 #%{?systemd_requires: %systemd_requires}
 BuildRequires:          systemd
 BuildRequires:          systemd-rpm-macros       

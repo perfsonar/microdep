@@ -20,7 +20,8 @@ Package: perfsonar-microdep
 Architecture: all
 Depends: ${misc:Depends}, ${perl:Depends},
  perfsonar-microdep-map,
- perfsonar-microdep-ana
+ perfsonar-microdep-ana,
+ perfsonar-tracetree
 Description: perfSONAR Microdep Analysis
  Meta-package pulling in packaged required for Microdep Analytics in perfSONAR
 
