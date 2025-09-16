@@ -435,12 +435,12 @@ sub emit_summary_json{
 		"h_min_d_sdv" => stddev( $jitter_obs{$id}{"h_min_d"} )->query * 1.0,
 		"h_delay_sdv" => stddev( $jitter_obs{$id}{"h_delay"} )->query * 1.0,
 		"h_slope_10_sdv" => stddev( $jitter_obs{$id}{"h_slope_10"} )->query * 1.0,
-		    "ddelay_low_n" =>  $#{$jitter_obs{$id}{"ddelay_low"}} + 1, 
-		    "ddelay_low_median" =>  median( $jitter_obs{$id}{"ddelay_low"} )->query * 1.0, 
-		    "ddelay_low_sdv" =>  stddev( $jitter_obs{$id}{"ddelay_low"} )->query * 1.0, 
-		    "ddelay_high_n" =>  $#{$jitter_obs{$id}{"ddelay_high"}} + 1, 
-		    "ddelay_high_median" =>  median( $jitter_obs{$id}{"ddelay_high"} )->query * 1.0, 
-		    "ddelay_high_sdv" =>  stddev( $jitter_obs{$id}{"ddelay_high"} )->query * 1.0, 
+		"ddelay_low_n" =>  $#{$jitter_obs{$id}{"ddelay_low"}} + 1, 
+		"ddelay_low_median" =>  median( $jitter_obs{$id}{"ddelay_low"} )->query * 1.0, 
+		"ddelay_low_sdv" =>  stddev( $jitter_obs{$id}{"ddelay_low"} )->query * 1.0, 
+		"ddelay_high_n" =>  $#{$jitter_obs{$id}{"ddelay_high"}} + 1, 
+		"ddelay_high_median" =>  median( $jitter_obs{$id}{"ddelay_high"} )->query * 1.0, 
+		"ddelay_high_sdv" =>  stddev( $jitter_obs{$id}{"ddelay_high"} )->query * 1.0, 
 	    };
 	    $json = { %$json, %$jitson};
 	}
@@ -1400,10 +1400,10 @@ sub report_summary_jitter{
 	# "h_slope_40" => median( $jitter_data{$id}{slope_40} )->query,
 	# "h_slope_50" => median( $jitter_data{$id}{slope_50} )->query,
 	    
-	"h_jit_sd" => stddev( $jitter_data{$id}{jit} )->query,
-	"h_ddelay_sd" => stddev( $jitter_data{$id}{ddelay} )->query,
-	"h_delay_sd" => stddev( $jitter_data{$id}{delay} )->query,
-	"h_slope_10_sd" => stddev( $jitter_data{$id}{slope_10} )->query
+	"h_jit_sdv" => stddev( $jitter_data{$id}{jit} )->query,
+	"h_ddelay_sdv" => stddev( $jitter_data{$id}{ddelay} )->query,
+	"h_delay_sdv" => stddev( $jitter_data{$id}{delay} )->query,
+	"h_slope_10_sdv" => stddev( $jitter_data{$id}{slope_10} )->query
     };
     if ( $jitter_data{$id}{high_ddelay} ){
 	$$json{report_type} = "threshold" ;
