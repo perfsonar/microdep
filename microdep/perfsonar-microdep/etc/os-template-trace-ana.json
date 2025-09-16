@@ -1,15 +1,12 @@
 {
     "index_patterns": [
 	"dragonlab_routemon*",
-	"microdep_routemon*"
+	"microdep_trace_ana*"
     ],
     "template": {
 	"settings": {
 	    "number_of_shards": 1,
 	    "number_of_replicas": 0
-	},
-	"aliases": {
-	    "dragonlab_routemon": {}
 	},
 	"mappings" : {
 	    "properties" : {
@@ -645,6 +642,11 @@
 		    }
 		}
 	    }
+	}
+    },
+    "data_stream": {
+	"timestamp_field": {
+	    "name": "@date"
 	}
     }
 }

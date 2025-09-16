@@ -18,15 +18,6 @@ set -e
 
 case "$1" in
     remove | deconfigure)
-	# Clean up open access to Microdep opensearch index
-	if [ -e /usr/lib/perfsonar/archive/config/roles.yml ]; then
-	    TMPROLESYML=$(mktemp)
-	    grep -v -x -F -f /etc/perfsonar/microdep/roles_yml_patch /usr/lib/perfsonar/archive/config/roles.yml > $TMPPIPELINE && mv $TMPROLESYML /usr/lib/perfsonar/archive/config/roles.yml
-
-	    # Refresh config of opensearch security
-	    /usr/lib/perfsonar/archive/perfsonar-scripts/pselastic_secure_pre.sh
-	    /usr/lib/perfsonar/archive/perfsonar-scripts/pselastic_secure_pos.sh
-	fi
 	
 	# Remove Microdep button from Grafana main dashboard (if present)
 	if [ -e /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json ]; then

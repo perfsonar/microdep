@@ -9,7 +9,8 @@ Build-Depends: debhelper (>= 10),
  libjson-perl,
  libdbi-perl,
  libdbd-sqlite3-perl,
- postgresql
+ postgresql,
+ curl
 Standards-Version: 4.7.0.0
 Homepage: http://www.perfsonar.net
 Vcs-Git: https://github.com/perfsonar/microdep.git

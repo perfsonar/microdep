@@ -92,7 +92,7 @@ BuildRequires:          centos-release-rabbitmq-38
 Requires:               erlang < 26.0
 #Requires:               erlang 
 Requires:               rabbitmq-server
-
+BuildRequires:          curl
 BuildRequires:          perl >= 5.32
 BuildRequires:          perl(DBI)
 BuildRequires:          perl(DBD::SQLite)
@@ -245,19 +245,6 @@ if [ -f %{config_base}/psconfig/pscheduler.d/toolkit-webui.json ]; then
     # (Perhaps "systemctl start perfsonar-microdep-watchconfig.service" could be run instead...)
 fi
 
-# Add open read access to Microdep opensearch indices
-if [ -f /usr/lib/perfsonar/archive/config/roles.yml ]; then
-    if ! grep -q -x -F -f %{microdep_config_base}/roles_yml_patch /usr/lib/perfsonar/archive/config/roles.yml; then
-	# Microdep index missing. Add.
-	sed -i '/prometheus\*/r %{microdep_config_base}/roles_yml_patch' /usr/lib/perfsonar/archive/config/roles.yml
-	sed -i '/prometheus_\*/r %{microdep_config_base}/roles_yml_patch' /usr/lib/perfsonar/archive/config/roles.yml
-
-	# Refresh config of opensearch security
-	/usr/lib/perfsonar/archive/perfsonar-scripts/pselastic_secure_pre.sh
-	/usr/lib/perfsonar/archive/perfsonar-scripts/pselastic_secure_pos.sh
-    fi
-fi
-
 # Add Microdep button on main grafana dashboard (if not already present)
 if [ -e /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json ]; then
     if grep -q  "Microdep map" /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json; then
@@ -285,11 +272,8 @@ if [ -f /var/lib/pgsql/data/pg_hba.conf ]; then
     %{command_base}/fix-pgsql-access.sh -i /var/lib/pgsql/data/pg_hba.conf
 fi
 
-# Enable Microdep pipeline for logstash (by adding content of /etc/perfsonar/microdep/microdep-pipelines.yml if not already present)
-if [ -f /etc/logstash/pipelines.yml ]; then
-    grep -q -x -F -f %{microdep_config_base}/logstash/microdep-pipelines.yml /etc/logstash/pipelines.yml || ( cat %{microdep_config_base}/logstash/microdep-pipelines.yml >> /etc/logstash/pipelines.yml )
-    systemctl restart logstash.service || true
-fi
+# Add Microdep to Opensearch setup (including Logstash) 
+/usr/lib/perfsonar/bin/microdep_commands/opensearch_config_microdep.sh
 
 # Enable executing of microdep ana scripts if SElinux is enabled
 if [ -f /sbin/restorecon ]; then
@@ -307,14 +291,6 @@ systemctl start perfsonar-microdep-trace-ana.service || true
 systemctl start perfsonar-microdep-restart.timer || true
 
 %preun map
-# Clean up open access to Microdep opensearch index
-TMPROLESYML=$(mktemp)
-grep -v -x -F -f %{microdep_config_base}/roles_yml_patch /usr/lib/perfsonar/archive/config/roles.yml > $TMPROLESYML && mv $TMPROLESYML /usr/lib/perfsonar/archive/config/roles.yml
-
-# Refresh config of opensearch security
-/usr/lib/perfsonar/archive/perfsonar-scripts/pselastic_secure_pre.sh
-/usr/lib/perfsonar/archive/perfsonar-scripts/pselastic_secure_pos.sh
-
 # Remove Microdep button from Grafana main dashboard (if present)
 if grep -q  "Microdep map" /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json; then
     DASHBOARDFILE=$(mktemp)
@@ -327,10 +303,8 @@ fi
 systemctl reload httpd.service || true
 
 %preun ana
-# Clean up pipeline for logstash
-TMPPIPELINE=$(mktemp)
-grep -v -x -F -f %{microdep_config_base}/logstash/microdep-pipelines.yml /etc/logstash/pipelines.yml > $TMPPIPELINE && mv $TMPPIPELINE /etc/logstash/pipelines.yml
-systemctl restart logstash.service || true
+# Remove Microdep from Opensearch setup (including Logstash) 
+/usr/lib/perfsonar/bin/microdep_commands/opensearch_config_microdep.sh -r config
 
 # Clean up db access
 if [ -f /var/lib/pgsql/data/pg_hba.conf ]; then
@@ -374,7 +348,6 @@ systemctl stop perfsonar-microdep-restart.timer || true
 %config %{microdep_config_base}/mapconfig.d/
 %{microdep_config_base}/dragonlab-base-geo.json.example
 %config %{microdep_config_base}/mp-dragonlab/etc/microdep.db
-%{microdep_config_base}/roles_yml_patch
 %{microdep_config_base}/grafana_dashboard_patch
 %config /etc/httpd/conf.d/apache-microdep-map.conf
 %config %{microdep_web_dir}/dragonlab/dragonlab-base-geo.json
@@ -390,6 +363,7 @@ systemctl stop perfsonar-microdep-restart.timer || true
 %attr(0755,perfsonar,perfsonar) %{command_base}/trace_event_reader.py
 %attr(0755,perfsonar,perfsonar) %{command_base}/create_new_db.sh
 %attr(0755,perfsonar,perfsonar) %{command_base}/fix-pgsql-access.sh
+%attr(0755,perfsonar,perfsonar) %{command_base}/opensearch_config_microdep.sh
 %config %{install_base}/logstash/microdep_pipeline/01-microdep-inputs.conf
 %config %{install_base}/logstash/microdep_pipeline/02-microdep-filter.conf
 %config %{install_base}/logstash/microdep_pipeline/03-microdep-outputs.conf
@@ -397,6 +371,7 @@ systemctl stop perfsonar-microdep-restart.timer || true
 %config /var/lib/logstash/microdep 
 %config %{microdep_config_base}/os-template-gap-ana.json
 %config %{microdep_config_base}/os-template-trace-ana.json
+%{microdep_config_base}/roles_yml_patch
 %{microdep_config_base}/microdep-tests.json.example
 %{microdep_config_base}/microdep-tests-packet-subcount.json.example
 %config /etc/pscheduler/default-archives/microdep-ana-rmq.json

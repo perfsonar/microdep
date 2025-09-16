@@ -18,12 +18,10 @@ set -e
 
 case "$1" in
     remove|deconfigure)
-	# Clean up pipline for logstash
-	if [ -e /etc/logstash/pipelines.yml ]; then
-	    TMPPIPELINE=$(mktemp)
-	    grep -v -x -F -f /etc/perfsonar/microdep/logstash/microdep-pipelines.yml /etc/logstash/pipelines.yml > $TMPPIPELINE && mv $TMPPIPELINE /etc/logstash/pipelines.yml
-	    systemctl restart logstash.service || true
-	fi
+
+	# Remove Microdep from Opensearch setup (including Logstash) 
+	/usr/lib/perfsonar/bin/microdep_commands/opensearch_config_microdep.sh -r config
+	
 	# Clean up db access
 	if [ -f /var/lib/pgsql/data/pg_hba.conf ]; then
 	    /usr/lib/perfsonar/bin/microdep_commands/fix-pgsql-access.sh -ri /var/lib/pgsql/data/pg_hba.conf

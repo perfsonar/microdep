@@ -31,11 +31,9 @@ case "$1" in
 	chown -R perfsonar:perfsonar /usr/lib/perfsonar/logstash/microdep_pipeline
 	chown perfsonar:perfsonar /var/lib/logstash/microdep/
 
-	# Enable Microdep pipeline for logstash (by adding content of /etc/perfsonar/microdep/microdep-pipelines.yml if not already present)
-	if [ -f /etc/logstash/pipelines.yml ]; then
-	    grep -q -x -F -f /etc/perfsonar/microdep/logstash/microdep-pipelines.yml /etc/logstash/pipelines.yml || ( cat /etc/perfsonar/microdep/logstash/microdep-pipelines.yml >> /etc/logstash/pipelines.yml )
-	    systemctl restart logstash.service || true
-	fi
+	# Add Microdep to Opensearch setup (including Logstash) 
+	/usr/lib/perfsonar/bin/microdep_commands/opensearch_config_microdep.sh
+	
 	# Enable executing of microdep ana scripts if SElinux is enabled
 	if [ -f /sbin/restorecon ]; then
 	    /sbin/restorecon -irv /usr/lib/perfsonar/bin/microdep_commands/
