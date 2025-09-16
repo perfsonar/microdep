@@ -17,14 +17,17 @@ set -e
 # for details, see https://www.debian.org/doc/debian-policy/ or
 # the debian-policy package
 
-
 case "$1" in
     configure)
+	# Ensure perfsonar user exists
+	groupadd -r perfsonar 2> /dev/null || true
+	useradd -g perfsonar -r -s /sbin/nologin -c "perfSONAR User" -d /tmp perfsonar 2> /dev/null || true
+
 	# Prepare DB for trace analyser (ignore errors)
         /usr/lib/perfsonar/bin/microdep_commands/create_new_db.sh -s -t postgres -d routingmonitor || true
 	# Fix access to db
-	if [ -f /var/lib/pgsql/data/pg_hba.conf ]; then
-	    /usr/lib/perfsonar/bin/microdep_commands/fix-pgsql-access.sh -i /var/lib/pgsql/data/pg_hba.conf || true
+	if [ -f /etc/postgresql/15/main/pg_hba.conf ]; then
+	    /usr/lib/perfsonar/bin/microdep_commands/fix-pgsql-access.sh -i /etc/postgresql/15/main/pg_hba.conf || true
 	fi
 
 	# Fix permissions 

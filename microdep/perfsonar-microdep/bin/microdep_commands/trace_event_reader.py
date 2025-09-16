@@ -160,6 +160,7 @@ class Tracesummary:
             't_last': 0,                        # Timestamp of last traceroute added to summary
             'routes_analysed' : 0,              # No of traceroutes analysed
             'routes_reached': 0,                # No of routes that reach target destination
+            'parse_errors': 0,                  # No of parsing attempts failed
             'min_length': 0,                    # Min length of successfull route
             'min_length_count' : 0,             # No of traceroutes of minimum length observed
             'max_length': 0,                    # Max length of successfull route
@@ -236,8 +237,13 @@ class Tracesummary:
         self.summary[self.current_pair][counter] += 1
 
     def parse_error(self):
-       # Increase parse errors counter
-       self.parse_errors += 1
+        if not self.current_pair:
+            # Increase general parse error counter
+            self.parse_errors += 1
+        else:
+            # Increase parse error counter for pair/flow
+            self.count("parse_errors")
+            
 
     def count_unique_hosts(self, hop, hosts):
         if not self.current_pair:
@@ -2477,6 +2483,8 @@ def read(path, srchost, srcdate, mode="batch", thread=0, starttime=0):
 
             else:
                 # Unrecognized line in traceroute
+                if param["verbose"] > 2:
+                    print ("Warning: Unrecognized line in traceroute: '" + line + "'") 
                 tracesummary.parse_error()
 
         if time > 0 and "src" in traceroutes[time] and "dst" in traceroutes[time]:
@@ -2499,6 +2507,8 @@ def read(path, srchost, srcdate, mode="batch", thread=0, starttime=0):
             # Output summary
             #tracesummary.print(traceroutes)
             tracesummary.print_all_pairs(thread)
+            if param["verbose"] > 2 :
+                print("General parse errors:", tracesummary.parse_errors)
             pass
         
         cursor.execute(('COMMIT'));
