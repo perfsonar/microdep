@@ -2356,11 +2356,11 @@ def read(path, srchost, srcdate, mode="batch", thread=0, starttime=0):
                 word.pop(1)
                 word.pop(0)
                 
-            if len(word) >= 6 and word[1] == "sudo" and word[2] == "traceroute" and word[5] =="-T":
+            if len(word) >= 6 and word[1] == "sudo" and word[2] == "traceroute" and word[6] =="-T":
                 # TCP traceroute from perfsonar found. 
                 traceroute_type = "tcp"
                 # Clean away tcp-specific header stuff
-                word.pop(5)
+                word.pop(6)
                 word.pop(1)
                 
             MICRODEPLOG = ( len(word) > 1 and word[1] == "starttime" )                        # E.g. logline ala "1617573742 starttime 00:02:22" found
