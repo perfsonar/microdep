@@ -1,5 +1,5 @@
 #!/bin/sh
-# postinst script for perfsonar-psconfig-maddash
+# postinst script for perfsonar-microdep-ana
 #
 # see: dh_installdeb(1)
 
@@ -40,16 +40,9 @@ case "$1" in
 	if [ -f /sbin/restorecon ]; then
 	    /sbin/restorecon -irv /usr/lib/perfsonar/bin/microdep_commands/
 	fi
-	# Enable systemd services (ignore failures)
-	systemctl daemon-reload || true
+	# Enable rabbitmq services in case it is not already running
 	systemctl enable rabbitmq-server.service || true
-	systemctl enable perfsonar-microdep-gap-ana.service || true
-	systemctl enable perfsonar-microdep-trace-ana.service || true
-	systemctl enable perfsonar-microdep-restart.timer || true
 	systemctl start rabbitmq-server.service || true
-	systemctl start perfsonar-microdep-gap-ana.service || true 
-	systemctl start perfsonar-microdep-trace-ana.service || true
-	systemctl start perfsonar-microdep-restart.timer || true
     ;;
 
     abort-upgrade|abort-remove|abort-deconfigure)

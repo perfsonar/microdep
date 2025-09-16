@@ -39,9 +39,15 @@ unibuild-repo/RPMS: unibuild-compose.yml
 	docker compose -f unibuild-compose.yml run el9 bash -c "unibuild build"
 #	docker compose -f unibuild-compose.yml run el9 bash -c "dnf -y update && unibuild build"
 
-unibuild-repo/Packages: unibuild-compose.yml
+deb-systemd-services: 
+	rsync  -t microdep/perfsonar-microdep/scripts/perfsonar-microdep-gap-ana.service microdep/perfsonar-microdep/unibuild-packaging/deb/perfsonar-microdep-ana.perfsonar-microdep-gap-ana.service
+	rsync  -t microdep/perfsonar-microdep/scripts/perfsonar-microdep-trace-ana.service microdep/perfsonar-microdep/unibuild-packaging/deb/perfsonar-microdep-ana.perfsonar-microdep-trace-ana.service
+	rsync  -t microdep/perfsonar-microdep/scripts/perfsonar-microdep-restart.service microdep/perfsonar-microdep/unibuild-packaging/deb/perfsonar-microdep-ana.perfsonar-microdep-restart.service
+	rsync  -t microdep/perfsonar-microdep/scripts/perfsonar-microdep-restart.timer microdep/perfsonar-microdep/unibuild-packaging/deb/perfsonar-microdep-ana.perfsonar-microdep-restart.timer
+
+unibuild-repo/Packages: deb-systemd-services unibuild-compose.yml pstracetree/unibuild-repo/Packages
 	@echo "Build Microdep U22 deb packages..."
-	docker compose -f unibuild-compose.yml run u22_amd64 bash -c "apt -y update && unibuild build"
+	docker compose -f unibuild-compose.yml run u22_amd64 bash -c "echo 'deb [trusted=yes] file:/app/pstracetree/unibuild-repo ./' > /etc/apt/sources.list.d/local-pstracetree-repo.list && apt -y update && unibuild build"
 
 rpm-build: pstracetree/unibuild-repo/RPMS unibuild-repo/RPMS 
 
@@ -53,7 +59,7 @@ rpm-test:  clean-rpm-test rpm-test-build
 	@echo "Starting rpm system test environment (containers) for PS Microdep..."
 	DISTRO=el9 docker compose -f microdep/tests/system-test.yml --project-directory . up
 
-deb-build: pstracetree/unibuild-repo/Packages unibuild-repo/Packages 
+deb-build: unibuild-repo/Packages 
 
 deb-test-build: pstracetree/unibuild-repo/Packages unibuild-repo/Packages 
 	@echo "Building deb system test environment (containers) for PS Microdep..."
@@ -82,3 +88,7 @@ clean-deb-build: unibuild-compose.yml
 	-cp unibuild-compose.yml pstracetree/
 	-cd pstracetree && docker compose -f unibuild-compose.yml run u22_amd64 unibuild clean
 	-docker compose -f unibuild-compose.yml run u22_amd64 unibuild clean
+
+deb: clean-deb-build deb-build
+
+rpm: clean-rpm-build rpm-build

@@ -4,7 +4,8 @@
 #export DH_VERBOSE=1
 
 %:
-	dh $@ --with systemd
+	dh $@
+#		dh $@ --with systemd
 
 # Nothing to build
 override_dh_auto_build:
@@ -14,3 +15,8 @@ override_dh_auto_build:
 #override_dh_auto_test:
 
 #override_dh_installinit:
+
+override_dh_installsystemd:
+	dh_installsystemd --name=perfsonar-microdep-gap-ana
+	dh_installsystemd --name=perfsonar-microdep-trace-ana
+	dh_installsystemd --name=perfsonar-microdep-restart

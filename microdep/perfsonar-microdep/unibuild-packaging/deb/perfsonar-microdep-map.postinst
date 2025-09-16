@@ -61,13 +61,14 @@ case "$1" in
 	fi
 	
 	# Enable apache config
-	a2enconf apache-microdep-map
-	systemctl reload apache2.service || true
-	
-	# Enable systemd services (ignore failures)
-	systemctl daemon-reload || true
-	systemctl enable perfsonar-microdep-watchconfig.path || true
-	systemctl start perfsonar-microdep-watchconfig.path || true
+        if [ -e /usr/share/apache2/apache2-maintscript-helper ]; then
+            . /usr/share/apache2/apache2-maintscript-helper
+
+            apache2_invoke enconf apache-microdep-map
+        else
+	    a2enconf apache-microdep-map
+	    systemctl reload apache2.service || true
+	fi
     ;;
 
     abort-upgrade|abort-remove|abort-deconfigure)

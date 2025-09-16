@@ -274,9 +274,6 @@ if [ -e /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json ]; the
     fi
 fi
 
-# Enable systemd services (ignore failures)
-systemctl enable perfsonar-microdep-watchconfig.path || true
-systemctl start perfsonar-microdep-watchconfig.path || true
 # Reload web server config
 systemctl reload httpd.service || true
 
