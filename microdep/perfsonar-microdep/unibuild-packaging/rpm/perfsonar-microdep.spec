@@ -251,8 +251,8 @@ if [ -f %{config_base}/psconfig/pscheduler.d/toolkit-webui.json ]; then
     # (Perhaps "systemctl start perfsonar-microdep-watchconfig.service" could be run instead...)
 fi
 
-# Add Microdep button on main grafana dashboard (if not already present)
-if [ -e /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json ]; then
+# Add Microdep button on main grafana dashboard (if not already present)  REMARK: TEMPORARY BE REMOVED 
+if [ -e /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json-temporary-removed ]; then
     if grep -q  "Microdep map" /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json; then
 	# Find next available panel id
 	NEXTID=$(jq .panels[].id /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json | sort -n | tail -n 1)
