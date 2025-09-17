@@ -493,11 +493,12 @@ def prepare_db(cursor, param):
         cursor.execute("CREATE UNIQUE INDEX idx_key1 ON routes (unique_pair)")
         cursor.execute(('COMMIT'));
     except Exception as err:
-        pass
-#        print("Warning: Failed to create table 'routes'")
-#        if param['dbtype'] == 'postgresql':
-#           print_psycopg2_exception(err)
-#        exit()
+        if param['verbose'] > 1: 
+            print("Warning: Failed to create table 'routes'")
+            if param['dbtype'] == 'postgresql':
+                print_psycopg2_exception(err)
+                # exit()
+            pass
 
 
     # Alter legacy tables to conform with current table format
@@ -518,12 +519,12 @@ def prepare_db(cursor, param):
         cursor.execute("CREATE UNIQUE INDEX idx_key2 ON jumps (unique_pair, hop)")
         cursor.execute(('COMMIT'));
     except:
-        pass
-#        print("Warning: Failed to create table 'jumps'")
-#        if param['dbtype'] == 'postgresql':
-#            print_psycopg2_exception(err)
-#        exit()
-
+        if param['verbose'] > 1: 
+            print("Warning: Failed to create table 'jumps'")
+            if param['dbtype'] == 'postgresql':
+                print_psycopg2_exception(err)
+                # exit()
+                pass
 """
     try:
         cursor.execute("CREATE TABLE length (unique_pair VARCHAR(200), lengths MEDIUMTEXT, frequencies MEDIUMTEXT, anomalies MEDIUMTEXT, normal INT, count MEDIUMTEXT, anomaly MEDIUMTEXT)")
