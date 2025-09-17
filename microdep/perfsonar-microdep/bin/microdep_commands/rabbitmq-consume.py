@@ -77,6 +77,10 @@ def callback(_ch, _method, _properties, body):
         print("\nReceived %s\n" % (body.decode("ascii")))
     else:
         print("%s" % (body.decode("ascii")))
+    # Acknowledge the rmq-message manually
+    _ch.basic_ack(delivery_tag=_method.delivery_tag)
+
+        
 try:
     channel.basic_consume(queue_name, callback)
 except:

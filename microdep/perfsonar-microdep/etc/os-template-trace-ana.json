@@ -1,545 +1,652 @@
 {
-  "dragonlab_routemon" : {
-    "mappings" : {
-      "properties" : {
-        "@date" : {
-          "type" : "date"
-        },
-        "@timestamp" : {
-          "type" : "date"
-        },
-        "agent" : {
-          "properties" : {
-            "ephemeral_id" : {
-              "type" : "text",
-              "fields" : {
-                "keyword" : {
-                  "type" : "keyword",
-                  "ignore_above" : 256
-                }
-              }
-            },
-            "hostname" : {
-              "type" : "text",
-              "fields" : {
-                "keyword" : {
-                  "type" : "keyword",
-                  "ignore_above" : 256
-                }
-              }
-            },
-            "id" : {
-              "type" : "text",
-              "fields" : {
-                "keyword" : {
-                  "type" : "keyword",
-                  "ignore_above" : 256
-                }
-              }
-            },
-            "name" : {
-              "type" : "text",
-              "fields" : {
-                "keyword" : {
-                  "type" : "keyword",
-                  "ignore_above" : 256
-                }
-              }
-            },
-            "type" : {
-              "type" : "text",
-              "fields" : {
-                "keyword" : {
-                  "type" : "keyword",
-                  "ignore_above" : 256
-                }
-              }
-            },
-            "version" : {
-              "type" : "text",
-              "fields" : {
-                "keyword" : {
-                  "type" : "keyword",
-                  "ignore_above" : 256
-                }
-              }
-            }
-          }
-        },
-        "alfa_date" : {
-          "type" : "alias",
-          "path" : "@date"
-        },
-        "anomaly_class" : {
-          "type" : "text",
-          "fields" : {
-            "keyword" : {
-              "type" : "keyword",
-              "ignore_above" : 256
-            }
-          }
-        },
-        "anomaly_count" : {
-          "type" : "long"
-        },
-        "cause" : {
-          "type" : "text",
-          "fields" : {
-            "keyword" : {
-              "type" : "keyword",
-              "ignore_above" : 256
-            }
-          }
-        },
-        "ce_delta" : {
-          "type" : "text",
-          "fields" : {
-            "keyword" : {
-              "type" : "keyword",
-              "ignore_above" : 256
-            }
-          }
-        },
-        "ce_delta_max" : {
-          "type" : "float"
-        },
-        "ce_delta_total" : {
-          "type" : "float"
-        },
-        "datetime" : {
-          "type" : "date"
-        },
-        "duration" : {
-          "type" : "long"
-        },
-        "ecs" : {
-          "properties" : {
-            "version" : {
-              "type" : "text",
-              "fields" : {
-                "keyword" : {
-                  "type" : "keyword",
-                  "ignore_above" : 256
-                }
-              }
-            }
-          }
-        },
-        "empty_routes" : {
-          "type" : "long"
-        },
-        "event_type" : {
-          "type" : "text",
-          "fields" : {
-            "keyword" : {
-              "type" : "keyword",
-              "ignore_above" : 256
-            }
-          }
-        },
-        "from" : {
-          "type" : "text",
-          "fields" : {
-            "keyword" : {
-              "type" : "keyword",
-              "ignore_above" : 256
-            }
-          }
-        },
-        "from_adr" : {
-          "type" : "text",
-          "fields" : {
-            "keyword" : {
-              "type" : "keyword",
-              "ignore_above" : 256
-            }
-          }
-        },
-        "host" : {
-          "properties" : {
-            "name" : {
-              "type" : "text",
-              "fields" : {
-                "keyword" : {
-                  "type" : "keyword",
-                  "ignore_above" : 256
-                }
-              }
-            }
-          }
-        },
-        "icmp_errors" : {
-          "properties" : {
-            "!A" : {
-              "type" : "long"
-            },
-            "!H" : {
-              "type" : "long"
-            },
-            "!N" : {
-              "type" : "long"
-            },
-            "!X" : {
-              "type" : "long"
-            },
-            "!p" : {
-              "type" : "long"
-            }
-          }
-        },
-        "icmp_ips" : {
-          "type" : "text",
-          "fields" : {
-            "keyword" : {
-              "type" : "keyword",
-              "ignore_above" : 256
-            }
-          }
-        },
-        "input" : {
-          "properties" : {
-            "type" : {
-              "type" : "text",
-              "fields" : {
-                "keyword" : {
-                  "type" : "keyword",
-                  "ignore_above" : 256
-                }
-              }
-            }
-          }
-        },
-        "json" : {
-          "type" : "object"
-        },
-        "last_hop" : {
-          "type" : "long"
-        },
-        "last_reply_as" : {
-          "type" : "text",
-          "fields" : {
-            "keyword" : {
-              "type" : "keyword",
-              "ignore_above" : 256
-            }
-          }
-        },
-        "last_reply_asn" : {
-          "type" : "long"
-        },
-        "last_reply_from" : {
-          "type" : "text",
-          "fields" : {
-            "keyword" : {
-              "type" : "keyword",
-              "ignore_above" : 256
-            }
-          }
-        },
-        "last_reply_name" : {
-          "type" : "text",
-          "fields" : {
-            "keyword" : {
-              "type" : "keyword",
-              "ignore_above" : 256
-            }
-          }
-        },
-        "log" : {
-          "properties" : {
-            "file" : {
-              "properties" : {
-                "path" : {
-                  "type" : "text",
-                  "fields" : {
-                    "keyword" : {
-                      "type" : "keyword",
-                      "ignore_above" : 256
-                    }
-                  }
-                }
-              }
-            },
-            "offset" : {
-              "type" : "long"
-            }
-          }
-        },
-        "max_hop_ce_delta" : {
-          "type" : "float"
-        },
-        "max_length" : {
-          "type" : "long"
-        },
-        "max_length_count" : {
-          "type" : "long"
-        },
-        "max_route_ce_delta" : {
-          "type" : "float"
-        },
-        "max_ttl" : {
-          "type" : "long"
-        },
-        "message" : {
-          "type" : "text",
-          "fields" : {
-            "keyword" : {
-              "type" : "keyword",
-              "ignore_above" : 256
-            }
-          }
-        },
-        "min_length" : {
-          "type" : "long"
-        },
-        "min_length_count" : {
-          "type" : "long"
-        },
-        "new_normal" : {
-          "type" : "text",
-          "fields" : {
-            "keyword" : {
-              "type" : "keyword",
-              "ignore_above" : 256
-            }
-          }
-        },
-        "no_hops_over_ce_limit" : {
-          "type" : "long"
-        },
-        "none_dst_ip_at_max_ttl" : {
-          "type" : "long"
-        },
-        "normal_end_state" : {
-          "type" : "text",
-          "fields" : {
-            "keyword" : {
-              "type" : "keyword",
-              "ignore_above" : 256
-            }
-          }
-        },
-        "normals_between" : {
-          "type" : "long"
-        },
-        "observed_end_states" : {
-          "properties" : {
-            "Failed" : {
-              "type" : "long"
-            },
-            "Success" : {
-              "type" : "long"
-            }
-          }
-        },
-        "original_normal" : {
-          "type" : "text",
-          "fields" : {
-            "keyword" : {
-              "type" : "keyword",
-              "ignore_above" : 256
-            }
-          }
-        },
-        "pair_id" : {
-          "type" : "text",
-          "fields" : {
-            "keyword" : {
-              "type" : "keyword",
-              "ignore_above" : 256
-            }
-          }
-        },
-        "parse_errors" : {
-          "type" : "long"
-        },
-        "preferred_index" : {
-          "type" : "text",
-          "fields" : {
-            "keyword" : {
-              "type" : "keyword",
-              "ignore_above" : 256
-            }
-          }
-        },
-        "prev_normal" : {
-          "type" : "text",
-          "fields" : {
-            "keyword" : {
-              "type" : "keyword",
-              "ignore_above" : 256
-            }
-          }
-        },
-        "probes_stopped_at_last_hop" : {
-          "type" : "long"
-        },
-        "probes_to_dst" : {
-          "type" : "long"
-        },
-        "probes_with_errormsg" : {
-          "type" : "long"
-        },
-        "probes_with_none_dst_last_hop" : {
-          "type" : "long"
-        },
-        "ps_testid" : {
-          "type" : "text",
-          "fields" : {
-            "keyword" : {
-              "type" : "keyword",
-              "ignore_above" : 256
-            }
-          }
-        },
-        "route_changes" : {
-          "type" : "long"
-        },
-        "route_type" : {
-          "type" : "text",
-          "fields" : {
-            "keyword" : {
-              "type" : "keyword",
-              "ignore_above" : 256
-            }
-          }
-        },
-        "routechange_as" : {
-          "type" : "text",
-          "fields" : {
-            "keyword" : {
-              "type" : "keyword",
-              "ignore_above" : 256
-            }
-          }
-        },
-        "routechange_asn" : {
-          "type" : "text",
-          "fields" : {
-            "keyword" : {
-              "type" : "keyword",
-              "ignore_above" : 256
-            }
-          }
-        },
-        "routechange_ip" : {
-          "type" : "text",
-          "fields" : {
-            "keyword" : {
-              "type" : "keyword",
-              "ignore_above" : 256
-            }
-          }
-        },
-        "routechange_name" : {
-          "type" : "text",
-          "fields" : {
-            "keyword" : {
-              "type" : "keyword",
-              "ignore_above" : 256
-            }
-          }
-        },
-        "routes_analysed" : {
-          "type" : "long"
-        },
-        "routes_failed" : {
-          "type" : "long"
-        },
-        "routes_reached" : {
-          "type" : "long"
-        },
-        "src_type" : {
-          "type" : "text",
-          "fields" : {
-            "keyword" : {
-              "type" : "keyword",
-              "ignore_above" : 256
-            }
-          }
-        },
-        "start_time" : {
-          "type" : "long"
-        },
-        "t_first" : {
-          "type" : "long"
-        },
-        "t_last" : {
-          "type" : "long"
-        },
-        "tcp_routes" : {
-          "type" : "long"
-        },
-        "tcp_routes_to_closed" : {
-          "type" : "long"
-        },
-        "tcp_routes_to_open" : {
-          "type" : "long"
-        },
-        "thread" : {
-          "type" : "long"
-        },
-        "timestamp" : {
-          "type" : "text",
-          "fields" : {
-            "keyword" : {
-              "type" : "keyword",
-              "ignore_above" : 256
-            }
-          }
-        },
-        "timestamp_ms" : {
-          "type" : "text",
-          "fields" : {
-            "keyword" : {
-              "type" : "keyword",
-              "ignore_above" : 256
-            }
-          }
-        },
-        "timestamp_zone" : {
-          "type" : "text",
-          "fields" : {
-            "keyword" : {
-              "type" : "keyword",
-              "ignore_above" : 256
-            }
-          }
-        },
-        "to" : {
-          "type" : "text",
-          "fields" : {
-            "keyword" : {
-              "type" : "keyword",
-              "ignore_above" : 256
-            }
-          }
-        },
-        "to_adr" : {
-          "type" : "text",
-          "fields" : {
-            "keyword" : {
-              "type" : "keyword",
-              "ignore_above" : 256
-            }
-          }
-        },
-        "udp_routes" : {
-          "type" : "long"
-        },
-        "unique_hosts" : {
-          "type" : "long"
-        },
-        "unique_hosts_per_hop" : {
-          "type" : "text",
-          "fields" : {
-            "keyword" : {
-              "type" : "keyword",
-              "ignore_above" : 256
-            }
-          }
-        }
-      }
+    "index_patterns": [
+	"dragonlab_routemon*",
+	"microdep_trace_ana*"
+    ],
+    "template": {
+	"settings": {
+	    "number_of_shards": 1,
+	    "number_of_replicas": 0
+	},
+	"mappings" : {
+	    "properties" : {
+		"@date" : {
+		    "type" : "date"
+		},
+		"@timestamp" : {
+		    "type" : "date"
+		},
+		"alfa_date" : {
+		    "type" : "alias",
+		    "path" : "@date"
+		},
+		"anomaly_class" : {
+		    "type" : "text",
+		    "fields" : {
+			"keyword" : {
+			    "type" : "keyword",
+			    "ignore_above" : 256
+			}
+		    }
+		},
+		"anomaly_count" : {
+		    "type" : "long"
+		},
+		"cause" : {
+		    "type" : "text",
+		    "fields" : {
+			"keyword" : {
+			    "type" : "keyword",
+			    "ignore_above" : 256
+			}
+		    }
+		},
+		"ce_delta" : {
+		    "type" : "text",
+		    "fields" : {
+			"keyword" : {
+			    "type" : "keyword",
+			    "ignore_above" : 256
+			}
+		    }
+		},
+		"ce_delta_max" : {
+		    "type" : "float"
+		},
+		"ce_delta_total" : {
+		    "type" : "float"
+		},
+		"datetime" : {
+		    "type" : "date"
+		},
+		"duration" : {
+		    "type" : "long"
+		},
+		"empty_routes" : {
+		    "type" : "long"
+		},
+		"event_type" : {
+		    "type" : "text",
+		    "fields" : {
+			"keyword" : {
+			    "type" : "keyword",
+			    "ignore_above" : 256
+			}
+		    }
+		},
+		"from" : {
+		    "type" : "text",
+		    "fields" : {
+			"keyword" : {
+			    "type" : "keyword",
+			    "ignore_above" : 256
+			}
+		    }
+		},
+		"from_adr" : {
+		    "type" : "text",
+		    "fields" : {
+			"keyword" : {
+			    "type" : "keyword",
+			    "ignore_above" : 256
+			}
+		    }
+		},
+		"from_geo": {
+		    "properties": {
+			"city_name": {
+			    "type": "text",
+			    "fields": {
+				"keyword": {
+				    "type": "keyword",
+				    "ignore_above": 256
+				}
+			    }
+			},
+			"continent_code": {
+			    "type": "text",
+			    "fields": {
+				"keyword": {
+				    "type": "keyword",
+				    "ignore_above": 256
+				}
+			    }
+			},
+			"country_code2": {
+			    "type": "text",
+			    "fields": {
+				"keyword": {
+				    "type": "keyword",
+				    "ignore_above": 256
+				}
+			    }
+			},
+			"country_code3": {
+			    "type": "text",
+			    "fields": {
+				"keyword": {
+				    "type": "keyword",
+				    "ignore_above": 256
+				}
+			    }
+			},
+			"country_name": {
+			    "type": "text",
+			    "fields": {
+				"keyword": {
+				    "type": "keyword",
+				    "ignore_above": 256
+				}
+			    }
+			},
+			"geo_src": {
+			    "type": "text",
+			    "fields": {
+				"keyword": {
+				    "type": "keyword",
+				    "ignore_above": 256
+				}
+			    }
+			},
+			"ip": {
+			    "type": "text",
+			    "fields": {
+				"keyword": {
+				    "type": "keyword",
+				    "ignore_above": 256
+				}
+			    }
+			},
+			"latitude": {
+			    "type": "float"
+			},
+			"location": {
+			    "properties": {
+				"lat": {
+				    "type": "float"
+				},
+				"lon": {
+				    "type": "float"
+				}
+			    }
+			},
+			"longitude": {
+			    "type": "float"
+			},
+			"postal_code": {
+			    "type": "text",
+			    "fields": {
+				"keyword": {
+				    "type": "keyword",
+				    "ignore_above": 256
+				}
+			    }
+			},
+			"refresh": {
+			    "type": "long"
+			},
+			"region_code": {
+			    "type": "text",
+			    "fields": {
+				"keyword": {
+				    "type": "keyword",
+				    "ignore_above": 256
+				}
+			    }
+			},
+			"region_name": {
+			    "type": "text",
+			    "fields": {
+				"keyword": {
+				    "type": "keyword",
+				    "ignore_above": 256
+				}
+			    }
+			},
+			"timezone": {
+			    "type": "text",
+			    "fields": {
+				"keyword": {
+				    "type": "keyword",
+				    "ignore_above": 256
+				}
+			    }
+			}
+		    }
+		},
+		"from_to" : {
+		    "type" : "text",
+		    "fields" : {
+			"keyword" : {
+			    "type" : "keyword",
+			    "ignore_above" : 256
+			}
+		    }
+		},
+		"icmp_errors" : {
+		    "properties" : {
+			"!A" : {
+			    "type" : "long"
+			},
+			"!H" : {
+			    "type" : "long"
+			},
+			"!N" : {
+			    "type" : "long"
+			},
+			"!X" : {
+			    "type" : "long"
+			},
+			"!p" : {
+			    "type" : "long"
+			}
+		    }
+		},
+		"icmp_ips" : {
+		    "type" : "text",
+		    "fields" : {
+			"keyword" : {
+			    "type" : "keyword",
+			    "ignore_above" : 256
+			}
+		    }
+		},
+		"last_hop" : {
+		    "type" : "long"
+		},
+		"last_reply_as" : {
+		    "type" : "text",
+		    "fields" : {
+			"keyword" : {
+			    "type" : "keyword",
+			    "ignore_above" : 256
+			}
+		    }
+		},
+		"last_reply_asn" : {
+		    "type" : "long"
+		},
+		"last_reply_from" : {
+		    "type" : "text",
+		    "fields" : {
+			"keyword" : {
+			    "type" : "keyword",
+			    "ignore_above" : 256
+			}
+		    }
+		},
+		"last_reply_name" : {
+		    "type" : "text",
+		    "fields" : {
+			"keyword" : {
+			    "type" : "keyword",
+			    "ignore_above" : 256
+			}
+		    }
+		},
+		"max_hop_ce_delta" : {
+		    "type" : "float"
+		},
+		"max_length" : {
+		    "type" : "long"
+		},
+		"max_length_count" : {
+		    "type" : "long"
+		},
+		"max_route_ce_delta" : {
+		    "type" : "float"
+		},
+		"max_ttl" : {
+		    "type" : "long"
+		},
+		"min_length" : {
+		    "type" : "long"
+		},
+		"min_length_count" : {
+		    "type" : "long"
+		},
+		"new_normal" : {
+		    "type" : "text",
+		    "fields" : {
+			"keyword" : {
+			    "type" : "keyword",
+			    "ignore_above" : 256
+			}
+		    }
+		},
+		"no_hops_over_ce_limit" : {
+		    "type" : "long"
+		},
+		"none_dst_ip_at_max_ttl" : {
+		    "type" : "long"
+		},
+		"normal_end_state" : {
+		    "type" : "text",
+		    "fields" : {
+			"keyword" : {
+			    "type" : "keyword",
+			    "ignore_above" : 256
+			}
+		    }
+		},
+		"normals_between" : {
+		    "type" : "long"
+		},
+		"observed_end_states" : {
+		    "properties" : {
+			"Failed" : {
+			    "type" : "long"
+			},
+			"Success" : {
+			    "type" : "long"
+			}
+		    }
+		},
+		"original_normal" : {
+		    "type" : "text",
+		    "fields" : {
+			"keyword" : {
+			    "type" : "keyword",
+			    "ignore_above" : 256
+			}
+		    }
+		},
+		"pair_id" : {
+		    "type" : "text",
+		    "fields" : {
+			"keyword" : {
+			    "type" : "keyword",
+			    "ignore_above" : 256
+			}
+		    }
+		},
+		"prev_normal" : {
+		    "type" : "text",
+		    "fields" : {
+			"keyword" : {
+			    "type" : "keyword",
+			    "ignore_above" : 256
+			}
+		    }
+		},
+		"probes_stopped_at_last_hop" : {
+		    "type" : "long"
+		},
+		"probes_to_dst" : {
+		    "type" : "long"
+		},
+		"probes_with_errormsg" : {
+		    "type" : "long"
+		},
+		"probes_with_none_dst_last_hop" : {
+		    "type" : "long"
+		},
+		"ps_testid" : {
+		    "type" : "text",
+		    "fields" : {
+			"keyword" : {
+			    "type" : "keyword",
+			    "ignore_above" : 256
+			}
+		    }
+		},
+		"route_changes" : {
+		    "type" : "long"
+		},
+		"route_type" : {
+		    "type" : "text",
+		    "fields" : {
+			"keyword" : {
+			    "type" : "keyword",
+			    "ignore_above" : 256
+			}
+		    }
+		},
+		"routechange_as" : {
+		    "type" : "text",
+		    "fields" : {
+			"keyword" : {
+			    "type" : "keyword",
+			    "ignore_above" : 256
+			}
+		    }
+		},
+		"routechange_asn" : {
+		    "type" : "long"
+		},
+		"routechange_ip" : {
+		    "type" : "text",
+		    "fields" : {
+			"keyword" : {
+			    "type" : "keyword",
+			    "ignore_above" : 256
+			}
+		    }
+		},
+		"routechange_name" : {
+		    "type" : "text",
+		    "fields" : {
+			"keyword" : {
+			    "type" : "keyword",
+			    "ignore_above" : 256
+			}
+		    }
+		},
+		"routes_analysed" : {
+		    "type" : "long"
+		},
+		"routes_failed" : {
+		    "type" : "long"
+		},
+		"routes_reached" : {
+		    "type" : "long"
+		},
+		"src_type" : {
+		    "type" : "text",
+		    "fields" : {
+			"keyword" : {
+			    "type" : "keyword",
+			    "ignore_above" : 256
+			}
+		    }
+		},
+		"start_time" : {
+		    "type" : "long"
+		},
+		"t_first" : {
+		    "type" : "long"
+		},
+		"t_last" : {
+		    "type" : "long"
+		},
+		"tcp_routes" : {
+		    "type" : "long"
+		},
+		"tcp_routes_to_closed" : {
+		    "type" : "long"
+		},
+		"tcp_routes_to_open" : {
+		    "type" : "long"
+		},
+		"thread" : {
+		    "type" : "long"
+		},
+		"timestamp" : {
+		    "type" : "long"
+		},
+		"timestamp_ms" : {
+		    "type" : "long"
+		},
+		"timestamp_zone" : {
+		    "type" : "text",
+		    "fields" : {
+			"keyword" : {
+			    "type" : "keyword",
+			    "ignore_above" : 256
+			}
+		    }
+		},
+		"to" : {
+		    "type" : "text",
+		    "fields" : {
+			"keyword" : {
+			    "type" : "keyword",
+			    "ignore_above" : 256
+			}
+		    }
+		},
+		"to_adr" : {
+		    "type" : "text",
+		    "fields" : {
+			"keyword" : {
+			    "type" : "keyword",
+			    "ignore_above" : 256
+			}
+		    }
+		},
+		"to_geo": {
+		    "properties": {
+			"city_name": {
+			    "type": "text",
+			    "fields": {
+				"keyword": {
+				    "type": "keyword",
+				    "ignore_above": 256
+				}
+			    }
+			},
+			"continent_code": {
+			    "type": "text",
+			    "fields": {
+				"keyword": {
+				    "type": "keyword",
+				    "ignore_above": 256
+				}
+			    }
+			},
+			"country_code2": {
+			    "type": "text",
+			    "fields": {
+				"keyword": {
+				    "type": "keyword",
+				    "ignore_above": 256
+				}
+			    }
+			},
+			"country_code3": {
+			    "type": "text",
+			    "fields": {
+				"keyword": {
+				    "type": "keyword",
+				    "ignore_above": 256
+				}
+			    }
+			},
+			"country_name": {
+			    "type": "text",
+			    "fields": {
+				"keyword": {
+				    "type": "keyword",
+				    "ignore_above": 256
+				}
+			    }
+			},
+			"geo_src": {
+			    "type": "text",
+			    "fields": {
+				"keyword": {
+				    "type": "keyword",
+				    "ignore_above": 256
+				}
+			    }
+			},
+			"ip": {
+			    "type": "text",
+			    "fields": {
+				"keyword": {
+				    "type": "keyword",
+				    "ignore_above": 256
+				}
+			    }
+			},
+			"latitude": {
+			    "type": "float"
+			},
+			"location": {
+			    "properties": {
+				"lat": {
+				    "type": "float"
+				},
+				"lon": {
+				    "type": "float"
+				}
+			    }
+			},
+			"longitude": {
+			    "type": "float"
+			},
+			"postal_code": {
+			    "type": "text",
+			    "fields": {
+				"keyword": {
+				    "type": "keyword",
+				    "ignore_above": 256
+				}
+			    }
+			},
+			"refresh": {
+			    "type": "long"
+			},
+			"region_code": {
+			    "type": "text",
+			    "fields": {
+				"keyword": {
+				    "type": "keyword",
+				    "ignore_above": 256
+				}
+			    }
+			},
+			"region_name": {
+			    "type": "text",
+			    "fields": {
+				"keyword": {
+				    "type": "keyword",
+				    "ignore_above": 256
+				}
+			    }
+			},
+			"timezone": {
+			    "type": "text",
+			    "fields": {
+				"keyword": {
+				    "type": "keyword",
+				    "ignore_above": 256
+				}
+			    }
+			}
+		    }
+		},
+		"udp_routes" : {
+		    "type" : "long"
+		},
+		"unique_hosts" : {
+		    "type" : "long"
+		},
+		"unique_hosts_per_hop" : {
+		    "type" : "text",
+		    "fields" : {
+			"keyword" : {
+			    "type" : "keyword",
+			    "ignore_above" : 256
+			}
+		    }
+		}
+	    }
+	}
+    },
+    "data_stream": {
+	"timestamp_field": {
+	    "name": "@date"
+	}
     }
-  }
 }

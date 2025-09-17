@@ -1,9 +1,5 @@
 %define install_base        /usr/share/javascript/
 
-#Version variables set by automated scripts
-%define perfsonar_auto_version 5.1.0
-%define perfsonar_auto_relnum alfa1
-
 Name:			chartjs
 Version:		4.4.2
 Release:		1%{?dist}

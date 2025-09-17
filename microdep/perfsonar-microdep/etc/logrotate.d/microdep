@@ -1,0 +1,12 @@
+/var/lib/logstash/microdep/gap-ana.json
+/var/lib/logstash/microdep/trace-ana.json
+{
+        su perfsonar perfsonar
+        rotate 4
+        maxsize 100000k
+        daily
+        missingok
+        notifempty
+        compress
+        delaycompress
+}

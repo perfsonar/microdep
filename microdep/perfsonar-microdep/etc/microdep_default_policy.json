@@ -1,0 +1,89 @@
+{
+  "policy": {
+      "description": "hot warm delete",
+      "schema_version": 21,
+      "error_notification": null,
+      "default_state": "hot",
+      "states": [
+          {
+              "name": "hot",
+              "actions": [
+                  {
+                      "retry": {
+                          "count": 3,
+                          "backoff": "exponential",
+                          "delay": "1m"
+                      },
+                      "index_priority": {
+                          "priority": 100
+                      }
+                  },
+                  {
+                      "retry": {
+                          "count": 3,
+                          "backoff": "exponential",
+                          "delay": "1m"
+                      },
+                      "rollover": {
+                          "min_index_age": "1d",
+			  "min_size": "100mb",
+                          "copy_alias": false
+                      }
+                  }
+              ],
+              "transitions": [
+                  {
+                      "state_name": "warm",
+                      "conditions": {
+                          "min_index_age": "2d"
+                      }
+                  }
+              ]
+          },
+          {
+              "name": "warm",
+              "actions": [
+                  {
+                      "retry": {
+                          "count": 3,
+                          "backoff": "exponential",
+                          "delay": "1m"
+                      },
+                      "index_priority": {
+                          "priority": 50
+                      }
+                  }
+              ],
+              "transitions": [
+                  {
+                      "state_name": "delete",
+                      "conditions": {
+                          "min_index_age": "7d"
+                      }
+                  }
+              ]
+          },
+          {
+              "name": "delete",
+              "actions": [
+                  {
+                      "retry": {
+                          "count": 3,
+                          "backoff": "exponential",
+                          "delay": "1m"
+                      },
+                      "delete": {}
+                  }
+              ],
+              "transitions": []
+          }
+      ],
+      "ism_template": {
+          "index_patterns": [
+	      "dragonlab*",
+              "microdep*"
+          ],
+          "priority": 100
+      }
+  }
+}

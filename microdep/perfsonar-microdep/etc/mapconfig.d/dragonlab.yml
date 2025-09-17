@@ -6,6 +6,7 @@ dragonlab:
   # Measuremet network/variant parameters
   title: "Global"
   descr: "Interdomain global measurement network"
+  database_secret: "virre-virre-vapp"
   event_type:
     # Event types for variant
     gap:

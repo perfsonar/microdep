@@ -1,0 +1,6 @@
+[Unit]
+Description=Watch for updates in toolkit-webui.json
+
+[Path]
+PathChanged=/etc/perfsonar/psconfig/pscheduler.d/toolkit-webui.json
+

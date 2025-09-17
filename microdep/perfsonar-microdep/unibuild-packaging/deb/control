@@ -9,7 +9,8 @@ Build-Depends: debhelper (>= 10),
  libjson-perl,
  libdbi-perl,
  libdbd-sqlite3-perl,
- postgresql
+ postgresql,
+ curl
 Standards-Version: 4.7.0.0
 Homepage: http://www.perfsonar.net
 Vcs-Git: https://github.com/perfsonar/microdep.git
@@ -19,7 +20,8 @@ Package: perfsonar-microdep
 Architecture: all
 Depends: ${misc:Depends}, ${perl:Depends},
  perfsonar-microdep-map,
- perfsonar-microdep-ana
+ perfsonar-microdep-ana,
+ perfsonar-tracetree
 Description: perfSONAR Microdep Analysis
  Meta-package pulling in packaged required for Microdep Analytics in perfSONAR
 
@@ -49,6 +51,7 @@ Depends: ${misc:Depends}, ${perl:Depends},
  libjs-chart.js-adapter-moment,
  libjs-chart.js-plugin-zoom,
  libjs-d3,
+ libjs-geodesy,
  libjs-hammer, 
  libjs-leaflet,
  libjs-leaflet-contextmenu,
@@ -86,7 +89,9 @@ Depends: ${misc:Depends}, ${perl:Depends},
 # pytz
  python3-tz,
  python3-tzlocal,
- perfsonar-microdep-geolite2
+ perfsonar-microdep-geolite2,
+## Both
+ logrotate
 Description: Microdep analytic toolset to analize perfSONAR datasets
  Analytic scripts to process perfSONAR data sets and generate events. Events may be viualized by Microdep map.
 

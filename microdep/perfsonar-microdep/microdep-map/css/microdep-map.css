@@ -35,3 +35,12 @@
     table.sortable th:not(.sorttable_sorted):not(.sorttable_sorted_reverse):not(.sorttable_nosort):after { 
 	content: " \25B4\25BE" 
     } 
+
+    .sprettom {
+	height:500; 
+	overflow:auto;
+    }
+    .sprettopp {
+	height:300px; 
+	overflow:auto;
+    }

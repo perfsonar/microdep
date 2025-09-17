@@ -1,4 +1,4 @@
-sorttable (2.0-1) perfsonar-5.1; urgency=low
+sorttable (2.0-1) perfsonar-5.3; urgency=low
 
   * Initial port to Debian.
 

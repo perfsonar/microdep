@@ -1,236 +1,509 @@
 {
-    "template": "dragonlab*",
-    "mappings" : {
-        "alfa_date" : {
-            "type" : "alias",
-            "path" : "@date"
-        },
-        "big_gaps" : {
-            "type" : "long"
-        },
-        "big_time" : {
-            "type" : "long"
-        },
-        "dTTL" : {
-            "type" : "long"
-        },
-        "datetime" : {
-            "type" : "text"
-        },
-        "ddelay_high_median" : {
-            "type" : "float"
-        },
-        "ddelay_high_n" : {
-            "type" : "long"
-        },
-        "ddelay_high_sdv" : {
-            "type" : "float"
-        },
-        "ddelay_low_median" : {
-            "type" : "float"
-        },
-        "ddelay_low_n" : {
-            "type" : "long"
-        },
-        "ddelay_low_sdv" : {
-            "type" : "float"
-        },
-        "down_ppm" : {
-            "type" : "float"
-        },
-        "duplicates" : {
-            "type" : "long"
-        },
-        "event_type" : {
-            "type" : "text",
-            "fields" : {
-		"keyword" : {
-		    "type" : "keyword",
-		    "ignore_above" : 256
+    "index_patterns": [
+	"dragonlab",
+	"dragonlab_jitter",
+	"microdep_gap_ana*"
+    ],
+    "template": {
+	"settings": {
+	    "number_of_shards": 1,
+	    "number_of_replicas": 0
+	},
+        "mappings" : {
+	    "properties" : {
+		"@date" : {
+		    "type" : "date"
+		},
+		"alfa_date" : {
+		    "type" : "alias",
+		    "path" : "@date"
+		},
+		"big_gaps" : {
+		    "type" : "long"
+		},
+		"big_time" : {
+		    "type" : "long"
+		},
+		"dTTL" : {
+		    "type" : "long"
+		},
+		"datetime" : {
+		    "type" : "text"
+		},
+		"ddelay_high_median" : {
+		    "type" : "float"
+		},
+		"ddelay_high_n" : {
+		    "type" : "long"
+		},
+		"ddelay_high_sdv" : {
+		    "type" : "float"
+		},
+		"ddelay_low_median" : {
+		    "type" : "float"
+		},
+		"ddelay_low_n" : {
+		    "type" : "long"
+		},
+		"ddelay_low_sdv" : {
+		    "type" : "float"
+		},
+		"down_ppm" : {
+		    "type" : "float"
+		},
+		"duplicates" : {
+		    "type" : "long"
+		},
+		"event_type" : {
+		    "type" : "text",
+		    "fields" : {
+			"keyword" : {
+			    "type" : "keyword",
+			    "ignore_above" : 256
+			}
+		    }
+		},
+		"from" : {
+		    "type" : "text",
+		    "fields" : {
+			"keyword" : {
+			    "type" : "keyword"
+			}
+		    }
+		},
+		"from_adr" : {
+		    "type" : "text",
+		    "fields" : {
+			"keyword" : {
+			    "type" : "keyword",
+			    "ignore_above" : 256
+			}
+		    }
+		},
+		"from_geo": {
+		    "properties": {
+			"city_name": {
+			    "type": "text",
+			    "fields": {
+				"keyword": {
+				    "type": "keyword",
+				    "ignore_above": 256
+				}
+			    }
+			},
+			"continent_code": {
+			    "type": "text",
+			    "fields": {
+				"keyword": {
+				    "type": "keyword",
+				    "ignore_above": 256
+				}
+			    }
+			},
+			"country_code2": {
+			    "type": "text",
+			    "fields": {
+				"keyword": {
+				    "type": "keyword",
+				    "ignore_above": 256
+				}
+			    }
+			},
+			"country_code3": {
+			    "type": "text",
+			    "fields": {
+				"keyword": {
+				    "type": "keyword",
+				    "ignore_above": 256
+				}
+			    }
+			},
+			"country_name": {
+			    "type": "text",
+			    "fields": {
+				"keyword": {
+				    "type": "keyword",
+				    "ignore_above": 256
+				}
+			    }
+			},
+			"geo_src": {
+			    "type": "text",
+			    "fields": {
+				"keyword": {
+				    "type": "keyword",
+				    "ignore_above": 256
+				}
+			    }
+			},
+			"ip": {
+			    "type": "text",
+			    "fields": {
+				"keyword": {
+				    "type": "keyword",
+				    "ignore_above": 256
+				}
+			    }
+			},
+			"latitude": {
+			    "type": "float"
+			},
+			"location": {
+			    "properties": {
+				"lat": {
+				    "type": "float"
+				},
+				"lon": {
+				    "type": "float"
+				}
+			    }
+			},
+			"longitude": {
+			    "type": "float"
+			},
+			"postal_code": {
+			    "type": "text",
+			    "fields": {
+				"keyword": {
+				    "type": "keyword",
+				    "ignore_above": 256
+				}
+			    }
+			},
+			"refresh": {
+			    "type": "long"
+			},
+			"region_code": {
+			    "type": "text",
+			    "fields": {
+				"keyword": {
+				    "type": "keyword",
+				    "ignore_above": 256
+				}
+			    }
+			},
+			"region_name": {
+			    "type": "text",
+			    "fields": {
+				"keyword": {
+				    "type": "keyword",
+				    "ignore_above": 256
+				}
+			    }
+			},
+			"timezone": {
+			    "type": "text",
+			    "fields": {
+				"keyword": {
+				    "type": "keyword",
+				    "ignore_above": 256
+				}
+			    }
+			}
+		    }
+		},
+		"from_to" : {
+		    "type" : "text",
+		    "fields" : {
+			"keyword" : {
+			    "type" : "keyword",
+			    "ignore_above" : 256
+			}
+		    }
+		},
+		"h_ddelay" : {
+		    "type" : "double"
+		},
+		"h_ddelay_sdv" : {
+		    "type" : "float"
+		},
+		"h_delay" : {
+		    "type" : "double"
+		},
+		"h_delay_sdv" : {
+		    "type" : "float"
+		},
+		"h_jit" : {
+		    "type" : "float"
+		},
+		"h_jit_sdv" : {
+		    "type" : "float"
+		},
+		"h_min_d" : {
+		    "type" : "double"
+		},
+		"h_min_d_sdv" : {
+		    "type" : "float"
+		},
+		"h_n" : {
+		    "type" : "long"
+		},
+		"h_slope_10" : {
+		    "type" : "float"
+		},
+		"h_slope_10_sdv" : {
+		    "type" : "float"
+		},
+		"h_slope_20" : {
+		    "type" : "float"
+		},
+		"h_slope_30" : {
+		    "type" : "float"
+		},
+		"h_slope_40" : {
+		    "type" : "float"
+		},
+		"h_slope_50" : {
+		    "type" : "float"
+		},
+		"lasted" : {
+		    "type" : "text",
+		    "fields" : {
+			"keyword" : {
+			    "type" : "keyword",
+			    "ignore_above" : 256
+			}
+		    }
+		},
+		"lasted_sec" : {
+		    "type" : "float"
+		},
+		"late" : {
+		    "type" : "long"
+		},
+		"late_sec" : {
+		    "type" : "float"
+		},
+		"least_delay" : {
+		    "type" : "text",
+		    "fields" : {
+			"keyword" : {
+			    "type" : "keyword",
+			    "ignore_above" : 256
+			}
+		    }
+		},
+		"overlap" : {
+		    "type" : "long"
+		},
+		"overlaps_icmp_gap" : {
+		    "type" : "boolean"
+		},
+		"rdelay" : {
+		    "type" : "float"
+		},
+		"reordered" : {
+		    "type" : "long"
+		},
+		"report_type" : {
+		    "type" : "text",
+		    "fields" : {
+			"keyword" : {
+			    "type" : "keyword",
+			    "ignore_above" : 256
+			}
+		    }
+		},
+		"resets" : {
+		    "type" : "long"
+		},
+		"rtx" : {
+		    "type" : "float"
+		},
+		"small_gaps" : {
+		    "type" : "long"
+		},
+		"small_time" : {
+		    "type" : "float"
+		},
+		"t_ddelay" : {
+		    "type" : "long"
+		},
+		"t_delay" : {
+		    "type" : "double"
+		},
+		"t_jit" : {
+		    "type" : "long"
+		},
+		"t_min_d" : {
+		    "type" : "double"
+		},
+		"t_n" : {
+		    "type" : "long"
+		},
+		"t_slope_10" : {
+		    "type" : "float"
+		},
+		"t_slope_20" : {
+		    "type" : "float"
+		},
+		"t_slope_30" : {
+		    "type" : "float"
+		},
+		"t_slope_40" : {
+		    "type" : "float"
+		},
+		"t_slope_50" : {
+		    "type" : "float"
+		},
+		"timestamp" : {
+		    "type" : "float"
+		},
+		"timestamp_ms" : {
+		    "type" : "date",
+		    "format" : "epoch_millis"
+		},
+		"timestamp_zone" : {
+		    "type" : "text"
+		},
+		"tloss" : {
+		    "type" : "long"
+		},
+		"to" : {
+		    "type" : "text",
+		    "fields" : {
+			"keyword" : {
+			    "type" : "keyword"
+			}
+		    }
+		},
+		"to_adr" : {
+		    "type" : "text",
+		    "fields" : {
+			"keyword" : {
+			    "type" : "keyword",
+			    "ignore_above" : 256
+			}
+		    }
+		},
+		"to_geo": {
+		    "properties": {
+			"city_name": {
+			    "type": "text",
+			    "fields": {
+				"keyword": {
+				    "type": "keyword",
+				    "ignore_above": 256
+				}
+			    }
+			},
+			"continent_code": {
+			    "type": "text",
+			    "fields": {
+				"keyword": {
+				    "type": "keyword",
+				    "ignore_above": 256
+				}
+			    }
+			},
+			"country_code2": {
+			    "type": "text",
+			    "fields": {
+				"keyword": {
+				    "type": "keyword",
+				    "ignore_above": 256
+				}
+			    }
+			},
+			"country_code3": {
+			    "type": "text",
+			    "fields": {
+				"keyword": {
+				    "type": "keyword",
+				    "ignore_above": 256
+				}
+			    }
+			},
+			"country_name": {
+			    "type": "text",
+			    "fields": {
+				"keyword": {
+				    "type": "keyword",
+				    "ignore_above": 256
+				}
+			    }
+			},
+			"geo_src": {
+			    "type": "text",
+			    "fields": {
+				"keyword": {
+				    "type": "keyword",
+				    "ignore_above": 256
+				}
+			    }
+			},
+			"ip": {
+			    "type": "text",
+			    "fields": {
+				"keyword": {
+				    "type": "keyword",
+				    "ignore_above": 256
+				}
+			    }
+			},
+			"latitude": {
+			    "type": "float"
+			},
+			"location": {
+			    "properties": {
+				"lat": {
+				    "type": "float"
+				},
+				"lon": {
+				    "type": "float"
+				}
+			    }
+			},
+			"longitude": {
+			    "type": "float"
+			},
+			"postal_code": {
+			    "type": "text",
+			    "fields": {
+				"keyword": {
+				    "type": "keyword",
+				    "ignore_above": 256
+				}
+			    }
+			},
+			"refresh": {
+			    "type": "long"
+			},
+			"region_code": {
+			    "type": "text",
+			    "fields": {
+				"keyword": {
+				    "type": "keyword",
+				    "ignore_above": 256
+				}
+			    }
+			},
+			"region_name": {
+			    "type": "text",
+			    "fields": {
+				"keyword": {
+				    "type": "keyword",
+				    "ignore_above": 256
+				}
+			    }
+			},
+			"timezone": {
+			    "type": "text",
+			    "fields": {
+				"keyword": {
+				    "type": "keyword",
+				    "ignore_above": 256
+				}
+			    }
+			}
+		    }
 		}
-            }
-        },
-        "from" : {
-            "type" : "text",
-            "fields" : {
-		"keyword" : {
-		    "type" : "keyword"
-		}
-            }
-        },
-        "from_adr" : {
-            "type" : "text",
-            "fields" : {
-		"keyword" : {
-		    "type" : "keyword",
-		    "ignore_above" : 256
-		}
-            }
-        },
-        "h_ddelay" : {
-            "type" : "double"
-        },
-        "h_ddelay_sdv" : {
-            "type" : "float"
-        },
-        "h_delay" : {
-            "type" : "double"
-        },
-        "h_delay_sdv" : {
-            "type" : "float"
-        },
-        "h_jit" : {
-            "type" : "float"
-        },
-        "h_jit_sdv" : {
-            "type" : "float"
-        },
-        "h_min_d" : {
-            "type" : "double"
-        },
-        "h_min_d_sdv" : {
-            "type" : "float"
-        },
-        "h_n" : {
-            "type" : "long"
-        },
-        "h_slope_10" : {
-            "type" : "float"
-        },
-        "h_slope_10_sdv" : {
-            "type" : "float"
-        },
-        "h_slope_20" : {
-            "type" : "float"
-        },
-        "h_slope_30" : {
-            "type" : "float"
-        },
-        "h_slope_40" : {
-            "type" : "float"
-        },
-        "h_slope_50" : {
-            "type" : "float"
-        },
-        "lasted" : {
-            "type" : "text",
-            "fields" : {
-		"keyword" : {
-		    "type" : "keyword",
-		    "ignore_above" : 256
-		}
-            }
-        },
-        "lasted_sec" : {
-            "type" : "float"
-        },
-        "late" : {
-            "type" : "long"
-        },
-        "late_sec" : {
-            "type" : "float"
-        },
-        "least_delay" : {
-            "type" : "text",
-            "fields" : {
-		"keyword" : {
-		    "type" : "keyword",
-		    "ignore_above" : 256
-		}
-            }
-        },
-        "overlap" : {
-            "type" : "long"
-        },
-        "overlaps_icmp_gap" : {
-            "type" : "boolean"
-        },
-        "rdelay" : {
-            "type" : "float"
-        },
-        "reordered" : {
-            "type" : "long"
-        },
-        "report_type" : {
-            "type" : "text",
-            "fields" : {
-		"keyword" : {
-		    "type" : "keyword",
-		    "ignore_above" : 256
-		}
-            }
-        },
-        "resets" : {
-            "type" : "long"
-        },
-        "rtx" : {
-            "type" : "float"
-        },
-        "small_gaps" : {
-            "type" : "long"
-        },
-        "small_time" : {
-            "type" : "float"
-        },
-        "t_ddelay" : {
-            "type" : "long"
-        },
-        "t_delay" : {
-            "type" : "double"
-        },
-        "t_jit" : {
-            "type" : "long"
-        },
-        "t_min_d" : {
-            "type" : "double"
-        },
-        "t_n" : {
-            "type" : "long"
-        },
-        "t_slope_10" : {
-            "type" : "float"
-        },
-        "t_slope_20" : {
-            "type" : "float"
-        },
-        "t_slope_30" : {
-            "type" : "float"
-        },
-        "t_slope_40" : {
-            "type" : "float"
-        },
-        "t_slope_50" : {
-            "type" : "float"
-        },
-        "timestamp" : {
-            "type" : "float"
-        },
-        "timestamp_ms" : {
-            "type" : "date",
-            "format" : "epoch_millis"
-        },
-        "timestamp_zone" : {
-            "type" : "text"
-        },
-        "tloss" : {
-            "type" : "long"
-        },
-        "to" : {
-            "type" : "text",
-            "fields" : {
-		"keyword" : {
-		    "type" : "keyword"
-		}
-            }
-        },
-        "to_adr" : {
-            "type" : "text",
-            "fields" : {
-		"keyword" : {
-		    "type" : "keyword",
-		    "ignore_above" : 256
-		}
-            }
-        },
+	    }
+        }
+    },
+    "data_stream": {
+	"timestamp_field": {
+	    "name": "@date"
+	}
     }
 }

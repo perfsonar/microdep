@@ -1,0 +1,18 @@
+etc/logstash/microdep/* usr/lib/perfsonar/logstash/microdep_pipeline/
+etc/logstash/microdep-pipelines.yml etc/perfsonar/microdep/logstash/
+etc/microdep_default_policy.json etc/perfsonar/microdep/
+etc/os-template-gap-ana.json etc/perfsonar/microdep/
+etc/os-template-trace-ana.json etc/perfsonar/microdep/
+etc/roles_yml_patch etc/perfsonar/microdep/
+etc/microdep-tests.json.example etc/perfsonar/microdep/
+etc/microdep-tests-packet-subcount.json.example etc/perfsonar/microdep/
+etc/psconfig/archives.d/microdep-ana-rmq.json etc/pscheduler/default-archives/
+bin/microdep_commands/qstream-gap-ana usr/lib/perfsonar/bin/microdep_commands/
+bin/microdep_commands/trace_event_reader.py usr/lib/perfsonar/bin/microdep_commands/ 
+bin/microdep_commands/create_new_db.sh usr/lib/perfsonar/bin/microdep_commands/
+bin/microdep_commands/fix-pgsql-access.sh usr/lib/perfsonar/bin/microdep_commands/
+bin/microdep_commands/opensearch_config_microdep.sh usr/lib/perfsonar/bin/microdep_commands/
+bin/microdep_commands/rabbitmq-consume.py usr/lib/perfsonar/bin/microdep_commands/
+bin/microdep_commands/json2table.pl usr/lib/perfsonar/bin/microdep_commands/
+etc/logrotate.d/microdep /etc/logrotate.d/
+

@@ -1,0 +1,210 @@
+# syntax=docker/dockerfile:1-labs
+#
+# Dockerfile to build perfSONAR  node
+# To build, cd to folder and run
+#
+#     docker build --build-arg TYPE=<node-variant> -t perfsonar-<node-variant> ."
+#
+# where <node-variant> may be "testpoint" og "toolkit" 
+#
+# To run container with systemd operative in none-priviledge mode (may not work...)  
+#   docker run -d --tmpfs /tmp --tmpfs /run -v /sys/fs/cgroup:/sys/fs/cgroup:ro --net=host --name perfsonar-testpoint --rm perfsonar-testpoint
+#   docker run -d --tmpfs /tmp --tmpfs /run -v /sys/fs/cgroup:/sys/fs/cgroup:ro --net=host --name perfsonar-toolkit --rm perfsonar-toolkit
+#
+# ... or in privilede-mode
+#   docker run -d --privileged --net=host --name perfsonar-testpoint --rm perfsonar-testpoint
+#   docker run -d --privileged --net=host --name perfsonar-toolkit --rm perfsonar-toolkit
+#
+#
+
+
+FROM systemd-image-u22:latest
+LABEL org.opencontainers.image.authors="Otto J Wittner <wittner@sikt.no>"
+
+# Fix default locals
+ENV LANG=en_US.UTF-8
+ENV LANGUAGE=en_US.UTF-8
+ENV LC_COLLATE=C
+ENV LC_CTYPE=en_US.UTF-8
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# To install tzdata quietly 
+RUN ln -fs /usr/share/zoneinfo/Europe/Oslo /etc/localtime 
+
+# ---- D o w n l o a d   a n d   i n s t a l l   p a c k a g e s  ------
+
+# Add misc management stuff
+RUN apt-get update && apt-get -y upgrade && apt-get install -y apt-utils coreutils man-db nano emacs git openssh-client net-tools iputils-ping traceroute tcpdump curl bind9-host unzip gnupg software-properties-common tree
+
+# Add required perfsonar repos
+RUN curl -o /etc/apt/sources.list.d/perfsonar-release.list https://downloads.perfsonar.net/debian/perfsonar-release.list
+RUN curl -s -o /etc/apt/trusted.gpg.d/perfsonar-release.gpg.asc https://downloads.perfsonar.net/debian/perfsonar-release.gpg.key
+RUN add-apt-repository universe
+RUN apt update
+
+ARG TYPE
+
+# Install and explicitly init postgres before installing perfsonar packages
+#
+# Based on a Dockerfile at
+# https://raw.githubusercontent.com/zokeber/docker-postgresql/master/Dockerfile
+# and
+# https://raw.githubusercontent.com/perfsonar/perfsonar-testpoint-docker/master/systemd/Dockerfile
+#RUN useradd -l -r -h /var/lib/pgsql postgres
+#RUN dnf install -y postgresql-server
+# Set the environment variables
+#ENV PGDATA=/var/lib/pgsql/data
+# Initialize the database
+#RUN su - postgres -c "/usr/bin/pg_ctl init"
+# Change own user
+#RUN chown -R postgres:postgres /var/lib/pgsql/data/*
+#Start postgresql and install perfSONAR
+#RUN mkdir -p /var/run/postgresql && chown postgres.postgres /var/run/postgresql \
+#    && su - postgres -c "/usr/bin/pg_ctl -D /var/lib/pgsql/data start -w -t 120" \
+#    && dnf install -y perfsonar-$TYPE
+
+
+RUN apt --download-only  --no-install-recommends -y install perfsonar-$TYPE
+# Fix missing example conf file in perfsonar-lsregistrationdaemon package
+#RUN mkdir -p /usr/share/doc/perfsonar-lsregistrationdaemon/examples/
+#RUN curl -s -o /usr/share/doc/perfsonar-lsregistrationdaemon/examples/lsregistrationdaemon.conf https://raw.githubusercontent.com/perfsonar/ls-registration-daemon/master/etc/lsregistrationdaemon.conf
+# Make sure rsyslog and postgresql are installed before perfsonar install
+RUN apt -y install rsyslog postgresql firewalld
+COPY microdep/tests/rsyslog/u22/rsyslog.conf /etc/rsyslog.conf
+COPY microdep/tests/rsyslog/listen.conf /etc/rsyslog.d/listen.conf
+COPY microdep/tests/rsyslog/python-pscheduler.conf /etc/rsyslog.d/python-pscheduler.conf
+COPY microdep/tests/rsyslog/owamp-syslog.conf /etc/rsyslog.d/owamp-syslog.conf
+RUN printf '#!/bin/sh\nexit 0' > /usr/sbin/policy-rc.d
+
+#RUN --security=insecure /lib/systemd/systemd --user; echo "systemd running..."; sleep 10; systemctl --user status; echo "AVBRYT NUH!"; sleep 50000
+
+#RUN /usr/sbin/rsyslogd -iNONE && /usr/bin/pg_ctlcluster 14 main start && \
+#env OPENSEARCH_INITIAL_ADMIN_PASSWORD=perfSONAR123! RUNLEVEL=1 apt-get --no-install-recommends -y install perfsonar-$TYPE
+
+#COPY etc/perfsonar-$TYPE/lsregistrationdaemon.conf /etc/perfsonar/lsregistrationdaemon.conf
+# Set management gui user/password to admin/notadminnono
+RUN if [ "$TYPE" = "toolkit" ]; then htpasswd -b /etc/perfsonar/toolkit/psadmin.htpasswd admin notadminnono ; fi
+# Fix missing python package for applied by pscheduler
+#RUN apt-get -y install python3-cryptography
+
+# Add Opensearch dashboards ("Kibana")
+#RUN if [ "$TYPE" = "toolkit" ]; then \
+#       apt -y install opensearch-dashboards && systemctl enable opensearch-dashboards.service ; \
+#    fi
+
+# Prepare access to local repos
+#RUN apt install dpkg-dev
+COPY unibuild-repo/*.deb /var/lib/unibuild-microdep-repo
+COPY unibuild-repo/Packages /var/lib/unibuild-microdep-repo
+COPY unibuild-repo/Release /var/lib/unibuild-microdep-repo
+#COPY pstracetree/unibuild-repo/*.deb /var/lib/unibuild-pstracetree-repo
+#COPY pstracetree/unibuild-repo/Packages /var/lib/unibuild-pstracetree-repo
+#COPY pstracetree/unibuild-repo/Release /var/lib/unibuild-pstracetree-repo
+RUN echo "deb file:/var/lib/unibuild-microdep-repo ./" > /etc/apt/sources.list.d/local-microdep-repo.list
+RUN echo "deb file:/var/lib/unibuild-pstracetree-repo ./" > /etc/apt/sources.list.d/local-pstracetree-repo.list
+RUN apt --allow-unauthenticated update -y
+
+# Install microdep (needs postgres running)
+#RUN if [ "$TYPE" = "toolkit" ]; then \
+#    apt --allow-unauthenticated -y install perfsonar-microdep; \
+#fi
+
+# ----  E n d   d o w n l o a d s   a n d   p a c k a g e   i n s t a l l   ----
+
+# POSTGRES
+# Reconfigure prefsonar Postgres DB (start db server first)
+RUN mkdir -p /var/run/postgresql && chown postgres.postgres /var/run/postgresql \
+    && su - postgres -c "/usr/bin/pg_ctlcluster 14 main start" \
+    && /usr/libexec/pscheduler/internals/db-update \
+    && /usr/libexec/pscheduler/internals/db-change-password
+
+# Make ntdp stay root and stop attempting to update system clock
+#RUN sed -i 's|-u ntp:ntp ||g' /usr/lib/systemd/system/ntpd.service
+#RUN echo "disable kernel" >> /etc/ntp.conf
+
+# Make pscheduler services more tolerant to restart failures
+RUN sed -i 's|Restart=always|Restart=always\nStartLimitBurst=1000\nStartLimitIntervalSec=30|g' /usr/lib/systemd/system/pscheduler-archiver.service
+RUN sed -i 's|Restart=always|Restart=always\nStartLimitBurst=1000\nStartLimitIntervalSec=30|g' /usr/lib/systemd/system/pscheduler-runner.service
+RUN sed -i 's|Restart=always|Restart=always\nStartLimitBurst=1000\nStartLimitIntervalSec=30|g' /usr/lib/systemd/system/pscheduler-scheduler.service
+RUN sed -i 's|Restart=always|Restart=always\nStartLimitBurst=1000\nStartLimitIntervalSec=30|g' /usr/lib/systemd/system/pscheduler-ticker.service
+
+# Reduce range for owamp and twamp test-ports (to more easy enable docker port mapping)
+RUN sed -i 's|testports 8760-9960|testports 8760-8800|g' /etc/owamp-server/owamp-server.conf
+RUN sed -i 's|testports 18760-19960|testports 18760-18800|g' /etc/twamp-server/twamp-server.conf
+
+# Add lookup service configs 
+COPY microdep/tests/etc/lsregistrationdaemon.conf*  /etc/perfsonar/
+
+# Add service to apply host specific config
+#COPY etc/hostspecific-conf.service /usr/lib/systemd/system/
+#RUN systemctl enable hostspecific-conf.service
+
+RUN if [ "$TYPE" = "toolkit" ]; then \
+# Fix JNA and temp-file issue with Opensearch and Logstash,
+       sed -i 's|${OPENSEARCH_TMPDIR}|/var/log/opensearch|g' /etc/opensearch/jvm.options; \
+       sed -i 's|#-Djava.io.tmpdir=$HOME|-Djava.io.tmpdir=/var/log/logstash|g' /etc/logstash/jvm.options; \
+# Go easy on java heap size
+       sed -i 's|-Xms7g|-Xms2g|g' /etc/opensearch/jvm.options; \
+       sed -i 's|-Xmx7g|-Xms4g|g' /etc/opensearch/jvm.options; \
+# Increase startup timeout and add auto restart for Opensearch
+       sed -i 's|TimeoutStartSec=75|TimeoutStartSec=600\nRestart=on-failure\nRestartSec=10s|g' /usr/lib/systemd/system/opensearch.service; \
+# Increase startup timeout and add auto restart for Grafana
+       sed -i 's|Restart=on-failure|TimeoutStartSec=600\nRestart=on-failure\nRestartSec=10s|g' /usr/lib/systemd/system/grafana-server.service; \
+# Fix template error for Logstash
+#       cp /usr/share/logstash/vendor/bundle/jruby/2.5.0/gems/logstash-output-opensearch-1.2.0-java/lib/logstash/outputs/opensearch/templates/ecs-disabled/1x.json /usr/share/logstash/vendor/bundle/jruby/2.5.0/gems/logstash-output-opensearch-1.2.0-java/lib/logstash/outputs/opensearch/templates/ecs-disabled/2x.json; \
+# Fix SSL problems with proxy towards Opensearch
+#       cp /etc/opensearch/node.pem /etc/opensearch/both.pem; \
+#       sed 's|PRI|RSA PRI|g' /etc/opensearch/node-key.pem >> /etc/opensearch/both.pem; \
+#       sed -i 's|ProxyPass|    SSLProxyVerify none\n    SSLProxyCheckPeerCN off\n    SSLProxyCheckPeerName off\n    SSLProxyCheckPeerExpire off\n    SSLProxyMachineCertificateFile /etc/opensearch/both.pem\n    ProxyPass|' /etc/httpd/conf.d/apache-opensearch.conf; \
+# Fix access to local resources when external port mapping alters urls
+       sed -i 's|Listen 443 https|Listen 443 https\nListen 4435 https\nListen 4436 https|' /etc/httpd/conf.d/ssl.conf; \
+       sed -i 's|_default_:443|_default_:443 _default_:4435 _default_:4436|' /etc/httpd/conf.d/ssl.conf; \
+       sed -i 's|Listen 80|Listen 80\nListen 8085\nListen 8086|' /etc/httpd/conf/httpd.conf; \
+       sed -i 's|\*:80|\*:80 \*:8085 \*:8086|' /etc/httpd/conf.d/apache-toolkit_web_gui.conf; \
+       dnf -y install httpd-tools && htpasswd -c -b /etc/perfsonar/toolkit/psadmin.htpasswd admin notadminnono ; \
+# Fix host address, username and password for Opensearch dashboard ("Kibana")
+#       sed -i 's/# server.host: "localhost"/server.host: "0.0.0.0"/' /etc/opensearch-dashboards/opensearch_dashboards.yml; \
+#       USER=`awk -F " " '{print $1}' /etc/perfsonar/opensearch/opensearch_login` && sed -i "s|opensearch.username: kibanaserver|opensearch.username: $USER|g" /etc/opensearch-dashboards/opensearch_dashboards.yml; \
+#       PASSWD=`awk -F " " '{print $2}' /etc/perfsonar/opensearch/opensearch_login` && sed -i "s|opensearch.password: kibanaserver|opensearch.password: $PASSWD|g" /etc/opensearch-dashboards/opensearch_dashboards.yml; \
+fi
+
+# Add service to run (re)run password setup for opensearch
+COPY microdep/tests/opensearch-security-admin.service /usr/lib/systemd/system/
+RUN if [ "$TYPE" = "toolkit" ]; then \
+     systemctl enable opensearch-security-admin.service; \
+fi
+
+#
+#  M i c r o d e p - i n - p e r f s o n a r   a d d i t i o n s
+#
+
+# Update topology db with info from psconfig test description
+#RUN if [ "$TYPE" = "tootlkit" ]; then \
+#       /usr/lib/perfsonar/bin/microdep_commands/microdep-psconfig-load.pl --db /etc/perfsonar/microdep/mp-dragonlab/etc/microdep.db /etc/perfsonar/psconfig/pscheduler.d/microdep-tests.json; \
+#    fi
+       
+# Add subsession support for powstream (assuming powstream is compiled with patch from branch "subsession-owp")
+#COPY microdep/tests/powstream /usr/bin/powstream
+#COPY microdep/tests/pscheduler-latencybg-subcount.patch-with-runtime-paths /usr/libexec/pscheduler
+#RUN cd /usr/libexec/pscheduler && patch -up1 < pscheduler-latencybg-subcount.patch-with-runtime-paths
+
+# Publish psconfig file for microdep tests
+RUN if [ "$TYPE" = "tootlkit" ]; then \
+       dnf install -y perfsonar-psconfig-publisher; \
+       psconfig publish --pretty /etc/perfsonar/psconfig/pscheduler.d/microdep-tests.json; \
+    fi
+
+# http web (use 443 instead!)
+EXPOSE 80  
+# https web
+EXPOSE 443
+# Opensearch (use https://<hostname>:443/opensearch/ instead)
+#EXPOSE 9200
+# Opensearch Dashboard   
+EXPOSE 5601
+# Grafana   
+EXPOSE 3000   
+
+# Run systemd as in "parent"-image
+CMD ["/lib/systemd/systemd"]

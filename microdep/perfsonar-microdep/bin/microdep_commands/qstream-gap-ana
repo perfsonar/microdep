@@ -1,6 +1,23 @@
 #!/usr/bin/perl
-# use strict;
-# use warnings 'all';
+#
+#  Qstream Gap Analysis analyse flows of packet received by
+#  the probing packet tool Rude & Crude (https://rude.sourceforge.net/ and
+#  (https://gitlab.sikt.no/rude/rude)
+#
+#  The analysis attempts to detect events of different types, e.g. gaps in
+#  the probe packet flows, and outputs statistics of packets observed before
+#  and after such events.
+#
+#  Qstream Gap Analysis also accepts input reported by perfSONAR's latencybg
+#  tests (in json-structures).
+#
+#  Authors: Olav Kvittem (olav.kvittem@sikt.no), Otto J Wittner (otto.wittner@sikt.no)
+#  Copyright: Sikt AS
+#  License: GPLv3
+#
+
+#use strict;
+#use warnings 'all';
 # use PDL;
 # use PDL::Ops;
 # use PDL::Fit::Polynomial;
@@ -9,10 +26,10 @@ use Statistics::LineFit;
 use Statistics::Basic qw(:all);
 use Getopt::Long;
 use Time::Local;
-use POSIX(strftime);
+use POSIX qw(strftime);
 use Data::Dumper;
     
-#use LWP::Simple;
+use LWP::Simple;
 
 # use Math::Int64 qw(uint64 uint64_to_number);
 use constant JAN_1970 => 0x83aa7e80;
@@ -36,9 +53,11 @@ my $gap_limit={'big'=>5000, 'small'=>50, 'tiny'=>0}; # lost packets of that kind
 my $max_gaps={'big'=>1000, 'small'=>1000, 'tiny'=>1000}; # count of that kind
 my $late_delay=3000; # ms to doom a packet late
 my %src_adr=(),  my %dst_adr=();
-my %least_delay; # least delay observed
-my %hostname=();
-
+my %least_delay;  # least delay observed
+my %hostname=();  # List of hostnames indexed by ip-address (ipv4 only?) 
+my %ip_addr=();   # List of ip-addresses indexed by hostnames (ipv4 only?) 
+my %geopos=();    # Geopositions for ip-addresses 
+    
 my %bad_lines=(); # count invalid input lines tat resemble crude fmt
 my $bad_line=0; # signal previous line was bad
 my $unknown_lines=0; # lines that does not match any RE
@@ -66,8 +85,16 @@ my $packet_interval=(); # packet interval guestimate per id
 my $opt_debug = 0;   # Debug level     
 my $opt_batchsize = 0;   # Override batch size (packet count) of measurement result set produced by owamp source. 
 
-my %seqnum_base;       # Base for sequence numbers of current batch from powstream
-my %pre_seqnum_base;   # Base for sequence numbers of previous batch of each flow
+my %owamp_batch;      # Memory for sequence numbers data for owamp sessions. Applied to handle seq num wrap-arround cases.
+
+my $last_topoevent = time(); # Epoch time when last topology event was output
+my $opt_topoevents = 0;       # Flag enabling toplogy events
+my $opt_topointerval = 3600;  # Min interval between topology events
+
+my $opt_pslookup = "http://ps-west.es.net/lookup/activehosts.json";  # Source of perfSONAR Lookup Service hosts;
+my $pslookuphost;               # Ref to hash of perfSONAR Lookup Service hosts;
+my $opt_pslookup_wait = 3600;   # Min interval between attempts to fetch info from ps-lookup service
+my $opt_ipv6 = 0;  # Flag to turn on ipv6 packet analysis
 
 my $usage="$0 '[-title text] [-minloss n] [-win n] [-graph file] [max-small-graphs n]  [-outdir dir] [-head|-rhead] [-id id] [-names file] [-addresses file] [-json file] [-v] [-version] [-esmond url] [file]...
 Analyse gaps in a crude packet log
@@ -81,16 +108,21 @@ Parameters
   -slep n              Number(1000) of crude lines in the circular buffer
   -index name          Elastic Search index name to use
   -owamp url           Get json owamp data from pscheduler (http://) og from rabbit message queue (ampq://)
-  -json file           Filename to store json event documents (intended for logstash ?)
+  -json file           Filename to store json event documents 
   -jitter secs         Emit jitter stats with secs interval
   -rtp n               RTP jitter algorithm with 1/n change of average (5)
   -change_factor f     Fraction change to cause threshold jitter report (0.3)
-  -threshold vector    Threshold values for reporting, in form of a vector ala  \"<min-jitter>,<min-ddelay>,<min-slope>\" ($min_jit,$min_ddelay,$min_slop)
+  -threshold vector    Threshold values for reporting, in form of a vector ala  \"<min-jitter>,<min-ddelay>,<min-slope>\" ($min_jit,$min_ddelay,$min_slope)
   -debug n             Level of debug info to output ($opt_debug)
   -batchsize n         Override batch size (packet count) expected when reading owamp subsession data sets
+  -topoevents	       Enable output of topology events whenever a topology change is detected. Requires -json. 
+  -topointerval n      Min interval (sec) between topology events (default is $opt_topointerval)
+  -pslookup url        Source url for perfSONAR lookup service hosts (default is $opt_pslookup)
+  -wait seconds        Min no of seconds to wait between refreshing info fetched from pslookup-service (default is $opt_pslookup_wait)
+  -6                   Analyse ipv6 packets (and ignore ipv4). Default is the opposite.
     ";
 
-my ($opt_h, $opt_help, $opt_id, $opt_slep, $opt_format, $opt_minloss, $opt_win, $opt_recover, $opt_max_small_graphs, $opt_head, $opt_rhead, $opt_graph, $opt_outdir, $opt_title, $opt_addresses, $opt_names, $opt_threshold, $opt_owamp, $opt_json, $opt_jitter, $opt_rtp, $opt_change_factor, $opt_index, $opt_v, $opt_version);
+my ($opt_h, $opt_help, $opt_id, $opt_slep, $opt_format, $opt_minloss, $opt_win, $opt_recover, $opt_max_small_graphs, $opt_head, $opt_rhead, $opt_graph, $opt_outdir, $opt_title, $opt_addresses, $opt_names, $opt_threshold, $opt_owamp, $opt_json, $opt_jitter, $opt_change_factor, $opt_index, $opt_v, $opt_version);
 
 
 GetOptions( 'h' => \$opt_h, 'help' => \$opt_help, 'id=s' => \$opt_id, 'slep=s' => \$opt_slep, 'format=s'=>\$opt_format,
@@ -101,8 +133,10 @@ GetOptions( 'h' => \$opt_h, 'help' => \$opt_help, 'id=s' => \$opt_id, 'slep=s' =
 	    'jitter=s' => \$opt_jitter, 'threshold' => \$opt_threshold, 'owamp=s' => \$opt_owamp,
 	    'rtp=s' => \$opt_rtp, 'ddelay_low=s' => $opt_ddelay_low, 'ddelay_high=s' => \$opt_ddelay_high,
 	    'debug=s' => \$opt_debug, 'batchsize=s' => $opt_batchsize,
-	    'change_factor=s' => \$opt_change_factor, 'v' => \$opt_v, 'version' => \$opt_version )
-    or die $usage;
+	    'change_factor=s' => \$opt_change_factor, 'v' => \$opt_v, 'version' => \$opt_version,
+	    'topoevents' => \$opt_topoevents, 'topointerval=s' => \$opt_topointerval,
+	    'pslookup=s' => \$opt_pslookup, 'wait=s' => \$opt_pslookup_wait, '6' =>\$opt_ipv6
+    ) or die $usage;
 # &NGetOpt( 'h', 'help', 'id=s', 'slep=s', 'minloss=s', 'win=s', 'max-small-graphs=s', 'head', 'rhead', 'graph=s', 'outdir=s', 'title=s', 'names=s', 'json=s', 'index=s', 'v', 'version') || die "$!" . $usage ."\n";
 
 if ( $opt_h || $opt_help) {
@@ -113,6 +147,14 @@ if ( $opt_h || $opt_help) {
 if ( $opt_version) {
     printf "Version $version\n";
     exit(0);
+}
+if ( $opt_topoevents && ! $opt_json ) {
+    printf "Topology events only output in JSON format. Apply -json <filename>.\n";
+    exit(1);
+}	
+if ( $opt_ipv6) {
+    printf "Ipv6 is not yet supported.\n";
+    exit(1);
 }
 
 if ($opt_owamp){
@@ -353,7 +395,8 @@ sub GetOwampDataFromEsmond($$$$$) {
 
 sub emit_summary_json{
     
-    foreach $id ( sort keys %npackets){
+#    foreach $id ( sort keys %npackets){
+    foreach $id ( sort keys %src_adr){
 	my $latems=0;
 	$latems=$late_sum{$id}/$late_n{$id} if $late_n{$id} > 0;
 	my $down_pmm=0;
@@ -392,12 +435,12 @@ sub emit_summary_json{
 		"h_min_d_sdv" => stddev( $jitter_obs{$id}{"h_min_d"} )->query * 1.0,
 		"h_delay_sdv" => stddev( $jitter_obs{$id}{"h_delay"} )->query * 1.0,
 		"h_slope_10_sdv" => stddev( $jitter_obs{$id}{"h_slope_10"} )->query * 1.0,
-		    "ddelay_low_n" =>  $#{$jitter_obs{$id}{"ddelay_low"}} + 1, 
-		    "ddelay_low_median" =>  median( $jitter_obs{$id}{"ddelay_low"} )->query * 1.0, 
-		    "ddelay_low_sdv" =>  stddev( $jitter_obs{$id}{"ddelay_low"} )->query * 1.0, 
-		    "ddelay_high_n" =>  $#{$jitter_obs{$id}{"ddelay_high"}} + 1, 
-		    "ddelay_high_median" =>  median( $jitter_obs{$id}{"ddelay_high"} )->query * 1.0, 
-		    "ddelay_high_sdv" =>  stddev( $jitter_obs{$id}{"ddelay_high"} )->query * 1.0, 
+		"ddelay_low_n" =>  $#{$jitter_obs{$id}{"ddelay_low"}} + 1, 
+		"ddelay_low_median" =>  median( $jitter_obs{$id}{"ddelay_low"} )->query * 1.0, 
+		"ddelay_low_sdv" =>  stddev( $jitter_obs{$id}{"ddelay_low"} )->query * 1.0, 
+		"ddelay_high_n" =>  $#{$jitter_obs{$id}{"ddelay_high"}} + 1, 
+		"ddelay_high_median" =>  median( $jitter_obs{$id}{"ddelay_high"} )->query * 1.0, 
+		"ddelay_high_sdv" =>  stddev( $jitter_obs{$id}{"ddelay_high"} )->query * 1.0, 
 	    };
 	    $json = { %$json, %$jitson};
 	}
@@ -433,6 +476,7 @@ sub emit_json{
 	"timestamp"=> $tunix * 1.0,
 	"timestamp_zone" => "GMT",
 	"datetime"=> $datems,
+	"ip_version" => ($opt_ipv6 ? 6 : 4),
 	"from"=> $from, "to"=> $to,
 	"from_adr" => $src_adr{$id},
 	"to_adr" => $dst_adr{$id}};
@@ -455,7 +499,8 @@ sub get_addresses {
 	if ( !$@ && $psconfig_content->{'addresses'}) {
 	    # PSconfig address mapping structure found. Load it into "resolver cache".
 	    foreach my $addr (keys %{$psconfig_content->{'addresses'}}) {
-		$hostname{$psconfig_content->{'addresses'}->{$addr}->{'address'}} = $addr; 
+		my $ip_ = validate_ip($psconfig_content->{'addresses'}->{$addr}->{'address'}); 
+		$hostname{$ip} = $addr; 
 	    }
 	} else {
 	    # No PSconfig content. Reread file assuming host-file format ("<hostname> <ip>")
@@ -492,11 +537,17 @@ sub get_name{
     my $adr=shift;
     my $name;
     if ($hostname{$adr}){
+	# Name in cache
 	$name=$hostname{$adr};
     } else {
+	# Attempt to lookup name
 	if ( $hostname = gethostbyaddr(inet_aton($adr), AF_INET)  ){
+	    # Name found
 	    $name=$hostname;
+	    # Update reverse cache also
+	    $ip_addr{$name}=$adr;
 	} else {
+	    # Give up. Apply address as name.
 	    $name=$adr;
 	}
 	$hostname{$adr}=$name;
@@ -504,6 +555,111 @@ sub get_name{
     return $name;
 }
 
+sub store_geopos{
+    # Store geopost data from pslookup structure
+    my $ip = shift;
+    my $posdata = shift;
+    
+    my $latitude = $posdata->{'location-latitude'}[0] || "0.0";
+    my $longitude = $posdata->{'location-longitude'}[0] || "0.0";
+    # Store applying Geolite2 (Maxmine) tags / keys
+    $geopos{$ip}{'latitude'} = $latitude * 1.0;           # Ensure float
+    $geopos{$ip}{'longitude'} = $longitude * 1.0;         # Ensure float
+    $geopos{$ip}{'location'}{'lat'} = $latitude * 1.0;    # Ensure float
+    $geopos{$ip}{'location'}{'lon'} = $longitude * 1.0;   # Ensure float
+    $geopos{$ip}{'city_name'} = $posdata->{'location-city'}[0] || "Unknown" ;
+    $geopos{$ip}{'postal_code'} = $posdata->{'location-code'}[0] || "Unknown" ;
+    $geopos{$ip}{'region_name'} = $posdata->{'location-state'}[0] || "Unknown" ;
+    $geopos{$ip}{'country_code2'} = $posdata->{'location-country'}[0] || "Unknown" ;
+    $geopos{$ip}{'country_code3'} = $geopos{$ip}{'country_code2'};
+    $geopos{$ip}{'geo_src'} = "pslookup";
+    $geopos{$ip}{'ip'} = $ip;
+}
+
+sub validate_ip{
+    # Check validity of ipv4 address, and attempt to fix if possible
+    # Attempt to find geo-position also
+    my $ip = shift;
+    $ip =~ s/^\s+|\s+$//g ; # Trim off white space
+    if ( $ip =~ /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/ ) {
+	print "validat_ip Ok:", $ip, "\n" if $opt_debug > 3;
+    } else {
+	print "Strange ip:", $ip, "\n" if $opt_debug > 3;
+	# Maybe ip is really a name? 
+	my $maybe_name = $ip;
+	if ( exists($ip_addr{$maybe_name} ) ) {
+	    # Ip already cached
+	    $ip = $ip_addr{$maybe_name};
+	    print "validate_ip in cache: ", $ip, "\n" if $opt_debug > 3;
+	} else {
+	    # Attempt lookup
+	    my $packed_ip = gethostbyname($maybe_name);
+	    if (defined $packed_ip) {
+		# Lookup succeeded.
+		$ip = inet_ntoa($packed_ip);
+		print "validate_ip lookup: ", $ip, "\n" if $opt_debug > 3;
+		$ip_addr{$maybe_name} = $ip;
+		$hostname{$ip} = $maybe_name;
+	    } else {
+		# Give up.
+		warn "Unrecognized ip address '". $ip . "', applying anyway.";
+	    }
+	}
+    }
+    if (! exists($geopos{$ip}) || $geopos{$ip}{'refresh'} < time() ) {
+	# Attempt to fetch geo coordinates from perfSONAR's Lookup Service
+	if (@{$pslookuphost->{'hosts'}} == 0) {
+	    my $pslookuphost_str = get( $opt_pslookup );
+	    $pslookuphost = decode_json $pslookuphost_str;
+	    print "pslookup hosts:\n", Dumper($pslookuphost) if $opt_debug > 1;
+	}
+	foreach (@{$pslookuphost->{'hosts'}}) {
+	    # Ask a Lookup Service host for data
+	    my $pslookup_str = get( $_->{'locator'} . "/?host-name=" . $ip);
+	    if (defined $pslookup_str) {
+		print "pslookup for ", $ip, ":\n", Dumper($pslookup_str) if $opt_debug > 3;
+		my $pslookup = decode_json $pslookup_str;
+		if (@{$pslookup}) {
+		    # Position available. Store.
+		    store_geopos($ip, $pslookup->[0]);
+		    last;
+		} else {
+		    # No host found. Search for ip among interface addresses (applying opensearch api at port 80)
+		    my $opensearch_api = $_->{'locator'};
+		    $opensearch_api =~ s/:8090//g;
+		    $opensearch_api =~ s/records/_search/g;
+		    my $iso_now = strftime("%Y-%m-%dT%H:%M:%S%z", localtime); # ISO formatted current time with timezone
+		    # Prepare to post json query string
+                    my $query_data = '{ "query": { "bool": { "filter": [ { "term": { "interface-addresses": "' . $ip . '" } }, { "range": { "expires" : { "gt" : "' . $iso_now . '" } } } ] } }, "size": 1 }';
+		    # Run query
+		    my $query_req = LWP::UserAgent->new;
+		    my $pslookup_resp = $query_req->post($opensearch_api, 'Content-Type' => 'application/json', Content => $query_data );
+		    if (defined $pslookup_resp) {
+			print "pslookup for ", $ip, ":\n", Dumper($pslookup_resp) if $opt_debug > 3;
+			$pslookup = decode_json $pslookup_resp->{'_content'};
+			if (%{$pslookup} && $pslookup->{'hits'} && $pslookup->{'hits'}->{'total'}{'value'} > 0 && $pslookup->{'hits'}->{'hits'}[0]->{'_source'}->{'uri'} ) {
+			    # Interface with ip found. Apply uri to find parent host for interface
+			    $query_data = '{ "query": { "bool": { "filter": [ { "term": { "host-net-interfaces": "' . $pslookup->{'hits'}->{'hits'}[0]->{'_source'}->{'uri'}  . '" } }, { "range": { "expires" : { "gt" : "' . $iso_now . '" } } } ] } }, "size": 1 }';
+			    $pslookup_resp = $query_req->post($opensearch_api, 'Content-Type' => 'application/json', Content => $query_data );
+			    if (defined $pslookup_resp) {
+				print "pslookup for ", $ip, ":\n", Dumper($pslookup_resp) if $opt_debug > 3;
+				$pslookup = decode_json $pslookup_resp->{'_content'};
+				if (%{$pslookup} && $pslookup->{'hits'} && $pslookup->{'hits'}->{'total'}{'value'} > 0 && $pslookup->{'hits'}->{'hits'}[0]->{'_source'} ) {
+				    # Parent host found. Store position if available
+				    store_geopos($ip, $pslookup->{'hits'}->{'hits'}[0]->{'_source'});
+				    last;
+				}
+			    }
+			}
+		    }
+		}
+	    }
+	}
+	# Set refresh interval for geopos info.
+	$geopos{$ip}{'refresh'} = time() + $opt_pslookup_wait;
+    }
+    return $ip
+}
 
 ################################################################################
 sub owptime2datetime {
@@ -590,49 +746,92 @@ sub owamp_ana($){
     # Batch of json data ready for analysis
     my $data = decode_json($payload);
     print Dumper($data) if $opt_debug > 3;
-    if ( $data && $data->{'run'}->{'state'} eq 'finished' ){
-	# Stats is "finished". Get results
-	my $batchsize = $opt_batchsize;
-	if (! $batchsize) {
-	    $batchsize = $data->{'test'}->{'spec'}->{'packet-count'};
+
+
+    if ( $data && $data->{'test'}->{'type'} eq 'latencybg' ){
+	# (At least) Meta data from a powstream / latencybg test is available
+#	(my $src, my $dst)=($data->{'test'}->{'spec'}->{'source-node'}, $data->{'test'}->{'spec'}->{'dest-node'} );
+	(my $src, my $dst)=($data->{'test'}->{'spec'}->{'source'}, $data->{'test'}->{'spec'}->{'dest'} );
+
+	my $ip_version = $data->{'test'}->{'spec'}->{'ip-version'} || 4;
+	if ( $opt_ipv6 && $ip_version == 4  || ! $opt_ipv6 && $ip_version != 4 ) {
+	    # Wrong ip version. Ignore batch.
+	    print("Wrong ip version. Ignoring batch of results.\n") if $opt_debug > 3;
+	    return;
 	}
-	(my $src, my $dst)=($data->{'test'}->{'spec'}->{'source-node'}, $data->{'test'}->{'spec'}->{'dest-node'} );
-	$opt_id = $src . "-" . $dst;   # Set global id for flow since analyze_packet() also can rely on this
-	my $results=$data->{'result'}->{'raw-packets'};
-	my $pre_tx = 0;    # Last tx observed for current flow
-	my $pre_seq = 0;   # Last seq num observed for current flow
-	foreach $probepacket (@$results){
-	    # if ( $probepacket->{'src-ts'} > 0 && $probepacket->{'dst-ts'} > 0 ){
-	    
-	    my $tx=owptime2datetime($probepacket->{'src-ts'});
-	    my $rx=owptime2datetime($probepacket->{'dst-ts'});
-	    my $seq=$probepacket->{'seq-num'};
-	    my $uniq_seq;
-	    # Adjust seq num attempting to make it unique across batches
-	    if ( $pre_tx > 0 && $tx < $pre_tx && $seq > $pre_seq ) {
-		# Packet from previous batch
-		$uniq_seq = $seq + $pre_seqnum_base{$opt_id};
-	    } elsif ($tx > $pre_tx && $seq < $prev_seq) {
-		# New batch / session. Increase base seq num to add.
-		$pre_seqnum_base{$opt_id} = $seqnum_base{$opt_id};
-		$seqnum_base{$opt_id} += $batchsize;
-		$uniq_seq = $seq + $seqnum_base{$opt_id};
-	    } else {
-		# Packet from current batch
-		$uniq_seq = $seq + $seqnum_base{$opt_id};
-	    }					    
-	    $_= sprintf "ID=%s SEQ=%d SRC=%s DST=%s Tx=%.3f Rx=%.3f SIZE=%d HOPLIMIT=%d",
-		0, $uniq_seq, $src, $dst, $tx, $rx, 64, $probepacket->{'ip-ttl'};
-	    analyze_packet($uniq_seq, $src, $dst, $tx, $rx);
-	    print $uniq_seq, " ", $src, " ", $dst, " ", $tx, " ", $rx, "\n" if $opt_debug > 3; 
-	    $pre_tx = $tx;
-	    # } else {
-	    #	if ( $opt_debug > 0) { warn "Invalid OWAMP timestamps for peers $opt_id"; }
-	    # }
-	    $pre_seq = $seq;
+	
+	# Record/update source and dest data 
+	$opt_id = $src . "_" . $dst;   # Set global id for flow since analyze_packet() also can rely on this
+	my $new_flow = ! $src_adr{$opt_id} || ! $dst_adr{$opt_id} ;
+	$src_adr{$opt_id}=validate_ip($src) if ! $src_adr{$opt_id} ;
+	$dst_adr{$opt_id}=validate_ip($dst) if ! $dst_adr{$opt_id} ;
+	$src_name{$opt_id}=get_name($src_adr{$opt_id});
+	$dst_name{$opt_id}=get_name($dst_adr{$opt_id});
+
+	if($opt_topoevents) {
+	    # Report topology change events
+	    if ($new_flow) {
+		# Output record with timestamp and src + dst info
+		emit_topology_json($opt_id);
+	    }
+	    if (time() - $last_topoevent > $opt_topointerval) {
+		# Output topology events for all observed src + dst pair
+		foreach my $id_ (keys  %src_adr) {
+		    emit_topology_json($id_);
+		}
+		$last_topoevent = time();
+	    }
 	}
     }
 
+    if ( $data && $data->{'run'}->{'state'} eq 'finished' && $data->{'test'}->{'type'} eq 'latencybg' ){
+	
+	# State is "finished" and powstream / latencybg results are available.
+	my $batchsize = $opt_batchsize;
+	if (! $batchsize) {
+	    $batchsize = $data->{'result'}->{'packets-sent'};
+	}
+#	(my $src, my $dst)=($data->{'test'}->{'spec'}->{'source-node'}, $data->{'test'}->{'spec'}->{'dest-node'} );
+	(my $src, my $dst)=($data->{'test'}->{'spec'}->{'source'}, $data->{'test'}->{'spec'}->{'dest'} );
+	$opt_id = $src . "_" . $dst;   # Set global id for flow since analyze_packet() also can rely on this
+	my $results=$data->{'result'}->{'raw-packets'};
+	foreach $probepacket (@$results){
+	    if ( $probepacket->{'src-ts'} == 0 && $opt_debug > 3) {
+		print "Packet with tx = 0 for peers $opt_id\n";
+	    } elsif ( $probepacket->{'dst-ts'} == 0 && $opt_debug > 3) {
+		print "Packet with rx = 0 for peers $opt_id\n";
+	    } else {
+		# Sane time stamps. Prepare packet data for analysis.
+		my $tx=owptime2datetime($probepacket->{'src-ts'});
+		my $rx=owptime2datetime($probepacket->{'dst-ts'});
+		my $seq=$probepacket->{'seq-num'};
+		my $uniq_seq;
+		# Adjust seq num attempting to make it unique across batches...
+		$owamp_batch{$opt_id} = { 'pre_tx' => 0, 'pre_seq' => 0, 'seq_base' => 0, 'pre_seq_base' => 0 } if ( ! exists($owamp_batch{$opt_id}) );
+		if ( $owamp_batch{$opt_id}->{'pre_tx'} > 0 && $tx < $owamp_batch{$opt_id}->{'pre_tx'} && $seq > $owamp_batch{$opt_id}->{'pre_seq'} ) {
+		    # Packet from previous batch
+		    $uniq_seq = $seq + $owamp_batch{$opt_id}->{'pre_seq_base'};
+		} elsif ($tx > $owamp_batch{$opt_id}->{'pre_tx'} && $seq < $owamp_batch{$opt_id}->{'pre_seq'} ) {
+		    # New batch / session. Increase base seq num to be added.
+		    $owamp_batch{$opt_id}->{'pre_seq_base'} = $owamp_batch{$opt_id}->{'seq_base'};
+		    $owamp_batch{$opt_id}->{'seq_base'} += $batchsize;
+		    $uniq_seq = $seq + $owamp_batch{$opt_id}->{'seq_base'};
+		} else {
+		    # Packet from current batch
+		    $uniq_seq = $seq + $owamp_batch{$opt_id}->{'seq_base'};
+		}
+		my $src_addr = validate_ip($src);
+		my $dst_addr = validate_ip($dst);
+		$_= sprintf "ID=%s SEQ=%d SRC=%s DST=%s Tx=%.3f Rx=%.3f SIZE=%d HOPLIMIT=%d",
+		    0, $uniq_seq, $src_addr, $dst_addr, $tx, $rx, 64, $probepacket->{'ip-ttl'};
+		analyze_packet($uniq_seq, $src_addr, $dst_addr, $tx, $rx);
+		print "Analyzed packet: ", $uniq_seq, " ", $src_addr, " ", $dst_addr, " ", $tx, " ", $rx, "\n" if $opt_debug > 3; 
+
+		$owamp_batch{$opt_id}->{'pre_tx'} = $tx;
+		$owamp_batch{$opt_id}->{'pre_seq'} = $seq;
+	    } 
+	}
+    }
 }
 
 
@@ -645,7 +844,7 @@ sub read_owamp_rabbitmq{
 	user       => 'guest',
 	pass       => 'guest',
 	vhost      => '/',
-	exchange   => 'gap-ana',
+	exchange   => 'microdep-ana',
 	queue      => ''
 	);
     my $payload;
@@ -690,7 +889,7 @@ sub read_owamp_rabbitmq{
     #
     my $consume_from_queue = sub {
 	# Create queue (either with specifies name or temporary name)
-	my $auto_delete = ( $rmq_params{'queue'} == '');   # Ensure temp queues are deleted
+	my $auto_delete = ( $rmq_params{'queue'} eq '');   # Ensure temp queues are deleted
 	print "Declaring queue '", $rmq_params{'queue'}, "'...\n" if $opt_debug > 2;
 	$channel->declare_queue(
 	    queue => $rmq_params{'queue'},
@@ -715,10 +914,12 @@ sub read_owamp_rabbitmq{
 				on_consume => sub {
 				    # Message consumed from queue
 				    my $msg = shift;
-				    $payload = $msg->{body}->payload;
-				    print "Read data from rmq. Analysing...\n" if $opt_debug > 2;
-				    owamp_ana($payload);
-				    
+				    if ( exists $msg->{body}) {
+					# Analyse message payload
+					$payload = $msg->{body}->payload;
+					print "Read data from rmq. Analysing...\n" if $opt_debug > 2;
+					owamp_ana($payload);
+				    }
 				    # Tell "main loop" to stop waiting for more, i.e. consume only single message
 				    #$rmq_cv->send;
 				}
@@ -733,10 +934,12 @@ sub read_owamp_rabbitmq{
 			on_consume => sub {
 			    # Message consumed from queue
 			    my $msg = shift;
-			    $payload = $msg->{body}->payload;
-			    print "Read data from rmq. Analysing...\n" if $opt_debug > 2;
-			    owamp_ana($payload);
-			    
+			    if ( exists $msg->{body}) {
+				# Analyse message payload
+				$payload = $msg->{body}->payload;
+				print "Read data from rmq. Analysing...\n" if $opt_debug > 2;
+				owamp_ana($payload);
+			    }
 			    # Tell "main loop" to stop waiting for more, i.e. consume only single message
 			    #$rmq_cv->send;
 			}
@@ -851,12 +1054,28 @@ sub analyze_packet {
     } else {
 	$id=get_name($src);
     }
-    
+
+    my $new_flow = ! $src_adr{$id} || ! $dst_adr{$id} ;
     $src_adr{$id}=$src if ! $src_adr{$id} ;
     $dst_adr{$id}=$dst if ! $dst_adr{$id} ;
     $src_name{$id}=get_name($src);
     $dst_name{$id}=get_name($dst);
-    
+
+    if($opt_topoevents) {
+	# Report topology change events
+	if ($new_flow) {
+	    # Output record with timestamp and src + dst info
+	    emit_topology_json($id);
+	}
+	if (time() - $last_topoevent > $opt_topointerval) {
+	    # Output topology events for all observed src + dst pair
+	    foreach my $id_ (keys  %src_adr) {
+		emit_topology_json($id_);
+	    }
+	    $last_topoevent = time();
+	}
+    }
+	
     if ( $rx <= 0 ){ # assume lost packet
 	return 1; #==== return
     }
@@ -1181,10 +1400,10 @@ sub report_summary_jitter{
 	# "h_slope_40" => median( $jitter_data{$id}{slope_40} )->query,
 	# "h_slope_50" => median( $jitter_data{$id}{slope_50} )->query,
 	    
-	"h_jit_sd" => stddev( $jitter_data{$id}{jit} )->query,
-	"h_ddelay_sd" => stddev( $jitter_data{$id}{ddelay} )->query,
-	"h_delay_sd" => stddev( $jitter_data{$id}{delay} )->query,
-	"h_slope_10_sd" => stddev( $jitter_data{$id}{slope_10} )->query
+	"h_jit_sdv" => stddev( $jitter_data{$id}{jit} )->query,
+	"h_ddelay_sdv" => stddev( $jitter_data{$id}{ddelay} )->query,
+	"h_delay_sdv" => stddev( $jitter_data{$id}{delay} )->query,
+	"h_slope_10_sdv" => stddev( $jitter_data{$id}{slope_10} )->query
     };
     if ( $jitter_data{$id}{high_ddelay} ){
 	$$json{report_type} = "threshold" ;
@@ -1662,4 +1881,19 @@ sub timestamp {
     my $tzmin= ( timegm(@tlocal) - timelocal(@tlocal) ) / 60 ;
     my $ts  = strftime("%Y-%m-%dT%H:%M:%S", @tlocal);
     return sprintf "%s.%03d%+03d%02d", $ts,  ( $tgmt - int($tgmt) ) * 1000, $tzmin / 60, abs($tzmin) % 60;
+}
+
+sub emit_topology_json{
+    # Output JSON structure for a "topology discovered"-event
+    # Parameters: flow-id
+    my $id=shift;
+    my $json= {
+	"event_type" => "topology",
+        "test_type" => "latencybg",
+    };
+    # Add geoip data (but only if available)
+    $json->{'from_geo'} = $geopos{$src_adr{$id}} if ( exists $geopos{$src_adr{$id}}{'ip'} );
+    $json->{'to_geo'} = $geopos{$dst_adr{$id}} if ( exists $geopos{$dst_adr{$id}}{'ip'} );
+
+    emit_json($json, $id, time()); 
 }

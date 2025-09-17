@@ -44,6 +44,7 @@ import geoip2.database
 import socket
 #import pika
 from urllib.parse import urlparse, parse_qsl
+import urllib.request
 from io import StringIO
 import hashlib
 from operator import itemgetter
@@ -101,7 +102,9 @@ param = {
     'all': 0,                 # Flag to enable processing of older-than-latest traceroutes
     'tcp': 0,                 # Flag to enable processing tcptraceroute files
     'pssrc': '',              # Url to perfsonar data source, e.g. amqp://<user:passwd@localhost>/<vhost>/queue=<traceroute>
-    'path': '/var/lib/microdep/mp-dragonlab/data/',               # Path to apply when searching based on date               
+    'path': '/var/lib/microdep/mp-dragonlab/data',             # Path to apply when searching based on date               
+    'reportpath': '/var/lib/microdep/mp-dragonlab/report/mp',  # Path to apply for output files when searching based on date               
+    'reportpostpath': 'trace-ana',                             # Finale path level to add below reportpath,  source host and date               
     'output':'',                 # Output filename.
     'oneoutput':'',              # Output filename for single file output.
     'samepath': 0,                 # Flag to enable placement of outputfile in same folder as input file 
@@ -117,6 +120,11 @@ param = {
     'verbose': 0,                 # Verbosity level for message output
     'profiler': 0,                # Output performance profile per file
     'maxprocs': 1,                # Max no of parallel processes in batch mode
+    'topoevents': 0,              # Flag to enable detection and output of topology events
+    'topointerval': 3600,         # Min no of seconds between topology events
+    'pslookup': 'http://ps-west.es.net/lookup/activehosts.json',  # Source of perfSONAR Lookup Service hosts
+    'pslookupwait': 3600,         # Min no of seconds to wait between refreshing info fetched from pslookup-service
+    'ipv6': 0                     # Flag enabling ipv6 address parsing
 }
 
 # State constants
@@ -152,6 +160,7 @@ class Tracesummary:
             't_last': 0,                        # Timestamp of last traceroute added to summary
             'routes_analysed' : 0,              # No of traceroutes analysed
             'routes_reached': 0,                # No of routes that reach target destination
+            'parse_errors': 0,                  # No of parsing attempts failed
             'min_length': 0,                    # Min length of successfull route
             'min_length_count' : 0,             # No of traceroutes of minimum length observed
             'max_length': 0,                    # Max length of successfull route
@@ -179,22 +188,42 @@ class Tracesummary:
         }
         self.parse_errors = 0                  # Traceroute parse errors
         self.current_pair= ""
-
-    def set_current_pair(self, src_dst, timestamp=0):
+        self.last_topology_event=0             # Timestamp when last topology event was output
+        
+    def set_current_pair(self, src_dst, timestamp=0, thread=0):
         # Set current relevant src dst pair
         self.current_pair= src_dst
         self.enable_pair(self.current_pair)
-        if timestamp < self.summary[self.current_pair]['t_first'] or self.summary[self.current_pair]['t_first'] == 0:
+        first_appearance = (self.summary[self.current_pair]['t_first'] == 0)
+        
+        if timestamp < self.summary[self.current_pair]['t_first'] or first_appearance:
             # Newest traceroute so far
             self.summary[self.current_pair]['t_first'] = timestamp
-        if timestamp > self.summary[self.current_pair]['t_last']:
+        if timestamp >= self.summary[self.current_pair]['t_last']:
             # Oldest traceroute so far
             self.summary[self.current_pair]['t_last'] = timestamp
-        if timestamp == 0:
-            # Apply current time
+        if timestamp == 0 and first_appearance:
+            # Timestamp missing.
+            # Apply current time.
             self.summary[self.current_pair]['t_first'] = time.time()
             self.summary[self.current_pair]['t_last'] = time.time()
             
+        if param["topoevents"] and first_appearance:
+            # Output topology event
+            p_list = [
+                self.current_pair,
+                self.summary[self.current_pair]["t_first"],
+                self.summary[self.current_pair]["t_last"]
+            ]
+            # Output topology event for src dest pair
+            printAlert( thread, self.summary[self.current_pair]['route_type'], p_list, self.summary[self.current_pair]["t_last"], "topology")
+            self.last_topology_event = time.time()
+
+        if param["topoevents"] and time.time() - self.last_topology_event > float(param['topointerval']):
+            # Output complete topology
+            self.print_topology()
+            self.last_topology_event = time.time()
+                
         
     def enable_pair(self, src_dst):
         # Make sure src-dst pair exists in summary table
@@ -208,8 +237,13 @@ class Tracesummary:
         self.summary[self.current_pair][counter] += 1
 
     def parse_error(self):
-       # Increase parse errors counter
-       self.parse_errors += 1
+        if not self.current_pair:
+            # Increase general parse error counter
+            self.parse_errors += 1
+        else:
+            # Increase parse error counter for pair/flow
+            self.count("parse_errors")
+            
 
     def count_unique_hosts(self, hop, hosts):
         if not self.current_pair:
@@ -281,7 +315,8 @@ class Tracesummary:
         # Remove lists of hosts since this causes trouble when serializing dictionary
         ret_dict.pop("unique_hosts_list")
         return ret_dict
-        
+
+    
     def print_all_pairs(self, thread=0):
         # Output summary for all src-dst pairs
         backup_current_pair = self.current_pair
@@ -296,6 +331,17 @@ class Tracesummary:
             printAlert( thread, self.summary[pair]['route_type'], p_list, self.summary[pair]["t_last"], "summary")
         # Restore current pair    
         self.current_pair = backup_current_pair
+
+    def print_topology(self, thread=0):
+        # Output topology discovery event for all src-dst pairs
+        for pair in self.summary.keys():
+            p_list = [
+                pair,
+                self.summary[pair]["t_first"],
+                self.summary[pair]["t_last"]
+            ]
+            # Output topology event for src dest pair
+            printAlert( thread, self.summary[pair]['route_type'], p_list, self.summary[pair]["t_last"], "topology")
         
 tracesummary = Tracesummary()  # Summary info for collection of traceroute runs
 
@@ -317,6 +363,8 @@ def parse_cmd(param):
     cmdparser.add_argument('--tcp', '-T', action='count', default=param['tcp'], help='Look for tcptraceroute files.')
     cmdparser.add_argument('--pssrc', default=param['pssrc'], help='URL to perfsonar data source.')
     cmdparser.add_argument('--path', '-p', default=param['path'], help='Base path to apply when searching based on date')
+    cmdparser.add_argument('--reportpath', '-r', default=param['reportpath'], help='Base path to apply when storing output for date based input.')
+    cmdparser.add_argument('--reportpostpath', '-R', default=param['reportpostpath'], help='Finale path level to add below reportpath, source host and date.')
     cmdparser.add_argument('--output', '-o', default=param['output'], help='Filename for output. Default is timestamp+"R"+hash')
     cmdparser.add_argument('--oneoutput', '-O', default=param['oneoutput'], help='All output to single file.')
     cmdparser.add_argument('--samepath', '-s', action='count', default=param['samepath'], help='Place output file in same path as input file')
@@ -331,7 +379,12 @@ def parse_cmd(param):
     cmdparser.add_argument('--verbose', '-v', action='count', default=param['verbose'], help='Verbose output to stderr. Apply multiple to increase level.')
     cmdparser.add_argument('--profiler', '-P', action='count', default=param['profiler'], help='Run performance profiling per file.')
     cmdparser.add_argument('--maxprocs', '-m', default=param['maxprocs'], help='Max no of processes in batch mode.')
-    
+    cmdparser.add_argument('--topoevents', '-t', action='count', default=param['topoevents'], help='Detect and output events when topology changes are detected.')
+    cmdparser.add_argument('--topointerval', default=param['topointerval'], help='Min no of seconds between topology events.')
+    cmdparser.add_argument('--pslookup', default=param['pslookup'], help='Source of perfSONAR Lookup Service hosts.')
+    cmdparser.add_argument('--pslookupwait', default=param['pslookupwait'], help='Min interval between attempts to fetch info from ps-lookup service.')
+    cmdparser.add_argument('--ipv6', '-6', action='count', default=param['ipv6'], help='Enable parsing of ipv6 addresses.')
+
     # Run parser
     args = cmdparser.parse_args()
     # Extract parameters
@@ -360,6 +413,10 @@ def connect_db(param):
             db=param['dbname'],
         )
         list_cursor = connection.cursor()
+        # Adjust some timeout values
+        list_cursor.execute('SET GLOBAL connect_timeout=28800')
+        list_cursor.execute('SET GLOBAL interactive_timeout=86400')
+        list_cursor.execute('SET GLOBAL wait_timeout=86400')
     elif param["dbtype"] == "postgresql":
         connection = psycopg2.connect(
             host=param['dbhost'],
@@ -432,16 +489,28 @@ def prepare_db(cursor, param):
         if param['dbtype'] == 'postgresql':
             cursor.execute("CREATE TABLE routes (unique_pair VARCHAR(200), success INTEGER, failed INTEGER, partialfail INTEGER, anomaly TEXT, normal INTEGER, count TEXT, report TEXT, bookmark INTEGER)")
         else:
-            cursor.execute("CREATE TABLE routes (unique_pair VARCHAR(200), success INT, failed INT, partialfail INT, anomaly MEDIUMTEXT, normal INT, count MEDIUMTEXT, report MEDIUMTEXT, bookmark INT)")
+            cursor.execute("CREATE TABLE routes (unique_pair VARCHAR(200), success INT, failed INT, partialfail INT, anomaly MEDIUMTEXT, normal INT, count MEDIUMTEXT, report LONGTEXT, bookmark INT)")
         cursor.execute("CREATE UNIQUE INDEX idx_key1 ON routes (unique_pair)")
         cursor.execute(('COMMIT'));
     except Exception as err:
+        if param['verbose'] > 1: 
+            print("Warning: Failed to create table 'routes'")
+            if param['dbtype'] == 'postgresql':
+                print_psycopg2_exception(err)
+                # exit()
+            pass
+
+
+    # Alter legacy tables to conform with current table format
+    try:
+        if param['dbtype'] == 'postgresql':
+            pass
+        else:
+            cursor.execute("ALTER TABLE routes MODIFY report LONGTEXT")
+        cursor.execute(('COMMIT'));
+    except Exception as err:
         pass
-#        print("Warning: Failed to create table 'routes'")
-#        if param['dbtype'] == 'postgresql':
-#           print_psycopg2_exception(err)
-#        exit()
-    
+
     try:
         if param['dbtype'] == 'postgresql':
             cursor.execute("CREATE TABLE jumps (unique_pair VARCHAR(200), hop INTEGER, destinations TEXT, frequencies TEXT, count INTEGER, normal TEXT, memory TEXT, anomaly TEXT, trcrt INTEGER, betweens INTEGER, cross_entropy REAL, timestamp INTEGER)")
@@ -450,12 +519,12 @@ def prepare_db(cursor, param):
         cursor.execute("CREATE UNIQUE INDEX idx_key2 ON jumps (unique_pair, hop)")
         cursor.execute(('COMMIT'));
     except:
-        pass
-#        print("Warning: Failed to create table 'jumps'")
-#        if param['dbtype'] == 'postgresql':
-#            print_psycopg2_exception(err)
-#        exit()
-
+        if param['verbose'] > 1: 
+            print("Warning: Failed to create table 'jumps'")
+            if param['dbtype'] == 'postgresql':
+                print_psycopg2_exception(err)
+                # exit()
+                pass
 """
     try:
         cursor.execute("CREATE TABLE length (unique_pair VARCHAR(200), lengths MEDIUMTEXT, frequencies MEDIUMTEXT, anomalies MEDIUMTEXT, normal INT, count MEDIUMTEXT, anomaly MEDIUMTEXT)")
@@ -483,14 +552,20 @@ class Resolver:
         """Read resolver db file
            Format per line assumed is "<node-name> <ip>"
         """
-
+        
+        if param["verbose"] > 2:
+            print("Initiating resolver cache...")
+            
         # Resolver DBs
         self.ip = {}
         self.name = {}
 
+        # Geopos info
+        self.geopos = {}
+        self.pslookuphost = {}
+        
         try:
             file = open(mapfile, "r")
-        
             
             psconfig_data={}
             try:
@@ -499,7 +574,7 @@ class Resolver:
                 if 'addresses' in psconfig_data:
                     # Addresses found. Init map.
                     for name in psconfig_data['addresses']:
-                        ip = psconfig_data['addresses'][name]['address'];
+                        ip = self.validate_ip(psconfig_data['addresses'][name]['address']);
                         # Add mappings 
                         self.ip[name] = ip
                         self.name[ip] = name
@@ -512,6 +587,7 @@ class Resolver:
                 Lines = file.readlines()
                 for line in Lines:
                     (name,ip) = line.split()
+                    ip = self.validate_ip(ip);
                     # Add mappings 
                     self.ip[name] = ip
                     self.name[ip] = name
@@ -526,13 +602,138 @@ class Resolver:
             print("Initial resolver cache:")
             pprint(self.ip)
             pprint(self.name)
+
+    def validate_ip(self, ip):
+        """ Check if ip address is valid. If not, attempt to resolve it.
+        """
+        try:
+            # Check if the ip is valid
+            socket.inet_aton(ip)
+        except socket.error:
+            # Invalid ip. Maybe a domain name? Attempt lookup.
+            try:
+                maybe_name = ip
+                ip = socket.gethostbyname(maybe_name)   #NOTE: Needs to be replaced by socket.getaddrinfo() to support ipv6
+            except socket.error:
+                # Give up and leave foney ip as is
+                if param['verbose'] > 2:
+                    print("Warning: Invalid ip address '%s' applied." % (ip))
+                pass
             
-    def get_name(self, ip):
+        self.refresh_geopos(ip)
+
+        return ip
+
+    def refresh_geopos(self, ip):
+        """ Attempt to fetch geopos-info from perfsonar's lookupservice.
+            Lookup frequency is trottled.
+        """
+        if ip not in self.geopos.keys():
+            # Init dict entry compatible with Geolite2 (Maxmine)
+            self.geopos[ip] = {
+                'latitude': 0.0,
+                'longitude': 0.0,
+                'location': { 'lat': 0.0, 'lon': 0.0 },
+                'city_name': 'Unknown',
+                'postal_code': 'Unknown',
+                'region_name': 'Unknown',
+                'country_code2': 'Unknown',
+                'country_code3': 'Unknown',
+		'geo_src': 'pslookup',
+                'ip': "",
+                'refresh': time.time() - 1 
+                }
+            
+        if param['pslookup'] and self.geopos[ip]['refresh'] < time.time():
+            # Attempt to fetch geopos info from perfSONAR's Lookup Service
+            if not self.pslookuphost:
+                try:
+                    # Fetch list of lookup service hosts
+                    pslookuphost_str = urllib.request.urlopen(param['pslookup']).read()
+                    self.pslookuphost = json.loads(pslookuphost_str)
+                except urllib.error.URLError:
+                    pass
+
+            for pshost in self.pslookuphost['hosts']:
+                try:
+                    # Lookup host name (via pslookup api at port 8090)
+                    pslookup_str = urllib.request.urlopen(pshost['locator'] + "/?host-name=" + ip).read()
+                    if param['verbose'] > 3:
+                        print("pslookup-data:")
+                        print(pslookup_str)
+                    pslookup = json.loads(pslookup_str)
+                    if pslookup:
+                        # Position available. Store applying Geolite2 (Maxmine) tags / keys
+                        self.store_geopos(ip, pslookup[0])
+                        break
+                    else:
+                        # Search for host name among interface addresses (applying opensearch api at port 80)
+                        opensearch_api = pshost['locator'].replace(":8090","").replace("records","_search")
+                        iso_now = datetime.fromtimestamp(time.time(), pytz.timezone(str(get_localzone()))).isoformat()    # ISO formatted current time with timezone
+                        query_data = { 'query': { 'bool': { 'filter': [ { 'term': { 'interface-addresses': ip } }, { 'range': { 'expires' : { 'gt' : iso_now  } } } ] } }, 'size': 1 }
+                        query_req = urllib.request.Request(opensearch_api, data=bytes(json.dumps(query_data), encoding='utf-8') )
+                        query_req.add_header('Content-Type', 'application/json')
+                        pslookup_str = urllib.request.urlopen(query_req).read()
+                        if param['verbose'] > 3:
+                            print("pslookup-data:")
+                            print(pslookup_str)
+                        pslookup = json.loads(pslookup_str)
+                        if pslookup and pslookup['hits'] and pslookup['hits']['total']['value'] > 0 and pslookup['hits']['hits'][0]['_source']['uri']:
+                            # Apply uri to find parent host for interface
+                            query_data = { 'query': { 'bool': { 'filter': [ { 'term': { 'host-net-interfaces': pslookup['hits']['hits'][0]['_source']['uri'] } } ] } }, 'size': 1 }
+                            query_req = urllib.request.Request(opensearch_api, data=bytes(json.dumps(query_data), encoding='utf-8') )
+                            query_req.add_header('Content-Type', 'application/json')
+                            pslookup_str = urllib.request.urlopen(query_req).read()
+                            if param['verbose'] > 3:
+                                print("pslookup-data:")
+                                print(pslookup_str)
+                            pslookup = json.loads(pslookup_str)
+                            if pslookup and pslookup['hits'] and pslookup['hits']['total']['value'] > 0:
+                                # Parent host found. Store position if available
+                                self.store_geopos(ip, pslookup['hits']['hits'][0]['_source'])
+                                break
+
+                except urllib.error.URLError:
+                    pass
+
+            # Set refresh interval for geopos info.
+            self.geopos[ip]['refresh'] = time.time() + float(param['pslookupwait'])
+
+    def store_geopos(self, ip, posdata):
+        """ Store geopos data from pslookup structure
+        """
+        # Store applying Geolite2 (Maxmine) tags / keys
+        if 'location-latitude' in posdata: self.geopos[ip]['latitude'] = float(posdata['location-latitude'][0]) 
+        if 'location-longitude' in posdata: self.geopos[ip]['longitude'] = float(posdata['location-longitude'][0])
+        self.geopos[ip]['location'] = { 'lat': self.geopos[ip]['latitude'], 'lon': self.geopos[ip]['longitude'] }
+        if 'location-city' in posdata: self.geopos[ip]['city_name'] = posdata['location-city'][0]
+        if 'location-code' in posdata: self.geopos[ip]['postal_code'] = posdata['location-code'][0]
+        if 'location-state' in posdata: self.geopos[ip]['region_name'] = posdata['location-state'][0]
+        if 'location-country' in posdata: self.geopos[ip]['country_code2'] = posdata['location-country'][0]
+        self.geopos[ip]['country_code3'] = self.geopos[ip]['country_code2']
+        self.geopos[ip]['ip'] = ip 
+        if param['verbose'] > 3:
+            print("Added geopos:")
+            pprint(self.geopos[ip])
+            
+            
+    def get_geopos(self, ip):
+        """ Return dictionary with geopos-info 
+        """
+        if ip in self.geopos and self.geopos[ip]["ip"]:
+            return self.geopos[ip]
+        else:
+            # No gepos available
+            return {}
+            
+    def get_name(self, ip, validate=True):
         """ Translates from ip to name
         """
         if ip in self.name.keys():
             return self.name[ip]
         else:
+            if validate:
+                ip = self.validate_ip(ip)
             try:
                 name, alias, addresslist = socket.gethostbyaddr(ip)
                 # Add mapping
@@ -542,7 +743,7 @@ class Resolver:
                 if param["verbose"] > 2:
                     print("Warning: Cannot resolve ip " + ip + ". Returning " + ip + " as name.")
                 # Add "emergency" mapping
-                self.name[ip] = ip
+#                self.name[ip] = ip
                 return ip
 
     def get_ip(self, name):
@@ -552,7 +753,7 @@ class Resolver:
             return self.ip[name]
         else:
             try:
-                ip = socket.gethostbyname(name)
+                ip = socket.gethostbyname(name)   #NOTE: Needs to be replaced by socket.getaddrinfo() to support ipv6
                 # Add mapping
                 self.ip[name] = ip
                 return ip
@@ -560,9 +761,38 @@ class Resolver:
                 if param["verbose"] > 2:
                     print("Warning: Cannot resolve name " + name + ". Returning " + name + " as ip.")
                 # Add "emergency" mapping
-                self.ip[name] = name
+#                self.ip[name] = name
                 return name
-
+            
+    def add(self, name, ip=''):
+        """ Add name-ip entry
+        """
+        if not ip:
+            if name in self.ip.keys():
+                ip = self.ip[name]
+            else:
+                # Missing ip for name. Attempt lookup.
+                try:
+                    # lookup name
+                    ip = socket.gethostbyname(name)
+                except:
+                    # Maybe name is really an ip...
+                    if not name in self.name.keys():
+                        try:
+                            # try reverse lookup
+                            maybe_ip = name
+                            name, alias, addresslist = socket.gethostbyaddr(maybe_ip)
+                            ip = maybe_ip
+                        except:
+                            pass
+        if ip:
+            # Add mapping
+            self.ip[name] = ip
+            self.name[ip] = name
+        else:
+            if param["verbose"] > 2:
+                print("Warning: Cannot resolve name " + name + ". No mapping added.")
+        
 def classifyOutage(errors):
     """ Finds the most common error if a traceroute returns multiple errors
     """
@@ -628,7 +858,10 @@ def classifyOutage(errors):
 
 def createJSON(alert):
 
-    path = alert["timestamp"] + "R" + str(random.randint(100, 999)) + str(random.randint(100, 999))
+    # Prepare filename
+
+    # Generate default unique filename
+    filename = alert["timestamp"] + "R" + str(random.randint(100, 999)) + str(random.randint(100, 999))
 
     if param['output']:
         # Prepare postfix
@@ -640,18 +873,27 @@ def createJSON(alert):
             
         if param['output'].find(".") != -1:
             # Add postfix before dot
-            path = param['output'].replace(".",  "-" + postfix + ".")
+            filename = param['output'].replace(".",  "-" + postfix + ".")
         else:
             # Add postfix at end
-            path = param['output'] + "-" + str(alert["thread"])
+            filename = param['output'] + "-" + str(alert["thread"])
     elif param['oneoutput']:
         # Output all to single (given) file
-        path = param['oneoutput']
-        
+        filename = param['oneoutput']
+
+    # Add path to filename      
+
+    if filename.find("/") != -1 and param["verbose"] > 2:
+        print ("Warning: Output filename contains path. Adjust '-r' and 's' to avoid additional output path to be added.")
+    
     if param['samepath'] > 0:
-        # Apply outputfile in same folder as inputfile
-        path = input_dir[alert["thread"]] + "/" + path
-            
+        # Place outputfile in same folder as inputfile
+        path = input_dir[alert["thread"]] + "/" + filename
+    else:
+        # Place outputfile in report folder
+        os.makedirs(report_dir[alert["thread"]], exist_ok=True)  # Create folders if required
+        path = report_dir[alert["thread"]] + "/" + filename
+    
     with open(path, "a") as outfile:
         if param['verbose'] > 2:
             print(json.dumps(alert) + "\n")
@@ -933,6 +1175,23 @@ def printAlert(threadid, tr_type, n, time, mode, normal=None, new=None):
         createJSON(alert)
         return
         
+    if mode == "topology":
+        # Output topology-discovery event
+        
+        #alert["anomaly_state"] = "topology"
+        alert["event_type"] = "topology"
+        alert["test_type"] = tr_type + "trace"
+        alert["start_time"] = n[1]
+        alert["duration"] = int(n[2]) - int(n[1])
+
+        # Add geopos-info if available
+        for pfx in [ "from", "to"]:
+            geopos = resolver.get_geopos(alert[pfx + "_adr"])
+            if geopos:
+                alert[pfx + "_geo"]=geopos
+            
+        createJSON(alert)
+        return
         
     #For a warning or complete-state we need more information
     data = json.loads(n[7])
@@ -1813,7 +2072,7 @@ def build_sql_insert(state, table):
     for field in state:
         insert_fields += field + ", "
         if field in DB_STRINGFIELDS:
-            insert_values += "'" + str(state[field]) + "', "
+            insert_values += "'" + str(state[field]).strip() + "', "
         else:
             insert_values += str(state[field]) + ", "
     insert_fields = insert_fields[:-2] + ")" 
@@ -1830,7 +2089,7 @@ def build_sql_update(state, table, cond_keys):
         if not field in cond_keys:
             if field in DB_STRINGFIELDS:
                 # Add quotes to strings
-                update_key_values += field + " = '" + str(state[field]) + "', "
+                update_key_values += field + " = '" + str(state[field]).strip() + "', "
             else:
                 update_key_values += field + " = " + str(state[field]) + ", "
     update_key_values = update_key_values[:-2]
@@ -1860,37 +2119,44 @@ def flush_analysis_state(cursor):
     """ Flush state currently in memory to DB
     """
 
-    global traceroute_analysis_state_routes
-    global traceroute_analysis_state_jumps
-    global traceroute_analysis_state_current_unique_pair_is_new
+    try:
+        global traceroute_analysis_state_routes
+        global traceroute_analysis_state_jumps
+        global traceroute_analysis_state_current_unique_pair_is_new
 
-    if param['all']:
-        # Older traceroutes than the last traceroute applied to update state in DB may have been analized. Skip storing new state.
-        return
+        if param['all']:
+            # Older traceroutes than the last traceroute applied to update state in DB may have been analized. Skip storing new state.
+            return
     
-    cursor.execute("START TRANSACTION")
-    if traceroute_analysis_state_current_unique_pair_is_new:
-        # Insert "route" state in DB (i.e. end-state analysis results)
-        if  len(traceroute_analysis_state_routes)>0:
-            cursor.execute( build_sql_insert(traceroute_analysis_state_routes, "routes") )
-        # Insert "jumps" state in DB (i.e. per hop analysis results)
-        for hop in traceroute_analysis_state_jumps:
-            cursor.execute( build_sql_insert(hop, "jumps") )
-    else:
-        # Update DB for end-state analysis
-        if  len(traceroute_analysis_state_routes)>0:
-            cursor.execute( build_sql_update(traceroute_analysis_state_routes, "routes", ['unique_pair']) )
-        # Update DB for per-hop-analysis
-        for hop in traceroute_analysis_state_jumps:
-            cursor.execute( "SELECT unique_pair, hop FROM jumps WHERE unique_pair = '" + hop['unique_pair'] + "' AND hop = " + str(hop['hop']) )
-            if cursor.rowcount == 0:
-                # Row is non-exitant. Insert new row instead
+        cursor.execute("START TRANSACTION")
+        if traceroute_analysis_state_current_unique_pair_is_new:
+            # Insert "route" state in DB (i.e. end-state analysis results)
+            if  len(traceroute_analysis_state_routes)>0:
+                cursor.execute( build_sql_insert(traceroute_analysis_state_routes, "routes") )
+                # Insert "jumps" state in DB (i.e. per hop analysis results)
+            for hop in traceroute_analysis_state_jumps:
                 cursor.execute( build_sql_insert(hop, "jumps") )
-            else:
-                # Udate row
-                cursor.execute( build_sql_update(hop, "jumps", ['unique_pair', 'hop']) )
+            traceroute_analysis_state_current_unique_pair_is_new = False 
+        else:
+            # Update DB for end-state analysis
+            if  len(traceroute_analysis_state_routes)>0:
+                cursor.execute( build_sql_update(traceroute_analysis_state_routes, "routes", ['unique_pair']) )
+            # Update DB for per-hop-analysis
+            for hop in traceroute_analysis_state_jumps:
+                cursor.execute( "SELECT unique_pair, hop FROM jumps WHERE unique_pair = '" + hop['unique_pair'] + "' AND hop = " + str(hop['hop']) )
+                if cursor.rowcount == 0:
+                    # Row is non-exitant. Insert new row instead
+                    cursor.execute( build_sql_insert(hop, "jumps") )
+                else:
+                    # Udate row
+                    cursor.execute( build_sql_update(hop, "jumps", ['unique_pair', 'hop']) )
             
-    cursor.execute(('COMMIT'));
+        cursor.execute(('COMMIT'));
+
+    except (KeyboardInterrupt, SystemExit) as e :
+        # Ignore and quit
+        pass 
+
     return
 
 def analyze(traceroute, time, cursor):
@@ -1917,8 +2183,8 @@ def analyze(traceroute, time, cursor):
     tracesummary.set_max('max_ttl', traceroute['maxhops'])
 
     if traceroute_analysis_state_current_unique_pair and traceroute_analysis_state_current_unique_pair != unique_pair:
-        # Update state for previouse end-state-analysis in DB
-        if param['verbose'] > 2:
+        # Update state for previous end-state-analysis in DB
+        if param['verbose'] > 3:
             pprint(traceroute_analysis_state_routes)
             pprint(traceroute_analysis_state_jumps)
         flush_analysis_state(cursor)
@@ -2007,17 +2273,18 @@ def analyze(traceroute, time, cursor):
     
 input_file = {}  # Filenames of inputfiles, indexed by thread  
 input_dir = {}  # Folders for inputfiles, indexed by thread  
+report_dir = {}  # Folders for outputfiles, indexed by thread  
 
 # Prepare communication between Rabbitmq receive proccess and analysis process
 pssrc_r, pssrc_w = os.pipe()                # Pipe from Rabbitmq reader to analysis process
 pssrc_pipe_input = os.fdopen(pssrc_w, "w")  # File descriptor for writing data to analysis process 
 pssrc_pipe_output = os.fdopen(pssrc_r)      # File descriptor for reading data inside analysis process  
 
-def read(path, srchost, mode="batch", thread=0, starttime=0):
+def read(path, srchost, srcdate, mode="batch", thread=0, starttime=0):
     """ Parse raw log file and run analysis on each found traceroute run
         2022-01-20: Renovated to properly parse both traceroute and tcptraceroute logs
     """  
-    
+
     if mode == "live":
         # Runs gztools in Linux and grabs the stdout
         p = subprocess.Popen(["gztool", "-v0", "-WT", path], stdout=subprocess.PIPE)
@@ -2029,11 +2296,17 @@ def read(path, srchost, mode="batch", thread=0, starttime=0):
     else:
         print ("Error: Unknown mode '" + mode + "'.")
         sys.exit()
-        
+
+    # Check if filehandel really is open
+    if (hasattr(p,'closed') and p.closed ) or (hasattr(p,'poll') and p.poll() is not None ):
+        print("Error: Accessing source '" + path + "' failed (file descriptor closed).")
+        return
+    
     # Update thread-inputfile mapping
     filename = os.path.basename(path)
     input_file[thread] = filename
     input_dir[thread] = os.path.dirname(path)
+    report_dir[thread] = param['reportpath'] + "/" + srchost + "/" + srcdate + "/" + param['reportpostpath']
     
     # Extract info from filename
     dsthost = str(filename)[filename.find("_")+1:-3]  # Assume "..._<ipv4-addr>.gz" filename format
@@ -2086,15 +2359,15 @@ def read(path, srchost, mode="batch", thread=0, starttime=0):
 
             if word[0] == "ps_testid":
                 # Strip off perfsonar test id
-                ps_testip = word[1]
+                ps_testid = word[1]
                 word.pop(1)
                 word.pop(0)
                 
-            if len(word) >= 6 and word[1] == "sudo" and word[2] == "traceroute" and word[5] =="-T":
+            if len(word) >= 6 and word[1] == "sudo" and word[2] == "traceroute" and word[6] =="-T":
                 # TCP traceroute from perfsonar found. 
                 traceroute_type = "tcp"
                 # Clean away tcp-specific header stuff
-                word.pop(5)
+                word.pop(6)
                 word.pop(1)
                 
             MICRODEPLOG = ( len(word) > 1 and word[1] == "starttime" )                        # E.g. logline ala "1617573742 starttime 00:02:22" found
@@ -2109,7 +2382,7 @@ def read(path, srchost, mode="batch", thread=0, starttime=0):
                             # Update maxhops
                             traceroutes[time]["maxhops"] = len(traceroutes[time]["result"])
 
-                        if param['verbose'] > 3:
+                        if param['verbose'] > 2:
                             print ("New traceroute run found at time ", time ,", analysing...")
                         analyze(traceroutes[time], time, cursor)
 
@@ -2127,12 +2400,24 @@ def read(path, srchost, mode="batch", thread=0, starttime=0):
                 if MICRODEPLOG:
                     traceroutes[time]["src"] = srchost
                     traceroutes[time]["dst"] = dsthost
-                    tracesummary.set_current_pair(srchost + "/" + dsthost, time)
+                    tracesummary.set_current_pair(traceroutes[time]["src"] + "/" + traceroutes[time]["dst"], time, thread)
                 elif PERFSONARLOG:
                     traceroutes[time]["src"] = word[6]
                     traceroutes[time]["dst"] = word[10]
-                    tracesummary.set_current_pair(srchost + "/" + dsthost, time)
+                    traceroutes[time]["ipversion"] = int(word[4][-1])
+                    if traceroutes[time]["ipversion"] == 6 and not param["ipv6"]:
+                        # Do not parse ipv6 traceroutes
+                        if param["verbose"] > 2:
+                            print("Unsupported ipv6 traceroute. Skipping.")
+                        parser_state = PS_INIT
+                        continue
+                    tracesummary.set_current_pair(traceroutes[time]["src"] + "/" + traceroutes[time]["dst"], time, thread)
                     tracesummary.set_pstestid(ps_testid)
+                else:
+                    if param['verbose'] > 2:
+                        print ("Warning: Unrecognized start line format, skipping input.")
+                    continue
+
                 tracesummary.set_routetype(traceroute_type)
                 traceroutes[time]["maxhops"] = 0
                 traceroutes[time]["type"] = traceroute_type
@@ -2199,11 +2484,13 @@ def read(path, srchost, mode="batch", thread=0, starttime=0):
 
             else:
                 # Unrecognized line in traceroute
+                if param["verbose"] > 2:
+                    print ("Warning: Unrecognized line in traceroute: '" + line + "'") 
                 tracesummary.parse_error()
 
-        if "src" in traceroutes[time] and "dst" in traceroutes[time]:
+        if time > 0 and "src" in traceroutes[time] and "dst" in traceroutes[time]:
             # Analyse also last traceroute in file
-            if param['verbose'] > 3:
+            if param['verbose'] > 2:
                 print ("New traceroute run found at time ", time ,", analysing...")
             if len(traceroutes[time]["result"]) > traceroutes[time]["maxhops"]:
                 # Update maxhops
@@ -2221,6 +2508,8 @@ def read(path, srchost, mode="batch", thread=0, starttime=0):
             # Output summary
             #tracesummary.print(traceroutes)
             tracesummary.print_all_pairs(thread)
+            if param["verbose"] > 2 :
+                print("General parse errors:", tracesummary.parse_errors)
             pass
         
         cursor.execute(('COMMIT'));
@@ -2262,7 +2551,8 @@ def amqp_read(url, mode, thread):
         "host": "localhost",
         "port": 5672,
         "vhost": "/",
-        "queue": "traceroute",
+        "exchange": "microdep-ana",
+        "queue" : "",
         "user" : "guest",
         "passwd" : "guest"
     }
@@ -2291,6 +2581,8 @@ def amqp_read(url, mode, thread):
     query = dict(parse_qsl(pssrc_url.query))
     if "queue" in query:
         rmq_param["queue"] = query["queue"]
+    if "exchange" in query:
+        rmq_param["exchange"] = query["exchange"]
 
     if param['verbose'] > 2:
         print("Connecting to Rabbit message queue applying:'");
@@ -2306,8 +2598,21 @@ def amqp_read(url, mode, thread):
         sys.exit(1)
 
     channel = connection.channel()
-    # Create queue (in case it does not yet exist)
-    channel.queue_declare(queue=rmq_param["queue"])
+    if rmq_param["exchange"]:
+        # Create exchange and queue
+        channel.exchange_declare(exchange=rmq_param["exchange"], exchange_type='fanout')
+        result = channel.queue_declare(queue=rmq_param["queue"], exclusive=True)
+        # Update queue name in case of one-time-queue-name when only exchange is specified
+        rmq_param["queue"] = result.method.queue
+        channel.queue_bind(exchange=rmq_param["exchange"], queue=rmq_param["queue"])
+        if param["verbose"] > 2:
+            print("Exchange '%s' and queue '%s' declared and bound." % (rmq_param["exchange"],rmq_param["queue"],)) 
+    elif rmq_param["queue"]:
+        # Create queue (in case it does not yet exist)
+        channel.queue_declare(queue=rmq_param["queue"])
+        if param["verbose"] > 2:
+            print("Default exchange and queue '%s' declared." % rmq_param["queue"]) 
+
     # Setup callback function
     #channel.basic_consume(amqp_read_callback, queue=rmq_param["queue"], no_ack=True)
     channel.basic_consume(rmq_param["queue"], amqp_read_callback)
@@ -2317,7 +2622,7 @@ def amqp_read(url, mode, thread):
     if pid == 0:
         # Child process. Reading only from pipe
         os.close(pssrc_w)
-        read("from pipe", "", mode)
+        read("", "", "", mode)
         sys.exit()
 
     # Parent process. No need to read from pipe
@@ -2334,11 +2639,29 @@ def amqp_read_callback(_ch, _method, _properties, body):
     """
     Callback function for Rabbit message queue reader
     """
-    if param['verbose'] > 3:
+    if param['verbose'] > 4:
         print ("Element fetched from Rabbit mq:")
         print("%s" % (body.decode("ascii")))
 
     element = json.loads(body.decode("ascii")) 
+
+    # Acknowledge the rmq-message manually
+    _ch.basic_ack(delivery_tag=_method.delivery_tag)
+
+    # Add to resolver
+    resolver.add(element["test"]["spec"]["source"])
+    resolver.add(element["test"]["spec"]["dest"])
+
+    if element["test"]["type"] != "trace":
+        # Ignore results from other test types
+        if param['verbose'] > 2:
+            print ("Unrelevant test-type '%s' found. Ignoring." % (element["test"]["type"]))
+        return
+    
+    if param['verbose'] > 3:
+        print ("Traceroute test results from Rabbit mq:")
+        print("%s" % (body.decode("ascii")))
+
     # Get timestamp
     starttime  = str(int(isodate.parse_datetime(element["run"]["start-time"]).timestamp()))
     # Generate pcheduler test id/checksum (based on /usr/lib/perfsonar/logstash/ruby/pscheduler_test_checksum.rb)
@@ -2381,6 +2704,10 @@ if __name__ == "__main__":
         import isodate
         import pika        
 
+    if param["ipv6" ]:
+        print("Error: Parsing of Ipv6 addresses not yet supported.")
+        sys.exit()
+        
     asn_lookup = geoip2.database.Reader(param['geodb'])  # Instansiate ASN lookup object
     resolver = Resolver(param['namemap'])  # Initiate ip-to-name and name-to-ip resolver 
 
@@ -2394,8 +2721,12 @@ if __name__ == "__main__":
         thr = 0
         for tracefile in param['file']:
             srchost = tracefile.split("/")[-3]    # Extract source host (?)
+            srcdate = tracefile.split("/")[-2]    # Extract date for source host (?)
             if not srchost :
                 print ("Error: No sourcehost found in file path")
+                sys.exit()
+            if not srcdate :
+                print ("Error: No source date found in file path")
                 sys.exit()
             if param['live'] > 0:
                 thr += 1
@@ -2404,17 +2735,17 @@ if __name__ == "__main__":
                 if pid == 0:
                     # Child process
                     os.nice(5)    # Give process a bit lower priority than normal
-                    read(tracefile, srchost, "nosummary", thr)  # Analyse whole file
-                    read(tracefile, srchost, "live", thr)  # Analyse tail and follow file
+                    read(tracefile, srchost, srcdate, "nosummary", thr)  # Analyse whole file
+                    read(tracefile, srchost, srcdate, "live", thr)  # Analyse tail and follow file
                     sys.exit()
                     
                 # Parent process
                 if param['verbose'] > 1:
                     print("Forked child ", pid)
             elif param['profiler'] > 0:
-                cProfile.run('read(tracefile, srchost, "batch", thr)' ) # Analyse
+                cProfile.run('read(tracefile, srchost, srcdate, "batch", thr)' ) # Analyse
             else:
-                read(tracefile, srchost, "batch", thr)  # Analyse
+                read(tracefile, srchost, srcdate, "batch", thr)  # Analyse
         if thr > 0:
             try:
                 # Wait for child processes to finish
@@ -2447,26 +2778,15 @@ if __name__ == "__main__":
         #print(str(int(time.time())))
         path = param['path']     # Base path to search for relevant traceroute files (given date)
             
-        #This is cool if you just want to analyze one node. Comment out what's under
-        #read("/var/lib/microdep/mp-dragonlab/data/ytelse-trd/2021-06-25/traceroute_35.246.8.199.gz", "traceroute_35.246.8.199.gz")
-        #read("aleksjek.gz", "ytelse-tos", "batch", 0)
-    
-        datacenters = {"amazon-ff", "amazonff-mp", "amazonie-mp", "amazon-mp", "amazonsth-mp", "amazonuw2-mp", "azure-mp", "azurene-mp", "googleeu-mp", "googlefi-mp", "google-mp"}
-        datacenterIP = {"18.195.175.203","34.246.185.57", "13.53.187.135", "18.236.63.8", "13.82.53.167", "13.79.144.22", "35.246.8.199", "35.228.220.215", "104.196.241.36", "34.246.185.57"}
-            
-            
         thr = 0       # No of prallell procs strated
         thr_done = 0  # Procs completed
         # Find relevant traceroute files based on date and start analysis for each
         for srcfolder in os.listdir(path):
-            #if str(srcfolder) in datacenters:
-            #    continue
             for datefolder in os.listdir(path + "/" + srcfolder + "/"):
                 if str(datefolder) != str(date): #Skips logs from other dates
                     continue
 
                 for filename in os.listdir(path + "/" + srcfolder + "/" + datefolder + "/"):
-                    #if filename.startswith("traceroute") and str(filename)[11:-3] not in datacenterIP:
                     prefix = "tcp" if param["tcp"] > 0 else ""
                     if filename.startswith(prefix + "traceroute"):
                         filepath = str(path + "/" + srcfolder + "/" + datefolder + "/" + filename)
@@ -2478,8 +2798,8 @@ if __name__ == "__main__":
                             if pid == 0:
                                 # Child process
 #                                os.nice(5)    # Give process a bit lower priority than normal
-                                read(filepath, srcfolder, "nosummary", thr)  # Analyse whole file
-                                read(filepath, srcfolder, "live", thr)  # Analyse tail and follow file
+                                read(filepath, srcfolder, datefolder, "nosummary", thr)  # Analyse whole file
+                                read(filepath, srcfolder, datefolder, "live", thr)  # Analyse tail and follow file
                                 sys.exit()
                                 
                             # Parent process
@@ -2498,7 +2818,7 @@ if __name__ == "__main__":
                             if pid == 0:
                                 # Child process
 #                                os.nice(5)    # Give process a bit lower priority than normal
-                                read(filepath, srcfolder, "batch", thr)  # Analyse whole file
+                                read(filepath, srcfolder, datefolder, "batch", thr)  # Analyse whole file
                                 sys.exit()
                                 
                             # Parent process

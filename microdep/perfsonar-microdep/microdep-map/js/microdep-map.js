@@ -5,7 +5,7 @@ import {parms, conffile, reversed, prop_sum, update_url, stats_on,
 	event_names, event_desc, event_long_desc, event_index, event_sum_type,
 	prop_names, prop_names_list, prop_desc, prop_long_desc, prop_aggr,
 	colors, get_color, make_palette, threshes, get_thresholds, 
-	get_parms,removeParam, parse_hhmm, hhmm,
+	get_parms,removeParam, parse_hhmm, hhmm , adjust_to_timezone,
 	get_config, update_props, make_prop_select, add_tab,
 	round_number, zero_fill, selected_date_is_today_or_future, selected_hour_is_future }
 from "./map-lib.js" ;
@@ -188,6 +188,11 @@ function make_markers ( network, points, focus) {
 
     }
 
+    if ( points.length == 0 ){
+	// No markers to focus on. Show the whole world (repeated as many times as necessary)
+        bounds =  [[-90,-180],   [90,180]];
+    }
+    
     if ( focus ){
 	mymap.fitBounds(bounds);
     }
@@ -344,24 +349,24 @@ function update_legend(title, threshes){
 	    + colors[i] + ">" + lower[i] + "</button></td>";
     }
 
-    // TODO: Dashboard should be specified in map-config.yaml and fetch from there (rather than hardcoded here)
-//    var dashboard={"uninett":'https://iou2.uninett.no/kibana/app/dashboards#/view/loss-uninett?_g=(filters%3A!()%2CrefreshInterval%3A(pause%3A!t%2Cvalue%3A0)%2Ctime%3A(from%3Anow%2Fd-1d%2Cto%3Anow%2Fd-1d))', 
-//        "dragonlab":'https://iou2.uninett.no/kibana/app/dashboards#/view/dragonlab-loss?_g=(filters%3A!()%2CrefreshInterval%3A(pause%3A!t%2Cvalue%3A0)%2Ctime%3A(from%3Anow%2Fd-1d%2Cto%3Anow%2Fd-1d))'};
-//     var myboard = dashboard[ $("#network").val() ];
-//     html += '<td><button class=knapp title="Kibana dashboard(limited access)" onclick=\'window.open("' + myboard + '", "_blank");\'>Dashboard</button>';
+    // Add dashboard button if configured
+    if (! jQuery.isEmptyObject(conffile[parms.net].dashboardURL)) {
+	html += '<td><button class=knapp title="Database dashboard" onclick=\'window.open("' + conffile[parms.net].dashboardURL + '", "_blank");\'>Dashboard</button>';
+    }
     html +=  "</tr></table>";
     $("#legend").html(html);
     
     $("#farge0").click(  function () {
 	// only_links_by_color(empty_color);
-
+	/* better to see only grey
 	if ( links_on ){
 	    hide_links_by_color(empty_color);
 	    links_on=false;
 	} else {
 	    links_on=true;
 	    show_links_by_color(empty_color);
-	}
+	} */
+	only_links_by_color(empty_color);
     });
     for ( i in lower ){
 	var id="legend"+i;
@@ -375,6 +380,45 @@ function update_legend(title, threshes){
 	color_on[colors[i]]=false;
     }
     
+}
+
+function gap_popup( div, link){
+    const button = document.createElement("button");
+    let etype = parms.event;
+    button.innerHTML = "Top " + etype + "s";
+    button.onclick = function(event) {
+	let idiv;
+	let etag = 'event ' + parms.event + parms.start + parms.period; // mark with tag to reuse data
+	if ( this[etag]){ // cycle through top, all, hide
+	    idiv = this[etag];
+	    if ( this.innerText.substr(0,4) == 'Hide'){
+		idiv.style.display = "none";
+		this.innerText='Top';
+	    } else {
+		idiv.style.display = "block";
+		if ( this.innerText.substr(0,3) == 'All'){
+		    idiv.innerHTML=gap_list( link.from, link.to, idiv['hits'+parms.event] );
+		    this.innerText='Hide';
+		} else { // top
+		    idiv.innerHTML=gap_list( link.from, link.to, idiv['hits'+parms.event], 10, 'num_desc');
+		    this.innerText='All';
+		}
+	    }
+	    this.innerText += ' ' + etype + 's'; 
+	    sorttable.makeSortable( div.getElementsByClassName('sortable')[0] );
+	    mymap._popup.update();
+	} else {
+	    idiv = document.createElement("div");
+	    idiv.classList.add("sprettopp");
+	    //idiv.classList.add("popupList");
+	    button.classList.add("knapp");
+	    div.appendChild(idiv);
+	    this[etag]=idiv; // store reference
+	    get_peer_data( link.from, link.to, idiv);
+	    this.innerText='All ' + etype +'s';
+	}
+    }
+    div.appendChild(button);
 }
 
 
@@ -396,26 +440,31 @@ function link_popup(link){
 //	// Add traceroute type prefix
 //	url += "&prefix=" + conffile[parms.net].event_type[parms.event].popup.see_routes;
 //    }
-    var url = '/pstracetree/ls.html?mahost=localhost:443&verify_SSL=0&from=' + name_to_ip[link.from] + '&to=' + name_to_ip[link.to] +'&time-start=' +  dato;
+    var url = '/pstracetree/ls.html?mahost=localhost:443&verify_SSL=0&api=opensearch&from=' + link.from + '&to=' + link.to +'&time-start=' + dato;
     html +='\nSee ';
-//    html += '\n<button class=knapp><a title="See the routes graph and stats in this period" target="_blank" href="' + url + '">Routes'  + '</a></button>' + "\n";
     html += '\n<button class=knapp onclick="window.open(\'' + url +'\');" title="See the routes graph and stats in this period">Routes'  + '</button>' + "\n";
 
+    const div = document.createElement("div");
+    div.classList.add("sprettom");
+    div.innerHTML = html;
+
+    gap_popup( div, link);
+
     url = 'curve-chart.html?net=' + parms.net + '&index=' + parms.net + '_jitter&from=' + link.from + '&to=' + link.to + '&event=jitter&property=h_ddelay&start=' + start + '&end=' + end + "&title=From " + link.from + " to " + link.to ;
-    //html += '<br>Plot <button class=knapp><a title="Curve over queues in this period" target="_blank" href="' + url + '">Queues</a></button>' + "\n";
-    html += '<br>Plot <button class=knapp onclick="window.open(\'' + url +'\');"Curve over queues in this period">Queues</button>' + "\n";
+    html = 'Plot <button class=knapp><a title="Curve over queues in this period" target="_blank" href="' + url + '">Queues</a></button>' + "\n";
 
     url='curve-chart.html?net=' + parms.net + '&index=' + event_index[parms.event] + '&from=' + link.from + '&to=' + link.to + '&event=' + parms.event + '&property=' + parms.property + '&start=' + start + '&end=' + end + '&title="From ' + link.from + ' to ' + link.to + ' for ' + parms.property + '"';
     html += '\n<button class=knapp><a title="Detailed report for report" target="_blank" href="' + url + '">' + prop_desc[parms.property] + '</a></button>' + "\n";
 
+    let tail=document.createElement("div");
+    tail.innerHTML = html;
+    div.appendChild(tail);
 
-    
-//    var knapp=" <button class=knapp onclick=document.open('javascript:document.documentElement.innerHTML=\"" + encodeURI(gap_list(link.from, link.to)) + "\"');>Gap list</button>";
-    var knapp=" <button class=knapp onclick=document.open('javascript:document.write(\"" + encodeURI(gap_list(link.from, link.to)) + "\")');>Gap list</button>";
+
     // if( parms.debug) console.log(knapp);
-    //html += knapp;
+    // html += knapp;
 
-    html += '<p>' + gap_list(link.from, link.to);
+    // html += '<p>' + gap_list(link.from, link.to);
     // html += ' <button class=knapp onclick=console.log(window.parent.name);console.log(window.name);window.parent.gap_list("' + link.from + '","' + link.to + '");' + '>Gap list</button>';
 
     /*
@@ -427,7 +476,7 @@ function link_popup(link){
     html += ', <button class=knapp><a href=' + fix_url( document.location.href, "node", link.to ) + '>' + link.to + '</a></button>';
     */
     // html+='</body>';
-    return html;
+    return div;
 }
 
   function make_tooltip_v2(title, link){
@@ -445,8 +494,8 @@ function link_popup(link){
 		  }
 	      }
 	  } else {
-	      for (const s in conffile[parms.net].event_type[parms.event].popup.summary) {
-		  var sum_var = conffile[parms.net].event_type[parms.event].popup.summary[s];
+	      for (const sum_var of conffile[parms.net].event_type[parms.event].popup.summary) {
+		  //ok var sum_var = conffile[parms.net].event_type[parms.event].popup.summary[s];
 		  if ( typeof link[sum_var] != 'undefined' ) {
 		      var prop_value = Math.round((link[sum_var] + Number.EPSILON) * 100) / 100;  // Round off to (max) 2 decimals
 		      tip+= '<tr><td>' + prop_desc[sum_var] + '<td align=right>' + prop_value; 
@@ -527,26 +576,38 @@ function link_tooltip( title, link, prop){
 }
 
 
-function gap_list( from, to){
+function gap_list( from, to, hits, lines, sort_type){
     var etype, html;
-    var n=0;
+    var n=0; //  line number
 
-      for ( var hit of last_hits){
+    // sort descending on tloss
+    if ( sort_type){
+	// let sort_col = conffile[parms.net].event_type[parms.event].popup.table[0];
+	let sort_col = conffile[parms.net].event_type[parms.event].default_field;
+	hits.sort( function(a,b){
+	    if ( sort_type === 'num_desc')
+		return b._source[sort_col] - a._source[sort_col];
+	    else // num_asc
+		return a._source[sort_col] - a._source[sort_col];
+	} );
+    }
+
+    for ( var hit of hits){
 	var gap = hit._source;
 	if ( ! etype) { // take first record as defining
 	    etype = gap.event_type;
 	    var amount_head = etype === "gap" ? "Queue(ms)" : "Cause";
-	    html="<table><thead><td>Day Time<td>Lost(s)<td>" + amount_head + "</thead>";
+	    html="<table class=sortable><thead><td>Day Time<td>Lost(s)<td>" + amount_head + "</thead>";
 	    if (! jQuery.isEmptyObject(prop_desc)) {
 		// Config from file available. Build table header row.
-		html="<table><thead><td>Day Time";
+		html="<table class=sortable><thead title=\"Click to sort on column\"><th>Day Time";
 		for (const col in conffile[parms.net].event_type[etype].popup.table) {
 		    // Prepare colum heading with popup title text.
 		    var title_text = "";
 		    if (typeof prop_long_desc[conffile[parms.net].event_type[etype].popup.table[col]] != "undefined") {
 			title_text = prop_long_desc[conffile[parms.net].event_type[etype].popup.table[col]];
 		    }
-		    html += "<td  title='" + title_text + "'>" + prop_desc[conffile[parms.net].event_type[etype].popup.table[col]];
+		    html += "<th  title='" + title_text + "'>" + prop_desc[conffile[parms.net].event_type[etype].popup.table[col]];
 		}
 		html += "</thead>";
 	    }
@@ -605,6 +666,7 @@ function gap_list( from, to){
 		//html += "<tr><td>" + syslog_href + "<td>" + telemetry_href + "<td>" + gap.h_ddelay.toFixed(1) + "<td>" + "\n";
 		html += "<tr><td>" + tid +  "<td align=right>" + sec + "<td align=right>" + amount + "<td>" + tail + "\n";
 	    }
+	    if ( lines &&  n >= lines) break;
 	    n++;
 	}
     }
@@ -769,12 +831,16 @@ function draw_links(hits, prop){
 		    linkByName[ab]=l;
 		    ends.push(abs);
 		    l.on("mouseover", function(e){
-			color_store[e.target.leaflet_id]=e.target.options.color;
-			e.target.bringToFront();
-			taint_link(e.target,"blue");
+			if (! mouseover) {
+                            mouseover = true;  // Flag required since mouseover is retriggered as long as the mouse hovers over a link
+ 			    color_store[e.target.leaflet_id]=e.target.options.color;
+			    e.target.bringToFront();
+			    taint_link(e.target,"blue");
+			}
 		    });
 		    l.on("mouseout", function(e){
 			taint_link(e.target, color_store[e.target.leaflet_id]);
+			mouseover=false;
 		    });
 		}
 	    } /* else { // no need to redraw
@@ -802,21 +868,66 @@ function draw_links(hits, prop){
     taint_links(hits, prop);
 }
 
-function get_topology(){
-    start = new Date($("#datepicker").val() + " 00:00:00").getTime()/1000;
-    end= new Date($("#datepicker").val() + " 23:59:59").getTime()/1000;
+function get_topology(source = "archive"){
+    // Fetch topology data from relevant source
+    // and initiate drawing of topology
+    
+    let start = new Date($("#datepicker").val() + " 00:00:00").getTime()/1000;
+    let start_iso = new Date($("#datepicker").val() + " 00:00:00").toISOString();
+    let end= new Date($("#datepicker").val() + " 23:59:59").getTime()/1000;
+    let end_iso = new Date($("#datepicker").val() + " 23:59:59").toISOString();
     var network=parms.net;
-    var url="microdep-config.cgi?secret=virre-virre-vapp&variant=mp-" + network + "&start=" + start + "&end=" + end;
-    $.getJSON( url,
-	       function(topology){
-		   draw_topology( topology );
-		   get_connections();
-		   // draw_topology( duplex_topology( topology) ); 
-	       }).fail( function( jqxhr, textStatus, error ) {
-		  var err = textStatus + ", " + error;
-		   console.log( "Request" + url + " Failed: " + err );
-	      });
 
+    switch (source) {
+	
+    case "sqlite-db":
+	// Ask for topology-info from (legacy) sqllite db 
+	var url="microdep-config.cgi?secret=\"" + conffile[parms.net].database_secret + "\"&variant=mp-" + network + "&start=" + start + "&end=" + end;
+	$.getJSON( url,
+		   function(topology){
+		       draw_topology( topology );
+		       get_connections();
+		       // draw_topology( duplex_topology( topology) ); 
+		   }).fail( function( jqxhr, textStatus, error ) {
+		       var err = textStatus + ", " + error;
+		       console.log( "Request" + url + " Failed: " + err );
+		   });
+	break;
+	
+    case "archive": 
+	// Fetch all unique from-to peers (flows) for time period from Opensearch archive
+	var query_index = event_index[parms.event];
+	if ( conffile[parms.net].event_type.topology.index )
+	    // Override with index from config
+	    query_index = JSON.stringify( { "index": conffile[parms.net].event_type.topology.index }); 
+	var url = conffile[parms.net].archive + "/" + query_index + "/_search";
+	var query = JSON.stringify ({ "query": { "range": { "@date": { "gte": start_iso,  "lt": end_iso  } } },
+		      "size": 0,
+		      "aggs": { "peer": { "terms": { "field": "from_to.keyword", "size" : 1000000  } } }
+				    });
+	$.post( {url: url, data: query, contentType: "application/json", dataType: "json", success: 
+		   function(result){
+		       var topology = [];
+		       if (! result.aggregations.peer.buckets.length) {
+			   console.log("No topology data returned from archive for time period " + start + " to " + end + ". Trying sqlite db ...");
+			   // No topology data returned. Try sqlite-db instead.
+			   get_topology("sqlite-db");
+		       } else {
+			   for (var p=0; p < result.aggregations.peer.buckets.length; p++) {
+			       topology.push(result.aggregations.peer.buckets[p].key.split("_"));
+			   }
+			   draw_topology( topology );
+			   get_connections();
+			   // draw_topology( duplex_topology( topology) );
+		       }
+		   }, fail: function( jqxhr, textStatus, error ) {
+		       var err = textStatus + ", " + error;
+		       console.log( "Request" + url + " Failed: " + err );
+		   } } );
+
+	break;
+    }
+	
 }
 
 // done by api
@@ -853,7 +964,6 @@ function draw_topology(topo){
 		l.on("mouseover", function(e){
 		    if (! mouseover) {
 			mouseover = true;  // Flag required since mouseover is retriggered as long as the mouse hovers over a link
-
 			color_store[e.target.leaflet_id]=e.target.options.color;
 			e.target.bringToFront();
 			taint_link(e.target,"blue");
@@ -948,7 +1058,6 @@ function taint_links( hits, prop){
 		    l.on("mouseover", function(e){
 			if (! mouseover) {
 			    mouseover = true;
-			    
 			    color_store[e.target.leaflet_id]=e.target.options.color;
 			    e.target.bringToFront();
 			    taint_link(e.target,"blue");
@@ -956,7 +1065,6 @@ function taint_links( hits, prop){
 		    });
 		    l.on("mouseout", function(e){
 			taint_link(e.target, color_store[e.target.leaflet_id]);
-			
 			mouseover = false;
 		    });
 		}
@@ -1098,15 +1206,85 @@ function draw_link( ends, color, tooltip, popup){
 	    console.log('Line draw failed ' + line_name);
 	
 	line.bindTooltip(tooltip, {"sticky":true});
-	line.bindPopup(popup,{maxHeight: 800, maxWidth:800	});
+	line.bindPopup(popup,{ maxHeight: "800", maxWidth:"800", keepInView: true, autoClose: true      });
     } else {
 	console.log("no coords for ends" + ends.length + ' ends ' + ends + ' coords ' + latlon1 + ' - ' + latlon2);
     }
     return(line);
 }
 
+function get_node_query(tofrom, start, end) {
+    // Produce a JSON string for querying node info from Opensearch
+    return JSON.stringify( { "query": { "bool": { "filter": [ { "term": { "event_type": "topology" } }, { "range": { "@date": { "gte": start, "lt": end } } } ] } }, "size": 0, "aggs": { "nodes": { "terms": { "field": tofrom + ".keyword", "size" : 10000  }, "aggs": { "ip": { "terms": { "field": tofrom + "_adr.keyword"}}, "city": { "terms": { "field": tofrom + "_geo.city_name.keyword"}}, "lat": { "terms":  { "field": tofrom + "_geo.latitude" } },  "lon": { "terms":  { "field": tofrom + "_geo.longitude" } } } } } } );
+}
 function load_coords(network, service, goal){
     // Load global coordinate for nodes in topology
+
+    if ( service === "topoevents" ) {
+	// Extract and load coordinates from topology-events fetched from archive db (Opensearch)
+	var start_iso = new Date($("#datepicker").val() + " 00:00:00").toISOString();
+	var end_iso = new Date($("#datepicker").val() + " 23:59:59").toISOString();
+	// Query for both source (from) nodes and destination (to) nodes
+	var query_index = JSON.stringify( { "index": event_index[parms.event] }); 
+	if ( conffile[parms.net].event_type.topology.index )
+	    // Override with index from config
+	    query_index = JSON.stringify( { "index": conffile[parms.net].event_type.topology.index }); 
+	var query_fromnodes = get_node_query( "from", start_iso, end_iso);
+	var query_tonodes = get_node_query( "to", start_iso, end_iso);
+	var query = query_index + '\n' + query_fromnodes + '\n' + query_index + '\n' + query_tonodes + '\n';
+	var url = conffile[parms.net].archive + "/_msearch";
+
+	$.post( {url: url, data: query, contentType: "application/json", dataType: "json", success: 
+		   function(result){
+		       for (var r = 0; r < result.responses.length; r++) {
+			   if (typeof result.responses[r].aggregations != "undefined" ) {
+			       // Aggregated results are available
+			       for (var n=0; n < result.responses[r].aggregations.nodes.buckets.length; n++) {
+				   // Add node info to points structure
+				   var p={ id: "", name: "Unknown", lat: 0, lon: 0, ip: "n/a"};
+				   p.id = result.responses[r].aggregations.nodes.buckets[n].key;
+				   if (typeof result.responses[r].aggregations.nodes.buckets[n].city.buckets[0] != "undefined" ) {
+				       p.name = result.responses[r].aggregations.nodes.buckets[n].city.buckets.at(-1).key;  // Grab last city in list
+				   } else {
+				       p.name = p.id;
+				   }			       
+				   if (typeof result.responses[r].aggregations.nodes.buckets[n].lat.buckets[0] != "undefined")
+				       p.lat = result.responses[r].aggregations.nodes.buckets[n].lat.buckets.at(-1).key ?? 0 ; // Get last value seen
+				   if (typeof result.responses[r].aggregations.nodes.buckets[n].lon.buckets[0] != "undefined") 
+				       p.lon = result.responses[r].aggregations.nodes.buckets[n].lon.buckets.at(-1).key ?? 0 ; // Get last value seen
+				   if (typeof result.responses[r].aggregations.nodes.buckets[n].ip.buckets[0] != "undefined") { 
+				       reg_ip_adr(p.id, result.responses[r].aggregations.nodes.buckets[n].ip.buckets.at(-1).key );  // Register last ip in list
+				       p.ip = result.responses[r].aggregations.nodes.buckets[n].ip.buckets.at(-1).key;
+				   }
+				   let point_already_loaded = points.find(o => o.id === p.id);
+				   if (! point_already_loaded) {
+				       points.push( p);
+				   } else {
+				       console.log( "Duplicate node info for node " + p.id );
+				   }
+			       }
+			   } else if (typeof result.responses[r].error.reason != "undefined" ) {
+			       // Something is "suboptimal"
+			       console.log("Failed to access data from Opensearch: " + result.responses[r].error.reason + ".");
+			   }
+		       }
+		       if ( ! result.responses.length ) {
+			   console.log("No node data returned from archive for time period " + start_iso + " to " + end_iso + ".");
+		       }
+		       loads++;
+		       if (loads >= goal) {
+			   // All other calls to load_coords() have completed.
+			   loads=0;
+			   show_map(network);
+			   get_topology();
+		       }
+		   }, fail:  function( jqxhr, textStatus, error ) {
+		       var err = textStatus + ", " + error;
+		       console.log( "Request" + url + " Failed: " + err );
+		       loads++;
+		   } } );
+	return;
+    } 
 
     if ( service === "db" ) {
 	// Load coordinates from config db
@@ -1135,10 +1313,12 @@ function load_coords(network, service, goal){
 		       if (loads >= goal) { // i.e. wait until data loaded
 			   loads=0;
 			   show_map(network);
+			   get_topology();
 		       }  
 		   }).fail( function( jqxhr, textStatus, error ) {
 		       var err = textStatus + ", " + error;
 		       console.log( "Request" + url + " Failed: " + err );
+		       loads++;
 		   });
 	return;
     } 
@@ -1148,7 +1328,8 @@ function load_coords(network, service, goal){
     $.getJSON( url,
 	function(tjenester){
 	    if ( "_meta" in tjenester ){
-		  $.each(tjenester._meta.hostvars, function(id, host){
+		$.each(tjenester._meta.hostvars, function(id, host){
+		    if( host.utm){
 		      var utm=host.utm.split(" ");
 		      var utm_o = L.utm( { x:utm[2], y:utm[1], zone: utm[0], band:"N" } );
 		      var latlon = utm_o.latLng();
@@ -1157,7 +1338,8 @@ function load_coords(network, service, goal){
 		      if ( id.indexOf("ytelse") >= 0){ // kutt uninett.no pga db
 			  ytid = id.substr(0, id.indexOf(".uninett.no") );
 		      }
-		      points.push( {id:ytid, name:host.nettinstallasjon, lat:latlon.lat, lon:latlon.lng });
+			points.push( {id:ytid, name:host.nettinstallasjon, lat:latlon.lat, lon:latlon.lng });
+		    }
 		  });
 	    } else { // assume array of points
 //		points = points.concat(tjenester);
@@ -1175,11 +1357,13 @@ function load_coords(network, service, goal){
 	    if (loads >= goal) { // i.e. wait until data loaded
 		loads=0;
 		show_map(network);
+		get_topology();
 	    }  
 
 	}).fail( function( jqxhr, textStatus, error ) {
 	    var err = textStatus + ", " + error;
 	    console.log( "Request" + url + " Failed: " + err );
+	    loads++;
 	});
 
 }
@@ -1191,10 +1375,15 @@ function show_network(network){
 	points=points_cache[network];
 	show_map(network);
     } else {
-	load_coords(network, "db",2);   // Load node coordinates from config db
-	load_coords(network, "base",2);
-//	load_coords(network, "extra",2);
-//	load_coords(network, "cnaas",2);
+	// Exctract node coordinates from topology events
+	load_coords(network, "topoevents", 5);
+	// Load node coordinates from config db
+	load_coords(network, "db", 5);
+	// Load node coordinates from json files
+	load_coords(network, "base", 5);
+	load_coords(network, "extra", 5);
+	load_coords(network, "cnaas", 5);
+	// NOTE: Last arg (int) must equal no of consequtive calls to 'load_coords'
     }
 }
 
@@ -1202,8 +1391,6 @@ function show_network(network){
 function get_coords(end){
     var coords, i;
 
-    if ( end.indexOf("ytelse") >= 0 && end.indexOf("uninett.no") >= 0 )
-	end = end.slice( 0, end.indexOf(".uninett.no") );
     for (i=0; i < points.length; i++){
 	var p=points[i];
 	if ( p.id === end ){
@@ -1414,8 +1601,10 @@ function change_date(delta){
     $("#datepicker").datepicker('setDate', p);
     //$("#draw").click();
     update_url();
-    get_topology();
+    show_network(parms.net);
+    //get_topology();
     get_connections();
+    update_url();
  
     // var curd = $("#datepicker").datepicker('GetDate');
     // $("#datepicker").datepicker('SetDate', curd+delta)
@@ -1471,6 +1660,44 @@ function log_summary(summary){
     }
 }
 
+
+// fill html table with parameters
+
+function present_table( parameters, div, data){
+}
+
+
+// get peer data
+function get_peer_data(from, to, div){
+    var data=[];
+    // adjust time from UTC to experiment timezone
+    let tz_start = adjust_to_timezone(start);
+    let tz_end = adjust_to_timezone(end);
+
+    var url="elastic-get-date-type.pl?index=" + event_index[parms.event] + "&event_type=" + parms.event
+	+ "&start=" + tz_start + "&end=" + tz_end
+	+ "&from=" + from + "&to=" + to;
+
+    $.getJSON( url,
+               function(resp){
+                   if (resp.hits && resp.hits.total.value > 0){
+                       // present_table( parameters, div, resp.hits.hits);
+                       let html=gap_list( from, to, resp.hits.hits, 10, 'num_desc');
+                       div.innerHTML = html;
+                       div['hits'+parms.event] =  resp.hits.hits;
+                       sorttable.makeSortable( div.getElementsByClassName('sortable')[0] );
+                       mymap._popup.update();
+                   } else {
+                       $("#error").html(hhmmss(new Date()) + " : No " + parms.event + " data for " + $("#datepicker").val() + " " + $("#period_input").val() + ";;");
+                   }
+
+	       })
+	.fail( function(e, textStatus, error ) {
+            //remove_links(links);
+            console.log("failed to get data from server :" + textStatus + ", " + error);
+        });
+}
+
 // get measurement data
   var links_on = false;
   const index_extension={};
@@ -1480,10 +1707,14 @@ function get_connections(){
     var index=parms.net;
     var etype= $("#event_type").val();
     var sum_etype="";
+    var sum_index="";
     if ( ! jQuery.isEmptyObject(event_index)) {
 	// Apply ES indexnames from config file
 	index = event_index[parms.event];
-	sum_etype = event_sum_type[parms.event];
+	if ( parms.event === 'jitter')
+	    sum_etype = event_index['gap']; // i.e. 
+	else
+	    sum_etype = event_sum_type[parms.event];
     } else if ( etype === "gap" || etype === "gapsum" ) {
 	sum_etype = "gapsum";
     } else if ( etype === "routeerr" || etype === "routesum" ) {
@@ -1508,6 +1739,7 @@ function get_connections(){
     var dstart=new Date(start);
     var msstart=dstart.getTime();
     var tz= dstart.getTimezoneOffset() / 60;
+    let tloss;
     if ( period < 24 ){
 	var period_input= $("#period_input").val();
 	hour=parse_hhmm( period_input ) + tz;
@@ -1515,6 +1747,7 @@ function get_connections(){
 	dstart= new Date( msstart + hour * 3600*1000 );
 	start = dstart.toISOString();
 	end = new Date(dstart.getTime() + 3600*1000).toISOString();
+	tloss=0;
     } else {
 	var msperiod=period * 3600*1000;
 	var msend= msstart + msperiod;
@@ -1533,19 +1766,31 @@ function get_connections(){
 	
 	start= new Date(msstart).toISOString();	
 	end= new Date(msend).toISOString();
+
+	if ( period < 2*24 ){ // uke
+	    tloss=1000; // ms
+	} else if ( period <= 7*24 ){ // uke
+	    tloss=5000; // ms
+	} else {
+	    tloss=60000;
+	}
     }	  
     
-    var now = new Date();
-  
-    var url="elastic-get-date-type.pl?index=" + index + "&event_type=" + etype
-	    + "&start=" + start + "&end=" + end;
-
-    if (parms.debug) console.log(url);
-
     // Clear current dataset (details and summary)
     last_hits=[];
     summary=[];
+
+    // get all detail if today
+    var now = new Date();
     
+    if ( etype === 'jitter' || start.substr(0,10) === now.toISOString().substr(0,10) ){ // read todays details
+    var url="elastic-get-date-type.pl?index=" + index + "&event_type=" + etype
+	+ "&start=" + start + "&end=" + end ;
+    if ( tloss > 0 && etype === "gap" )
+	url += "&tloss=" + tloss;
+
+    if (parms.debug) console.log(url);
+
      $.getJSON( url,
 	       function(resp){
 		  if (resp.hits && resp.hits.total.value > 0){
@@ -1588,11 +1833,6 @@ function get_connections(){
 		      $("#error").html(hhmmss(new Date()) + " : No " + $("#event_type").val() + " data for " + $("#datepicker").val() + " " + $("#period_input").val() + ";;");
 		  }
 
-		   if (parms.report) {
-		       // Prepare specified report (next to the map)
-		       $("#check").val(parms.report).trigger('change');
-		       delete parms.report;  // ... but only first time when page is loaded
-		   }
 
 	      })
 	.fail( function(e, textStatus, error ) {
@@ -1600,9 +1840,14 @@ function get_connections(){
 	    console.log("### Failed to get data from server :" + textStatus + ", " + error + " url: " + url);
 	});
 
-    if ( sum_etype && start.substr(0,10) != now.toISOString().substr(0,10)) {
+    } else if ( sum_etype) { // get the summary records
+    // if ( sum_etype && start.substr(0,10) != now.toISOString().substr(0,10)) {
 	// Event type for summary info is set and it's not todays date...
 
+	if ( etype === 'jitter'){
+	    index = parms.net; // conffile in error
+	    sum_etype = 'gapsum';
+	}
 	// Prepare to fetch summary info
 	var sum_url="elastic-get-date-type.pl?index=" + index + "&event_type=" + sum_etype
 	    + "&start=" + start + "&end=" + end;
@@ -1633,6 +1878,12 @@ function get_connections(){
 		//remove_links(links);
 		console.log("failed to get data from server :" + textStatus + ", " + error);
 	    });
+    }
+    
+    if (parms.report) {
+	// Prepare specified report (next to the map)
+	$("#check").val(parms.report).trigger('change');
+	delete parms.report;  // ... but only first time when page is loaded
     }
 
     $("#tabs").tabs("option", "active", 0);
@@ -1701,7 +1952,8 @@ function hhmmss(d){
 	      $("#next").prop('dsabled', selected_hour_is_future() ); // Make next-button available if relevant
 	      //ok update_props();
 	      update_url();
-	      get_topology();
+	      show_network(parms.net);
+	      //get_topology();
 	      get_connections();
 	  });
 
@@ -1776,19 +2028,19 @@ function hhmmss(d){
 	  }
       });
 
-
       // network change
-      $("#network").change( function(){
+      $("#network").change( async function(){
 	  parms.net= $("#network").val();
 	  update_props();
 	  remove_links(links);
 	  load_name_to_address();
 	  show_network(parms.net);
-	  get_topology();
+	  // await new Promise(r => setTimeout(r, 5000)); // Sleep 5 sec for loading of node-data to complete. WARNING! THIS DESPERATELY NEEDS REDESIGN.
+	  // get_topology();
 	  update_url();
 	  $("#tabs").tabs("option", "active", 0);
       });
-
+      
       // event_type parameter change
       $("#event_type").change( function(){
 	  parms.event = $("#event_type").val()    

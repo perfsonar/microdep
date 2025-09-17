@@ -88,7 +88,7 @@ if [ "$LIST" ]; then
     if [ $DBTYPE = "mysql" ]; then
 	sudo mysqlshow
     elif [ $DBTYPE = "postgres" ]; then
-	psql -U postgres postgres -c \\l
+	su postgres -c 'psql -c "\l"'
     fi
     exit 0
 fi
@@ -135,7 +135,7 @@ if [ $DBTYPE = "mysql" ]; then
     sudo mysqladmin create $DBNAME
     exit_code=$?;
 elif [ $DBTYPE = "postgres" ]; then
-    su postgres -c "createdb $DBNAME"
+    su postgres -c "createdb -O '$USERNAME' $DBNAME"
     exit_code=$?;
 fi
 if [ $exit_code -gt 0 ]; then
@@ -162,9 +162,10 @@ FLUSH PRIVILEGES;
 elif [ $DBTYPE = "postgres" ]; then
     echo "
     DROP ROLE IF EXISTS $USERNAME;
+    GRANT ALL ON DATABASE $DBNAME TO $USERNAME;
     CREATE ROLE $USERNAME WITH PASSWORD '$PASSWD' LOGIN;
 " > $SQLCMD
-    su postgres -c "psql -f $SQLCMD"  
+    su postgres -c "psql -f $SQLCMD $DBNAME"  
 fi    
 rm $SQLCMD
 msg "done."

@@ -392,15 +392,7 @@ export function removeParam(parameter){
 
 export var parms={};
 export var conffile=[];   //Config file loaded initially
-export var thresholds={
-    h_delay:[10,50],
-    h_min_d:[10,50],
-    h_ddelay:[5,50],
-    h_jit:[2,20],
-    down_ppm:[100,1000],
-    h_slope_10:[0.1,0.2]
-};
-
+export var thresholds={};
 
 export var net_names=[];
 export var net_descr={};
@@ -415,42 +407,20 @@ export var event_names;
 export var event_index = {}; 
 export var event_sum_type = {}; 
 
-export var event_desc={ gapsum: "Gap summary", gap: "Gaps", jitter: "Queues", routesum: "Route summary", routeerr: "Route errors"};
+export var event_desc={};
 export var event_long_desc={};
 
 export var stats_on={ jitter:true}; // show stats_type field
 
 export var prop_names;
-export var prop_names_list = {
-    gapsum: "down_ppm h_ddelay h_jit h_min_d big_gaps big_time small_gaps small_time".split(" "),
-    gap: "down_ppm tloss h_ddelay h_jit h_min_d h_slope_10".split(" "),
-    jitter: "h_ddelay h_jit h_min_d h_slope_10".split(" "),
-    routesum: "routes_failed routes_reached probes_stopped_at_last_hop probes_with_none_dst_last_hop routes_analysed routes_reached min_length max_length".split(" "),
-    routeerr: "anomaly_count duration last_hop last_reply_from icmp_errors".split(" ")
-};
-export var prop_desc= { down_ppm:"Unavailability (PPM)",  h_ddelay:"Queue(ms)", h_jit:"Jitter(ms)",
-			h_min_d:"Min delay(ms)", h_delay:"Avg delay(ms)",
-			tloss:"Time lost(ms)", h_slope_10:"Slope",
-			big_gaps:"Big gaps(#)", big_time:"Big gap time(s)", small_gaps:"Small gaps(#)", small_time:"Small gap time(s)"
-		      };
-
-// assign names as description temporarily
-for ( const record of 'routesum routeerr'.split(" ") ){
-    for ( const prop of prop_names_list[record] ){
-	if ( ! prop_desc[prop] ) prop_desc[prop] = prop; 
-    }
-}
+export var prop_names_list = {};
+export var prop_desc= {}; 
 
 
 export function get_config( conffilename, call_back){
-    // OJW 2021-12-09 BEGIN CONFIG FILE LOAD
     // Fetch config info and initialize page
-    // var conffilename = parms.conffile;
-//    if (! conffilename) conffilename = 'mapconfig.yml'
-//    $.getJSON( "yaml-to-json.cgi?inputfile=" + conffilename, function(read_conffile) {
     $.getJSON( "get-mapconfig.cgi", function(read_conffile) {
 	if (Object.keys(read_conffile).length > 0) {
-//	    console.log("Config file " + conffilename + " non-empty: " + read_conffile.msg);
 	    console.log("mapconfig file non-empty: " + read_conffile.msg);
 	    conffile = read_conffile.config;
 	    // Fetch measurment network/variant details from config
@@ -464,17 +434,13 @@ export function get_config( conffilename, call_back){
 	    call_back();
 	}
 
-	// OJW 2021-12-09 CONTINUES AT END OF "document ready"
-
-	//OJW 2021-12-09 CONTINUED CONFIG FILE LOAD
-        })
+    })
     .fail( function(e, textStatus, error ) {
 	// Config not avaiable
         console.log("Failed to get conf.json :" + textStatus + ", " + error);
     });
-    
-    //OJW 2021-12-09 END CONFIG FILE LOAD
 }
+
 export function update_props() {
     // Repopulate property structures based on given measuerment network variant and config file
     // Also re-init event type and variable select-lists
@@ -603,4 +569,15 @@ export function update_props() {
     
     // Update period 
     //ok if (parms.period) $("#period").val(parms.period);
+}
+
+// Adjust time from UTC to experiment time zone
+export function adjust_to_timezone( gmt){
+    let tz=conffile[parms.net].time_zone || 'CET';
+    let locale=Intl.DateTimeFormat().resolvedOptions().locale;
+    let d = new Date(gmt);
+    //let tz_ms = new Date( d.toLocaleString( locale, tz) ).getTimezoneOffset() * 60 * 1000;
+    let tz_ms = d.getTimezoneOffset() * 60 * 1000;
+    let new_ms = d.getTime() + tz_ms;
+    return(new Date(new_ms).toISOString());
 }

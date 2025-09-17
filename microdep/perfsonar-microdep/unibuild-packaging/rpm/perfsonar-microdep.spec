@@ -7,7 +7,7 @@
 %define microdep_web_dir    %{install_base}/microdep-map
 
 #Version variables set by automated scripts
-%define perfsonar_auto_version 5.1.3
+%define perfsonar_auto_version 5.3.0
 %define perfsonar_auto_relnum 1
 
 Name:			perfsonar-microdep
@@ -73,9 +73,12 @@ Requires:               leafletjs-L.LatLng.UTM
 Requires:               latlon-sphericaljs
 Requires:               momentjs = 2.30.1
 Requires:               select2js = 4.0.0
-Recommends:             perfsonar-tracetree
-%{?systemd_requires: %systemd_requires}
+Requires:               sorttablejs = 2.0
+Requires:               perfsonar-tracetree
+#%{?systemd_requires: %systemd_requires}
 BuildRequires:          systemd
+BuildRequires:          systemd-rpm-macros       
+# ... but macros are not yet utilized below
 
 %description map
 Web GUI presenting Microdep analytic results in a map view
@@ -89,7 +92,7 @@ BuildRequires:          centos-release-rabbitmq-38
 Requires:               erlang < 26.0
 #Requires:               erlang 
 Requires:               rabbitmq-server
-
+BuildRequires:          curl
 BuildRequires:          perl >= 5.32
 BuildRequires:          perl(DBI)
 BuildRequires:          perl(DBD::SQLite)
@@ -119,29 +122,13 @@ Requires:               python3-mysqlclient
 Requires:               python3-pika
 Requires:               python3-psycopg2
 Requires:               python3-pytz
-#Requires:               py3-tzlocal
 Requires:               python3-tzlocal
 Requires:               perfsonar-microdep-geolite2
-
-# Potenial dependencies...
-#Requires:               python3-psycopg2
-#Requires:               python3-mysqlclient
-#Requires:               gcc
-#Requires:               python3-devel
-#Requires:               python3-multidict
-##Requires:               typing_extensions
-#Requires:               python3-yarl
-##Requires:               async_timeout
-##Requires:               idna_ssl
-#Requires:               python3-aiosignal
-##Requires:               cchardet
-##Requires:               charset_normalizer
-#Requires:               python3-attrs
-#Requires:               python3-pika
-
-
-%{?systemd_requires: %systemd_requires}
- #BuildRequires:          systemd
+Requires:               logrotate
+#%{?systemd_requires: %systemd_requires}
+BuildRequires:          systemd
+BuildRequires:          systemd-rpm-macros    
+# ... but macros are not yet utilized below
 
 %description ana
 Analytic scripts to process perfSONAR data sets and generate events. Events may be viualized by Microdep map.
@@ -153,10 +140,16 @@ Analytic scripts to process perfSONAR data sets and generate events. Events may 
 %pre map
 /usr/sbin/groupadd -r perfsonar 2> /dev/null || :
 /usr/sbin/useradd -g perfsonar -r -s /sbin/nologin -c "perfSONAR User" -d /tmp perfsonar 2> /dev/null || :
+# Stop services (ignore failures)
+systemctl stop perfsonar-microdep-watchconfig.path || true
 
 %pre ana
 /usr/sbin/groupadd -r perfsonar 2> /dev/null || :
 /usr/sbin/useradd -g perfsonar -r -s /sbin/nologin -c "perfSONAR User" -d /tmp perfsonar 2> /dev/null || :
+# Stop services (ignore failures)
+systemctl stop perfsonar-microdep-gap-ana.service || true
+systemctl stop perfsonar-microdep-trace-ana.service || true
+systemctl stop perfsonar-microdep-restart.timer || true
 
 %prep
 %setup -q
@@ -170,17 +163,26 @@ make ROOTPATH=%{buildroot}/%{install_base} CONFIGPATH=%{buildroot}/%{microdep_co
 mkdir -p %{buildroot}/%{_unitdir}
 install -D -m 0644 -t %{buildroot}/%{_unitdir} %{buildroot}/%{install_base}/scripts/*.service
 install -D -m 0644 -t %{buildroot}/%{_unitdir} %{buildroot}/%{install_base}/scripts/*.timer
-# Move psconfig, httpd and logstash configs into correct folders
-install -D -m 0644 -t %{buildroot}/%{config_base}/psconfig/pscheduler.d/ %{buildroot}/%{microdep_config_base}/microdep-tests.json
+install -D -m 0644 -t %{buildroot}/%{_unitdir} %{buildroot}/%{install_base}/scripts/*.path
+systemctl daemon-reload || true
+# Move microdep map, httpd and logstash configs into correct folders
+install -D -m 0644 -t %{buildroot}/%{microdep_config_base}/mp-dragonlab/etc/ %{buildroot}/%{microdep_config_base}/microdep.db
 install -D -m 0644 -t %{buildroot}/etc/httpd/conf.d/ %{buildroot}/%{microdep_config_base}/apache-microdep-map.conf
-install -D -m 0644 -t %{buildroot}/%{install_base}/logstash/pipeline/microdep %{buildroot}/%{microdep_config_base}/logstash/microdep/*
+install -D -m 0644 -t %{buildroot}/%{install_base}/logstash/microdep_pipeline/ %{buildroot}/%{microdep_config_base}/logstash/microdep/*
+install -D -m 0644 -t %{buildroot}/etc/pscheduler/default-archives/ %{buildroot}/%{microdep_config_base}/psconfig/archives.d/microdep-ana-rmq.json
+install -D -m 0644 -t %{buildroot}/etc/logrotate.d/ %{buildroot}/%{microdep_config_base}/logrotate.d/microdep
+
+# Prepare folder for json output from analytics scripts read by logstash
+mkdir -p %{buildroot}/var/lib/logstash/microdep 
 
 # Clean up copied/unrequired files
 rm -rf %{buildroot}/%{install_base}/scripts
 rm -f %{buildroot}/%{install_base}/Makefile
-rm -rf %{buildroot}/%{microdep_config_base}/microdep-tests.json
 rm -rf %{buildroot}/%{microdep_config_base}/apache-microdep-map.conf
-rm -rf %{buildroot}/%{microdep_config_base}/logstash/
+rm -rf %{buildroot}/%{microdep_config_base}/logstash/microdep
+rm -rf %{buildroot}/%{microdep_config_base}/microdep.db
+rm -rf %{buildroot}/%{microdep_config_base}/psconfig
+rm -rf %{buildroot}/%{microdep_config_base}/logrotate.d
 
 # Make js and css libs available in web folder (-r for relative paths ... to make rpmbuild happy)
 ln -sr /usr/share/javascript/chartjs/4.4.2/chart.umd.js %{buildroot}/%{microdep_web_dir}/js
@@ -219,65 +221,107 @@ ln -sr /usr/share/javascript/leaflet-L.LatLng.UTM/1.0/L.LatLng.UTM.js %{buildroo
 ln -sr /usr/share/javascript/momentjs/2.30.1/moment.js %{buildroot}/%{microdep_web_dir}/js/
 ln -sr /usr/share/javascript/select2/4.0.0/css/select2.min.css %{buildroot}/%{microdep_web_dir}/css/
 ln -sr /usr/share/javascript/select2/4.0.0/js/select2.min.js %{buildroot}/%{microdep_web_dir}/js/
-ln -sr /usr/share/javascript/sorttable/v2/sorttable.js %{buildroot}/%{microdep_web_dir}/js/
+ln -sr /usr/share/javascript/sorttable/2.0/sorttable.js %{buildroot}/%{microdep_web_dir}/js/
 
 # Link mapconfig
 ln -sr %{microdep_config_base}/mapconfig.yml %{buildroot}/%{microdep_web_dir}
 
-# Init Microdep config db with start time set to beginnig of yesterday local time (** This needs redesign **)
-mkdir -p %{buildroot}/%{microdep_config_base}/mp-dragonlab/etc 
-perl %{buildroot}/%{command_base}/microdep-psconfig-load.pl -c --db %{buildroot}/%{microdep_config_base}/mp-dragonlab/etc/microdep.db --start-time $(date --date "yesterday 00:00:00" +%s) %{buildroot}/%{config_base}/psconfig/pscheduler.d/microdep-tests.json
+# Link up some handy tools
+mkdir -p %{buildroot}/usr/local/bin/ || true
+ln -sr %{command_base}/opensearch_config_microdep.sh  %{buildroot}/usr/local/bin/opensearch_config_microdep.sh
+ln -sr %{command_base}/rabbitmq-consume.py  %{buildroot}/usr/local/bin/rabbitmq-consume.py
+ln -sr %{command_base}/microdep_commands/json2table.pl  %{buildroot}/usr/local/bin/json2table.pl
+
 
 %clean
 rm -rf %{buildroot}
 
 %post map
-# Fix credentials to ensure access to Opensearch
+# Fix credentials to ensure access to Opensearch *** NEEDS TO MADE OBSOLETE ***
 if [ -f /etc/perfsonar/opensearch/opensearch_login ]; then
     USER=`awk -F " " '{print $1}' /etc/perfsonar/opensearch/opensearch_login`
     PASSWD=`awk -F " " '{print $2}' /etc/perfsonar/opensearch/opensearch_login`
     sed -i "s|http://admin:no+nz+br|https://$USER:$PASSWD|g" %{microdep_config_base}/microdep-config.yml
 fi
-    
+
+# Init Microdep config db. *** Obsolete since topology events now produce topology info ****
+if [ -f %{config_base}/psconfig/pscheduler.d/toolkit-webui.json ]; then
+    # Read psconfig-data and set start time set to beginnig of yesterday local time (later repeated by perfsonar-microdep-watchconfig.service)
+    %{command_base}/microdep-psconfig-load.pl -c --db %{microdep_config_base}/mp-dragonlab/etc/microdep.db --start-time $(date --date "today 00:00:00" +%s) %{config_base}/psconfig/pscheduler.d/toolkit-webui.json
+    # (Perhaps "systemctl start perfsonar-microdep-watchconfig.service" could be run instead...)
+fi
+
+# Add Microdep button on main grafana dashboard (if not already present)  REMARK: TEMPORARY BE REMOVED 
+if [ -e /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json-temporary-removed ]; then
+    if grep -q  "Microdep map" /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json; then
+	# Find next available panel id
+	NEXTID=$(jq .panels[].id /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json | sort -n | tail -n 1)
+	let NEXTID++
+	# Set new id in dashboard patch
+	PATCHFILE=$(mktemp)
+	jq --argjson nextid "$NEXTID" '.id = $nextid' %{microdep_config_base}/grafana_dashboard_patch > $PATCHFILE
+	# Add new panel to main dashboard
+	DASHBOARDFILE=$(mktemp)
+	jq '.panels += [input]' /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json  $PATCHFILE > $DASHBOARDFILE
+	mv $DASHBOARDFILE /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json
+    fi
+fi
+
+# Reload web server config
+systemctl reload httpd.service || true
+
 %post ana
 # Create db
-%{command_base}/create_new_db.sh -t postgres -d routingmonitor
-
-# Enable Microdep pipeline for logstash
-if [ -f /etc/logstash/pipelines.yml -a  -z "$(grep "pipeline.id: microdep" /etc/logstash/pipelines.yml)" ]; then
-    echo -e "- path.config: /usr/lib/perfsonar/logstash/pipeline/microdep/*.conf\n  pipeline.ecs_compatibility: disabled
-\n  pipeline.id: microdep\n" >> /etc/logstash/pipelines.yml
-    # Add microdep index pattern to pscheduler user ... but this require opensearch to run...
-    #sed -i "s|- 'pscheduler_\*'|- 'pscheduler_\*'\n      - 'dragonlab\*'|" opensearch/opensearch-security/roles.yml; \
-	#sed -i "s|- 'pscheduler\*'|- 'pscheduler\*'\n      - 'dragonlab\*'|" opensearch/opensearch-security/roles.yml; \
-	#/usr/share/opensearch/plugins/opensearch-security/tools/securityadmin.sh -f /etc/opensearch/opensearch-security/roles.yml -icl -nhnv -cert /etc/opensearch/admin.pem -cacert /etc/opensearch/root-ca.pem -key /etc/opensearch/admin-key.pem -t config
-    # ... substitute in user+passwd instead
-    USER=`awk -F " " '{print $1}' /etc/perfsonar/opensearch/opensearch_login` && sed -i "s|\${opensearch_admin_user}|$USER|g" %{install_base}/logstash/pipeline/microdep/03-microdep-outputs.conf
-    PASSWD=`awk -F " " '{print $2}' /etc/perfsonar/opensearch/opensearch_login` && sed -i "s|\${opensearch_admin_password}|$PASSWD|g" %{install_base}/logstash/pipeline/microdep/03-microdep-outputs.conf
+%{command_base}/create_new_db.sh -s -t postgres -d routingmonitor
+# Fix access to db
+if [ -f /var/lib/pgsql/data/pg_hba.conf ]; then
+    %{command_base}/fix-pgsql-access.sh -i /var/lib/pgsql/data/pg_hba.conf
 fi
-# Prepare folder for json output from analytics scripts read by logstash
-mkdir -p /var/lib/logstash/microdep && chown perfsonar:perfsonar /var/lib/logstash/microdep && chmod 755 /var/lib/logstash/microdep
+
+# Add Microdep to Opensearch setup (including Logstash) 
+/usr/lib/perfsonar/bin/microdep_commands/opensearch_config_microdep.sh
 
 # Enable executing of microdep ana scripts if SElinux is enabled
 if [ -f /sbin/restorecon ]; then
     /sbin/restorecon -irv /usr/lib/perfsonar/bin/microdep_commands/
 fi
     
-# Enable systemd services (probably not the recommended method)
-systemctl enable rabbitmq-server.service
-systemctl enable perfsonar-microdep-gap-ana.service
-systemctl enable perfsonar-microdep-trace-ana.service
-systemctl enable perfsonar-microdep-restart.timer
-systemctl start rabbitmq-server.service
-systemctl start perfsonar-microdep-gap-ana.service
-systemctl start perfsonar-microdep-trace-ana.service
-systemctl start perfsonar-microdep-restart.timer
+# Enable systemd services (ignore failures)
+systemctl enable rabbitmq-server.service || true
+systemctl enable perfsonar-microdep-gap-ana.service || true
+systemctl enable perfsonar-microdep-trace-ana.service || true
+systemctl enable perfsonar-microdep-restart.timer || true
+systemctl start rabbitmq-server.service || true
+systemctl start perfsonar-microdep-gap-ana.service || true
+systemctl start perfsonar-microdep-trace-ana.service || true
+systemctl start perfsonar-microdep-restart.timer || true
 
-%postun
-# Clean up pipline for logstash
-sed -ie '/pipeline\/microdep/,+2d' /etc/logstash/pipelines.yml
+%preun map
+# Remove Microdep button from Grafana main dashboard (if present)
+if grep -q  "Microdep map" /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json; then
+    DASHBOARDFILE=$(mktemp)
+    jq  'del( .panels[] | select(.options.content != null ) | select (.options.content | contains("Microdep map")))' /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json > $DASHBOARDFILE
+    mv $DASHBOARDFILE /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json
+fi
 
+%postun map
+# Reload web server (since web configs have been uninstalled)
+systemctl reload httpd.service || true
 
+%preun ana
+# Remove Microdep from Opensearch setup (including Logstash) 
+/usr/lib/perfsonar/bin/microdep_commands/opensearch_config_microdep.sh -r config
+
+# Clean up db access
+if [ -f /var/lib/pgsql/data/pg_hba.conf ]; then
+    %{command_base}/fix-pgsql-access.sh -ri /var/lib/pgsql/data/pg_hba.conf
+fi
+
+# Stop services (ignore failures)
+systemctl stop perfsonar-microdep-gap-ana.service || true
+systemctl stop perfsonar-microdep-trace-ana.service || true
+systemctl stop perfsonar-microdep-restart.timer || true
+    
 %files 
 %defattr(0644,perfsonar,perfsonar,0755)
 %license %{install_base}/LICENSE
@@ -301,13 +345,14 @@ sed -ie '/pipeline\/microdep/,+2d' /etc/logstash/pipelines.yml
 %attr(0755,perfsonar,perfsonar) %{command_base}/yaml-to-json.cgi
 %attr(0755,perfsonar,perfsonar) %{command_base}/get-mapconfig.cgi
 %attr(0755,perfsonar,perfsonar) %{command_base}/microdep-psconfig-load.pl
-%attr(0755,perfsonar,perfsonar) %{command_base}/json2table.pl
-%attr(0755,perfsonar,perfsonar) %{command_base}/rabbitmq-consume.py
+%{_unitdir}/perfsonar-microdep-watchconfig.path
+%{_unitdir}/perfsonar-microdep-watchconfig.service
 %config %{microdep_config_base}/microdep-config.yml
 %config %{microdep_config_base}/mapconfig.yml
 %config %{microdep_config_base}/mapconfig.d/
+%{microdep_config_base}/dragonlab-base-geo.json.example
 %config %{microdep_config_base}/mp-dragonlab/etc/microdep.db
-%config %{config_base}/psconfig/pscheduler.d/microdep-tests.json
+%{microdep_config_base}/grafana_dashboard_patch
 %config /etc/httpd/conf.d/apache-microdep-map.conf
 %config %{microdep_web_dir}/dragonlab/dragonlab-base-geo.json
 
@@ -321,12 +366,28 @@ sed -ie '/pipeline\/microdep/,+2d' /etc/logstash/pipelines.yml
 %attr(0755,perfsonar,perfsonar) %{command_base}/qstream-gap-ana
 %attr(0755,perfsonar,perfsonar) %{command_base}/trace_event_reader.py
 %attr(0755,perfsonar,perfsonar) %{command_base}/create_new_db.sh
-%config %{install_base}/logstash/pipeline/microdep/01-microdep-inputs.conf
-%config %{install_base}/logstash/pipeline/microdep/02-microdep-filter.conf
-%config %{install_base}/logstash/pipeline/microdep/03-microdep-outputs.conf
+%attr(0755,perfsonar,perfsonar) %{command_base}/fix-pgsql-access.sh
+%attr(0755,perfsonar,perfsonar) %{command_base}/opensearch_config_microdep.sh
+%attr(0755,perfsonar,perfsonar) %{command_base}/json2table.pl
+%attr(0755,perfsonar,perfsonar) %{command_base}/rabbitmq-consume.py
+%attr(0755,perfsonar,perfsonar) /usr/local/bin/opensearch_config_microdep.sh
+%attr(0755,perfsonar,perfsonar) /usr/local/bin/rabbitmq-consume.py
+%attr(0755,perfsonar,perfsonar) /usr/local/bin/json2table.pl
+%config %{install_base}/logstash/microdep_pipeline/01-microdep-inputs.conf
+%config %{install_base}/logstash/microdep_pipeline/02-microdep-filter.conf
+%config %{install_base}/logstash/microdep_pipeline/03-microdep-outputs.conf
+%config %{microdep_config_base}/logstash/microdep-pipelines.yml
+%config /var/lib/logstash/microdep 
 %config %{microdep_config_base}/os-template-gap-ana.json
 %config %{microdep_config_base}/os-template-trace-ana.json
+%{microdep_config_base}/roles_yml_patch
+%{microdep_config_base}/microdep-tests.json.example
+%{microdep_config_base}/microdep-tests-packet-subcount.json.example
+%config /etc/pscheduler/default-archives/microdep-ana-rmq.json
+%config(0644,root,root) /etc/logrotate.d/microdep
 %changelog
+* Thu Oct 24 2024 Otto J Wittner <otto.wittner@sikt.no>
+- Prepareing for release 5.3
 * Thu Jan 04 2024 Otto J Wittner <otto.wittner@sikt.no>
 - Initial spec file created
 

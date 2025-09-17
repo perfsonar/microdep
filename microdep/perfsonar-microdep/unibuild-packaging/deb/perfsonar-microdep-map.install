@@ -5,12 +5,11 @@ bin/microdep_commands/microdep-config.cgi usr/lib/perfsonar/bin/microdep_command
 bin/microdep_commands/yaml-to-json.cgi usr/lib/perfsonar/bin/microdep_commands/
 bin/microdep_commands/get-mapconfig.cgi usr/lib/perfsonar/bin/microdep_commands/
 bin/microdep_commands/microdep-psconfig-load.pl usr/lib/perfsonar/bin/microdep_commands/
-bin/microdep_commands/json2table.pl usr/lib/perfsonar/bin/microdep_commands/
-bin/microdep_commands/rabbitmq-consume.py usr/lib/perfsonar/bin/microdep_commands/
 etc/mapconfig.yml etc/perfsonar/microdep/
 etc/mapconfig.d/* etc/perfsonar/microdep/mapconfig.d/
 etc/microdep-config.yml etc/perfsonar/microdep/
-etc/microdep-tests.json etc/perfsonar/psconfig/pscheduler.d/microdep-tests.json
-etc/apache-microdep-map.conf etc/httpd/conf.d/
+etc/microdep.db etc/perfsonar/microdep/mp-dragonlab/etc/
+etc/apache-microdep-map.conf etc/apache2/conf-available/
+etc/grafana_dashboard_patch etc/perfsonar/
 
 

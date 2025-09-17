@@ -1,0 +1,54 @@
+    {
+      "datasource": {
+        "type": "grafana-opensearch-datasource",
+        "uid": "f990c0c6-a920-41c2-8b3e-a43e6ff9234a"
+      },
+      "gridPos": {
+        "h": 2,
+        "w": 4,
+        "x": 20,
+        "y": 10
+      },
+      "id": 20,
+      "options": {
+        "code": {
+          "language": "plaintext",
+          "showLineNumbers": false,
+          "showMiniMap": false
+        },
+        "content": "<div class=\"nav-div\">\n<a class=\"simple-button\" target=\"_blank\" href=\"/microdep/\">Microdep map</a>\n</div>\n\n<style>\n  .nav-div {\n    margin:18px 10px; \n    text-align:center;\n  }\n</style>",
+        "mode": "html"
+      },
+      "pluginVersion": "10.4.8",
+      "targets": [
+        {
+          "alias": "",
+          "bucketAggs": [
+            {
+              "field": "pscheduler.start_time",
+              "id": "2",
+              "settings": {
+                "interval": "auto"
+              },
+              "type": "date_histogram"
+            }
+          ],
+          "datasource": {
+            "type": "grafana-opensearch-datasource",
+            "uid": "f990c0c6-a920-41c2-8b3e-a43e6ff9234a"
+          },
+          "format": "table",
+          "metrics": [
+            {
+              "id": "1",
+              "type": "count"
+            }
+          ],
+          "query": "",
+          "queryType": "lucene",
+          "refId": "A",
+          "timeField": "pscheduler.start_time"
+        }
+      ],
+      "type": "text"
+    }

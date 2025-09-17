@@ -4,6 +4,7 @@
 # Measuremet network/variant parameters
 title: "Network-name"           # NEEDS TO BE OVERRIDDEN
 descr: "My measurement network" # NEEDS TO BE OVERRIDDEN
+archive: "/opensearch"  # Url to relevant Opensearch DB holding indices
 default_event_type: "gap"     # Event type to apply if no relevant is available
 default_event_type_live: "gap"     # Event type to apply if no relevant is available and date is today
 event_type:
@@ -842,4 +843,10 @@ event_type:
         aggr: ""
         mouseover: "routechange_ip"     # Show tooltip title on mouse-over based on other field
 
+  topology:
+    enable: false               # Do not show explicitly in map
+    title: "Topology-data"
+    descr: "Info about peer nodes with flow configured between them."
+    index: ""                   # Empty index here triggers map to use index for currently selected measurement type (data set event_type)
+   
 
