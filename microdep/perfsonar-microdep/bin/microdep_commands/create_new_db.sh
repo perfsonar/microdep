@@ -5,7 +5,9 @@
 
 USERNAME="traceroute"
 PASSWD="NeeLeoth9e"
-HOST="localhost"
+DBHOST="localhost"
+MSPORT=3306
+PGPORT=5432
 LIST=""
 DROP=""
 DROPONLY=""
@@ -18,7 +20,8 @@ usage () {
     echo "-t dbtype       Database type. Supported are 'mysql' and 'postgres'. Default '$DBTYPE'"
     echo "-u username     Username to add. Default '$USERNAME'"
     echo "-p password     Password for user. Default '$PASSWD'"
-    echo "-H DB-hostname  Hostname for DB server. Default '$HOST'"
+    echo "-H DB-hostname  Hostname for DB server. Default '$DBHOST'"
+    echo "-P DB-port      Hostname for DB server. Default $MSPORT for mysql and $PGPORT for postgres."
     echo "-l              List databases only."
     echo "-d              Drop DB first (if it exists) before creating new."
     echo "-D              Drop DB only (if it exists) and do not create new."
@@ -35,7 +38,7 @@ msg () {
 }
 
 # Parse arguments
-while getopts ":hlsdDt:u:p:H:" opt; do
+while getopts ":hlsdDt:u:p:H:P:" opt; do
     case $opt in
 	t)
 	    DBTYPE=$OPTARG
@@ -47,7 +50,11 @@ while getopts ":hlsdDt:u:p:H:" opt; do
 	    PASSWD=$OPTARG
 	    ;;
 	H)
-	    HOST=$OPTARG
+	    DBHOST=$OPTARG
+	    ;;
+	P)
+	    MSPORT=$OPTARG
+	    PGPORT=$OPTARG
 	    ;;
 	l)
 	    LIST=y
@@ -82,13 +89,21 @@ if [ "$DBTYPE" != "mysql" -a "$DBTYPE" != "postgres" ]; then
     msg "Error: Unsupported database type."
     exit 1;
 fi
-
+if [ "$DBTYPE" = "postgres" ]; then
+    if [ "$DBHOST" = "localhost" ]; then
+	# Skip hostname config to avoid password issues
+	DBHOST=
+    else
+	DBHOST="-h $DBHOST"
+    fi
+fi
+    
 if [ "$LIST" ]; then
     # List available database (only)
     if [ $DBTYPE = "mysql" ]; then
-	sudo mysqlshow
+	sudo mysqlshow -h $DBHOST -P $MSPORT
     elif [ $DBTYPE = "postgres" ]; then
-	su postgres -c 'psql -c "\l"'
+	su postgres -c "psql $DBHOST -p $PGPORT -c \"\\l\""
     fi
     exit 0
 fi
@@ -101,23 +116,23 @@ fi
 if [ "$DROP" -o "$DROPONLY" ]; then
     if [ $DBTYPE = "mysql" ]; then
 	# Check if db exits
-	sudo mysqlshow $DBNAME | grep -q "| Tables |" 2> /dev/null
+	sudo mysqlshow -h $DBHOST -P $MSPORT $DBNAME | grep -q "| Tables |" 2> /dev/null
 	if [ $? -eq 0 ]; then
 	    # Drop db first
 	    msg -n "Dropping database $DBNAME..."
 	    if [ $SILENT ]; then
 		FORCE="--force"
 	    fi
-	    sudo mysqladmin $FORCE drop $DBNAME
+	    sudo mysqladmin -h $DBHOST -P $MSPORT $FORCE drop $DBNAME
 	    msg "done."
 	fi
     elif [ $DBTYPE = "postgres" ]; then
 	# Check if db exits
-	su postgres -c 'psql -c "\l routingmonitor"' | grep -q "(1 row)" 2> /dev/null
+	su postgres -c "psql $DBHOST -p $PGPORT -w -c \"\\l $DBNAME\"" | grep -q "(1 row)" 2> /dev/null
 	if [ $? -eq 0 ]; then
 	    # Drop db first
 	    msg -n "Dropping database $DBNAME..."
-	    su postgres -c "dropdb $DBNAME"
+	    su postgres -c "dropdb $DBHOST -p $PGPORT -w $DBNAME"
 	    msg "done."
 	    
 	fi
@@ -132,10 +147,10 @@ fi
 msg -n "Creating databasbase $DBNAME..."
 exit_code=0
 if [ $DBTYPE = "mysql" ]; then
-    sudo mysqladmin create $DBNAME
+    sudo mysqladmin -h $DBHOST -P $MSPORT create $DBNAME
     exit_code=$?;
 elif [ $DBTYPE = "postgres" ]; then
-    su postgres -c "createdb -O '$USERNAME' $DBNAME"
+    su postgres -c "createdb $DBHOST -p $PGPORT -w -O '$USERNAME' $DBNAME"
     exit_code=$?;
 fi
 if [ $exit_code -gt 0 ]; then
@@ -152,20 +167,20 @@ touch $SQLCMD
 chmod o+r $SQLCMD
 if [ $DBTYPE = "mysql" ]; then
     echo "
-DROP USER '$USERNAME'@'$HOST';
+DROP USER '$USERNAME';
 FLUSH PRIVILEGES;
-CREATE USER '$USERNAME'@'$HOST' IDENTIFIED BY '$PASSWD';
-GRANT ALL PRIVILEGES ON *.* TO '$USERNAME'@'$HOST';
+CREATE USER '$USERNAME' IDENTIFIED BY '$PASSWD';
+GRANT ALL PRIVILEGES ON *.* TO '$USERNAME';
 FLUSH PRIVILEGES;
 " > $SQLCMD
-    sudo mysql $DBNAME < $SQLCMD
+    sudo mysql -h $DBHOST -P $MSPORT $DBNAME < $SQLCMD
 elif [ $DBTYPE = "postgres" ]; then
     echo "
     DROP ROLE IF EXISTS $USERNAME;
     GRANT ALL ON DATABASE $DBNAME TO $USERNAME;
     CREATE ROLE $USERNAME WITH PASSWORD '$PASSWD' LOGIN;
 " > $SQLCMD
-    su postgres -c "psql -f $SQLCMD $DBNAME"  
+    su postgres -c "psql $DBHOST -p $PGPORT -f $SQLCMD $DBNAME"  
 fi    
 rm $SQLCMD
 msg "done."
