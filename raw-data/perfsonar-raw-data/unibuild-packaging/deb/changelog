@@ -1,0 +1,5 @@
+perfsonar-microdep (5.3.0-1) perfsonar-5.3; urgency=low
+
+  * Initial Debian build.
+
+ -- Otto J Wittner <otto.wittner@sikt.no>  Thu, 23 Oct 2025 16:00:00 -0200

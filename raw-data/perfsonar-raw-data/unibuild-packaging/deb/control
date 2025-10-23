@@ -1,0 +1,20 @@
+Source: perfsonar-raw-data
+Section: misc
+Priority: optional
+Maintainer: perfSONAR developers <debian@perfsonar.net>
+Uploaders: Otto J Wittner <otto.wittner@sikt.no>
+Build-Depends: debhelper (>= 10),
+ perl (>= 5.32),
+ curl
+Standards-Version: 4.7.0.0
+Homepage: http://www.perfsonar.net
+Vcs-Git: https://github.com/perfsonar/microdep.git
+#Vcs-Browser: 
+
+Package: perfsonar-raw-data
+Architecture: all
+Depends: ${misc:Depends}, ${perl:Depends},
+ perfsonar-archive
+Description: perfSONAR raw test data caching
+ Enables short term storage of raw data sets coming from pscheduler via logstash
+

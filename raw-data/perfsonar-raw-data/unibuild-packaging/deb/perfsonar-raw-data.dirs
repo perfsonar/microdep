@@ -1,0 +1,5 @@
+/usr/lib/perfsonar/logstash/pipeline
+/usr/lib/perfsonar/archive/config/
+/usr/lib/perfsonar/archive/config/ilm/install/
+/usr/lib/perfsonar/archive/bin/commands
+
