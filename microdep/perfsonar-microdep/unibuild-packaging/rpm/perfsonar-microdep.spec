@@ -75,7 +75,6 @@ Requires:               momentjs = 2.30.1
 Requires:               select2js = 4.0.0
 Requires:               sorttablejs = 2.0
 Requires:               perfsonar-tracetree
-#%{?systemd_requires: %systemd_requires}
 BuildRequires:          systemd
 BuildRequires:          systemd-rpm-macros       
 # ... but macros are not yet utilized below
@@ -125,7 +124,6 @@ Requires:               python3-pytz
 Requires:               python3-tzlocal
 Requires:               perfsonar-microdep-geolite2
 Requires:               logrotate
-#%{?systemd_requires: %systemd_requires}
 BuildRequires:          systemd
 BuildRequires:          systemd-rpm-macros    
 # ... but macros are not yet utilized below
@@ -140,8 +138,6 @@ Analytic scripts to process perfSONAR data sets and generate events. Events may 
 %pre map
 /usr/sbin/groupadd -r perfsonar 2> /dev/null || :
 /usr/sbin/useradd -g perfsonar -r -s /sbin/nologin -c "perfSONAR User" -d /tmp perfsonar 2> /dev/null || :
-# Stop services (ignore failures)
-systemctl stop perfsonar-microdep-watchconfig.path || true
 
 %pre ana
 /usr/sbin/groupadd -r perfsonar 2> /dev/null || :
@@ -163,7 +159,6 @@ make ROOTPATH=%{buildroot}/%{install_base} CONFIGPATH=%{buildroot}/%{microdep_co
 mkdir -p %{buildroot}/%{_unitdir}
 install -D -m 0644 -t %{buildroot}/%{_unitdir} %{buildroot}/%{install_base}/scripts/*.service
 install -D -m 0644 -t %{buildroot}/%{_unitdir} %{buildroot}/%{install_base}/scripts/*.timer
-install -D -m 0644 -t %{buildroot}/%{_unitdir} %{buildroot}/%{install_base}/scripts/*.path
 systemctl daemon-reload || true
 # Move microdep map, httpd and logstash configs into correct folders
 install -D -m 0644 -t %{buildroot}/%{microdep_config_base}/mp-dragonlab/etc/ %{buildroot}/%{microdep_config_base}/microdep.db
@@ -345,8 +340,6 @@ systemctl stop perfsonar-microdep-restart.timer || true
 %attr(0755,perfsonar,perfsonar) %{command_base}/yaml-to-json.cgi
 %attr(0755,perfsonar,perfsonar) %{command_base}/get-mapconfig.cgi
 %attr(0755,perfsonar,perfsonar) %{command_base}/microdep-psconfig-load.pl
-%{_unitdir}/perfsonar-microdep-watchconfig.path
-%{_unitdir}/perfsonar-microdep-watchconfig.service
 %config %{microdep_config_base}/microdep-config.yml
 %config %{microdep_config_base}/mapconfig.yml
 %config %{microdep_config_base}/mapconfig.d/
