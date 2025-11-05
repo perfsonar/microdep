@@ -28,6 +28,7 @@ case "$1" in
 	# Fix access to db
 	if [ -f /etc/postgresql/15/main/pg_hba.conf ]; then
 	    /usr/lib/perfsonar/bin/microdep_commands/fix-pgsql-access.sh -i /etc/postgresql/15/main/pg_hba.conf || true
+	    sudo systemctl reload postgresql || true
 	fi
 
 	# Fix permissions 
@@ -35,7 +36,7 @@ case "$1" in
 	chown perfsonar:perfsonar /var/lib/logstash/microdep/
 
 	# Add Microdep to Opensearch setup (including Logstash) 
-	/usr/lib/perfsonar/bin/microdep_commands/opensearch_config_microdep.sh
+	/usr/lib/perfsonar/bin/microdep_commands/opensearch_config_microdep.sh || true
 	
 	# Enable executing of microdep ana scripts if SElinux is enabled
 	if [ -f /sbin/restorecon ]; then

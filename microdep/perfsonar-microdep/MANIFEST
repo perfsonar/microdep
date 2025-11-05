@@ -31,6 +31,7 @@ bin/microdep_commands/qstream-gap-ana
 bin/microdep_commands/trace_event_reader.py
 bin/microdep_commands/create_new_db.sh
 bin/microdep_commands/fix-pgsql-access.sh
+bin/microdep_commands/opensearch_config_microdep.sh
 scripts/perfsonar-microdep-gap-ana.service
 scripts/perfsonar-microdep-trace-ana.service
 scripts/perfsonar-microdep-restart.service

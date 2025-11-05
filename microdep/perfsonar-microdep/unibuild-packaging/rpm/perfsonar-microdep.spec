@@ -274,7 +274,7 @@ if [ -f /var/lib/pgsql/data/pg_hba.conf ]; then
 fi
 
 # Add Microdep to Opensearch setup (including Logstash) 
-/usr/lib/perfsonar/bin/microdep_commands/opensearch_config_microdep.sh
+/usr/lib/perfsonar/bin/microdep_commands/opensearch_config_microdep.sh || true
 
 # Enable executing of microdep ana scripts if SElinux is enabled
 if [ -f /sbin/restorecon ]; then
@@ -305,7 +305,7 @@ systemctl reload httpd.service || true
 
 %preun ana
 # Remove Microdep from Opensearch setup (including Logstash) 
-/usr/lib/perfsonar/bin/microdep_commands/opensearch_config_microdep.sh -r config
+/usr/lib/perfsonar/bin/microdep_commands/opensearch_config_microdep.sh -r config || true
 
 # Clean up db access
 if [ -f /var/lib/pgsql/data/pg_hba.conf ]; then
@@ -366,6 +366,7 @@ systemctl stop perfsonar-microdep-restart.timer || true
 %attr(0755,perfsonar,perfsonar) /usr/local/bin/opensearch_config_microdep.sh
 %attr(0755,perfsonar,perfsonar) /usr/local/bin/rabbitmq-consume.py
 %attr(0755,perfsonar,perfsonar) /usr/local/bin/json2table.pl
+/usr/local/bin/opensearch_config_microdep.sh
 %config %{install_base}/logstash/microdep_pipeline/01-microdep-inputs.conf
 %config %{install_base}/logstash/microdep_pipeline/02-microdep-filter.conf
 %config %{install_base}/logstash/microdep_pipeline/03-microdep-outputs.conf

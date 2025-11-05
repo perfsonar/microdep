@@ -125,6 +125,12 @@ if [ "$1" ]; then
     OPENSEARCH_URL="$1"
 fi
 
+ADMIN_PASS=$(grep -w "admin" $PASSWORD_FILE | head -n 1 | awk '{print $2}')
+if [ -z "$ADMIN_PASS" ]; then
+    echo "Error: Opensearch admin password not available. Apply -p <password-file>. " >&2
+    exit 1
+fi    
+
 if [ "$REMOVE" ]; then
     if [ "$REMOVE" = "config" -o "$REMOVE" = "all" ]; then
 	# Clean up pipeline for logstash
@@ -198,7 +204,6 @@ fi
 
 
 # Create Microdep ana index policies (ISM) and templates
-ADMIN_PASS=$(grep -w "admin" $PASSWORD_FILE | head -n 1 | awk '{print $2}')
 if [ $? -ne 0 ]; then
     msg "Warning: Failed to parse Opensearch password. Is perfsonar-toolkit installed?"
 else
