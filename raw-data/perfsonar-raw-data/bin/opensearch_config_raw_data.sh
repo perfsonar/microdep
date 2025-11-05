@@ -56,7 +56,8 @@ wait_opensearch () {
 		msg "Restart complete"
             else
 		msg "[Warning] Opensearch in failed state even after restart attempt"
-		exit 0
+		return 2
+		exit 2
             fi
 	fi
 	opensearch_systemctl_status=$(systemctl is-active opensearch)
@@ -76,7 +77,8 @@ wait_opensearch_api () {
 	# Wait a maximum of 100 seconds for the API to start
 	if [[ $i -eq 100 ]]; then
             msg "[Warning] API start timeout"
-            exit 0
+            return 2
+	    exit 2
 	fi
 	api_status=$(curl -s -o /dev/null -w "%{http_code}" -u admin:${ADMIN_PASS} -k https://localhost:9200/_cluster/health)
     done
@@ -125,6 +127,12 @@ if [ "$1" ]; then
     OPENSEARCH_URL="$1"
 fi
 
+ADMIN_PASS=$(grep -w "admin" $PASSWORD_FILE | head -n 1 | awk '{print $2}')
+if [ -z "$ADMIN_PASS" ]; then
+    echo "Error: Opensearch admin password not available. Apply -p <password-file>. " >&2
+    exit 1
+fi    
+
 if [ "$REMOVE" ]; then
     # Prompt for full cleanup
     if [ -z "$ANSWERYES" ]; then
@@ -150,7 +158,6 @@ if [ "$REMOVE" ]; then
 fi
 
 # Create raw data index policies (ISM) and templates
-ADMIN_PASS=$(grep -w "admin" $PASSWORD_FILE | head -n 1 | awk '{print $2}')
 if [ $? -ne 0 ]; then
     msg "Warning: Failed to parse Opensearch password. Is perfsonar-toolkit installed?"
 else

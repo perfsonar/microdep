@@ -20,7 +20,7 @@ case "$1" in
     remove|deconfigure)
 
 	# Remove raw data indices, templates and policies from Opensearch
-	/usr/lib/perfsonar/archive/bin/commands/opensearch_config_raw_data.sh -ry
+	/usr/lib/perfsonar/archive/bin/commands/opensearch_config_raw_data.sh -ry || true
     ;;
 
     upgrade|failed-upgrade)
