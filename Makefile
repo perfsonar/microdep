@@ -4,6 +4,8 @@
 
 include $(wildcard unibuild/unibuild.make)
 
+BUILDCMD="unibuild build"   # May be replace by running e.g. "make BUILDCMD=bash deb" to enable manual building 
+
 default:
 	@echo "*** Building packages for Microdep ***"
 	@echo "Run 'make rpm-build' or 'make deb-build' to build packages for a distribution (applying 'unibuild' in containers)."
@@ -46,8 +48,9 @@ deb-systemd-services:
 	rsync  -t microdep/perfsonar-microdep/scripts/perfsonar-microdep-restart.timer microdep/perfsonar-microdep/unibuild-packaging/deb/perfsonar-microdep-ana.perfsonar-microdep-restart.timer
 
 unibuild-repo/Packages: deb-systemd-services unibuild-compose.yml pstracetree/unibuild-repo/Packages
-	@echo "Build Microdep U22 deb packages..."
-	docker compose -f unibuild-compose.yml run u22_amd64 bash -c "echo 'deb [trusted=yes] file:/app/pstracetree/unibuild-repo ./' > /etc/apt/sources.list.d/local-pstracetree-repo.list && apt -y update && unibuild build"
+	@echo "Build Microdep U22 deb packages ..."
+#	docker compose -f unibuild-compose.yml run u22_amd64 bash -c "echo 'deb [trusted=yes] file:/app/pstracetree/unibuild-repo ./' > /etc/apt/sources.list.d/local-pstracetree-repo.list && apt -y update && unibuild build"
+	docker compose -f unibuild-compose.yml run u22_amd64 bash -c "echo 'deb [trusted=yes] file:/app/pstracetree/unibuild-repo ./' > /etc/apt/sources.list.d/local-pstracetree-repo.list && apt -y update && ${BUILDCMD}"
 
 #rpm-build: pstracetree/unibuild-repo/RPMS unibuild-repo/RPMS 
 rpm-build: unibuild-repo/RPMS 
