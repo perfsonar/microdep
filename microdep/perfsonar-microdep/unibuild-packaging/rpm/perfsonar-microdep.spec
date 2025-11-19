@@ -124,6 +124,7 @@ Requires:               python3-pytz
 Requires:               python3-tzlocal
 Requires:               perfsonar-microdep-geolite2
 Requires:               logrotate
+Requires:               perfsonar-raw-data
 BuildRequires:          systemd
 BuildRequires:          systemd-rpm-macros    
 # ... but macros are not yet utilized below
