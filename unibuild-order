@@ -56,6 +56,7 @@ perl_statistics_linefit
 perl_net_amqp
 perl_anyevent_rabbitmq
 raw-data
-#pstracetree
+submodules/pstracetree/visjs
+submodules/pstracetree/pstracetree
 microdep
 
