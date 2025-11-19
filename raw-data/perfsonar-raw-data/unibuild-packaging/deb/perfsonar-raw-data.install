@@ -1,0 +1,4 @@
+bin/opensearch_config_raw_data.sh /usr/lib/perfsonar/archive/bin/commands/
+pipeline/* /usr/lib/perfsonar/logstash/pipeline
+etc/pscheduler_raw_data_policy.json /usr/lib/perfsonar/archive/config/ilm/install/
+etc/index_template-pscheduler_raw.json /usr/lib/perfsonar/archive/config/

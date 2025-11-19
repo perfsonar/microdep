@@ -1,0 +1,73 @@
+{
+  "index_patterns": [
+    "pscheduler_raw*"
+  ],
+  "priority": 10,
+  "template": {
+    "settings": {
+      "number_of_shards": 1,
+      "number_of_replicas": 0
+    },
+    "aliases": {
+      "pscheduler_raw": {}
+    },
+    "mappings": {
+      "_source": {},
+      "_meta": {},
+      "dynamic_templates": [
+        {
+          "ip_addresses": {
+            "mapping": {
+              "type": "ip"
+            },
+            "match": "ip"
+          }
+        },
+        {
+          "histograms": {
+            "mapping": {
+              "type": "object",
+              "enabled": false
+            },
+            "match": "histogram"
+          }
+        },
+        {
+          "json_unparsed": {
+            "mapping": {
+              "type": "object",
+              "enabled": false
+            },
+            "match": "json"
+          }
+        },
+        {
+          "location": {
+            "path_match": "*.geo.location",
+            "mapping": {
+              "type": "geo_point"
+            }
+          }
+        },
+        {
+          "src_timestamp": {
+            "mapping": {
+              "type": "unsigned_long"
+            },
+            "match": "src-ts"
+          }
+        },
+        {
+          "dst_timestamp": {
+            "mapping": {
+              "type": "unsigned_long"
+            },
+            "match": "dst-ts"
+          }
+        }
+      ],
+      "properties": {}
+    }
+  },
+  "data_stream": {}
+}
