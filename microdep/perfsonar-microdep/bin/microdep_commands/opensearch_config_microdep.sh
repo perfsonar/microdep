@@ -166,12 +166,12 @@ if [ "$REMOVE" ]; then
 	fi
 	# Remove all
 	msg "Removing Opensearch templates, policies and datastreams/indices for Microdep ..."
-	curl -k -u admin:${ADMIN_PASS} -s -XDELETE "$OPENSEARCH_URL/_index_template/microdep_gap_ana" 2>/dev/null ; echo
-	curl -k -u admin:${ADMIN_PASS} -s -XDELETE "$OPENSEARCH_URL/_index_template/microdep_trace_ana" 2>/dev/null ; echo
-	curl -k -u admin:${ADMIN_PASS} -s -XDELETE "$OPENSEARCH_URL/_plugins/_ism/policies/microdep_default_policy" 2>/dev/null ; echo
 	for i in $MICRODEP_INDICES; do
 	    curl -k -u admin:${ADMIN_PASS} -s -XDELETE "$OPENSEARCH_URL/_data_stream/$i" 2>/dev/null ; echo
 	done
+	curl -k -u admin:${ADMIN_PASS} -s -XDELETE "$OPENSEARCH_URL/_plugins/_ism/policies/microdep_default_policy" 2>/dev/null ; echo
+	curl -k -u admin:${ADMIN_PASS} -s -XDELETE "$OPENSEARCH_URL/_index_template/microdep_gap_ana" 2>/dev/null ; echo
+	curl -k -u admin:${ADMIN_PASS} -s -XDELETE "$OPENSEARCH_URL/_index_template/microdep_trace_ana" 2>/dev/null ; echo
     fi
     msg "Removal completed."
     exit 0
