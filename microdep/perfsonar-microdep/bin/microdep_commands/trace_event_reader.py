@@ -518,7 +518,7 @@ def prepare_db(cursor, param):
             cursor.execute("CREATE TABLE jumps (unique_pair VARCHAR(200), hop INT, destinations MEDIUMTEXT, frequencies MEDIUMTEXT, count INT, normal MEDIUMTEXT, memory MEDIUMTEXT, anomaly TEXT, trcrt INT, betweens INT, cross_entropy FLOAT(10), timestamp INT)")
         cursor.execute("CREATE UNIQUE INDEX idx_key2 ON jumps (unique_pair, hop)")
         cursor.execute(('COMMIT'));
-    except:
+    except Exception as err:
         if param['verbose'] > 1: 
             print("Warning: Failed to create table 'jumps'")
             if param['dbtype'] == 'postgresql':

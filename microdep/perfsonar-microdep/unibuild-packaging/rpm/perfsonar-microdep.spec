@@ -271,13 +271,17 @@ systemctl reload httpd.service || true
 # Fix access to db
 if [ -f /var/lib/pgsql/data/pg_hba.conf ]; then
     %{command_base}/fix-pgsql-access.sh -i /var/lib/pgsql/data/pg_hba.conf
+    systemctl reload postgresql.service || true
 fi
+
 
 # Add Microdep to Opensearch setup (including Logstash) 
 /usr/lib/perfsonar/bin/microdep_commands/opensearch_config_microdep.sh || true
 
 # Enable executing of microdep ana scripts if SElinux is enabled
-if [ -f /sbin/restorecon ]; then
+if [ -f /sbin/semanage ]; then
+    /sbin/semanage fcontext -a -t bin_t "/usr/lib/perfsonar/bin/microdep_commands/qstream-gap-ana"
+    /sbin/semanage fcontext -a -t bin_t "/usr/lib/perfsonar/bin/microdep_commands/trace_event_reader.py"
     /sbin/restorecon -irv /usr/lib/perfsonar/bin/microdep_commands/
 fi
     

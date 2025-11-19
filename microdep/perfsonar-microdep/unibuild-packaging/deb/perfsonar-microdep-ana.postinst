@@ -28,7 +28,7 @@ case "$1" in
 	# Fix access to db
 	if [ -f /etc/postgresql/15/main/pg_hba.conf ]; then
 	    /usr/lib/perfsonar/bin/microdep_commands/fix-pgsql-access.sh -i /etc/postgresql/15/main/pg_hba.conf || true
-	    sudo systemctl reload postgresql || true
+	    systemctl reload postgresql || true
 	fi
 
 	# Fix permissions 
