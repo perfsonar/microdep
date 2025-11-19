@@ -343,7 +343,6 @@ systemctl stop perfsonar-microdep-restart.timer || true
 %attr(0755,perfsonar,perfsonar) %{command_base}/microdep-config.cgi
 %attr(0755,perfsonar,perfsonar) %{command_base}/yaml-to-json.cgi
 %attr(0755,perfsonar,perfsonar) %{command_base}/get-mapconfig.cgi
-%attr(0755,perfsonar,perfsonar) %{command_base}/microdep-psconfig-load.pl
 %config %{microdep_config_base}/microdep-config.yml
 %config %{microdep_config_base}/mapconfig.yml
 %config %{microdep_config_base}/mapconfig.d/
@@ -367,10 +366,9 @@ systemctl stop perfsonar-microdep-restart.timer || true
 %attr(0755,perfsonar,perfsonar) %{command_base}/opensearch_config_microdep.sh
 %attr(0755,perfsonar,perfsonar) %{command_base}/json2table.pl
 %attr(0755,perfsonar,perfsonar) %{command_base}/rabbitmq-consume.py
-%attr(0755,perfsonar,perfsonar) /usr/local/bin/opensearch_config_microdep.sh
-%attr(0755,perfsonar,perfsonar) /usr/local/bin/rabbitmq-consume.py
-%attr(0755,perfsonar,perfsonar) /usr/local/bin/json2table.pl
 /usr/local/bin/opensearch_config_microdep.sh
+/usr/local/bin/rabbitmq-consume.py
+/usr/local/bin/json2table.pl
 %config %{install_base}/logstash/microdep_pipeline/01-microdep-inputs.conf
 %config %{install_base}/logstash/microdep_pipeline/02-microdep-filter.conf
 %config %{install_base}/logstash/microdep_pipeline/03-microdep-outputs.conf
@@ -382,7 +380,7 @@ systemctl stop perfsonar-microdep-restart.timer || true
 %{microdep_config_base}/microdep-tests.json.example
 %{microdep_config_base}/microdep-tests-packet-subcount.json.example
 %config /etc/pscheduler/default-archives/microdep-ana-rmq.json
-%config(0644,root,root) /etc/logrotate.d/microdep
+%config /etc/logrotate.d/microdep
 %changelog
 * Thu Oct 24 2024 Otto J Wittner <otto.wittner@sikt.no>
 - Prepareing for release 5.3
