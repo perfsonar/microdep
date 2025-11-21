@@ -9,7 +9,7 @@ OPENSEARCH_CONFIG_DIR=/etc/opensearch
 OPENSEARCH_SECURITY_PLUGIN=/usr/share/opensearch/plugins/opensearch-security
 OPENSEARCH_SECURITY_CONFIG=${OPENSEARCH_CONFIG_DIR}/opensearch-security
 PASSWORD_FILE=/etc/perfsonar/opensearch/auth_setup.out
-INDICES="pscheduler_raw_latencybg"
+INDICES="pscheduler_raw_latencybg pscheduler_raw_trace"
 
 usage () {
     echo "Usage: `basename $0` [options] [opensearch-host-url]"
