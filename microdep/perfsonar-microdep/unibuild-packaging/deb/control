@@ -77,7 +77,7 @@ Depends: ${misc:Depends}, ${perl:Depends},
  libstatistics-basic-perl,
 # LWP::Simple
  libwww-perl,
- rabbitmq-server, libanyevent-rabbitmq-perl,
+ libanyevent-rabbitmq-perl,
  liburi-perl,
  libjson-perl,
  libchart-clicker-perl,
@@ -95,7 +95,7 @@ Depends: ${misc:Depends}, ${perl:Depends},
 ## Both
  logrotate,
  perfsonar-raw-data
-#Recommends: perfsonar-raw-data
+Recommends: rabbitmq-server
 Description: Microdep analytic toolset to analize perfSONAR datasets
  Analytic scripts to process perfSONAR data sets and generate events. Events may be viualized by Microdep map.
 

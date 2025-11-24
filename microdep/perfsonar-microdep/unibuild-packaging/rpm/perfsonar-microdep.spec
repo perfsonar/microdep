@@ -87,10 +87,10 @@ Summary:		Microdep analytic toolset to analize perfSONAR datasets
 Group:			Applications/Communications
 
 # Rabbit message queue ... but since 'dnf update' is required between installing these two dependencies, things fail... hm
-BuildRequires:          centos-release-rabbitmq-38
-Requires:               erlang < 26.0
+#BuildRequires:          centos-release-rabbitmq-38
+#Requires:               erlang < 26.0
 #Requires:               erlang 
-Requires:               rabbitmq-server
+#Requires:               rabbitmq-server
 BuildRequires:          curl
 BuildRequires:          perl >= 5.32
 BuildRequires:          perl(DBI)
