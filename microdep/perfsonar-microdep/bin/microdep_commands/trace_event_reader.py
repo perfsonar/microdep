@@ -2319,6 +2319,7 @@ def read(path, srchost, srcdate, mode="batch", thread=0, starttime=0):
 
     traceroutes = {}
     time = 0
+    ps_testid = ""
 
     #Connects to SQL server
     cursor = connect_db(param);              # Connect to DB
