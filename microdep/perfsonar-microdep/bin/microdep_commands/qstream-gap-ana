@@ -32,7 +32,8 @@ use LWP::Simple;
 # use Math::Int64 qw(uint64 uint64_to_number);
 use constant JAN_1970 => 0x83aa7e80;
 
-# use LWP::UserAgent ();
+use LWP::UserAgent;
+use IO::Socket::SSL;
 # use LWP::Protocol::https;
 
 # make sure that summary records are produced when killed
@@ -875,7 +876,7 @@ sub read_owamp_follow{
 	# Url seems to be a ref to a perfsonar archive with opensearch.
 	$url_str .= "/pscheduler_raw_latencybg/_search";
 	my $query_req = LWP::UserAgent->new;
-	$query_req->ssl_opts( verify_hostname => 0);  # Accept any SSl cert
+	$query_req->ssl_opts( verify_hostname => 0, SSL_verify_mode => IO::Socket::SSL::SSL_VERIFY_NONE);  # Accept any SSl cert
 	while( 1 ) {
 	    # Loop until interrupted
 	    my $search_query = owamp_search_query($date_last_read_rec); 
