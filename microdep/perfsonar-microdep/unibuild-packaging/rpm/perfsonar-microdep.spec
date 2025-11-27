@@ -287,11 +287,9 @@ if [ -f /sbin/semanage ]; then
 fi
     
 # Enable systemd services (ignore failures)
-systemctl enable rabbitmq-server.service || true
 systemctl enable perfsonar-microdep-gap-ana.service || true
 systemctl enable perfsonar-microdep-trace-ana.service || true
 systemctl enable perfsonar-microdep-restart.timer || true
-systemctl start rabbitmq-server.service || true
 systemctl start perfsonar-microdep-gap-ana.service || true
 systemctl start perfsonar-microdep-trace-ana.service || true
 systemctl start perfsonar-microdep-restart.timer || true

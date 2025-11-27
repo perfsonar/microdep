@@ -57,7 +57,7 @@ bin/microdep_commands/fix-pgsql-access.sh
 etc/logstash/microdep/03-microdep-outputs.conf
 etc/logstash/microdep-pipelines.yml
 etc/logrotate.d/microdep
-etc/psconfig/archives.d/microdep-ana-rmq.json
+#etc/psconfig/archives.d/microdep-ana-rmq.json
 etc/os-template-gap-ana.json
 etc/os-template-trace-ana.json
 etc/GeoLite2/GeoLite2-City.mmdb

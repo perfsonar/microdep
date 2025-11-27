@@ -1,7 +1,6 @@
 [Unit]
 Description=perfSONAR Microdep Gap analysis
-After=network.target rabbitmq-server.service
-Requires=rabbitmq-server.service
+After=network.target 
 
 [Service]
 Type=simple
