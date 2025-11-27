@@ -88,12 +88,6 @@ Web GUI presenting Microdep analytic results in a map view
 %package ana
 Summary:		Microdep analytic toolset to analize perfSONAR datasets
 Group:			Applications/Communications
-
-# Rabbit message queue ... but since 'dnf update' is required between installing these two dependencies, things fail... hm
-#BuildRequires:          centos-release-rabbitmq-38
-#Requires:               erlang < 26.0
-#Requires:               erlang 
-#Requires:               rabbitmq-server
 BuildRequires:          curl
 BuildRequires:          perl >= 5.32
 BuildRequires:          perl(DBI)
@@ -168,7 +162,6 @@ systemctl daemon-reload || true
 install -D -m 0644 -t %{buildroot}/%{microdep_config_base}/mp-dragonlab/etc/ %{buildroot}/%{microdep_config_base}/microdep.db
 install -D -m 0644 -t %{buildroot}/etc/httpd/conf.d/ %{buildroot}/%{microdep_config_base}/apache-microdep-map.conf
 install -D -m 0644 -t %{buildroot}/%{install_base}/logstash/microdep_pipeline/ %{buildroot}/%{microdep_config_base}/logstash/microdep/*
-install -D -m 0644 -t %{buildroot}/etc/pscheduler/default-archives/ %{buildroot}/%{microdep_config_base}/psconfig/archives.d/microdep-ana-rmq.json
 install -D -m 0644 -t %{buildroot}/etc/logrotate.d/ %{buildroot}/%{microdep_config_base}/logrotate.d/microdep
 
 # Prepare folder for json output from analytics scripts read by logstash
@@ -381,7 +374,6 @@ systemctl stop perfsonar-microdep-restart.timer || true
 %{microdep_config_base}/roles_yml_patch
 %{microdep_config_base}/microdep-tests.json.example
 %{microdep_config_base}/microdep-tests-packet-subcount.json.example
-%config /etc/pscheduler/default-archives/microdep-ana-rmq.json
 %config /etc/logrotate.d/microdep
 %changelog
 * Thu Oct 24 2024 Otto J Wittner <otto.wittner@sikt.no>
