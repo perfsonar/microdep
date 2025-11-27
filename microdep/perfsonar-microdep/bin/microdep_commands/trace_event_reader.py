@@ -45,6 +45,7 @@ import socket
 #import pika
 from urllib.parse import urlparse, parse_qsl
 import urllib.request
+import ssl
 from io import StringIO
 import hashlib
 from operator import itemgetter
@@ -96,18 +97,18 @@ HOPDIST_INIT_WINDOW = 2500    # Min no of probes seen for a hop to consider its 
 
 # Set default paramenter values
 param = {
-    'file':'',                # Path to traceroutes source
-    'date': '',               # Date to consider when searching for files to analyse
-    'live': 0,                # Flag for live analysis
-    'all': 0,                 # Flag to enable processing of older-than-latest traceroutes
-    'tcp': 0,                 # Flag to enable processing tcptraceroute files
-    'pssrc': '',              # Url to perfsonar data source, e.g. amqp://<user:passwd@localhost>/<vhost>/queue=<traceroute>
+    'file':'',    # Path to traceroutes source
+    'date': '',   # Date to consider when searching for files to analyse
+    'live': 0,    # Flag for live analysis
+    'all': 0,     # Flag to enable processing of older-than-latest traceroutes
+    'tcp': 0,     # Flag to enable processing tcptraceroute files
+    'pssrc': '',  # Url to perfsonar data source, amqp://<user:passwd@localhost>/<vhost>/queue=<traceroute> or, https://<archive-host>/opensearch 
     'path': '/var/lib/microdep/mp-dragonlab/data',             # Path to apply when searching based on date               
     'reportpath': '/var/lib/microdep/mp-dragonlab/report/mp',  # Path to apply for output files when searching based on date               
     'reportpostpath': 'trace-ana',                             # Finale path level to add below reportpath,  source host and date               
-    'output':'',                 # Output filename.
-    'oneoutput':'',              # Output filename for single file output.
-    'samepath': 0,                 # Flag to enable placement of outputfile in same folder as input file 
+    'output':'',                  # Output filename.
+    'oneoutput':'',               # Output filename for single file output.
+    'samepath': 0,                # Flag to enable placement of outputfile in same folder as input file 
     'namemap': '/var/lib/microdep/mp-dragonlab/etc/mp-address.txt',    # File path to name-to-ip mapping db
     'geodb': '/usr/share/GeoIP/GeoLite2-ASN.mmdb',                     # File path to ip-to-ASN mapping db
     'dbtype': 'mysql',            # Database type. 'mysql' and 'postgresql' supported.
@@ -115,7 +116,7 @@ param = {
     'dbuser': 'traceroute',       # User name for db access
     'dbpasswd': 'NeeLeoth9e',     # Password for db access
     'dbhost': 'localhost',        # Host name for db access
-    'dbclear': 0,                # Clear db before running
+    'dbclear': 0,                 # Clear db before running
     'help': False,                # Help text flag
     'verbose': 0,                 # Verbosity level for message output
     'profiler': 0,                # Output performance profile per file
@@ -124,7 +125,8 @@ param = {
     'topointerval': 3600,         # Min no of seconds between topology events
     'pslookup': 'http://ps-west.es.net/lookup/activehosts.json',  # Source of perfSONAR Lookup Service hosts
     'pslookupwait': 3600,         # Min no of seconds to wait between refreshing info fetched from pslookup-service
-    'ipv6': 0                     # Flag enabling ipv6 address parsing
+    'ipv6': 0,                    # Flag enabling ipv6 address parsing
+    'followinterval': 10          # No of seconds to wait between requests for data from openseach archive
 }
 
 # State constants
@@ -384,6 +386,7 @@ def parse_cmd(param):
     cmdparser.add_argument('--pslookup', default=param['pslookup'], help='Source of perfSONAR Lookup Service hosts.')
     cmdparser.add_argument('--pslookupwait', default=param['pslookupwait'], help='Min interval between attempts to fetch info from ps-lookup service.')
     cmdparser.add_argument('--ipv6', '-6', action='count', default=param['ipv6'], help='Enable parsing of ipv6 addresses.')
+    cmdparser.add_argument('--followinterval', default=param['followinterval'], help='No of seconds to wait between requests for data from openseach archive.')
 
     # Run parser
     args = cmdparser.parse_args()
@@ -518,7 +521,7 @@ def prepare_db(cursor, param):
             cursor.execute("CREATE TABLE jumps (unique_pair VARCHAR(200), hop INT, destinations MEDIUMTEXT, frequencies MEDIUMTEXT, count INT, normal MEDIUMTEXT, memory MEDIUMTEXT, anomaly TEXT, trcrt INT, betweens INT, cross_entropy FLOAT(10), timestamp INT)")
         cursor.execute("CREATE UNIQUE INDEX idx_key2 ON jumps (unique_pair, hop)")
         cursor.execute(('COMMIT'));
-    except:
+    except Exception as err:
         if param['verbose'] > 1: 
             print("Warning: Failed to create table 'jumps'")
             if param['dbtype'] == 'postgresql':
@@ -2316,6 +2319,7 @@ def read(path, srchost, srcdate, mode="batch", thread=0, starttime=0):
 
     traceroutes = {}
     time = 0
+    ps_testid = ""
 
     #Connects to SQL server
     cursor = connect_db(param);              # Connect to DB
@@ -2540,7 +2544,103 @@ def sorted_json(js, result):
 
     return result
 
-            
+def pscheduler_testid(element):
+    """
+    Generate pcheduler test id/checksum (based on /usr/lib/perfsonar/logstash/ruby/pscheduler_test_checksum.rb)
+    """
+    testid_obj = {}
+    testid_obj["test"] = element["test"]
+#    testid_obj["observer_ip"] = "127.0.0.1"  # Assuming locahost as sender of results
+#    testid_obj["observer_ip"] = "172.150.1.2"  # Assuming current host as sender of results
+    testid_obj["observer_ip"] = None   # Seems to end up as "Null" (?!) after logstash pipeline element /usr/lib/perfsonar/logstash/pipeline/02-pscheduler_common.conf
+    testid_obj["tool"] = element["tool"]["name"]
+    sorted_testid_obj = sorted_json(testid_obj, {})
+    cleaned_testid_obj = json.dumps(sorted_testid_obj)
+    cleaned_testid_obj = cleaned_testid_obj.replace(" ","")
+    cleaned_testid_obj = cleaned_testid_obj.encode('utf-8')
+    testid = hashlib.sha256(cleaned_testid_obj).hexdigest()
+
+    return testid
+
+def opensearch_read(opensearch_api, mode, thread):
+    """
+    Read traceroute records via Opensearch API
+    PerfSONAR's trace-test format is expected
+    """
+    iso_now = datetime.fromtimestamp(time.time(), pytz.timezone(str(get_localzone()))).isoformat()    # ISO formatted current time with timezone
+    date_last_read_rec = iso_now;
+
+    # Initiate parsing and analysis in child process
+    pid = os.fork()
+    if pid == 0:
+        # Child process. Reading only from pipe
+        os.close(pssrc_w)
+        read("", "", "", mode)
+        sys.exit()
+
+    # Parent process. No need to read from pipe
+    os.close(pssrc_r)
+        
+    try:
+        while True:
+            # Loop until interrupted
+            search_query = { 'query': { 'range': { '@timestamp': { 'gt':  date_last_read_rec } } }, 'size': 600, 'sort': [ {'@timestamp': {'order': 'asc'}} ]}
+            query_req = urllib.request.Request(opensearch_api + '/pscheduler_raw_trace/_search', data=bytes(json.dumps(search_query), encoding='utf-8') )
+            query_req.add_header('Content-Type', 'application/json')
+            # Prepare to ignore SSL cert errors
+            ssl_context = ssl._create_unverified_context()
+            # Run query
+            response = urllib.request.urlopen(query_req, context=ssl_context)
+            result_str = response.read()
+            if param['verbose'] > 3:
+                print("Data from Opensearch API:")
+                print(result_str)
+            results = json.loads(result_str)
+            if results and results['hits'] and results['hits']['total']['value'] > 0:
+                # Record/doc found
+                for r in results['hits']['hits']:
+		    # Analyse each result-set/element found
+                    element = r["_source"]
+                
+                    # Add to resolver
+                    resolver.add(element["test"]["spec"]["source"])
+                    resolver.add(element["test"]["spec"]["dest"])
+
+                    if element["test"]["type"] != "raw_trace":
+                        # Ignore results from other test types
+                        if param['verbose'] > 2:
+                            print ("Unrelevant test-type '%s' found. Ignoring." % (element["test"]["type"]))
+                        return
+    
+                    # Get timestamp
+                    starttime  = str(int(isodate.parse_datetime(element["pscheduler"]["start_time"]).timestamp()))
+                    # Add some header data
+                    data = starttime + " " + element["result-full"][0]["diags"]
+                    # Forward to analysis process
+                    pssrc_pipe_input.write(data)
+                    if param["verbose"] > 3:
+                        print("Wrote to pipe: '" + data + "'")
+                    try:
+                        pssrc_pipe_input.flush()
+                    except:
+                        # Ignore flush errors
+                        pass
+
+		    # Ensure only new recordes are fetch in next loop
+                    date_last_read_rec = element["@timestamp"]
+
+            elif param["verbose"] > 1:
+                print( "Warning: Missing response from " + opensearch_api + " ." )
+
+	    # Wait and try again
+            time.sleep(param["followinterval"])
+
+    except (KeyboardInterrupt, SystemExit) as e :
+        # Wait for analysis child process to exit
+        os.wait()
+    
+    return 
+    
 def amqp_read(url, mode, thread):
     """ 
     Read traceroute records from Rabbit message queue.
@@ -2560,7 +2660,7 @@ def amqp_read(url, mode, thread):
     # Parse Rabbitmq url
     pssrc_url = urlparse(url)
     if pssrc_url.scheme != "amqp":
-        print("Error: --pssrc supports only amqp://")
+        print("Error: Unsupported message protocol '" + pssrc_url.scheme  + "'")
         sys.exit(1)
     netloc = pssrc_url.netloc.split("@")
     if len(netloc)>1:      
@@ -2643,10 +2743,10 @@ def amqp_read_callback(_ch, _method, _properties, body):
         print ("Element fetched from Rabbit mq:")
         print("%s" % (body.decode("ascii")))
 
-    element = json.loads(body.decode("ascii")) 
-
     # Acknowledge the rmq-message manually
     _ch.basic_ack(delivery_tag=_method.delivery_tag)
+    
+    element = json.loads(body.decode("ascii")) 
 
     # Add to resolver
     resolver.add(element["test"]["spec"]["source"])
@@ -2768,7 +2868,14 @@ if __name__ == "__main__":
             # Read from perfSONAR data source applying today's date
             date = datetime.date(datetime.now())
             mode = 'pssrc'
-            amqp_read(param['pssrc'], mode, 0) 
+            pssrc_url = urlparse(param['pssrc'])
+            if pssrc_url.scheme == "http" or pssrc_url.scheme == "https" :
+                # Check for 'opensearch' in path
+                if pssrc_url.path[-10:] == "opensearch" or pssrc_url.path[-11:] == "opensearch/":
+                    # Url seems valid
+                    opensearch_read(param['pssrc'], mode, 0)
+            else:    
+                amqp_read(param['pssrc'], mode, 0) 
             sys.exit()
         else:
             # Should never come here

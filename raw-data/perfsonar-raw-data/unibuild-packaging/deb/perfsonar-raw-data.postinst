@@ -1,5 +1,5 @@
 #!/bin/sh
-# postinst script for perfsonar-microdep-ana
+# postinst script for perfsonar-raw-data
 #
 # see: dh_installdeb(1)
 
@@ -23,25 +23,14 @@ case "$1" in
 	groupadd -r perfsonar 2> /dev/null || true
 	useradd -g perfsonar -r -s /sbin/nologin -c "perfSONAR User" -d /tmp perfsonar 2> /dev/null || true
 
-	# Prepare DB for trace analyser (ignore errors)
-        /usr/lib/perfsonar/bin/microdep_commands/create_new_db.sh -s -t postgres -d routingmonitor || true
-	# Fix access to db
-	if [ -f /etc/postgresql/15/main/pg_hba.conf ]; then
-	    /usr/lib/perfsonar/bin/microdep_commands/fix-pgsql-access.sh -i /etc/postgresql/15/main/pg_hba.conf || true
-	    systemctl reload postgresql || true
-	fi
-
 	# Fix permissions 
-	chown -R perfsonar:perfsonar /usr/lib/perfsonar/logstash/microdep_pipeline
-	chown perfsonar:perfsonar /var/lib/logstash/microdep/
+	chown perfsonar:perfsonar /usr/lib/perfsonar/logstash/pipeline/*raw*.conf
 
-	# Add Microdep to Opensearch setup (including Logstash) 
-	/usr/lib/perfsonar/bin/microdep_commands/opensearch_config_microdep.sh || true
+	# Add raw data templates and policies to Opensearch setup
+	/usr/lib/perfsonar/archive/bin/commands/opensearch_config_raw_data.sh || true
 	
-	# Enable executing of microdep ana scripts if SElinux is enabled
-	if [ -f /sbin/restorecon ]; then
-	    /sbin/restorecon -irv /usr/lib/perfsonar/bin/microdep_commands/
-	fi
+	# Restart Logstash to enable pipeline update
+	systemctl restart logstash.service || true
     ;;
 
     abort-upgrade|abort-remove|abort-deconfigure)

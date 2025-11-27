@@ -31,6 +31,7 @@ bin/microdep_commands/qstream-gap-ana
 bin/microdep_commands/trace_event_reader.py
 bin/microdep_commands/create_new_db.sh
 bin/microdep_commands/fix-pgsql-access.sh
+bin/microdep_commands/opensearch_config_microdep.sh
 scripts/perfsonar-microdep-gap-ana.service
 scripts/perfsonar-microdep-trace-ana.service
 scripts/perfsonar-microdep-restart.service
@@ -40,7 +41,6 @@ etc/logstash/microdep/02-microdep-filter.conf
 etc/logstash/microdep/03-microdep-outputs.conf
 etc/logstash/microdep-pipelines.yml
 etc/logrotate.d/microdep
-etc/psconfig/archives.d/microdep-ana-rmq.json
 etc/os-template-gap-ana.json
 etc/os-template-trace-ana.json
 etc/GeoLite2/GeoLite2-City.mmdb

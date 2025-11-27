@@ -150,7 +150,7 @@ if [ $DBTYPE = "mysql" ]; then
     sudo mysqladmin -h $DBHOST -P $MSPORT create $DBNAME
     exit_code=$?;
 elif [ $DBTYPE = "postgres" ]; then
-    su postgres -c "createdb $DBHOST -p $PGPORT -w -O '$USERNAME' $DBNAME"
+    su postgres -c "createdb $DBHOST -p $PGPORT $DBNAME"
     exit_code=$?;
 fi
 if [ $exit_code -gt 0 ]; then
@@ -177,8 +177,10 @@ FLUSH PRIVILEGES;
 elif [ $DBTYPE = "postgres" ]; then
     echo "
     DROP ROLE IF EXISTS $USERNAME;
-    GRANT ALL ON DATABASE $DBNAME TO $USERNAME;
     CREATE ROLE $USERNAME WITH PASSWORD '$PASSWD' LOGIN;
+    GRANT ALL ON DATABASE $DBNAME TO $USERNAME;
+    GRANT CREATE ON SCHEMA public TO $USERNAME;
+    GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO $USERNAME;
 " > $SQLCMD
     su postgres -c "psql $DBHOST -p $PGPORT -f $SQLCMD $DBNAME"  
 fi    

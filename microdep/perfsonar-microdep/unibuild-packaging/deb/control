@@ -60,7 +60,9 @@ Depends: ${misc:Depends}, ${perl:Depends},
  libjs-leaflet-utm,
  libjs-moment, 
  libjs-select2.js,
- libjs-sorttable
+ libjs-sorttable,
+ perfsonar-tracetree
+#Recommends: perfsonar-tracetree
 Description: Microdep map web GUI presenting analytic results
  Web GUI presenting Microdep analytic results in a map view
 
@@ -75,7 +77,7 @@ Depends: ${misc:Depends}, ${perl:Depends},
  libstatistics-basic-perl,
 # LWP::Simple
  libwww-perl,
- rabbitmq-server, libanyevent-rabbitmq-perl,
+ libanyevent-rabbitmq-perl,
  liburi-perl,
  libjson-perl,
  libchart-clicker-perl,
@@ -91,7 +93,9 @@ Depends: ${misc:Depends}, ${perl:Depends},
  python3-tzlocal,
  perfsonar-microdep-geolite2,
 ## Both
- logrotate
+ logrotate,
+ perfsonar-raw-data
+Recommends: rabbitmq-server
 Description: Microdep analytic toolset to analize perfSONAR datasets
  Analytic scripts to process perfSONAR data sets and generate events. Events may be viualized by Microdep map.
 

@@ -2,14 +2,12 @@
 #
 #  Qstream Gap Analysis analyse flows of packet received by
 #  the probing packet tool Rude & Crude (https://rude.sourceforge.net/ and
-#  (https://gitlab.sikt.no/rude/rude)
+#  (https://gitlab.sikt.no/rude/rude) or from latencybg tests initiated by
+#  perfSONAR pscheduler (https://perfsonar.net)
 #
 #  The analysis attempts to detect events of different types, e.g. gaps in
 #  the probe packet flows, and outputs statistics of packets observed before
 #  and after such events.
-#
-#  Qstream Gap Analysis also accepts input reported by perfSONAR's latencybg
-#  tests (in json-structures).
 #
 #  Authors: Olav Kvittem (olav.kvittem@sikt.no), Otto J Wittner (otto.wittner@sikt.no)
 #  Copyright: Sikt AS
@@ -34,7 +32,8 @@ use LWP::Simple;
 # use Math::Int64 qw(uint64 uint64_to_number);
 use constant JAN_1970 => 0x83aa7e80;
 
-# use LWP::UserAgent ();
+use LWP::UserAgent;
+use IO::Socket::SSL;
 # use LWP::Protocol::https;
 
 # make sure that summary records are produced when killed
@@ -94,48 +93,67 @@ my $opt_topointerval = 3600;  # Min interval between topology events
 my $opt_pslookup = "http://ps-west.es.net/lookup/activehosts.json";  # Source of perfSONAR Lookup Service hosts;
 my $pslookuphost;               # Ref to hash of perfSONAR Lookup Service hosts;
 my $opt_pslookup_wait = 3600;   # Min interval between attempts to fetch info from ps-lookup service
-my $opt_ipv6 = 0;  # Flag to turn on ipv6 packet analysis
+my $opt_ipv6 = 0;           # Flag to turn on ipv6 packet analysis
+my $opt_follow = 0;         # Flag to turn on rereding of owamp input source 
+my $opt_followinterval = 10;   # Reread interval of owamp input source 
 
-my $usage="$0 '[-title text] [-minloss n] [-win n] [-graph file] [max-small-graphs n]  [-outdir dir] [-head|-rhead] [-id id] [-names file] [-addresses file] [-json file] [-v] [-version] [-esmond url] [file]...
-Analyse gaps in a crude packet log
-  - output a list of statistical qos parameters as text or json
-  - make linear regression to see the delay trend around a gap
-  - make curves to show the delay change before and after a gap
-Parameters
+my $usage="$0 '[options] [file]...
+Analyses for gaps in packet logs (crude logs or owamp data from pscheduler).  
+When gaps are found a list of statistical qos parameters is output as text or json.
+Linear regression statistics are also output to indicate the delay trend around a gap. 
+Curves visualizing the delay change before and after a gap may also be generated.
+Summary statistics are ouput when analysis is terminated.
+
+Options
   -h -help             Help message
-  -rhead n             Output headers so that R can make the headings in the text tables
-  -max-small-graphs n  Limit number(20) of graphs to output from small few packet losses
-  -slep n              Number(1000) of crude lines in the circular buffer
-  -index name          Elastic Search index name to use
+  -id flow-id	       Set id tag for an end-to-end flow. Defaults to source address (or <src>_<dst> for pscheduler data). 
+  -slep n              Number of packets kept in window for analysis. Defaults to 10000.
+  -minloss n           Number of lost packets interpreted as a 'big'. Each big gap generates an event. Default is 5.
+  -win n               Number of packets to analyse before and after a big gap. Default is 10.
+  -recover n	       Nubmer of in sequence to be receieved for a big gap to be considered ended. Default is 5.
+  -max-small-graphs n  Number of graphs to output from small packet losses. Default is 20.
+  -head		       Output headers.
+  -rhead n             Output headers so that R can make the headings in the text tables.
+  -graph 	       Output graphs.
+  -outdir dir	       Set output directory.
+  -title string	       Set title for graphs. Default is 'Delay'.
+  -addresses file      Set source of ip-to-name mappings. Both '<hostname> <address>' format and perfsonar psConfig json is accepted.
+  -names file	       Set source of ip-to-name mappings. '<name> <user> <dns> <ip>' format acccepted.
+  -threshold vector    Threshold values for reporting, in form of a vector '<min-jitter>,<min-ddelay>,<min-slope>'. Default is $min_jit,$min_ddelay,$min_slope .
   -owamp url           Get json owamp data from pscheduler (http://) og from rabbit message queue (ampq://)
-  -json file           Filename to store json event documents 
-  -jitter secs         Emit jitter stats with secs interval
-  -rtp n               RTP jitter algorithm with 1/n change of average (5)
-  -change_factor f     Fraction change to cause threshold jitter report (0.3)
-  -threshold vector    Threshold values for reporting, in form of a vector ala  \"<min-jitter>,<min-ddelay>,<min-slope>\" ($min_jit,$min_ddelay,$min_slope)
-  -debug n             Level of debug info to output ($opt_debug)
+  -follow	       Reread input source at intervals and analyse newly arrived packets. Applys only for owamp url. (Use input-piping, and 'tail -f' to follow files.)   	       
+  -followinterval n    Interval for rereading input source. Default is $opt_followinterval sec.       	       
+  -json file           Enable events output in JSON format to given file. 
+  -jitter secs         Emit jitter statistics at intervals. Default is $jitter_period sec.
+  -change_factor f     Fraction change to cause threshold jitter report. Default is 0.3.
+  -v		       Be verbose.
+  -rtp n               RTP jitter algorithm with 1/n change of average, Default is $opt_rtp.
+  -ddelay_low n        Lower limit for recording jitter burst. Default is $opt_ddelay_low ms.
+  -ddelay_high n       Upper limit for recording jitter burst. Default is $opt_ddelay_high ms.
+  -debug n             Level of debug info to output. Default is $opt_debug
   -batchsize n         Override batch size (packet count) expected when reading owamp subsession data sets
   -topoevents	       Enable output of topology events whenever a topology change is detected. Requires -json. 
-  -topointerval n      Min interval (sec) between topology events (default is $opt_topointerval)
-  -pslookup url        Source url for perfSONAR lookup service hosts (default is $opt_pslookup)
-  -wait seconds        Min no of seconds to wait between refreshing info fetched from pslookup-service (default is $opt_pslookup_wait)
+  -topointerval n      Min interval (sec) between topology events. Default is $opt_topointerval
+  -pslookup url        Source url for perfSONAR lookup service hosts. Default is $opt_pslookup
+  -wait seconds        Min no of seconds to wait between refreshing info fetched from pslookup-service. Default is $opt_pslookup_wait
   -6                   Analyse ipv6 packets (and ignore ipv4). Default is the opposite.
     ";
 
-my ($opt_h, $opt_help, $opt_id, $opt_slep, $opt_format, $opt_minloss, $opt_win, $opt_recover, $opt_max_small_graphs, $opt_head, $opt_rhead, $opt_graph, $opt_outdir, $opt_title, $opt_addresses, $opt_names, $opt_threshold, $opt_owamp, $opt_json, $opt_jitter, $opt_change_factor, $opt_index, $opt_v, $opt_version);
+my ($opt_h, $opt_help, $opt_id, $opt_slep, $opt_minloss, $opt_win, $opt_recover, $opt_max_small_graphs, $opt_head, $opt_rhead, $opt_graph, $opt_outdir, $opt_title, $opt_addresses, $opt_names, $opt_threshold, $opt_owamp, $opt_json, $opt_jitter, $opt_change_factor, $opt_v, $opt_version);
 
 
-GetOptions( 'h' => \$opt_h, 'help' => \$opt_help, 'id=s' => \$opt_id, 'slep=s' => \$opt_slep, 'format=s'=>\$opt_format,
+GetOptions( 'h' => \$opt_h, 'help' => \$opt_help, 'id=s' => \$opt_id, 'slep=s' => \$opt_slep, 
 	    'minloss=s' => \$opt_minloss, 'win=s' => \$opt_win, 'recover=s' => \$opt_recover,
 	    'max-small-graphs=s' => \$opt_max_small_graphs, 
 	    'head' => \$opt_head, 'rhead' => \$opt_rhead, 'graph=s' => \$opt_graph, 'outdir=s' => \$opt_outdir, 
-	    'title=s' => \$opt_title, 'addresses=s'=> \$opt_addresses, 'names=s' => \$opt_names, 'json=s' => \$opt_json, 'index=s' => \$opt_index, 
+	    'title=s' => \$opt_title, 'addresses=s'=> \$opt_addresses, 'names=s' => \$opt_names, 'json=s' => \$opt_json,  
 	    'jitter=s' => \$opt_jitter, 'threshold' => \$opt_threshold, 'owamp=s' => \$opt_owamp,
 	    'rtp=s' => \$opt_rtp, 'ddelay_low=s' => $opt_ddelay_low, 'ddelay_high=s' => \$opt_ddelay_high,
 	    'debug=s' => \$opt_debug, 'batchsize=s' => $opt_batchsize,
 	    'change_factor=s' => \$opt_change_factor, 'v' => \$opt_v, 'version' => \$opt_version,
 	    'topoevents' => \$opt_topoevents, 'topointerval=s' => \$opt_topointerval,
-	    'pslookup=s' => \$opt_pslookup, 'wait=s' => \$opt_pslookup_wait, '6' =>\$opt_ipv6
+	    'pslookup=s' => \$opt_pslookup, 'wait=s' => \$opt_pslookup_wait, '6' =>\$opt_ipv6,
+	    'follow' => \$opt_follow, 'followinterval=s' => \$opt_followinterval 
     ) or die $usage;
 # &NGetOpt( 'h', 'help', 'id=s', 'slep=s', 'minloss=s', 'win=s', 'max-small-graphs=s', 'head', 'rhead', 'graph=s', 'outdir=s', 'title=s', 'names=s', 'json=s', 'index=s', 'v', 'version') || die "$!" . $usage ."\n";
 
@@ -260,7 +278,12 @@ my %jitter_data=();
 
 if ($opt_owamp){
     if ( $opt_owamp =~ /^http.*:\/\// ){
-	read_owamp_curl($opt_owamp);
+	if ($opt_follow && $opt_followinterval > 0 )  {
+	    # Inititate rereading logic for perfsonar input
+	    read_owamp_follow($opt_owamp, $opt_followinterval);
+	} else {
+	    read_owamp_curl($opt_owamp);
+	}
     } elsif ($opt_owamp =~ /^amqp.*:\/\//) {
 	read_owamp_rabbitmq($opt_owamp);
     } else {
@@ -731,7 +754,7 @@ sub read_owamp_ua {
     $ENV{PERL_NET_HTTPS_SSL_SOCKET_CLASS} = 'Net::SSL';
     my $ua = LWP::UserAgent->new;
     $ua->ssl_opts( verify_hostname => 0); # certs don't verify in ps-land
-    my $resp = $ua->get($url);
+    My $resp = $ua->get($url);
     if ( $resp->is_success ){
 	read_owamp_json( $resp->content);
     } else {
@@ -748,8 +771,10 @@ sub owamp_ana($){
     print Dumper($data) if $opt_debug > 3;
 
 
-    if ( $data && $data->{'test'}->{'type'} eq 'latencybg' ){
+    if ( $data && ( $data->{'test'}->{'type'} eq 'latencybg' || $data->{'test'}->{'type'} eq 'raw_latencybg') ){ 
 	# (At least) Meta data from a powstream / latencybg test is available
+	print("latencybg test results found....\n") if $opt_debug > 2;
+
 #	(my $src, my $dst)=($data->{'test'}->{'spec'}->{'source-node'}, $data->{'test'}->{'spec'}->{'dest-node'} );
 	(my $src, my $dst)=($data->{'test'}->{'spec'}->{'source'}, $data->{'test'}->{'spec'}->{'dest'} );
 
@@ -834,7 +859,51 @@ sub owamp_ana($){
     }
 }
 
+sub owamp_search_query{
+    # Return Opensearch search query for docs newer the given iso-time, ordered on timestamps
+    my $iso_date = shift;
+    return '{ "query": { "range": { "@timestamp": { "gt": "' . $iso_date . '" } } }, "size": 600, "sort": [ {"@timestamp": {"order": "asc"}} ]}';
+}   
 
+sub read_owamp_follow{
+    # Read and analyze pscheduler latencybg data (stemming from owamp measurements) from http source.
+    # Re-read at regular intervals to fetch new records.
+    my ($url_str, $followinterval) = @_;
+    my $iso_now = strftime("%Y-%m-%dT%H:%M:%S%z", localtime); # ISO formatted current time with timezone
+    my $date_last_read_rec = $iso_now;
+
+    if ($url_str =~ /^http.*:\/\/\S*\/opensearch\/*$/ ){
+	# Url seems to be a ref to a perfsonar archive with opensearch.
+	$url_str .= "/pscheduler_raw_latencybg/_search";
+	my $query_req = LWP::UserAgent->new;
+	$query_req->ssl_opts( verify_hostname => 0, SSL_verify_mode => IO::Socket::SSL::SSL_VERIFY_NONE);  # Accept any SSl cert
+	while( 1 ) {
+	    # Loop until interrupted
+	    my $search_query = owamp_search_query($date_last_read_rec); 
+	    my $owamp_resp = $query_req->post($url_str, 'Content-Type' => 'application/json', Content => $search_query );
+	    if (defined $owamp_resp) {
+		print "owamp data from ", $url_str, ":\n", Dumper($owamp_resp) if $opt_debug > 3;
+		$owamp_data = decode_json $owamp_resp->{'_content'};
+		if (%{$owamp_data} && $owamp_data->{'hits'} && $owamp_data->{'hits'}->{'total'}{'value'} > 0 ) {
+		    # Record/docs found
+		    foreach $result (@{$owamp_data->{'hits'}->{'hits'}}) {
+			# Analyse each result-set found
+			owamp_ana(encode_json($result->{'_source'}));
+			# Ensure only new recordes are fetch in next loop
+			$date_last_read_rec = $result->{'_source'}->{'@timestamp'};
+		    }
+		}
+	    } else {
+		warn "Missing response from $url_str." if ($opt_v || $opt_debug > 1);
+	    }		
+	    # Wait and try again
+	    sleep $followinterval;
+	}
+    } else {
+	die "Unrecognized owamp source to follow. Url to perfsonar archive required, i.e. ending with '/opensearch'."
+    }
+}
+    
 sub read_owamp_rabbitmq{
     # Reads and analyze owamp records from Rabbit MQ "forever"
     my $url_str=shift;

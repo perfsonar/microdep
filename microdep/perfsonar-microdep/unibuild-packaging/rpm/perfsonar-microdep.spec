@@ -51,6 +51,9 @@ Requires:               perl(DBI)
 Requires:		perl(Getopt::Long)
 Requires:		perl(JSON)
 Requires:		perl(LWP::Simple)
+Requires:               perl(LWP::UserAgent)
+Requires:               perl(LWP::Protocol::https)
+Requires:               perl(IO::Socket::SSL)
 Requires:		perl(Socket)
 Requires:		perl(strict)
 Requires:		perl(URI)
@@ -75,7 +78,6 @@ Requires:               momentjs = 2.30.1
 Requires:               select2js = 4.0.0
 Requires:               sorttablejs = 2.0
 Requires:               perfsonar-tracetree
-#%{?systemd_requires: %systemd_requires}
 BuildRequires:          systemd
 BuildRequires:          systemd-rpm-macros       
 # ... but macros are not yet utilized below
@@ -88,10 +90,10 @@ Summary:		Microdep analytic toolset to analize perfSONAR datasets
 Group:			Applications/Communications
 
 # Rabbit message queue ... but since 'dnf update' is required between installing these two dependencies, things fail... hm
-BuildRequires:          centos-release-rabbitmq-38
-Requires:               erlang < 26.0
+#BuildRequires:          centos-release-rabbitmq-38
+#Requires:               erlang < 26.0
 #Requires:               erlang 
-Requires:               rabbitmq-server
+#Requires:               rabbitmq-server
 BuildRequires:          curl
 BuildRequires:          perl >= 5.32
 BuildRequires:          perl(DBI)
@@ -125,7 +127,7 @@ Requires:               python3-pytz
 Requires:               python3-tzlocal
 Requires:               perfsonar-microdep-geolite2
 Requires:               logrotate
-#%{?systemd_requires: %systemd_requires}
+Requires:               perfsonar-raw-data
 BuildRequires:          systemd
 BuildRequires:          systemd-rpm-macros    
 # ... but macros are not yet utilized below
@@ -140,8 +142,6 @@ Analytic scripts to process perfSONAR data sets and generate events. Events may 
 %pre map
 /usr/sbin/groupadd -r perfsonar 2> /dev/null || :
 /usr/sbin/useradd -g perfsonar -r -s /sbin/nologin -c "perfSONAR User" -d /tmp perfsonar 2> /dev/null || :
-# Stop services (ignore failures)
-systemctl stop perfsonar-microdep-watchconfig.path || true
 
 %pre ana
 /usr/sbin/groupadd -r perfsonar 2> /dev/null || :
@@ -163,7 +163,6 @@ make ROOTPATH=%{buildroot}/%{install_base} CONFIGPATH=%{buildroot}/%{microdep_co
 mkdir -p %{buildroot}/%{_unitdir}
 install -D -m 0644 -t %{buildroot}/%{_unitdir} %{buildroot}/%{install_base}/scripts/*.service
 install -D -m 0644 -t %{buildroot}/%{_unitdir} %{buildroot}/%{install_base}/scripts/*.timer
-install -D -m 0644 -t %{buildroot}/%{_unitdir} %{buildroot}/%{install_base}/scripts/*.path
 systemctl daemon-reload || true
 # Move microdep map, httpd and logstash configs into correct folders
 install -D -m 0644 -t %{buildroot}/%{microdep_config_base}/mp-dragonlab/etc/ %{buildroot}/%{microdep_config_base}/microdep.db
@@ -276,22 +275,24 @@ systemctl reload httpd.service || true
 # Fix access to db
 if [ -f /var/lib/pgsql/data/pg_hba.conf ]; then
     %{command_base}/fix-pgsql-access.sh -i /var/lib/pgsql/data/pg_hba.conf
+    systemctl reload postgresql.service || true
 fi
 
+
 # Add Microdep to Opensearch setup (including Logstash) 
-/usr/lib/perfsonar/bin/microdep_commands/opensearch_config_microdep.sh
+/usr/lib/perfsonar/bin/microdep_commands/opensearch_config_microdep.sh || true
 
 # Enable executing of microdep ana scripts if SElinux is enabled
-if [ -f /sbin/restorecon ]; then
+if [ -f /sbin/semanage ]; then
+    /sbin/semanage fcontext -a -t bin_t "/usr/lib/perfsonar/bin/microdep_commands/qstream-gap-ana"
+    /sbin/semanage fcontext -a -t bin_t "/usr/lib/perfsonar/bin/microdep_commands/trace_event_reader.py"
     /sbin/restorecon -irv /usr/lib/perfsonar/bin/microdep_commands/
 fi
     
 # Enable systemd services (ignore failures)
-systemctl enable rabbitmq-server.service || true
 systemctl enable perfsonar-microdep-gap-ana.service || true
 systemctl enable perfsonar-microdep-trace-ana.service || true
 systemctl enable perfsonar-microdep-restart.timer || true
-systemctl start rabbitmq-server.service || true
 systemctl start perfsonar-microdep-gap-ana.service || true
 systemctl start perfsonar-microdep-trace-ana.service || true
 systemctl start perfsonar-microdep-restart.timer || true
@@ -310,7 +311,7 @@ systemctl reload httpd.service || true
 
 %preun ana
 # Remove Microdep from Opensearch setup (including Logstash) 
-/usr/lib/perfsonar/bin/microdep_commands/opensearch_config_microdep.sh -r config
+/usr/lib/perfsonar/bin/microdep_commands/opensearch_config_microdep.sh -r config || true
 
 # Clean up db access
 if [ -f /var/lib/pgsql/data/pg_hba.conf ]; then
@@ -344,9 +345,6 @@ systemctl stop perfsonar-microdep-restart.timer || true
 %attr(0755,perfsonar,perfsonar) %{command_base}/microdep-config.cgi
 %attr(0755,perfsonar,perfsonar) %{command_base}/yaml-to-json.cgi
 %attr(0755,perfsonar,perfsonar) %{command_base}/get-mapconfig.cgi
-%attr(0755,perfsonar,perfsonar) %{command_base}/microdep-psconfig-load.pl
-%{_unitdir}/perfsonar-microdep-watchconfig.path
-%{_unitdir}/perfsonar-microdep-watchconfig.service
 %config %{microdep_config_base}/microdep-config.yml
 %config %{microdep_config_base}/mapconfig.yml
 %config %{microdep_config_base}/mapconfig.d/
@@ -370,9 +368,9 @@ systemctl stop perfsonar-microdep-restart.timer || true
 %attr(0755,perfsonar,perfsonar) %{command_base}/opensearch_config_microdep.sh
 %attr(0755,perfsonar,perfsonar) %{command_base}/json2table.pl
 %attr(0755,perfsonar,perfsonar) %{command_base}/rabbitmq-consume.py
-%attr(0755,perfsonar,perfsonar) /usr/local/bin/opensearch_config_microdep.sh
-%attr(0755,perfsonar,perfsonar) /usr/local/bin/rabbitmq-consume.py
-%attr(0755,perfsonar,perfsonar) /usr/local/bin/json2table.pl
+/usr/local/bin/opensearch_config_microdep.sh
+/usr/local/bin/rabbitmq-consume.py
+/usr/local/bin/json2table.pl
 %config %{install_base}/logstash/microdep_pipeline/01-microdep-inputs.conf
 %config %{install_base}/logstash/microdep_pipeline/02-microdep-filter.conf
 %config %{install_base}/logstash/microdep_pipeline/03-microdep-outputs.conf
@@ -384,7 +382,7 @@ systemctl stop perfsonar-microdep-restart.timer || true
 %{microdep_config_base}/microdep-tests.json.example
 %{microdep_config_base}/microdep-tests-packet-subcount.json.example
 %config /etc/pscheduler/default-archives/microdep-ana-rmq.json
-%config(0644,root,root) /etc/logrotate.d/microdep
+%config /etc/logrotate.d/microdep
 %changelog
 * Thu Oct 24 2024 Otto J Wittner <otto.wittner@sikt.no>
 - Prepareing for release 5.3
