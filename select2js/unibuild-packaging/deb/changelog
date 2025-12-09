@@ -1,0 +1,5 @@
+select2 (4.0.13) perfsonar-5.3; urgency=low
+
+  * Initial port to Debian.
+
+ -- Otto J Wittner <otto.wittner@sikt.no>  Mon, 1 Dec  2025 14:00:00 -0200

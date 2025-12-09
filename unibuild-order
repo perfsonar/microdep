@@ -30,7 +30,9 @@ leafletjs-contextmenu
 leafletjs-curve
 leafletjs-utm
 momentjs
-select2js
+ifelse(PACKAGING,rpm,select2js)
+ifelse(DISTRO/MAJOR,Ubuntu/20,select2js)
+#select2js
 sorttablejs
 perl_color_library
 perl_moosex_aliases

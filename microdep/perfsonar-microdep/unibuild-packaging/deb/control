@@ -4,7 +4,7 @@ Priority: optional
 Maintainer: perfSONAR developers <debian@perfsonar.net>
 Uploaders: Otto J Wittner <otto.wittner@sikt.no>
 Build-Depends: debhelper (>= 10),
- perl (>= 5.32),
+ perl,
  libwww-perl,
  libjson-perl,
  libdbi-perl,
@@ -35,7 +35,7 @@ Architecture: all
 Depends: ${misc:Depends}, ${perl:Depends},
  apache2,
 # libperl, perl-base, perl-modules, Getopt::Long, POSIX, Time::Local, Data:dumper 
- perl (>= 5.32),
+ perl,
  libcgi-pm-perl, 
  libdbi-perl,
  libjson-perl,
@@ -71,7 +71,7 @@ Architecture: all
 Depends: ${misc:Depends}, ${perl:Depends},
 ## gap-ana
 # libperl, perl-base, perl-modules, Getopt::Long, POSIX, Time::Local, Data:Dumper, constant, sigtrap,  
- perl (>= 5.32), 
+ perl, 
  libsocket-perl,
  libstatistics-linefit-perl,
  libstatistics-basic-perl,

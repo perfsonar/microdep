@@ -75,7 +75,7 @@ Requires:               leafletjs-curve
 Requires:               leafletjs-L.LatLng.UTM
 Requires:               latlon-sphericaljs
 Requires:               momentjs = 2.30.1
-Requires:               select2js = 4.0.0
+Requires:               select2js = 4.0.13
 Requires:               sorttablejs = 2.0
 Requires:               perfsonar-tracetree
 BuildRequires:          systemd
@@ -88,12 +88,6 @@ Web GUI presenting Microdep analytic results in a map view
 %package ana
 Summary:		Microdep analytic toolset to analize perfSONAR datasets
 Group:			Applications/Communications
-
-# Rabbit message queue ... but since 'dnf update' is required between installing these two dependencies, things fail... hm
-#BuildRequires:          centos-release-rabbitmq-38
-#Requires:               erlang < 26.0
-#Requires:               erlang 
-#Requires:               rabbitmq-server
 BuildRequires:          curl
 BuildRequires:          perl >= 5.32
 BuildRequires:          perl(DBI)
@@ -168,7 +162,6 @@ systemctl daemon-reload || true
 install -D -m 0644 -t %{buildroot}/%{microdep_config_base}/mp-dragonlab/etc/ %{buildroot}/%{microdep_config_base}/microdep.db
 install -D -m 0644 -t %{buildroot}/etc/httpd/conf.d/ %{buildroot}/%{microdep_config_base}/apache-microdep-map.conf
 install -D -m 0644 -t %{buildroot}/%{install_base}/logstash/microdep_pipeline/ %{buildroot}/%{microdep_config_base}/logstash/microdep/*
-install -D -m 0644 -t %{buildroot}/etc/pscheduler/default-archives/ %{buildroot}/%{microdep_config_base}/psconfig/archives.d/microdep-ana-rmq.json
 install -D -m 0644 -t %{buildroot}/etc/logrotate.d/ %{buildroot}/%{microdep_config_base}/logrotate.d/microdep
 
 # Prepare folder for json output from analytics scripts read by logstash
@@ -218,8 +211,8 @@ ln -sr /usr/share/javascript/leaflet-markercluster/1.0.3/leaflet.markercluster-s
 ln -sr /usr/share/javascript/leaflet-curve/0.9.2/leaflet.curve.js %{buildroot}/%{microdep_web_dir}/js/
 ln -sr /usr/share/javascript/leaflet-L.LatLng.UTM/1.0/L.LatLng.UTM.js %{buildroot}/%{microdep_web_dir}/js/
 ln -sr /usr/share/javascript/momentjs/2.30.1/moment.js %{buildroot}/%{microdep_web_dir}/js/
-ln -sr /usr/share/javascript/select2/4.0.0/css/select2.min.css %{buildroot}/%{microdep_web_dir}/css/
-ln -sr /usr/share/javascript/select2/4.0.0/js/select2.min.js %{buildroot}/%{microdep_web_dir}/js/
+ln -sr /usr/share/javascript/select2/4.0.13/css/select2.min.css %{buildroot}/%{microdep_web_dir}/css/
+ln -sr /usr/share/javascript/select2/4.0.13/js/select2.min.js %{buildroot}/%{microdep_web_dir}/js/
 ln -sr /usr/share/javascript/sorttable/2.0/sorttable.js %{buildroot}/%{microdep_web_dir}/js/
 
 # Link mapconfig
@@ -229,7 +222,7 @@ ln -sr %{microdep_config_base}/mapconfig.yml %{buildroot}/%{microdep_web_dir}
 mkdir -p %{buildroot}/usr/local/bin/ || true
 ln -sr %{command_base}/opensearch_config_microdep.sh  %{buildroot}/usr/local/bin/opensearch_config_microdep.sh
 ln -sr %{command_base}/rabbitmq-consume.py  %{buildroot}/usr/local/bin/rabbitmq-consume.py
-ln -sr %{command_base}/microdep_commands/json2table.pl  %{buildroot}/usr/local/bin/json2table.pl
+ln -sr %{command_base}/json2table.pl  %{buildroot}/usr/local/bin/json2table.pl
 
 
 %clean
@@ -381,10 +374,9 @@ systemctl stop perfsonar-microdep-restart.timer || true
 %{microdep_config_base}/roles_yml_patch
 %{microdep_config_base}/microdep-tests.json.example
 %{microdep_config_base}/microdep-tests-packet-subcount.json.example
-%config /etc/pscheduler/default-archives/microdep-ana-rmq.json
 %config /etc/logrotate.d/microdep
 %changelog
-* Thu Oct 24 2024 Otto J Wittner <otto.wittner@sikt.no>
+* Thu Oct 24 2025 Otto J Wittner <otto.wittner@sikt.no>
 - Prepareing for release 5.3
 * Thu Jan 04 2024 Otto J Wittner <otto.wittner@sikt.no>
 - Initial spec file created

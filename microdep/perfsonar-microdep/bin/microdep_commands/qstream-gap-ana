@@ -472,8 +472,10 @@ sub emit_summary_json{
 	    $json{"dropped_$gap_type"}=$dropped_gaps{$id}{$gap_type};
 	}
 
-	emit_json( $json, $id, $ptx{$id} );
-    }
+	my $sum_time = $ptx{$id} || time();  # Ensure valid timestamp for summary records  
+#	emit_json( $json, $id, $ptx{$id} );
+	emit_json( $json, $id, $sum_time );
+    } 
 }
 
 sub emit_json{
