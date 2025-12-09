@@ -75,7 +75,7 @@ Requires:               leafletjs-curve
 Requires:               leafletjs-L.LatLng.UTM
 Requires:               latlon-sphericaljs
 Requires:               momentjs = 2.30.1
-Requires:               select2js = 4.0.0
+Requires:               select2js = 4.0.13
 Requires:               sorttablejs = 2.0
 Requires:               perfsonar-tracetree
 BuildRequires:          systemd
@@ -211,8 +211,8 @@ ln -sr /usr/share/javascript/leaflet-markercluster/1.0.3/leaflet.markercluster-s
 ln -sr /usr/share/javascript/leaflet-curve/0.9.2/leaflet.curve.js %{buildroot}/%{microdep_web_dir}/js/
 ln -sr /usr/share/javascript/leaflet-L.LatLng.UTM/1.0/L.LatLng.UTM.js %{buildroot}/%{microdep_web_dir}/js/
 ln -sr /usr/share/javascript/momentjs/2.30.1/moment.js %{buildroot}/%{microdep_web_dir}/js/
-ln -sr /usr/share/javascript/select2/4.0.0/css/select2.min.css %{buildroot}/%{microdep_web_dir}/css/
-ln -sr /usr/share/javascript/select2/4.0.0/js/select2.min.js %{buildroot}/%{microdep_web_dir}/js/
+ln -sr /usr/share/javascript/select2/4.0.13/css/select2.min.css %{buildroot}/%{microdep_web_dir}/css/
+ln -sr /usr/share/javascript/select2/4.0.13/js/select2.min.js %{buildroot}/%{microdep_web_dir}/js/
 ln -sr /usr/share/javascript/sorttable/2.0/sorttable.js %{buildroot}/%{microdep_web_dir}/js/
 
 # Link mapconfig
@@ -222,7 +222,7 @@ ln -sr %{microdep_config_base}/mapconfig.yml %{buildroot}/%{microdep_web_dir}
 mkdir -p %{buildroot}/usr/local/bin/ || true
 ln -sr %{command_base}/opensearch_config_microdep.sh  %{buildroot}/usr/local/bin/opensearch_config_microdep.sh
 ln -sr %{command_base}/rabbitmq-consume.py  %{buildroot}/usr/local/bin/rabbitmq-consume.py
-ln -sr %{command_base}/microdep_commands/json2table.pl  %{buildroot}/usr/local/bin/json2table.pl
+ln -sr %{command_base}/json2table.pl  %{buildroot}/usr/local/bin/json2table.pl
 
 
 %clean
@@ -270,7 +270,6 @@ if [ -f /var/lib/pgsql/data/pg_hba.conf ]; then
     %{command_base}/fix-pgsql-access.sh -i /var/lib/pgsql/data/pg_hba.conf
     systemctl reload postgresql.service || true
 fi
-
 
 # Add Microdep to Opensearch setup (including Logstash) 
 /usr/lib/perfsonar/bin/microdep_commands/opensearch_config_microdep.sh || true

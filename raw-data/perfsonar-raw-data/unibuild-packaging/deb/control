@@ -4,7 +4,7 @@ Priority: optional
 Maintainer: perfSONAR developers <debian@perfsonar.net>
 Uploaders: Otto J Wittner <otto.wittner@sikt.no>
 Build-Depends: debhelper (>= 10),
- perl (>= 5.32),
+ perl,
  curl
 Standards-Version: 4.7.0.0
 Homepage: http://www.perfsonar.net

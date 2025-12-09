@@ -1,0 +1,22 @@
+Source: select2
+Section: javascript
+Priority: optional
+Maintainer: perfSONAR developers <debian@perfsonar.net>
+Uploaders: Otto J Wittner <otto.wittner@sikt.no>
+Build-Depends: debhelper (>= 10)
+Standards-Version: 4.7.0.0
+Homepage: https://select2.github.io/
+Vcs-Git: https://github.com/select2/select2.git
+#Vcs-Browser: 
+
+Package: libjs-select2.js 
+Architecture: all
+Depends: libjs-jquery
+Recommends: javascript-common
+Description: jQuery based replacement for select boxes
+ Select2 is a jQuery based replacement for select boxes. It supports
+ searching, tagging, remote data sets, infinite scrolling, and many
+ other highly used options.
+
+
+
