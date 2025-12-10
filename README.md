@@ -11,49 +11,60 @@ This project provides a collection of tools realizing the *perfSONAR Microdep an
 
 ## Project structure
 
-During the ongoing migration fase for *PS Microdep* the `/dev` folder holds misc subprojects the *PS Microdep analytic system* 
-inherets its components from, i.e. `/dev` holds the legacy Microdep development environment. 
+The folder structure follows perfsonar standards to enable building with *unibuild*. The *microdep* folder holds source and build specs for Microdep core packages. The *submodules* folder holds other git projects which Microdep depends upon. A collection of other folders (on the project root level) holds misc libraries Microdep also depends on.
 
-Other folders hold scripts and files applied by the perfsonar version of the system, i.e. files included in builds for different distributions.
-Note that these files are typically copies of files under `/dev`. Run `make resync` to ensure perfsonar version is in sync with legacy version. 
+A *microdep-dev* folder exists with some legacy version of misc files. Please ignore this one (or have a look if you suspect some old ideas can be re-introduced.)
 
 ## Building
 
-A Makefile is available to support building and testing
+A Makefile is available to support building and testing on a debian based host
   * Ensure *docker* is installed: `sudo apt install docker-ce-cli docker-compose-plugin`
-  * To clean out old builds: `make clean-rpm-build clean-deb-build`
-  * To build el9 rpm-packages: `make rpm-build`
-  * To build u22 deb-packages: `make deb-build`
-
-Updated packages should become available in `unibuild-repo/` 
+  * To cleanup'n'build rpm-packages: `make rpm`
+  * To cleanup'n'build deb-packages: `make deb`
+  * To specify which distro to build for (defaults are *el9* and *u22*) run e.g. `make -e DEBDIST=u20 deb`
+  
+  * To clean out builds apply `make clean-rpm-build` or `make clean-deb-build`
+  * To build only apply `make rpm-build` or `make deb-build`
 
 ## Testing
 
+### Creating a local microdep-package repo in test host
+
+If all works well while building (i.e. *unibuild* is cloned, applied for building, and the requested build is succeedfull) the resulting repo of packages may be install via a local repo on a host by applying
+  * `bin/refresh-remote-repos.sh <hostname>`
+
+Note that the `refresh-remote-repos.sh` script requires an admin/root-account with remote access to be available on the target host (e.g. via `ssh root@<hostname>`) .
+
+On a test host microdep packages may now be installed applying the instructions given below.
+
+### Running it all in docker
+
+**NOT CURRENTLY FULLY OPERATIONAL**
+  
 A docker container based system test enviroment is available. As a minimum the environment consists of three containers, a toolkit node with the perfsonar-microdep add-on installed, a testpoint node and a network emulator node. The network emulator interconnects the toolkit and testpoint nodes, and introduces packet drops and delays as well as a traceroute hop.
 
-To initiate a el9 test environment run: `make rpm-test`
-To initiate a u22 test environment run: `make deb-test` **NOT YET OPERATIONAL**
+To initiate an rpm test environment run: `make rpm-test`
+To initiate a deb test environment run: `make deb-test` 
 
 When all containers are running the toolkit GUI should be accessable via https://localhost:4436/grafana and the Microdep add-ond via https://localhost:4436/microdep
 
 ## Installation
 
-A set of packages composes the overal analytic system
+A set of packages composes the overall analytic system
 
   * **perfsonar-microdep**     : Root packages depending on other perfsonar-microdep packages 
   * **perfsonar-microdep-map** : Web based map-gui
   * **perfsonar-microdep-ana** : Realtime analytics for event discovery
   * **perfsonar-tracetree**    : Web based graphical traceroute viewer
+  * **perfsonar-raw-data**     : Logstash pipeline additions to enable short-term indices in Opensearch for raw-data from tests
 
-Note that currently PS Microdep depends on **perfsonar-toolkit**, i.e. it needs to be installed on a server running the full toolkit suit.
-
-Locally build repositories may be copied and prepared at a relevant toolkit host with the `refresh-remote-repos.sh`
+Note that currently PS Microdep depends on **perfsonar-toolkit**, i.e. it needs to be installed on a server running the full toolkit suit. **TO BE FIXED BEFORE 5.3 RELEASE**
 
 To install RPM-based distibutions
-  * el9 (almalinux): `sudo dnf install perfsonar-microdep prefsonar-tracetree`
+  * `sudo dnf install perfsonar-microdep`
  
 To install DEB-based distributions (Debian, Ubuntu)
-  * u22 (ubuntu): `sudo apt install perfsonar-microdep perfsonar-tracetree`
+  * `sudo apt install perfsonar-microdep`
   
 To install from source **NOT YET AVAILABLE**
   * `tar zxvf perfsonar-microdep-xxx.yyy.zz.tar.gz`
@@ -64,11 +75,13 @@ To install from source **NOT YET AVAILABLE**
   
 ## Configuring
 
-The Microdep add-on currently examines `/etc/perfsonar/psconfig/pscheduler.d/toolkit-webui.json` for measurement topologies. Changes made to this file (manually or via a psConfig tool) is detected automatically.
+As the Microdep add-on relies on raw-data from tests to perform analysis, only selected tests will be analyzed (assuming the *perfsonar-raw-data package* is installed):
+  * **traceroute tests** : All tests as the all supply raw data.
+  * **latencybg  tests** : All tests where the flag **"output-raw": true** is included as attribute in the **"spec"**-structure of a test (see `microdep-tests.json.example`).
+  
+## Accessing analytic results
 
-To enable Microdep analysis of a bglatency test, add the `"output-raw":true` to the tests spec-structure.
+Analytic results from Microdep is available via https://<my-host>/microdep.
 
-## Accessing
 
-Analytic results from Microdep is available via https://my-toolkit-host/microdep
 

@@ -1,3 +1,5 @@
+# PER 2025-12-01 THE MICRODEP-DEV FOLDER IS OBSOLETE!
+
 # Microdep in perfSONAR - container based test environment
 
 NOTE: Run `git submodule update --init --recursive` after cloning to init submodules
