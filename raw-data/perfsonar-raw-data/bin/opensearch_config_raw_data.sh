@@ -129,8 +129,8 @@ fi
 
 ADMIN_PASS=$(grep -w "admin" $PASSWORD_FILE | head -n 1 | awk '{print $2}')
 if [ -z "$ADMIN_PASS" ]; then
-    echo "Error: Opensearch admin password not available. Apply -p <password-file>. " >&2
-    exit 1
+    echo "Warning: Opensearch admin password not available in $PASSWORD_FILE. Please re-run '$0' applying -p <password-file>. " >&2
+    exit 0
 fi    
 
 if [ "$REMOVE" ]; then
