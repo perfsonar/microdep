@@ -11,7 +11,7 @@ This project provides a collection of tools realizing the *perfSONAR Microdep an
 
 ## Project structure
 
-The folder structure follows perfsonar standards to enable building with *unibuild*. The *microdep* folder holds source and build specs for Microdep core packages. The *submodules* folder holds other git projects which Microdep depends upon. A collection of other folders (on the project root level) holds misc libraries Microdep also depends on.
+The folder structure follows perfsonar standards to enable building with *unibuild*. The *microdep* folder holds source and build specs for Microdep core packages and well as a collection of other folders and build specs for libraries Microdep also depends on.
 
 A *microdep-dev* folder exists with some legacy version of misc files. Please ignore this one (or have a look if you suspect some old ideas can be re-introduced.)
 
