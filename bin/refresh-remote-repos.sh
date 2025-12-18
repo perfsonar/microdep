@@ -84,7 +84,7 @@ if [ "$DISTRO" = "rpm" ]; then
     rsync -vr -e "$RSH" pstracetree/unibuild-repo/RPMS $USER@$HOST:/var/lib/unibuild-repo/
 
     echo "Preparing remote repo ..."
-    $RSH $USER@$HOST dnf -y install centos-release-rabbitmq-38 yum-utils createrepo
+    $RSH $USER@$HOST dnf -y install yum-utils createrepo
     #$RSH $USER@$HOST rm -rf /var/lib/unibuild-repo/repodata
     $RSH $USER@$HOST createrepo /var/lib/unibuild-repo
     
