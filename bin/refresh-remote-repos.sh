@@ -88,14 +88,13 @@ if [ "$DISTRO" = "rpm" ]; then
     #$RSH $USER@$HOST rm -rf /var/lib/unibuild-repo/repodata
     $RSH $USER@$HOST createrepo /var/lib/unibuild-repo
     
-    $RSH $USER@$HOST dnf repolist | grep -q file:///var/lib/unibuild-repo
-#    if [ $? -gt 0 ]; then
-	echo "Enabling remote repo ..."
-	$RSH $USER@$HOST yum-config-manager --add-repo file:///var/lib/unibuild-repo
-#    fi
+    echo "Enabling remote repo ..."
+    $RSH $USER@$HOST yum-config-manager --add-repo file:///var/lib/unibuild-repo
+    $RSH $USER@$HOST "echo gpgcheck=0 >> /etc/yum.repos.d/var_lib_unibuild-repo.repo"
+    
     echo "Refreshing repo list ..."
     $RSH $USER@$HOST dnf clean all
-    $RSH $USER@$HOST dnf -y update --nogpgcheck
+#    $RSH $USER@$HOST dnf -y update --nogpgcheck
     echo "Done!"
     echo "Packages in local repo:"
     $RSH $USER@$HOST dnf list | grep unibuild-repo
