@@ -28,6 +28,7 @@ unibuild-compose.yml:
 pstracetree:
 	@echo "Cloning pstracetree..."
 	git clone https://github.com/perfsonar/pstracetree.git
+	grep -q 'pstracetree/' .gitignore || echo "pstracetree/" >> .gitignore
 
 pstracetree/unibuild-repo/RPMS: pstracetree unibuild-compose.yml
 	@echo "Build pstracetree rpms for ${RPMDIST}..."
@@ -48,7 +49,7 @@ pstracetree/unibuild-repo/Packages: pstracetree unibuild-compose.yml
 unibuild-repo/RPMS: unibuild-compose.yml
 	@echo "Build Microdep rpms for ${RPMDIST}..."
 # 	Add pstracetree repo before building
-	docker compose -f unibuild-compose.yml run ${RPMDIST} bash -c "dnf -y install yum-utils &&  yum-config-manager --add-repo file:/app/pstracetree/unibuild-repo && dnf clean all && dnf -y update --nogpgcheck && ${BUILDCMD}"
+	docker compose -f unibuild-compose.yml run ${RPMDIST} bash -c "dnf -y install yum-utils && yum-config-manager --setopt=gpgcheck=0 --add-repo file:/app/pstracetree/unibuild-repo && dnf clean all && dnf -y update --nogpgcheck && ${BUILDCMD}"
 
 deb-systemd-services: 
 	rsync  -t microdep/perfsonar-microdep/scripts/perfsonar-microdep-gap-ana.service microdep/perfsonar-microdep/unibuild-packaging/deb/perfsonar-microdep-ana.perfsonar-microdep-gap-ana.service
