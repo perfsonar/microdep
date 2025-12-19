@@ -4,7 +4,9 @@
 
 include $(wildcard unibuild/unibuild.make)
 
-COMPOSECMD= docker compose   
+# Check if docker-compose exists, otherwise use "docker compose"
+COMPOSECMD := $(shell command -v docker-compose 2>/dev/null || echo "docker compose")
+
 BUILDCMD= unibuild build     # May be replace by running e.g. "make -e BUILDCMD=bash deb" to enable manual building 
 DEBDIST= u22
 RPMDIST= el9
