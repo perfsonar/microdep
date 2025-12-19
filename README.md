@@ -76,12 +76,12 @@ To install from source **NOT YET AVAILABLE**
 ## Configuring
 
 As the Microdep add-on relies on raw-data from tests to perform analysis, only selected tests will be analyzed (assuming the *perfsonar-raw-data package* is installed):
-  * **traceroute tests** : All tests as the all supply raw data.
+  * **traceroute tests** : All tests as they all supply raw data.
   * **latencybg  tests** : All tests where the flag **"output-raw": true** is included as attribute in the **"spec"**-structure of a test (see `microdep-tests.json.example`).
   
 ## Accessing analytic results
 
-Analytic results from Microdep is available via https://<my-host>/microdep.
+Analytic results from Microdep is available via https://my-host/microdep.
 
 
 
