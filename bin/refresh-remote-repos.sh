@@ -77,8 +77,14 @@ fi
 read -p "Sync $DISTRO-repos to $USER@$HOST (y/N)? " YESNO
 if [  "$YESNO" != "y" -a  "$YESNO" != "Y" ]; then exit 0; fi
 
+
 if [ "$DISTRO" = "rpm" ]; then
 
+    if [ ! -d "unibuild-repo/RPMS"  ]; then
+	echo "Error: No RPM build found (folder unibuild-repo/RPMS is missing). Run 'make rpm' first." >&2
+	exit 1
+    fi
+    
     echo "Synching to remote repo at $USER@$HOST ..."
     rsync -vr -e "$RSH" unibuild-repo/RPMS $USER@$HOST:/var/lib/unibuild-repo/
     rsync -vr -e "$RSH" pstracetree/unibuild-repo/RPMS $USER@$HOST:/var/lib/unibuild-repo/
@@ -100,6 +106,12 @@ if [ "$DISTRO" = "rpm" ]; then
     $RSH $USER@$HOST dnf list | grep unibuild-repo
 
 elif [ "$DISTRO" = "deb" ]; then
+
+    if [ -e "unibuild-repo/Release"  ]; then
+	echo "Error: No valid DEB build found (unibuild-repo/Release is missing). Run 'make deb' first." >&2
+	exit 1
+    fi
+    
     echo "Synching to remote $DISTRO-repo at $USER@$HOST ..."
     rsync -vr -e "$RSH" unibuild-repo/*.deb unibuild-repo/Packages unibuild-repo/Release $USER@$HOST:/var/lib/unibuild-microdep-repo/
     rsync -vr -e "$RSH" pstracetree/unibuild-repo/*.deb pstracetree/unibuild-repo/Packages pstracetree/unibuild-repo/Release $USER@$HOST:/var/lib/unibuild-pstracetree-repo/
