@@ -107,8 +107,8 @@ if [ "$DISTRO" = "rpm" ]; then
 
 elif [ "$DISTRO" = "deb" ]; then
 
-    if [ -e "unibuild-repo/Release"  ]; then
-	echo "Error: No valid DEB build found (unibuild-repo/Release is missing). Run 'make deb' first." >&2
+    if [ ! -e "unibuild-repo/Release" -o ! -e "pstracetree/unibuild-repo/Release" ]; then
+	echo "Error: No valid DEB build found (unibuild-repo/Release or pstracetree/unibuild-repo/Release is missing). Run 'make deb' first." >&2
 	exit 1
     fi
     
