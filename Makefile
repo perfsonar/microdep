@@ -4,10 +4,13 @@
 
 include $(wildcard unibuild/unibuild.make)
 
-BUILDCMD="unibuild build"   # May be replace by running e.g. "make BUILDCMD=bash deb" to enable manual building 
-DEBDIST="u22"
-RPMDIST="el9"
-ARCH="amd64"
+# Check if docker-compose exists, otherwise use "docker compose"
+COMPOSECMD := $(shell command -v docker-compose 2>/dev/null || echo "docker compose")
+
+BUILDCMD= unibuild build     # May be replace by running e.g. "make -e BUILDCMD=bash deb" to enable manual building 
+DEBDIST= u22
+RPMDIST= el9
+ARCH= amd64
 
 default:
 	@echo "*** Building packages for Microdep ***"
@@ -25,14 +28,31 @@ unibuild-compose.yml:
 	@echo "Fetching unibuild docker compose file..."
 	@wget -O unibuild-compose.yml https://raw.githubusercontent.com/perfsonar/unibuild/main/docker-envs/docker-compose.yml
 
-submodules/pstracetree/Makefile:
-	@echo "Fetching submodules..."
-	git submodule init
-	git submodule update
+pstracetree:
+	@echo "Cloning pstracetree..."
+	git clone https://github.com/perfsonar/pstracetree.git
+	grep -q 'pstracetree/' .gitignore || echo "pstracetree/" >> .gitignore
 
-unibuild-repo/RPMS: unibuild-compose.yml submodules/pstracetree/Makefile
+pstracetree/unibuild-repo/RPMS: pstracetree unibuild-compose.yml
+	@echo "Build pstracetree rpms for ${RPMDIST}..."
+	cp unibuild-compose.yml pstracetree/
+	${COMPOSECMD} -f pstracetree/unibuild-compose.yml run ${RPMDIST} bash -c "unibuild build"
+
+pstracetree/unibuild-repo/Packages: pstracetree unibuild-compose.yml
+	@echo "Build pstracetree deb packages for ${DEBDIST} ..."
+	cp unibuild-compose.yml pstracetree/
+	${COMPOSECMD} -f pstracetree/unibuild-compose.yml run ${DEBDIST}_${ARCH} bash -c "apt -y update && unibuild build"
+
+#submodules/pstracetree/Makefile:
+#	@echo "Fetching submodules..."
+#	git submodule init
+#	git submodule update
+
+#unibuild-repo/RPMS: unibuild-compose.yml submodules/pstracetree/Makefile
+unibuild-repo/RPMS: unibuild-compose.yml
 	@echo "Build Microdep rpms for ${RPMDIST}..."
-	docker compose -f unibuild-compose.yml run ${RPMDIST} bash -c "${BUILDCMD}"
+# 	Add pstracetree repo before building
+	${COMPOSECMD} -f unibuild-compose.yml run ${RPMDIST} bash -c "dnf -y install yum-utils && yum-config-manager --add-repo file:/app/pstracetree/unibuild-repo; echo gpgcheck=0 >> /etc/yum.repos.d/app_pstracetree_unibuild-repo.repo; dnf clean all && dnf -y update --nogpgcheck && ${BUILDCMD}"
 
 deb-systemd-services: 
 	rsync  -t microdep/perfsonar-microdep/scripts/perfsonar-microdep-gap-ana.service microdep/perfsonar-microdep/unibuild-packaging/deb/perfsonar-microdep-ana.perfsonar-microdep-gap-ana.service
@@ -40,19 +60,22 @@ deb-systemd-services:
 	rsync  -t microdep/perfsonar-microdep/scripts/perfsonar-microdep-restart.service microdep/perfsonar-microdep/unibuild-packaging/deb/perfsonar-microdep-ana.perfsonar-microdep-restart.service
 	rsync  -t microdep/perfsonar-microdep/scripts/perfsonar-microdep-restart.timer microdep/perfsonar-microdep/unibuild-packaging/deb/perfsonar-microdep-ana.perfsonar-microdep-restart.timer
 
-unibuild-repo/Packages: deb-systemd-services unibuild-compose.yml submodules/pstracetree/Makefile
+#unibuild-repo/Packages: deb-systemd-services unibuild-compose.yml submodules/pstracetree/Makefile
+unibuild-repo/Packages: deb-systemd-services unibuild-compose.yml pstracetree/unibuild-repo/Packages
 	@echo "Build Microdep deb packages for ${DEBDIST}..."
-	docker compose -f unibuild-compose.yml run ${DEBDIST}_${ARCH} bash -c "apt -y update && ${BUILDCMD}"
+#	${COMPOSECMD} -f unibuild-compose.yml run ${DEBDIST}_${ARCH} bash -c "apt -y update && ${BUILDCMD}"
+	${COMPOSECMD} -f unibuild-compose.yml run ${DEBDIST}_${ARCH} bash -c "echo 'deb [trusted=yes] file:/app/pstracetree/unibuild-repo ./' > /etc/apt/sources.list.d/local-pstracetree-repo.list && apt -y update && unibuild build"
 
-rpm-build: unibuild-repo/RPMS 
+#rpm-build: unibuild-repo/RPMS 
+rpm-build: pstracetree/unibuild-repo/RPMS unibuild-repo/RPMS
 
 rpm-test-build: 
 	@echo "Building rpm system test environment (containers) for PS Microdep..."
-	DISTRO=${RPMDIST} docker compose -f microdep/tests/system-test.yml --project-directory . build 
+	DISTRO=${RPMDIST} ${COMPOSECMD} -f microdep/tests/system-test.yml --project-directory . build 
 
 rpm-test-run:
 	@echo "Starting rpm system test environment (containers) for PS Microdep..."
-	DISTRO=${RPMDIST} docker compose -f microdep/tests/system-test.yml --project-directory . up
+	DISTRO=${RPMDIST} ${COMPOSECMD} -f microdep/tests/system-test.yml --project-directory . up
 
 rpm-test:  clean-rpm-test rpm-build rpm-test-build rpm-test-run
 
@@ -61,29 +84,33 @@ deb-build: unibuild-repo/Packages
 
 deb-test-build: 
 	@echo "Building deb system test environment (containers) for PS Microdep..."
-	DISTRO=${DEBDIST} docker compose -f microdep/tests/system-test.yml --project-directory . build 
+	DISTRO=${DEBDIST} ${COMPOSECMD} -f microdep/tests/system-test.yml --project-directory . build 
 
 deb-test-run:  
 	@echo "Starting deb system test environment (containers) for PS Microdep..."
-	DISTRO=${DEBDIST} docker compose -f microdep/tests/system-test.yml --project-directory . up
+	DISTRO=${DEBDIST} ${COMPOSECMD} -f microdep/tests/system-test.yml --project-directory . up
 
 deb-test:  clean-deb-test deb-build deb-test-build deb-test-run
 
 clean-rpm-test:  
 	@echo "Clean up rpm tests of PS Microdep..."
-	-DISTRO=${RPMDIST} docker compose -f microdep/tests/system-test.yml --project-directory . down 	
+	-DISTRO=${RPMDIST} ${COMPOSECMD} -f microdep/tests/system-test.yml --project-directory . down 	
 
 clean-deb-test:  
 	@echo "Clean up deb tests of PS Microdep..."
-	-DISTRO=${DEBDIST} docker compose -f microdep/tests/system-test.yml --project-directory . down 	
+	-DISTRO=${DEBDIST} ${COMPOSECMD} -f microdep/tests/system-test.yml --project-directory . down 	
 
 clean-rpm-build: unibuild-compose.yml
 	@echo "Removing locally built rpm repos..."
-	-docker compose -f unibuild-compose.yml run ${RPMDIST} unibuild clean
+	-cp unibuild-compose.yml pstracetree/
+	-${COMPOSECMD} -f pstracetree/unibuild-compose.yml run ${RPMDIST} unibuild clean
+	-${COMPOSECMD} -f unibuild-compose.yml run ${RPMDIST} unibuild clean
 
 clean-deb-build: unibuild-compose.yml
 	@echo "Removing locally built deb repos..."
-	-docker compose -f unibuild-compose.yml run ${DEBDIST}_${ARCH} unibuild clean
+	-cp unibuild-compose.yml pstracetree/
+	-${COMPOSECMD} -f pstracetree/unibuild-compose.yml run ${DEBDIST}_${ARCH} unibuild clean
+	-${COMPOSECMD} -f unibuild-compose.yml run ${DEBDIST}_${ARCH} unibuild clean
 
 deb: clean-deb-build deb-build
 

@@ -204,38 +204,34 @@ fi
 
 
 # Create Microdep ana index policies (ISM) and templates
-if [ $? -ne 0 ]; then
-    msg "Warning: Failed to parse Opensearch password. Is perfsonar-toolkit installed?"
-else
-    wait_opensearch
-    wait_opensearch_api
-    # Opensearch is operational
+wait_opensearch
+wait_opensearch_api
+# Opensearch is operational
 
-    # Add templates
-    msg "Adding Microdep index templates..."
-    curl -k -u admin:${ADMIN_PASS} -s -H 'Content-Type: application/json' -XPUT "$OPENSEARCH_URL/_index_template/microdep_gap_ana" -d @/etc/perfsonar/microdep/os-template-gap-ana.json 2>/dev/null ; echo
-    curl -k -u admin:${ADMIN_PASS} -s -H 'Content-Type: application/json' -XPUT "$OPENSEARCH_URL/_index_template/microdep_trace_ana" -d @/etc/perfsonar/microdep/os-template-trace-ana.json 2>/dev/null ; echo
-    
-    if [ $(curl -s -o /dev/null -w "%{http_code}" -u admin:${ADMIN_PASS} -k "$OPENSEARCH_URL/_plugins/_ism/policies/microdep_default_policy") -ne 200 ]; then
-	# No policy found.  Create new.
-	msg "Creating default Microdep index policy..."
-	curl -k -u admin:${ADMIN_PASS} -H 'Content-Type: application/json' -X PUT "$OPENSEARCH_URL/_plugins/_ism/policies/microdep_default_policy" -d "@/etc/perfsonar/microdep/microdep_default_policy.json" 2>/dev/null ; echo
-	# Apply policy to index
-	msg "Applying Microdep index policy to indices..."
-	curl -k -u admin:${ADMIN_PASS} -H 'Content-Type: application/json' -X POST "$OPENSEARCH_URL/_plugins/_ism/add/dragonlab*" -d '{ "policy_id": "microdep_default_policy" }' 2>/dev/null ; echo
-	curl -k -u admin:${ADMIN_PASS} -H 'Content-Type: application/json' -X POST "$OPENSEARCH_URL/_plugins/_ism/add/microdep*" -d '{ "policy_id": "microdep_default_policy" }' 2>/dev/null ; echo
-    else
-	# Get policy identifiers
-	P_SEQ_NO=$(curl -s -u admin:${ADMIN_PASS} -k $OPENSEARCH_URL/_plugins/_ism/policies/microdep_default_policy | jq ._seq_no)
-	P_PRIM_TERM=$(curl -s -u admin:${ADMIN_PASS} -k $OPENSEARCH_URL/_plugins/_ism/policies/microdep_default_policy | jq ._primary_term)
-	# Update policy
-	msg "Updating default Microdep index policy..."
-	curl -k -u admin:${ADMIN_PASS} -H 'Content-Type: application/json' -X PUT "$OPENSEARCH_URL/_plugins/_ism/policies/microdep_default_policy?if_seq_no=$P_SEQ_NO&if_primary_term=$P_PRIM_TERM" -d "@/etc/perfsonar/microdep/microdep_default_policy.json" 2>/dev/null ; echo
-	# Roll over indices to activate new policy version
-	msg "Rolling over indices to ensure new policy is applied..."
-	for i in $MICRODEP_INDICES; do
-	    curl -k -u admin:${ADMIN_PASS} -X POST "$OPENSEARCH_URL/$i/_rollover"  2>/dev/null ; echo
-	done
-    fi
+# Add templates
+msg "Adding Microdep index templates..."
+curl -k -u admin:${ADMIN_PASS} -s -H 'Content-Type: application/json' -XPUT "$OPENSEARCH_URL/_index_template/microdep_gap_ana" -d @/etc/perfsonar/microdep/os-template-gap-ana.json 2>/dev/null ; echo
+curl -k -u admin:${ADMIN_PASS} -s -H 'Content-Type: application/json' -XPUT "$OPENSEARCH_URL/_index_template/microdep_trace_ana" -d @/etc/perfsonar/microdep/os-template-trace-ana.json 2>/dev/null ; echo
+
+if [ $(curl -s -o /dev/null -w "%{http_code}" -u admin:${ADMIN_PASS} -k "$OPENSEARCH_URL/_plugins/_ism/policies/microdep_default_policy") -ne 200 ]; then
+    # No policy found.  Create new.
+    msg "Creating default Microdep index policy..."
+    curl -k -u admin:${ADMIN_PASS} -H 'Content-Type: application/json' -X PUT "$OPENSEARCH_URL/_plugins/_ism/policies/microdep_default_policy" -d "@/etc/perfsonar/microdep/microdep_default_policy.json" 2>/dev/null ; echo
+    # Apply policy to index
+    msg "Applying Microdep index policy to indices..."
+    curl -k -u admin:${ADMIN_PASS} -H 'Content-Type: application/json' -X POST "$OPENSEARCH_URL/_plugins/_ism/add/dragonlab*" -d '{ "policy_id": "microdep_default_policy" }' 2>/dev/null ; echo
+    curl -k -u admin:${ADMIN_PASS} -H 'Content-Type: application/json' -X POST "$OPENSEARCH_URL/_plugins/_ism/add/microdep*" -d '{ "policy_id": "microdep_default_policy" }' 2>/dev/null ; echo
+else
+    # Get policy identifiers
+    P_SEQ_NO=$(curl -s -u admin:${ADMIN_PASS} -k $OPENSEARCH_URL/_plugins/_ism/policies/microdep_default_policy | jq ._seq_no)
+    P_PRIM_TERM=$(curl -s -u admin:${ADMIN_PASS} -k $OPENSEARCH_URL/_plugins/_ism/policies/microdep_default_policy | jq ._primary_term)
+    # Update policy
+    msg "Updating default Microdep index policy..."
+    curl -k -u admin:${ADMIN_PASS} -H 'Content-Type: application/json' -X PUT "$OPENSEARCH_URL/_plugins/_ism/policies/microdep_default_policy?if_seq_no=$P_SEQ_NO&if_primary_term=$P_PRIM_TERM" -d "@/etc/perfsonar/microdep/microdep_default_policy.json" 2>/dev/null ; echo
+    # Roll over indices to activate new policy version
+    msg "Rolling over indices to ensure new policy is applied..."
+    for i in $MICRODEP_INDICES; do
+	curl -k -u admin:${ADMIN_PASS} -X POST "$OPENSEARCH_URL/$i/_rollover"  2>/dev/null ; echo
+    done
 fi
 msg "Configuration completed."

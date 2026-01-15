@@ -13,7 +13,7 @@ Vcs-Git: https://github.com/perfsonar/microdep.git
 Package: perfsonar-raw-data
 Architecture: all
 Depends: ${misc:Depends}, ${perl:Depends}
-Recommends:
- perfsonar-archive
+#Recommends:
+# perfsonar-archive
 Description: perfSONAR raw test data caching
  Enables short term storage of raw data sets coming from pscheduler via logstash

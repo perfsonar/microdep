@@ -129,8 +129,8 @@ fi
 
 ADMIN_PASS=$(grep -w "admin" $PASSWORD_FILE | head -n 1 | awk '{print $2}')
 if [ -z "$ADMIN_PASS" ]; then
-    echo "Error: Opensearch admin password not available. Apply -p <password-file>. " >&2
-    exit 1
+    echo "Warning: Opensearch admin password not available in $PASSWORD_FILE. Please re-run '$0' applying -p <password-file>. " >&2
+    exit 0
 fi    
 
 if [ "$REMOVE" ]; then
@@ -158,36 +158,32 @@ if [ "$REMOVE" ]; then
 fi
 
 # Create raw data index policies (ISM) and templates
-if [ $? -ne 0 ]; then
-    msg "Warning: Failed to parse Opensearch password. Is perfsonar-toolkit installed?"
-else
-    # Ensure Opensearch is operational
-    wait_opensearch
-    wait_opensearch_api
+# Ensure Opensearch is operational
+wait_opensearch
+wait_opensearch_api
 
-    # Add templates
-    msg "Adding raw data index template..."
-    curl -k -u admin:${ADMIN_PASS} -s -H 'Content-Type: application/json' -XPUT "$OPENSEARCH_URL/_index_template/pscheduler_raw_data_policy" -d @/usr/lib/perfsonar/archive/config/index_template-pscheduler_raw.json 2>/dev/null ; echo
-    
-    if [ $(curl -s -o /dev/null -w "%{http_code}" -u admin:${ADMIN_PASS} -k "$OPENSEARCH_URL/_plugins/_ism/policies/pscheduler_raw_data_policy") -ne 200 ]; then
-	# No policy found.  Create new.
-	msg "Creating raw data index policy..."
-	curl -k -u admin:${ADMIN_PASS} -H 'Content-Type: application/json' -X PUT "$OPENSEARCH_URL/_plugins/_ism/policies/pscheduler_raw_data_policy" -d "@/usr/lib/perfsonar/archive/config/ilm/install/pscheduler_raw_data_policy.json" 2>/dev/null ; echo
-	# Apply policy to index
-	msg "Applying raw data index policy to indices..."
-	curl -k -u admin:${ADMIN_PASS} -H 'Content-Type: application/json' -X POST "$OPENSEARCH_URL/_plugins/_ism/add/pscheduler_raw*" -d '{ "policy_id": "pscheduler_raw_data_policy" }' 2>/dev/null ; echo
-    else
-	# Get policy identifiers
-	P_SEQ_NO=$(curl -s -u admin:${ADMIN_PASS} -k $OPENSEARCH_URL/_plugins/_ism/policies/pscheduler_raw_data_policy | jq ._seq_no)
-	P_PRIM_TERM=$(curl -s -u admin:${ADMIN_PASS} -k $OPENSEARCH_URL/_plugins/_ism/policies/pscheduler_raw_data_policy | jq ._primary_term)
-	# Update policy
-	msg "Updating raw data index policy..."
-	curl -k -u admin:${ADMIN_PASS} -H 'Content-Type: application/json' -X PUT "$OPENSEARCH_URL/_plugins/_ism/policies/pscheduler_raw_data_policy?if_seq_no=$P_SEQ_NO&if_primary_term=$P_PRIM_TERM" -d "@/usr/lib/perfsonar/archive/config/ilm/install/pscheduler_raw_data_policy.json" 2>/dev/null ; echo
-	# Roll over indices to activate new policy version
-	msg "Rolling over raw data indices to ensure new policy is applied..."
-	for i in INDICES; do
-	    curl -k -u admin:${ADMIN_PASS} -X POST "$OPENSEARCH_URL/$i/_rollover"  2>/dev/null ; echo
-	done
-    fi
+# Add templates
+msg "Adding raw data index template..."
+curl -k -u admin:${ADMIN_PASS} -s -H 'Content-Type: application/json' -XPUT "$OPENSEARCH_URL/_index_template/pscheduler_raw_data_policy" -d @/usr/lib/perfsonar/archive/config/index_template-pscheduler_raw.json 2>/dev/null ; echo
+
+if [ $(curl -s -o /dev/null -w "%{http_code}" -u admin:${ADMIN_PASS} -k "$OPENSEARCH_URL/_plugins/_ism/policies/pscheduler_raw_data_policy") -ne 200 ]; then
+    # No policy found.  Create new.
+    msg "Creating raw data index policy..."
+    curl -k -u admin:${ADMIN_PASS} -H 'Content-Type: application/json' -X PUT "$OPENSEARCH_URL/_plugins/_ism/policies/pscheduler_raw_data_policy" -d "@/usr/lib/perfsonar/archive/config/ilm/install/pscheduler_raw_data_policy.json" 2>/dev/null ; echo
+    # Apply policy to index
+    msg "Applying raw data index policy to indices..."
+    curl -k -u admin:${ADMIN_PASS} -H 'Content-Type: application/json' -X POST "$OPENSEARCH_URL/_plugins/_ism/add/pscheduler_raw*" -d '{ "policy_id": "pscheduler_raw_data_policy" }' 2>/dev/null ; echo
+else
+    # Get policy identifiers
+    P_SEQ_NO=$(curl -s -u admin:${ADMIN_PASS} -k $OPENSEARCH_URL/_plugins/_ism/policies/pscheduler_raw_data_policy | jq ._seq_no)
+    P_PRIM_TERM=$(curl -s -u admin:${ADMIN_PASS} -k $OPENSEARCH_URL/_plugins/_ism/policies/pscheduler_raw_data_policy | jq ._primary_term)
+    # Update policy
+    msg "Updating raw data index policy..."
+    curl -k -u admin:${ADMIN_PASS} -H 'Content-Type: application/json' -X PUT "$OPENSEARCH_URL/_plugins/_ism/policies/pscheduler_raw_data_policy?if_seq_no=$P_SEQ_NO&if_primary_term=$P_PRIM_TERM" -d "@/usr/lib/perfsonar/archive/config/ilm/install/pscheduler_raw_data_policy.json" 2>/dev/null ; echo
+    # Roll over indices to activate new policy version
+    msg "Rolling over raw data indices to ensure new policy is applied..."
+    for i in INDICES; do
+	curl -k -u admin:${ADMIN_PASS} -X POST "$OPENSEARCH_URL/$i/_rollover"  2>/dev/null ; echo
+    done
 fi
 msg "Configuration completed."

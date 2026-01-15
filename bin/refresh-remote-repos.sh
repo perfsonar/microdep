@@ -77,30 +77,41 @@ fi
 read -p "Sync $DISTRO-repos to $USER@$HOST (y/N)? " YESNO
 if [  "$YESNO" != "y" -a  "$YESNO" != "Y" ]; then exit 0; fi
 
+
 if [ "$DISTRO" = "rpm" ]; then
 
+    if [ ! -d "unibuild-repo/RPMS"  ]; then
+	echo "Error: No RPM build found (folder unibuild-repo/RPMS is missing). Run 'make rpm' first." >&2
+	exit 1
+    fi
+    
     echo "Synching to remote repo at $USER@$HOST ..."
     rsync -vr -e "$RSH" unibuild-repo/RPMS $USER@$HOST:/var/lib/unibuild-repo/
     rsync -vr -e "$RSH" pstracetree/unibuild-repo/RPMS $USER@$HOST:/var/lib/unibuild-repo/
 
     echo "Preparing remote repo ..."
-    $RSH $USER@$HOST dnf -y install centos-release-rabbitmq-38 yum-utils createrepo
+    $RSH $USER@$HOST dnf -y install yum-utils createrepo
     #$RSH $USER@$HOST rm -rf /var/lib/unibuild-repo/repodata
     $RSH $USER@$HOST createrepo /var/lib/unibuild-repo
     
-    $RSH $USER@$HOST dnf repolist | grep -q file:///var/lib/unibuild-repo
-#    if [ $? -gt 0 ]; then
-	echo "Enabling remote repo ..."
-	$RSH $USER@$HOST yum-config-manager --add-repo file:///var/lib/unibuild-repo
-#    fi
+    echo "Enabling remote repo ..."
+    $RSH $USER@$HOST yum-config-manager --add-repo file:///var/lib/unibuild-repo
+    $RSH $USER@$HOST "echo gpgcheck=0 >> /etc/yum.repos.d/var_lib_unibuild-repo.repo"
+    
     echo "Refreshing repo list ..."
     $RSH $USER@$HOST dnf clean all
-    $RSH $USER@$HOST dnf -y update --nogpgcheck
+#    $RSH $USER@$HOST dnf -y update --nogpgcheck
     echo "Done!"
     echo "Packages in local repo:"
     $RSH $USER@$HOST dnf list | grep unibuild-repo
 
 elif [ "$DISTRO" = "deb" ]; then
+
+    if [ ! -e "unibuild-repo/Release" -o ! -e "pstracetree/unibuild-repo/Release" ]; then
+	echo "Error: No valid DEB build found (unibuild-repo/Release or pstracetree/unibuild-repo/Release is missing). Run 'make deb' first." >&2
+	exit 1
+    fi
+    
     echo "Synching to remote $DISTRO-repo at $USER@$HOST ..."
     rsync -vr -e "$RSH" unibuild-repo/*.deb unibuild-repo/Packages unibuild-repo/Release $USER@$HOST:/var/lib/unibuild-microdep-repo/
     rsync -vr -e "$RSH" pstracetree/unibuild-repo/*.deb pstracetree/unibuild-repo/Packages pstracetree/unibuild-repo/Release $USER@$HOST:/var/lib/unibuild-pstracetree-repo/
