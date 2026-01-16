@@ -5,7 +5,8 @@
         rotate 4
         maxsize 100000k
         daily
-        missingok
+        copytruncate
+	missingok
         notifempty
         compress
         delaycompress
