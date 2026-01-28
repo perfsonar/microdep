@@ -5,6 +5,8 @@ export var colors=[];
 export var threshes=[];  // color thresholds for current property
 
 export function make_palette( palette){
+    // Prepare color palette for global colors[] array
+    
     if ( palette === "auto"){
 	  colors=generate_colors(10, [0.8,0.2,0.2]); // 5 colors in red with 50% green and blue
     } else if ( palette === "traffic2" ) {
