@@ -814,21 +814,23 @@ function draw_links(hits, prop){
 
     for (var i=0; i < hits.length; i++){
 	var link=hits[i];
-	var abs=[link._source.from, link._source.to];
-	var ab=link._source.from + "," + link._source.to;
-	new_ends[ab]=1;
+	var ab=[link._source.from, link._source.to];
+	var abs=ab.join();
+	if(!new_ends[abs]) new_ends.length++; // Ensure updated array length
+	new_ends[abs]=1;
 
-	// if ( ! ( parms.node && ! (abs.indexOf( parms.node) >= 0) ) ){ // only with node
-	if ( focus_node === "" || abs.indexOf(focus_node) >= 0 ){
+	// if ( ! ( parms.node && ! (ab.indexOf( parms.node) >= 0) ) ){ // only with node
+	if ( focus_node === "" || ab.indexOf(focus_node) >= 0 ){
 	    var color=get_color( link._source[prop], threshes);
 
-	    if ( ! linkByName[ab]){ // draw line
+	    if ( ! linkByName[abs]){ // draw line
 		var tooltip= link_tooltip( link._source.from + " to " + link._source.to , link._source, prop );
 
-		var l=draw_link(abs, color, tooltip, link_popup(link._source) );
+		var l=draw_link(ab, color, tooltip, link_popup(link._source) );
 		if (l){
 		    links.push(l);
-		    linkByName[ab]=l;
+		    if(!linkByName[abs]) linkByName.length++;  // Ensure updated array length
+ 		    linkByName[abs]=l;
 		    ends.push(abs);
 		    l.on("mouseover", function(e){
 			if (! mouseover) {
@@ -852,11 +854,16 @@ function draw_links(hits, prop){
 	    remove_link(ab);		
 	}
     }
-    // remove  stale links 
+    // Find stale links
+    var stale_link=[];
     for (var i=0; i < ends.length; i++){
 	if ( ! new_ends[ ends[i]] ) {
-	    remove_link(ends[i]);
+	    stale_link.push(ends[i]);
 	}
+    }
+    // Remove stale links 
+    for (var i=0; i < stale_link.length; i++){
+	    remove_link(stale_link[i]);
     }
     // refocus map 
     /* if (mymap){
@@ -897,9 +904,13 @@ function get_topology(source = "archive"){
     case "archive": 
 	// Fetch all unique from-to peers (flows) for time period from Opensearch archive
 	var query_index = event_index[parms.event];
-	if ( conffile[parms.net].event_type.topology.index )
+	if ( conffile[parms.net].event_type.topology.index ) {
 	    // Override with index from config
-	    query_index = JSON.stringify( { "index": conffile[parms.net].event_type.topology.index }); 
+	    query_index = conffile[parms.net].event_type.topology.index;
+	} else if (conffile[parms.net].event_type[parms.event].topology_index) {
+	    // Override with index from config
+	    query_index = conffile[parms.net].event_type[parms.event].topology_index ;
+	}	    
 	var url = conffile[parms.net].archive + "/" + query_index + "/_search";
 	var query = JSON.stringify ({ "query": { "range": { "@date": { "gte": start_iso,  "lt": end_iso  } } },
 		      "size": 0,
@@ -949,17 +960,17 @@ function draw_topology(topo){
     var new_ends=[];
 
     for (var i=0; i < topo.length; i++){
-        var abs=topo[i];
-	var ab= abs[0] + "," + abs[1];
-	// new_ends.push(ab);
-	new_ends[ab]=1;
+        var ab=topo[i];
+	var abs= ab.join();
+	if (! new_ends[ab]) new_ends.lenght++;  // Ensure correct length.
+	new_ends[abs]=1;
 
-	if ( ! linkByName[ab]){ // draw line
+	if ( ! linkByName[abs]){ // draw line
 
-	    var l=draw_link(abs, empty_color, ab, ab );
+	    var l=draw_link(ab, empty_color, ab, ab );
 	    if (l){
 		links.push(l);
-		linkByName[ab]=l;
+		linkByName[abs]=l;
 		ends.push(abs);
 		l.on("mouseover", function(e){
 		    if (! mouseover) {
@@ -975,19 +986,23 @@ function draw_topology(topo){
 		});
 	    }
 	}  else { // no need to redraw
-	    // console.log("link already there : " + ab);
-	    taint_link(linkByName[ab], empty_color);
+	    // console.log("link already there : " + abs);
+	    taint_link(linkByName[abs], empty_color);
 	} 
     }
-
-     // remove  stale links 
+    // Find stale links
+    var stale_link=[];
     for (var i=0; i < ends.length; i++){
 	if ( ! new_ends[ ends[i]] ) {
-	    remove_link(ends[i]);
+	    stale_link.push(ends[i]);
 	}
     }
+    // Remove stale links 
+    for (var i=0; i < stale_link.length; i++){
+	    remove_link(stale_link[i]);
+    }
     
-    ends=new_ends;
+//    ends=new_ends;
     links_on=true;
     
     // refocus map 
@@ -1007,13 +1022,14 @@ function taint_topology( topo, prop){
     for (var i=0; i < topo.length; i++){
 	var link=topo[i];
 	var ab=[link._source.from, link._source.to];
-	if ( linkByName[ab] ){
+	var abs = ab.join();
+	if ( linkByName[abs] ){
 	    var color=get_color( link._source[prop], threshes);
-	    taint_link( linkByName[ab], color );
+	    taint_link( linkByName[abs], color );
 
 	    var popup=link_popup(link._source);
 	    var tooltip= link_tooltip( link._source.from + " to " + link._source.to , link._source, prop );
-	    annotate_link( ab.join(), linkByName[ab], tooltip, popup );
+	    annotate_link( abs, linkByName[abs], tooltip, popup );
 	}
     }
 
@@ -1048,7 +1064,7 @@ function taint_links( hits, prop){
 		var color=get_color( link._source[prop], threshes);
 		var tooltip= link_tooltip( link._source.from + " to " + link._source.to , link._source, prop );
 		    
-		var l=draw_link(abs.split(","), color, tooltip, link_popup(link._source) );
+		var l=draw_link(ab, color, tooltip, link_popup(link._source) );
 
 		if (l){
 		    //		    dash_link(l);        // Turn out to be complicated to toggle correctly !
@@ -2046,6 +2062,7 @@ function hhmmss(d){
 	  parms.event = $("#event_type").val()    
 	  update_props();
 	  //remove_links();
+	  get_topology();
 	  get_connections();
 	  update_url();
 	  $("#tabs").tabs("option", "active", 0);

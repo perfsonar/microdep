@@ -14,6 +14,7 @@ event_type:
     title: "Gaps"
     descr: "Flow downtime events, i.e. probe packets are lost."
     index: "gap-index"          # NEEDS TO BE OVERRIDDEN
+    topology_index: ""          # Empty here implies using "index" as source of topology data          
     summary_event_type: "gapsum"  # Additional event type for summary info to include 
     popup:
       # Data for popup windows
@@ -119,6 +120,7 @@ event_type:
     title: "Queues"
     descr: "Events with significant delay variations."
     index: "jitter-index"          # NEEDS TO BE OVERRIDDEN
+    topology_index: ""          # Empty here implies using "index" as source of topology data          
     summary_event_type: "gapsum"  # Additional event type for summary info to include 
     popup:
       # Data for popup windows
@@ -208,6 +210,7 @@ event_type:
     title: "Route errors"
     descr: "Events where UDP based traceroute probes never reach their destination."
     index: "routeerr-index"    # NEEDS TO BE OVERRIDDEN   
+    topology_index: ""          # Empty here implies using "index" as source of topology data          
     summary_event_type: "routesum"  # Additional event type for summary info to include 
     popup:
       # Data for popup windows
@@ -308,6 +311,7 @@ event_type:
     title: "Route changes"
     descr: "Events with significant change in ip addesses observed by UDP based traceroute."
     index: "routechange-index"    # NEEDS TO BE OVERRIDDEN
+    topology_index: ""          # Empty here implies using "index" as source of topology data          
     summary_event_type: "routesum"
     popup:
       # Data for popup windows
@@ -453,6 +457,7 @@ event_type:
     title: "TCP route errors"
     descr: "Events where TCP based traceroute probes never reach their destination."
     index: "tcprouteerr-index"    # NEEDS TO BE OVERRIDDEN 
+    topology_index: ""          # Empty here implies using "index" as source of topology data          
     summary_event_type: "tcproutesum"
     popup:
       # Data for popup windows
@@ -552,6 +557,7 @@ event_type:
     title: "TCP Route changes"
     descr: "Events with significant change in ip addesses observed by TCPP based traceroute."
     index: "tcproutechange-index"    # NEEDS TO BE OVERRIDDEN 
+    topology_index: ""          # Empty here implies using "index" as source of topology data          
     summary_event_type: "tcproutesum"
     popup:
       # Data for popup windows
@@ -697,6 +703,7 @@ event_type:
     title: "Correlations"
     descr: "Events of time correlated gap and route-change events."
     index: "corrolation-index"    # NEEDS TO BE OVERRIDDEN
+    topology_index: ""          # Empty here implies using "index" as source of topology data          
     summary_event_type: "corrsum"
     asn_source: "routechange_asn"       # Field providing relevant as numbers  
     popup:
@@ -847,6 +854,6 @@ event_type:
     enable: false               # Do not show explicitly in map
     title: "Topology-data"
     descr: "Info about peer nodes with flow configured between them."
-    index: ""                   # Empty index here triggers map to use index for currently selected measurement type (data set event_type)
+    index: ""                   # Empty index here triggers map to look for topology index spec under currently selected measurement type (data set event_type)
    
 

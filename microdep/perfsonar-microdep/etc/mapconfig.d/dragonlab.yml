@@ -23,5 +23,5 @@ dragonlab:
       index: "dragonlab_routemon" 
     correlation:
       index: "dragonlab_correvents"
-          
+      topology_index: "dragonlab"           # Empty here implies using "index" as source of topology data          
 
