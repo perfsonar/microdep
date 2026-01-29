@@ -878,7 +878,7 @@ function draw_links(hits, prop){
 function get_topology(source = "archive"){
     // Fetch topology data from relevant source
     // and initiate drawing of topology
-    
+
     let start = new Date($("#datepicker").val() + " 00:00:00").getTime()/1000;
     let start_iso = new Date($("#datepicker").val() + " 00:00:00").toISOString();
     let end= new Date($("#datepicker").val() + " 23:59:59").getTime()/1000;
@@ -892,9 +892,21 @@ function get_topology(source = "archive"){
 	var url="microdep-config.cgi?secret=\"" + conffile[parms.net].database_secret + "\"&variant=mp-" + network + "&start=" + start + "&end=" + end;
 	$.getJSON( url,
 		   function(topology){
-		       draw_topology( topology );
-		       get_connections();
-		       // draw_topology( duplex_topology( topology) ); 
+		       if (topology.length == 0) {
+			   $("#error").html(hhmmss(new Date()) + " : No topology data found for " + parms.event + " events on " + $("#datepicker").val() + " " + $("#period_input").val() + ";;");
+			   // Empty topology. Remove all links.
+			   remove_links(links);
+			   console.log("No topology data found.");
+		       } else {
+			   if (points.length == 0) {
+			       // No nodes loaded yet. Do that first.
+			       load_coords_from_all_sources(network); // NOTE: This function call get_topology() again on success.
+			       return;
+			   }
+			   draw_topology( topology );
+			   get_connections();
+			   // draw_topology( duplex_topology( topology) );
+		       }
 		   }).fail( function( jqxhr, textStatus, error ) {
 		       var err = textStatus + ", " + error;
 		       console.log( "Request" + url + " Failed: " + err );
@@ -913,32 +925,37 @@ function get_topology(source = "archive"){
 	}	    
 	var url = conffile[parms.net].archive + "/" + query_index + "/_search";
 	var query = JSON.stringify ({ "query": { "range": { "@date": { "gte": start_iso,  "lt": end_iso  } } },
-		      "size": 0,
-		      "aggs": { "peer": { "terms": { "field": "from_to.keyword", "size" : 1000000  } } }
+				      "size": 0,
+				      "aggs": { "peer": { "terms": { "field": "from_to.keyword", "size" : 1000000  } } }
 				    });
 	$.post( {url: url, data: query, contentType: "application/json", dataType: "json", success: 
-		   function(result){
-		       var topology = [];
-		       if (! result.aggregations.peer.buckets.length) {
-			   console.log("No topology data returned from archive for time period " + start + " to " + end + ". Trying sqlite db ...");
-			   // No topology data returned. Try sqlite-db instead.
-			   get_topology("sqlite-db");
-		       } else {
-			   for (var p=0; p < result.aggregations.peer.buckets.length; p++) {
-			       topology.push(result.aggregations.peer.buckets[p].key.split("_"));
-			   }
-			   draw_topology( topology );
-			   get_connections();
-			   // draw_topology( duplex_topology( topology) );
-		       }
-		   }, fail: function( jqxhr, textStatus, error ) {
-		       var err = textStatus + ", " + error;
-		       console.log( "Request" + url + " Failed: " + err );
-		   } } );
-
+		 function(result){
+		     var topology = [];
+		     if (! result.aggregations.peer.buckets.length) {
+			 console.log("No topology data returned from archive for time period " + start + " to " + end + ". Trying sqlite db ...");
+			 // No topology data returned. Try sqlite-db instead.
+			 get_topology("sqlite-db");
+		     } else {
+			 if (points.length == 0) {
+			     // No nodes loaded yet. Do that first.
+			     load_coords_from_all_sources(network); // NOTE: This function call get_topology() again on success.
+			     return;
+			 }
+    
+			 for (var p=0; p < result.aggregations.peer.buckets.length; p++) {
+			     topology.push(result.aggregations.peer.buckets[p].key.split("_"));
+			 }
+			 draw_topology( topology );
+			 get_connections();
+			 // draw_topology( duplex_topology( topology) );
+		     }
+		 }, fail: function( jqxhr, textStatus, error ) {
+		     var err = textStatus + ", " + error;
+		     console.log( "Request" + url + " Failed: " + err );
+		 } } );
+	
 	break;
     }
-	
 }
 
 // done by api
@@ -956,6 +973,7 @@ function draw_topology(topo){
     if (topo.length == 0) {
 	// Empty topology. Remove all links.
 	remove_links(links);
+	return;
     }
     var new_ends=[];
 
@@ -1233,6 +1251,7 @@ function get_node_query(tofrom, start, end) {
     // Produce a JSON string for querying node info from Opensearch
     return JSON.stringify( { "query": { "bool": { "filter": [ { "term": { "event_type": "topology" } }, { "range": { "@date": { "gte": start, "lt": end } } } ] } }, "size": 0, "aggs": { "nodes": { "terms": { "field": tofrom + ".keyword", "size" : 10000  }, "aggs": { "ip": { "terms": { "field": tofrom + "_adr.keyword"}}, "city": { "terms": { "field": tofrom + "_geo.city_name.keyword"}}, "lat": { "terms":  { "field": tofrom + "_geo.latitude" } },  "lon": { "terms":  { "field": tofrom + "_geo.longitude" } } } } } } );
 }
+
 function load_coords(network, service, goal){
     // Load global coordinate for nodes in topology
 
@@ -1384,22 +1403,28 @@ function load_coords(network, service, goal){
 
 }
 
+function load_coords_from_all_sources(network){
+    // Load topology nodes with coordinates from all available sources
 
+    // Exctract node coordinates from topology events
+    load_coords(network, "topoevents", 5);
+    // Load node coordinates from config db
+    load_coords(network, "db", 5);
+    // Load node coordinates from json files
+    load_coords(network, "base", 5);
+    load_coords(network, "extra", 5);
+    load_coords(network, "cnaas", 5);
+    // NOTE: Last arg (int) must equal no of consequtive calls to 'load_coords'
+ }
+    
 function show_network(network){
     points=[];
     if ( network in points_cache){
 	points=points_cache[network];
 	show_map(network);
     } else {
-	// Exctract node coordinates from topology events
-	load_coords(network, "topoevents", 5);
-	// Load node coordinates from config db
-	load_coords(network, "db", 5);
-	// Load node coordinates from json files
-	load_coords(network, "base", 5);
-	load_coords(network, "extra", 5);
-	load_coords(network, "cnaas", 5);
-	// NOTE: Last arg (int) must equal no of consequtive calls to 'load_coords'
+	// Fetch nodes and coordinates
+	load_coords_from_all_sources(network);
     }
 }
 
@@ -1618,7 +1643,7 @@ function change_date(delta){
     //$("#draw").click();
     update_url();
     show_network(parms.net);
-    //get_topology();
+    get_topology();
     get_connections();
     update_url();
  
@@ -1969,7 +1994,7 @@ function hhmmss(d){
 	      //ok update_props();
 	      update_url();
 	      show_network(parms.net);
-	      //get_topology();
+	      get_topology();
 	      get_connections();
 	  });
 
