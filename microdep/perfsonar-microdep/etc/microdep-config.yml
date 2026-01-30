@@ -2,5 +2,5 @@
 # Config file for microdep-config-db.cgi (alias microdep-config.cgi)
 #
 basedir: "/etc/perfsonar/microdep"
-opensearch_url: "http://admin:no+nz+br@localhost:9200"
+opensearch_url: "https://localhost/opensearch"
   
