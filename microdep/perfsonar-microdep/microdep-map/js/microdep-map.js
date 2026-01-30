@@ -1311,7 +1311,9 @@ function load_coords(network, service, goal){
 			   // All other calls to load_coords() have completed.
 			   loads=0;
 			   show_map(network);
-			   get_topology();
+			   if (points.length > 0)
+			       // Some nodes are available. Plot the links too.
+			       get_topology();
 		       }
 		   }, fail:  function( jqxhr, textStatus, error ) {
 		       var err = textStatus + ", " + error;
@@ -1348,7 +1350,9 @@ function load_coords(network, service, goal){
 		       if (loads >= goal) { // i.e. wait until data loaded
 			   loads=0;
 			   show_map(network);
-			   get_topology();
+			   if (points.length > 0)
+			       // Some nodes are available. Plot the links too.
+			       get_topology();
 		       }  
 		   }).fail( function( jqxhr, textStatus, error ) {
 		       var err = textStatus + ", " + error;
@@ -1358,7 +1362,7 @@ function load_coords(network, service, goal){
 	return;
     } 
 
-    //$.getJSON("https://kind.uninett.no/api/ansible_inventory.json?tjenester="+service,
+    // Load nodes and coordinates from json-file
     var url= "./" + network + "/" + network + "-" + service + "-geo.json";
     $.getJSON( url,
 	function(tjenester){
@@ -1392,7 +1396,9 @@ function load_coords(network, service, goal){
 	    if (loads >= goal) { // i.e. wait until data loaded
 		loads=0;
 		show_map(network);
-		get_topology();
+		if (points.length > 0)
+		    // Some nodes are available. Plot the links too.
+		    get_topology();
 	    }  
 
 	}).fail( function( jqxhr, textStatus, error ) {
