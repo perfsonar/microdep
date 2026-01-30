@@ -811,12 +811,14 @@ sub owamp_ana($){
 	}
     }
 
-    if ( $data && $data->{'run'}->{'state'} eq 'finished' && $data->{'test'}->{'type'} eq 'latencybg' ){
+    if ( $data &&
+	 ( ( $data->{'run'}->{'state'} eq 'finished' && $data->{'test'}->{'type'} eq 'latencybg' ) ||
+	   ( $data->{'test'}->{'type'} eq 'raw_latencybg' && $data->{'result'}->{'succeeded'} ) ) ){
 	
-	# State is "finished" and powstream / latencybg results are available.
+	# Powstream / latencybg results are available.
 	my $batchsize = $opt_batchsize;
 	if (! $batchsize) {
-	    $batchsize = $data->{'result'}->{'packets-sent'};
+	    $batchsize = $data->{'result'}->{'packets-sent'} || $data->{'result'}->{'packets'}->{'sent'};
 	}
 #	(my $src, my $dst)=($data->{'test'}->{'spec'}->{'source-node'}, $data->{'test'}->{'spec'}->{'dest-node'} );
 	(my $src, my $dst)=($data->{'test'}->{'spec'}->{'source'}, $data->{'test'}->{'spec'}->{'dest'} );
