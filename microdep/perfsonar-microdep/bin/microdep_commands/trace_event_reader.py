@@ -356,7 +356,8 @@ def parse_cmd(param):
     """
 
     # Parse arguments from commandline
-    cmdparser = argparse.ArgumentParser(description="Analyses traceroute output and reports detected anomalities.")
+    cmdparser = argparse.ArgumentParser(description="Analyses traceroute output and reports detected anomalities.",
+                                        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     # Configure parser
     cmdparser.add_argument('file',  nargs="*", default=param['file'], help='Path to traceroute file')
     cmdparser.add_argument('--date', '-d', default=param['date'], help='ISO-date for traceroute file search')
