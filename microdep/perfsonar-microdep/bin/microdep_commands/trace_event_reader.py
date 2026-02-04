@@ -49,6 +49,7 @@ import ssl
 from io import StringIO
 import hashlib
 from operator import itemgetter
+import re
 
 #Tweaks for comparing final status of traceroute
 
@@ -573,7 +574,7 @@ class Resolver:
             
             psconfig_data={}
             try:
-                # Attempt to load file as if if has PSconfig JSON structure
+                # Attempt to load file as if it has PSconfig JSON structure
                 psconfig_data = json.load(file);
                 if 'addresses' in psconfig_data:
                     # Addresses found. Init map.
@@ -735,6 +736,9 @@ class Resolver:
         """
         if ip in self.name.keys():
             return self.name[ip]
+        elif ip in self.name:
+            # IP is not an IP but already an registered name
+            return ip
         else:
             if validate:
                 ip = self.validate_ip(ip)
@@ -755,11 +759,15 @@ class Resolver:
         """
         if name in self.ip.keys():
             return self.ip[name]
+        elif name in self.ip:
+            # Name is not a name but already an registered ip-address
+            return name
         else:
             try:
                 ip = socket.gethostbyname(name)   #NOTE: Needs to be replaced by socket.getaddrinfo() to support ipv6
                 # Add mapping
                 self.ip[name] = ip
+                self.name[ip] = name
                 return ip
             except:
                 if param["verbose"] > 2:
@@ -2403,12 +2411,12 @@ def read(path, srchost, srcdate, mode="batch", thread=0, starttime=0):
                 time = int(word[0])  
                 traceroutes[time] = {}
                 if MICRODEPLOG:
-                    traceroutes[time]["src"] = srchost
-                    traceroutes[time]["dst"] = dsthost
+                    traceroutes[time]["src"] = resolver.get_ip(srchost)
+                    traceroutes[time]["dst"] = resolver.get_ip(dsthost)
                     tracesummary.set_current_pair(traceroutes[time]["src"] + "/" + traceroutes[time]["dst"], time, thread)
                 elif PERFSONARLOG:
-                    traceroutes[time]["src"] = word[6]
-                    traceroutes[time]["dst"] = word[10]
+                    traceroutes[time]["src"] = resolver.get_ip(word[6])
+                    traceroutes[time]["dst"] = resolver.get_ip(word[10])
                     traceroutes[time]["ipversion"] = int(word[4][-1])
                     if traceroutes[time]["ipversion"] == 6 and not param["ipv6"]:
                         # Do not parse ipv6 traceroutes
@@ -2432,7 +2440,7 @@ def read(path, srchost, srcdate, mode="batch", thread=0, starttime=0):
 
             elif parser_state == PS_STARTLINE and word[0] == "traceroute":
                 # Header line found, e.g. "traceroute to 109.105.116.52 (109.105.116.52), 30 hops max, 60 byte packets"
-                traceroutes[time]["dst"] = word[2]   # Update dsthost found in filename or start line
+                traceroutes[time]["dst"] = resolver.get_ip(word[2])   # Update dsthost found in filename or start line
                 traceroutes[time]["maxhops"] = int(word[4])
                 parser_state = PS_HEADERLINE
                 
@@ -2477,6 +2485,9 @@ def read(path, srchost, srcdate, mode="batch", thread=0, starttime=0):
                     elif w[0] == "!":
                         # ICMP error response found
                         adresses.append(w)
+                    elif re.match("^((?!-)[A-Za-z0-9-]{1, 63}(?<!-)\\.)+[A-Za-z]{2, 6}$", w):
+                        # Valid domain name found. Convert to ip.
+                        adresses.append(get_ip(w))
                     else:
                         if param["verbose"] > 2:
                             print("Warning: Strange string '" + w + "' found in traceroute line")
