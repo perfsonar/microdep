@@ -1,46 +1,760 @@
-    #mapid { height: 900px; z-index: 1;}
-    #midding {width:600px}
-    #busyx {  margin: auto;
-	      width: 5%; 
-	      /* border: 3px solid #2222aa; */
-	      padding: 10px;
-	   }
-    
-    /* css to customize Leaflet default styles  */
-    .popupCustom .leaflet-popup-tip,
-    .popupCustom .leaflet-popup-content-wrapper {
-	font-size:large;
-	background: #e0e0e0;
-	color: #234c5e;
-    }
-    .leaflet-popup, .leaflet-pane {
-	font-size:large;	
-    }
-    .knapp, select, td, th { font-size:x-large;   }
-    table td { padding:5px; }
-    .knapp { line-height: 1.3em; }
-    th {
-	cursor: pointer;
-    }
-    caption { font-size: x-large;  font-weight: bold; }
-    
-    table.sortable thead {
-	background-color:#eee;
-	color:#666666;
-	font-weight: bold;
-	cursor: default;
-    }
-    
-    
-    table.sortable th:not(.sorttable_sorted):not(.sorttable_sorted_reverse):not(.sorttable_nosort):after { 
-	content: " \25B4\25BE" 
-    } 
+/* ============================================================
+   Microdep Map — Modernized Theme
+   Drop-in replacement for css/microdep-map.css
+   Aesthetic: Industrial/utilitarian network monitoring
+   ============================================================ */
 
-    .sprettom {
-	height:500; 
-	overflow:auto;
+/* ---------- Fonts ---------- */
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+/* ---------- CSS Variables ---------- */
+:root {
+    --font-ui: 'IBM Plex Sans', system-ui, sans-serif;
+    --font-mono: 'IBM Plex Mono', monospace;
+
+    --bg-body: #0f1318;
+    --bg-surface: #181d25;
+    --bg-elevated: #1f2630;
+    --bg-control: #252d38;
+    --bg-control-hover: #2e3848;
+    --bg-active: #0f766e;
+
+    --text-primary: #e2e8f0;
+    --text-secondary: #94a3b8;
+    --text-muted: #64748b;
+    --text-inverse: #0f1318;
+
+    --accent: #14b8a6;
+    --accent-hover: #2dd4bf;
+    --accent-glow: rgba(20, 184, 166, 0.25);
+
+    --border: rgba(148, 163, 184, 0.12);
+    --border-focus: rgba(20, 184, 166, 0.5);
+
+    --danger: #f87171;
+    --warning: #fbbf24;
+    --success: #34d399;
+
+    --radius: 6px;
+    --radius-lg: 10px;
+
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.3);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.4);
+    --shadow-lg: 0 8px 24px rgba(0,0,0,0.5);
+}
+
+/* ---------- Reset & Base ---------- */
+*, *::before, *::after {
+    box-sizing: border-box;
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--font-ui);
+    background: var(--bg-body);
+    color: var(--text-primary);
+    margin: 0;
+    padding: 0 !important;
+    width: 100% !important;
+    height: 100vh !important;
+    display: flex;
+    flex-direction: column;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* Subtle grid background */
+body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+        linear-gradient(rgba(20, 184, 166, 0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(20, 184, 166, 0.02) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+}
+
+a {
+    color: var(--accent);
+    text-decoration: none;
+    transition: color 0.2s;
+}
+a:hover {
+    color: var(--accent-hover);
+}
+
+/* ---------- Top Controls Bar ---------- */
+.controls-bar {
+    position: relative;
+    z-index: 10;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border);
+}
+
+/* Logo / Title area */
+.controls-bar::before {
+    content: '⬡ Micro Dependability';
+    font-weight: 600;
+    font-size: 1rem;
+    color: var(--accent);
+    letter-spacing: -0.01em;
+    margin-right: 16px;
+    white-space: nowrap;
+}
+
+/* ---------- Controls: select, button, input ---------- */
+.knapp,
+select,
+button,
+input[type="text"],
+input[type="search"] {
+    font-family: var(--font-ui);
+    font-size: 0.85rem !important;
+    font-weight: 500;
+    line-height: 1.4;
+    color: var(--text-primary);
+    background: var(--bg-control);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 7px 12px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    outline: none;
+    white-space: nowrap;
+}
+
+select {
+    appearance: none;
+    -webkit-appearance: none;
+    padding-right: 30px;
+    background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%2394a3b8' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+}
+
+select option {
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+}
+
+.knapp:hover,
+select:hover,
+button:hover,
+input[type="text"]:hover,
+input[type="search"]:hover {
+    border-color: var(--accent);
+    background: var(--bg-control-hover);
+}
+
+.knapp:focus,
+select:focus,
+button:focus,
+input[type="text"]:focus,
+input[type="search"]:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+button:active {
+    transform: scale(0.97);
+}
+
+input[type="text"],
+input[type="search"] {
+    cursor: text;
+}
+
+input[type="search"]::placeholder {
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+/* Datepicker input */
+#datepicker {
+    font-family: var(--font-mono);
+    font-size: 0.85rem !important;
+    letter-spacing: 0.02em;
+    width: 10em;
+}
+
+#period_input {
+    font-family: var(--font-mono);
+    font-size: 0.85rem !important;
+    width: 5em;
+    text-align: center;
+}
+
+/* About project link — right aligned */
+span.knapp:last-of-type,
+span.knapp[style*="float:right"],
+span.knapp[style*="float: right"] {
+    margin-left: auto;
+}
+
+/* ---------- Busy / Loading Indicator ---------- */
+#busy {
+    width: 22px;
+    height: 22px;
+    display: none;
+    vertical-align: middle;
+    margin: 0 4px;
+    /* We'll replace the GIF with a CSS spinner overlay approach */
+}
+
+/* ---------- Tabs (jQuery UI) ---------- */
+main#tabs {
+    position: relative;
+    z-index: 1;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* Override jQuery UI tab styles */
+.ui-tabs {
+    padding: 0 !important;
+    border: none !important;
+    background: none !important;
+}
+
+.ui-tabs .ui-tabs-nav {
+    padding: 0 !important;
+    background: var(--bg-surface) !important;
+    border: none !important;
+    border-bottom: 1px solid var(--border) !important;
+    border-radius: 0 !important;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 0 12px !important;
+}
+
+.ui-tabs .ui-tabs-nav li {
+    margin: 0 !important;
+    border: none !important;
+    background: none !important;
+    border-radius: 0 !important;
+    float: none !important;
+}
+
+.ui-tabs .ui-tabs-nav li a {
+    font-family: var(--font-ui);
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-muted) !important;
+    padding: 10px 18px !important;
+    border: none !important;
+    border-radius: var(--radius) var(--radius) 0 0 !important;
+    background: none !important;
+    transition: color 0.15s, background 0.15s;
+    outline: none !important;
+}
+
+.ui-tabs .ui-tabs-nav li a:hover {
+    color: var(--text-secondary) !important;
+    background: var(--bg-elevated) !important;
+}
+
+.ui-tabs .ui-tabs-nav li.ui-tabs-active a {
+    color: var(--text-primary) !important;
+    background: var(--bg-elevated) !important;
+}
+
+.ui-tabs .ui-tabs-nav li.ui-tabs-active {
+    border-bottom: 2px solid var(--accent) !important;
+}
+
+/* Tab panel */
+.ui-tabs .ui-tabs-panel {
+    padding: 0 !important;
+    background: none !important;
+    border: none !important;
+    flex: 1;
+}
+
+/* The + dropdown for reports */
+#check {
+    font-size: 0.85rem !important;
+    min-width: 40px;
+    padding: 7px 10px;
+}
+
+/* Tab close button (if dynamically added) */
+.ui-tabs .ui-tabs-nav li span.ui-icon-close {
+    cursor: pointer;
+    margin-left: 6px;
+    opacity: 0.5;
+    transition: opacity 0.15s;
+}
+.ui-tabs .ui-tabs-nav li span.ui-icon-close:hover {
+    opacity: 1;
+}
+
+/* ---------- Map Container ---------- */
+#mapid {
+    height: 100% !important;
+    min-height: 500px;
+    flex: 1;
+    z-index: 1;
+    background: var(--bg-body);
+}
+
+/* ---------- Leaflet Overrides ---------- */
+.leaflet-container {
+    background: var(--bg-body) !important;
+    font-family: var(--font-ui) !important;
+}
+
+/* Zoom controls */
+.leaflet-control-zoom {
+    border: none !important;
+    box-shadow: var(--shadow-md) !important;
+    border-radius: var(--radius-lg) !important;
+    overflow: hidden;
+}
+
+.leaflet-control-zoom a {
+    background: var(--bg-elevated) !important;
+    color: var(--text-primary) !important;
+    border: 1px solid var(--border) !important;
+    width: 34px !important;
+    height: 34px !important;
+    line-height: 34px !important;
+    font-size: 16px !important;
+    transition: background 0.15s;
+}
+
+.leaflet-control-zoom a:hover {
+    background: var(--bg-control-hover) !important;
+}
+
+.leaflet-control-zoom-in {
+    border-radius: var(--radius) var(--radius) 0 0 !important;
+    border-bottom: none !important;
+}
+
+.leaflet-control-zoom-out {
+    border-radius: 0 0 var(--radius) var(--radius) !important;
+}
+
+/* Attribution */
+.leaflet-control-attribution {
+    background: rgba(15, 19, 24, 0.8) !important;
+    color: var(--text-muted) !important;
+    font-size: 0.7rem !important;
+    padding: 2px 8px !important;
+}
+.leaflet-control-attribution a {
+    color: var(--text-muted) !important;
+}
+
+/* Popups */
+.leaflet-popup-content-wrapper {
+    background: var(--bg-surface) !important;
+    color: var(--text-primary) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: var(--radius-lg) !important;
+    box-shadow: var(--shadow-lg) !important;
+    font-family: var(--font-ui) !important;
+}
+
+.leaflet-popup-content {
+    margin: 14px 18px !important;
+    font-size: 0.9rem !important;
+    line-height: 1.6 !important;
+}
+
+.leaflet-popup-tip {
+    background: var(--bg-surface) !important;
+    border: 1px solid var(--border) !important;
+    box-shadow: none !important;
+}
+
+.leaflet-popup-close-button {
+    color: var(--text-muted) !important;
+    font-size: 20px !important;
+    padding: 6px 8px 0 0 !important;
+}
+.leaflet-popup-close-button:hover {
+    color: var(--text-primary) !important;
+}
+
+/* Custom popup styles */
+.popupCustom .leaflet-popup-tip,
+.popupCustom .leaflet-popup-content-wrapper {
+    font-size: 0.9rem;
+    background: var(--bg-surface);
+    color: var(--text-primary);
+}
+
+.leaflet-popup,
+.leaflet-pane {
+    font-size: 0.9rem;
+}
+
+/* Tooltip */
+.leaflet-tooltip {
+    background: var(--bg-elevated) !important;
+    color: var(--text-primary) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: var(--radius) !important;
+    box-shadow: var(--shadow-sm) !important;
+    font-family: var(--font-ui) !important;
+    font-size: 0.85rem !important;
+    padding: 4px 10px !important;
+}
+
+.leaflet-tooltip-top:before,
+.leaflet-tooltip-bottom:before,
+.leaflet-tooltip-left:before,
+.leaflet-tooltip-right:before {
+    border-color: transparent !important;
+}
+
+/* MarkerCluster overrides */
+.marker-cluster-small {
+    background-color: rgba(20, 184, 166, 0.3) !important;
+}
+.marker-cluster-small div {
+    background-color: rgba(20, 184, 166, 0.6) !important;
+    color: #fff !important;
+    font-family: var(--font-mono) !important;
+    font-weight: 600;
+}
+.marker-cluster-medium {
+    background-color: rgba(251, 191, 36, 0.3) !important;
+}
+.marker-cluster-medium div {
+    background-color: rgba(251, 191, 36, 0.6) !important;
+    color: #000 !important;
+    font-family: var(--font-mono) !important;
+    font-weight: 600;
+}
+.marker-cluster-large {
+    background-color: rgba(248, 113, 113, 0.3) !important;
+}
+.marker-cluster-large div {
+    background-color: rgba(248, 113, 113, 0.6) !important;
+    color: #fff !important;
+    font-family: var(--font-mono) !important;
+    font-weight: 600;
+}
+
+/* ---------- Legend Table ---------- */
+#legend {
+    position: relative;
+    z-index: 5;
+    padding: 6px 12px;
+    background: var(--bg-surface);
+    border-top: 1px solid var(--border);
+}
+
+#legend table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+#legend table td {
+    padding: 0 2px;
+}
+
+#legend button {
+    font-size: 0.8rem !important;
+    padding: 5px 10px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    font-weight: 500;
+    transition: all 0.15s;
+}
+
+#legend button:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-sm);
+}
+
+/* ---------- Status Bar ---------- */
+div:has(> #status) {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 6px 16px;
+    background: var(--bg-surface);
+    border-top: 1px solid var(--border);
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+}
+
+#status {
+    color: var(--success);
+    margin-left: 4px;
+}
+
+#error {
+    color: var(--danger);
+    margin-left: 4px;
+}
+
+/* ---------- Tables (popup, reports, sortable) ---------- */
+table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 0.85rem;
+}
+
+table td,
+table th {
+    font-size: 0.85rem !important;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+}
+
+table th {
+    cursor: pointer;
+    font-weight: 600;
+    color: var(--text-secondary);
+    background: var(--bg-elevated);
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+table tr:hover td {
+    background: var(--bg-elevated);
+}
+
+caption {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--accent);
+    padding: 8px 0;
+    text-align: left;
+}
+
+/* Sortable table */
+table.sortable thead {
+    background-color: var(--bg-elevated);
+    color: var(--text-secondary);
+    font-weight: 600;
+    cursor: default;
+}
+
+table.sortable th:not(.sorttable_sorted):not(.sorttable_sorted_reverse):not(.sorttable_nosort)::after {
+    content: " \25B4\25BE";
+    color: var(--text-muted);
+    font-size: 0.75em;
+}
+
+/* DataTables overrides */
+.dataTables_wrapper {
+    color: var(--text-primary) !important;
+    font-family: var(--font-ui) !important;
+}
+
+.dataTables_wrapper .dataTables_filter input {
+    background: var(--bg-control) !important;
+    border: 1px solid var(--border) !important;
+    color: var(--text-primary) !important;
+    border-radius: var(--radius) !important;
+    padding: 4px 8px !important;
+}
+
+/* ---------- Scrollable Containers ---------- */
+.sprettom {
+    height: 500px;
+    overflow: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--bg-control-hover) transparent;
+}
+
+.sprettopp {
+    height: 300px;
+    overflow: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--bg-control-hover) transparent;
+}
+
+/* Webkit scrollbar */
+.sprettom::-webkit-scrollbar,
+.sprettopp::-webkit-scrollbar {
+    width: 6px;
+}
+.sprettom::-webkit-scrollbar-track,
+.sprettopp::-webkit-scrollbar-track {
+    background: transparent;
+}
+.sprettom::-webkit-scrollbar-thumb,
+.sprettopp::-webkit-scrollbar-thumb {
+    background: var(--bg-control-hover);
+    border-radius: 3px;
+}
+
+/* ---------- jQuery UI Datepicker Overrides ---------- */
+.ui-datepicker {
+    background: var(--bg-surface) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: var(--radius-lg) !important;
+    box-shadow: var(--shadow-lg) !important;
+    padding: 8px !important;
+    font-family: var(--font-ui) !important;
+    z-index: 1000 !important;
+}
+
+.ui-datepicker-header {
+    background: var(--bg-elevated) !important;
+    border: none !important;
+    border-radius: var(--radius) !important;
+    color: var(--text-primary) !important;
+    font-weight: 600 !important;
+    padding: 6px !important;
+}
+
+.ui-datepicker-prev,
+.ui-datepicker-next {
+    cursor: pointer !important;
+    top: 6px !important;
+}
+
+.ui-datepicker-prev span,
+.ui-datepicker-next span {
+    background-image: none !important;
+    text-indent: 0 !important;
+    color: var(--text-primary) !important;
+}
+
+.ui-datepicker-prev:hover,
+.ui-datepicker-next:hover {
+    background: var(--bg-control-hover) !important;
+    border: none !important;
+    border-radius: var(--radius) !important;
+}
+
+.ui-datepicker th {
+    color: var(--text-muted) !important;
+    font-weight: 500 !important;
+    font-size: 0.75rem !important;
+    padding: 4px !important;
+    background: none !important;
+    border: none !important;
+}
+
+.ui-datepicker td {
+    padding: 1px !important;
+    border: none !important;
+}
+
+.ui-datepicker td a,
+.ui-datepicker td span {
+    background: none !important;
+    color: var(--text-primary) !important;
+    border: none !important;
+    border-radius: var(--radius) !important;
+    padding: 4px 8px !important;
+    text-align: center !important;
+    transition: background 0.1s !important;
+}
+
+.ui-datepicker td a:hover {
+    background: var(--bg-control-hover) !important;
+}
+
+.ui-datepicker td .ui-state-active {
+    background: var(--accent) !important;
+    color: var(--text-inverse) !important;
+    font-weight: 600 !important;
+}
+
+.ui-datepicker td .ui-state-highlight {
+    background: var(--bg-control) !important;
+    border: 1px solid var(--accent) !important;
+}
+
+/* ---------- jQuery UI Dialog Overrides ---------- */
+.ui-dialog {
+    background: var(--bg-surface) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: var(--radius-lg) !important;
+    box-shadow: var(--shadow-lg) !important;
+    padding: 0 !important;
+}
+
+.ui-dialog-titlebar {
+    background: var(--bg-elevated) !important;
+    border: none !important;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0 !important;
+    color: var(--text-primary) !important;
+    padding: 10px 16px !important;
+}
+
+.ui-dialog-content {
+    color: var(--text-primary) !important;
+    padding: 16px !important;
+}
+
+/* ---------- Disclaimer Footer ---------- */
+body > :last-child:not(main):not(script):not(#legend):not(div) {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    padding: 4px 16px;
+    font-style: italic;
+}
+
+/* ---------- Autorefresh Active State ---------- */
+#live[style*="background-color: Aqua"],
+#live[style*="background-color: aqua"] {
+    background-color: var(--accent) !important;
+    color: var(--text-inverse) !important;
+    border-color: var(--accent) !important;
+    animation: pulse-glow 2s ease-in-out infinite;
+}
+
+@keyframes pulse-glow {
+    0%, 100% { box-shadow: 0 0 0 0 var(--accent-glow); }
+    50% { box-shadow: 0 0 0 6px transparent; }
+}
+
+/* ---------- Responsive ---------- */
+@media (max-width: 900px) {
+    .controls-bar {
+        padding: 8px 10px;
+        gap: 6px;
     }
-    .sprettopp {
-	height:300px; 
-	overflow:auto;
+
+    .controls-bar::before {
+        display: none;
     }
+
+    .knapp, select, button,
+    input[type="text"],
+    input[type="search"] {
+        font-size: 0.8rem !important;
+        padding: 5px 8px;
+    }
+
+    #mapid {
+        min-height: 350px;
+    }
+}
+
+@media (max-width: 600px) {
+    .controls-bar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    span.knapp:last-of-type {
+        margin-left: 0;
+    }
+}

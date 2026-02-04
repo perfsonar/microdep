@@ -14,6 +14,7 @@
   
   <title>Micro dependability measurement node map</title>
   <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   <link rel="author" href="mailto:microdep@sikt.no">
 
@@ -39,21 +40,17 @@
   <script src="js/leaflet.contextmenu.min.js"></script>
   <script src="js/leaflet.curve.js"></script>
   <script src="js/L.LatLng.UTM.js"></script>
-  <!-- <script src="js/latlon-spherical.js"></script> -->
   <script src="js/stats.js"></script>
   <script src="js/sorttable.js"></script>
-  <!-- <script src="js/map-lib-2.js"></script>  -->
-  <!-- script src="js/graph-2.js"></script-->
 
+  <!-- Modernized theme -->
   <link rel="stylesheet" href="css/microdep-map.css" />
 
 </head>
 
-<body style="height:80%; width:90%; padding-top:5px; margin:auto;">
-  <!-- <h2>Micro dependability measurement node map</h2> -->
-    <!--
-    <button class=knapp id="draw">Connections</button>
-    -->
+<body>
+  <!-- Controls bar -->
+  <div class="controls-bar">
     <select id=network class=knapp title='Measurement network'>
       <option value=none>None</option>
     </select>
@@ -68,9 +65,6 @@
       <option value="95.0">95%</option>
       <option value="50.0">50%</option>
       <option value="1.0">1%</option>
-<!--      <option value=avg>Average</option>
-      <option value=min>Minimum</option>
-      <option value=max>Maximum</option> -->
      </select>
 
     <select class=knapp id=period title='Measurement period'>
@@ -83,48 +77,38 @@
     <input class=knapp type="text" id="period_input" size=4em placeholder="00:00" title='Starting hour'>
 
     <button class=knapp id=prev title='Previous period'>Prev</button>
-    <button  class=knapp id=next title='Next period'>Next</button>
-    
-    <!--
-    <button  class=knapp id=search>Search</button>
-    -->
+    <button class=knapp id=next title='Next period'>Next</button>
+
    <input class=knapp type="search" id="search_input" size=5em placeholder=search title='Type to select by link names'>
-   <!---->
-    <span  class=knapp id=refs></span>
-    <button  class=knapp id=live title="Refresh display every minute">Autorefresh</button>
+    <span class=knapp id=refs></span>
+    <button class=knapp id=live title="Refresh display every minute">Autorefresh</button>
 
     <img id=busy src="img/ajax-loader.gif" alt='Busy fetching data'>
     <span class=knapp style=float:right><a href=https://sikt.no/en/micro-dependability target=microdep-project>About project</a></span>
-<!--
-    <div id=busy><img width=100% src="img/ajax-loader.gif"></div>
-    -->
+  </div>
+
   <main id=tabs>
     <ul>
       <li><a href="#mapid">Map</a>
       <li>
 	<select class=knapp id=check title='Reports for current parameter'>
 	  <option value=choose>+</option>
-	  <!-- <option value=curve title='Table of alle variables'>Line curve</option> -->
 	  <option value=heatmap title='Table of alle variables'>Heatmap</option>
 	  <option value=missing title='Missing opposite links'>Missing</option>
 	  <option value=asymmetry title='Asymmetry in selected variable'>Asymmetry</option>
 	  <option value=summary title='Table of alle variables'>Summary</option>
 	</select>
       </li>
- <!--     <li><a href="#report">Report</a> -->
     </ul>
     <div id="mapid"></div>
-<!--    <div id="report"></div> -->
   </main>
     <div id=legend></div>
     <div>
-       <b>Last status:</b><span  id=status>none</span>
-       <b>Last error:</b><span  id=error>none</span>
+       <b>Last status:</b><span id=status>none</span>
+       <b>Last error:</b><span id=error>none</span>
     </div>
 
     <span class=knapp id=missing style=align:left></span>
-        *) The positons of sites are a guess and not official.
-<!-- <div id=dialog>testing dialog popup</div> -->
 
 <script src="js/microdep-map.js" type="module"></script>
 
