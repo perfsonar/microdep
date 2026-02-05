@@ -115,15 +115,15 @@ if [ "${REMOVE}" ]; then
 #    for p in $(iptables -L | grep probability | awk '{print $13}'); do
     for p in $(iptables -L | grep probability | awk '{ if ( length($13) > 0 ) print $13; else print $10 }'); do
 	if [ "$LOSSPROTO" = "icmp" ]; then
-	    iptables -D INPUT -p "$LOSSPROTO" -m statistic --mode random --probability $p -j DROP 2> /dev/null
-	    iptables -D OUTPUT -p "$LOSSPROTO" -m statistic --mode random --probability $p -j DROP 2> /dev/null
-	    ip6tables -D INPUT -p "$LOSSPROTO" -m statistic --mode random --probability $p -j DROP 2> /dev/null
-	    ip6tables -D OUTPUT -p "$LOSSPROTO" -m statistic --mode random --probability $p -j DROP 2> /dev/null
+	    iptables -D INPUT -i $IF -p "$LOSSPROTO" -m statistic --mode random --probability $p -j DROP 2> /dev/null
+	    iptables -D OUTPUT -o $IF -p "$LOSSPROTO" -m statistic --mode random --probability $p -j DROP 2> /dev/null
+	    ip6tables -D INPUT -i $IF -p "$LOSSPROTO" -m statistic --mode random --probability $p -j DROP 2> /dev/null
+	    ip6tables -D OUTPUT -o $IF -p "$LOSSPROTO" -m statistic --mode random --probability $p -j DROP 2> /dev/null
 	else
-	    iptables -D INPUT -p "$LOSSPROTO" --match multiport --dports "$LOSSPORTRANGE" -m statistic --mode random --probability $p -j DROP 2> /dev/null
-	    iptables -D OUTPUT -p "$LOSSPROTO" --match multiport --dports "$LOSSPORTRANGE" -m statistic --mode random --probability $p -j DROP 2> /dev/null
-	    ip6tables -D INPUT -p "$LOSSPROTO" --match multiport --dports "$LOSSPORTRANGE" -m statistic --mode random --probability $p -j DROP 2> /dev/null
-	    ip6tables -D OUTPUT -p "$LOSSPROTO" --match multiport --dports "$LOSSPORTRANGE" -m statistic --mode random --probability $p -j DROP 2> /dev/null
+	    iptables -D INPUT -i $IF -p "$LOSSPROTO" --match multiport --dports "$LOSSPORTRANGE" -m statistic --mode random --probability $p -j DROP 2> /dev/null
+	    iptables -D OUTPUT -o $IF -p "$LOSSPROTO" --match multiport --dports "$LOSSPORTRANGE" -m statistic --mode random --probability $p -j DROP 2> /dev/null
+	    ip6tables -D INPUT -i $IF -p "$LOSSPROTO" --match multiport --dports "$LOSSPORTRANGE" -m statistic --mode random --probability $p -j DROP 2> /dev/null
+	    ip6tables -D OUTPUT -o $IF -p "$LOSSPROTO" --match multiport --dports "$LOSSPORTRANGE" -m statistic --mode random --probability $p -j DROP 2> /dev/null
 	fi
     done
 fi
@@ -158,58 +158,58 @@ if [ "$LOSS" -a "$LOSSTYPE" = "iptables" ]; then
     PROB=$(echo "$LOSS" | LC_ALL=C awk '{printf "%.2f", $1 / 100}')
     if [  "${LINK}" = "output"  -o  "${LINK}" = "both"  ]; then
 	if [ "$LOSSPROTO" = "icmp" ]; then
-	    iptables -A OUTPUT -p "$LOSSPROTO" -m statistic --mode random --probability $PROB -j DROP
-	    ip6tables -A OUTPUT -p "$LOSSPROTO" -m statistic --mode random --probability $PROB -j DROP
+	    iptables -A OUTPUT -o $IF -p "$LOSSPROTO" -m statistic --mode random --probability $PROB -j DROP
+	    ip6tables -A OUTPUT -o $IF -p "$LOSSPROTO" -m statistic --mode random --probability $PROB -j DROP
 	else
-	    iptables -A OUTPUT -p "$LOSSPROTO" --match multiport --dports "$LOSSPORTRANGE" -m statistic --mode random --probability $PROB -j DROP
-	    ip6tables -A OUTPUT -p "$LOSSPROTO" --match multiport --dports "$LOSSPORTRANGE" -m statistic --mode random --probability $PROB -j DROP
+	    iptables -A OUTPUT -o $IF -p "$LOSSPROTO" --match multiport --dports "$LOSSPORTRANGE" -m statistic --mode random --probability $PROB -j DROP
+	    ip6tables -A OUTPUT -o $IF -p "$LOSSPROTO" --match multiport --dports "$LOSSPORTRANGE" -m statistic --mode random --probability $PROB -j DROP
 	fi
     fi    
     if [  "${LINK}" = "input" -o "${LINK}" = "both"  ]; then
 	if [ "$LOSSPROTO" = "icmp" ]; then
-	    iptables -A INPUT -p "$LOSSPROTO" -m statistic --mode random --probability $PROB -j DROP
-	    ip6tables -A INPUT -p "$LOSSPROTO" -m statistic --mode random --probability $PROB -j DROP
+	    iptables -A INPUT -i $IF -p "$LOSSPROTO" -m statistic --mode random --probability $PROB -j DROP
+	    ip6tables -A INPUT -i $IF -p "$LOSSPROTO" -m statistic --mode random --probability $PROB -j DROP
 	else
-	    iptables -A INPUT -p "$LOSSPROTO" --match multiport --dports "$LOSSPORTRANGE" -m statistic --mode random --probability $PROB -j DROP
-	    ip6tables -A INPUT -p "$LOSSPROTO" --match multiport --dports "$LOSSPORTRANGE" -m statistic --mode random --probability $PROB -j DROP
+	    iptables -A INPUT -i $IF -p "$LOSSPROTO" --match multiport --dports "$LOSSPORTRANGE" -m statistic --mode random --probability $PROB -j DROP
+	    ip6tables -A INPUT -i $IF -p "$LOSSPROTO" --match multiport --dports "$LOSSPORTRANGE" -m statistic --mode random --probability $PROB -j DROP
 	fi
     fi
 fi
 
 if [ "${SHOW}" ]; then
     # Show status for tc and qdisc
-    echo "Interface '$IF':"
+    echo "# Interface '$IF':"
     TC=$(tc qdisc show dev $IF | grep netem; tc filter show dev $IF; tc qdisc show dev ifb0 2> /dev/null)
     if [ "$TC" ]; then
-	echo "    $TC"
+	echo "$TC"
     else
-	echo "    No delay or loss added via 'tc qdisc netem'."
+	echo "No delay or loss added via 'tc qdisc netem'."
     fi
 
     if [ "$LOSSTYPE" = "iptables" ]; then
 	# Show iptables
 	IPT=""
-	IPT_RES=$(iptables -L INPUT | grep probability)
+	IPT_RES=$(iptables -vL INPUT | grep probability)
 	if [ "$IPT_RES" ]; then
-	    IPT="    INPUT: $IPT_RES\n"
+	    IPT="INPUT:\n$IPT_RES\n"
 	fi
-	IPT_RES=$(iptables -L OUTPUT | grep probability)
+	IPT_RES=$(iptables -vL OUTPUT | grep probability)
 	if [ "$IPT_RES" ]; then
-	    IPT="$IPT    OUTPUT: $IPT_RES\n"
+	    IPT="${IPT}OUTPUT:\n$IPT_RES\n"
 	fi
-	IPT_RES=$(ip6tables -L INPUT | grep probability)
+	IPT_RES=$(ip6tables -vL INPUT | grep probability)
 	if [ "$IPT_RES" ]; then
-	    IPT="$IPT    INPUT6: $IPT_RES\n"
+	    IPT="${IPT}INPUT6:\n$IPT_RES\n"
 	fi
-	IPT_RES=$(ip6tables -L OUTPUT | grep probability)
+	IPT_RES=$(ip6tables -vL OUTPUT | grep probability)
 	if [ "$IPT_RES" ]; then
-	    IPT="$IPT    OUTPUT6: $IPT_RES\n"
+	    IPT="${IPT}OUTPUT6:\n$IPT_RES\n"
 	fi
 	if [  "$IPT" ]; then
-	    echo "Iptables:"
+	    echo -e "\n# Iptables:"
 	    echo -e "$IPT"
 	else
-	    echo "    No loss added via 'iptables'. "
+	    echo "No loss added via 'iptables'. "
 	fi
     fi
 fi
