@@ -49,19 +49,19 @@ event_type:
         aggr: "sum"
       h_ddelay:
         title: "Queue"
-        descr: "Events with significantly larger current delay than minimum delay."
+        descr: "Difference between delay ahead of gap and minimum delay."
         unit: "ms"
         type: "number"
         aggr: "avg"
       h_jit:
         title: "Jitter"
-        descr: "Delay varations measured as specified by RFC3550 appendix A.8."
+        descr: "Delay varations ahead of gap measured as specified by RFC3550 appendix A.8."
         unit: "ms"
         type: "number"
         aggr: "avg"
       h_min_d:
         title: "Min delay"
-        descr: "Minimum one-way delay measured in a limited time window (~ 1-2min)."
+        descr: "Minimum one-way delay ahead of gap measured in a limited time window (~ 1-2min)."
         unit: "ms"
         type: "number"
         aggr: "min"
@@ -121,19 +121,14 @@ event_type:
     descr: "Events with significant delay variations."
     index: "jitter-index"          # NEEDS TO BE OVERRIDDEN
     topology_index: ""          # Empty here implies using "index" as source of topology data          
-    summary_event_type: "gapsum"  # Additional event type for summary info to include 
+#    summary_event_type: "gapsum"  # Additional event type for summary info to include 
     popup:
       # Data for popup windows
       summary:
         # Summary info fields
-        - down_ppm
         - h_ddelay
         - h_jit
         - h_min_d
-        - big_gaps
-        - big_time
-        - small_gaps
-        - small_time            - 
       see_routes: "traceroute"  # Source for traceroute viewer
       table:
         # Table columns (in addition to date and time) to display in map popup windows
@@ -143,32 +138,30 @@ event_type:
     field:
       h_ddelay:
         title: "Queue"
+        descr: "Difference between abnormal delay and minimum delay."
         unit: "ms"
         type: "number"
         aggr: "avg"
       h_jit:
         title: "Jitter"
+        descr: "Delay varations measured as specified by RFC3550 appendix A.8."
         unit: "ms"
         type: "number"
         aggr: "avg"
       h_min_d:
         title: "Min delay"
+        descr: "Minimum one-way delay measured in time window."
         unit: "ms"
         type: "number"
         aggr: "min"
       h_slope_10:
         title: "Slope"
+        descr: "Slope of increase in delay ahead of abnormal delay event (based on 10 probe packets)."
         unit: ""
         type: "number"
         aggr: "avg"
     default_summary_field: "h_ddelay"
     summary_field:      # From summary event type
-      down_ppm:
-        title: "Unavailability"
-        descr: "Fraction of downtime over total time in parts-per-million (10 ppm <=> \"five-nines\")."
-        unit: "ppm"
-        type: "number"
-        aggr: "sum"
       h_ddelay:
         title: "Queue"
         unit: "ms"
@@ -184,26 +177,6 @@ event_type:
         unit: "ms"
         type: "number"
         aggr: "min"
-      big_gaps:
-        title: "Big gaps"
-        unit: "#"
-        type: "number"
-        aggr: "sum"
-      big_time:
-        title: "Big gap time"
-        unit: "s"
-        type: "number"
-        aggr: "sum"
-      small_gaps:
-        title: "Small gaps"
-        unit: "#"
-        type: "number"
-        aggr: "sum"
-      small_time:
-        title: "Small gap time"
-        unit: "s"
-        type: "number"
-        aggr: "sum"
 
   routeerr:
     enable: true

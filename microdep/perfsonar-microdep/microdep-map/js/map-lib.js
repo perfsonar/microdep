@@ -359,12 +359,12 @@ export function update_url(parameter, value){
     url = urlBase+'?'+pars.join('&');
     window.history.pushState('',document.title,url); // added this line to push the new url directly to url bar .
 
+    get_parms();    // Make sure global parameter object is in sync with url
+    
     if ( stats_on[ $("#event_type").val() ] )
 	$("#stats_type").show();
     else
 	$("#stats_type").hide();
-
-
 }
 
 export function removeParam(parameter){
