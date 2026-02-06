@@ -13,6 +13,7 @@ dragonlab:
       index: "dragonlab"
     jitter:
       index: "dragonlab_jitter" 
+      topology_index: "dragonlab"           # Empty here implies using "index" as source of topology data          
     routeerr:
       index: "dragonlab_routemon" 
     routechange:

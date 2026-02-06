@@ -388,7 +388,7 @@ function gap_popup( div, link){
     button.innerHTML = "Top " + etype + "s";
     button.onclick = function(event) {
 	let idiv;
-	let etag = 'event ' + parms.event + parms.start + parms.period; // mark with tag to reuse data
+	let etag = 'event ' + parms.event + ' ' + parms.date + ' ' + parms.period; // mark with tag to reuse data
 	if ( this[etag]){ // cycle through top, all, hide
 	    idiv = this[etag];
 	    if ( this.innerText.substr(0,4) == 'Hide'){
@@ -1261,9 +1261,13 @@ function load_coords(network, service, goal){
 	var end_iso = new Date($("#datepicker").val() + " 23:59:59").toISOString();
 	// Query for both source (from) nodes and destination (to) nodes
 	var query_index = JSON.stringify( { "index": event_index[parms.event] }); 
-	if ( conffile[parms.net].event_type.topology.index )
+	if ( conffile[parms.net].event_type.topology.index ) {
 	    // Override with index from config
 	    query_index = JSON.stringify( { "index": conffile[parms.net].event_type.topology.index }); 
+	} else if (conffile[parms.net].event_type[parms.event].topology_index) {
+	    // Override with index from config
+	    query_index = JSON.stringify( { "index": conffile[parms.net].event_type[parms.event].topology_index });
+	}	    
 	var query_fromnodes = get_node_query( "from", start_iso, end_iso);
 	var query_tonodes = get_node_query( "to", start_iso, end_iso);
 	var query = query_index + '\n' + query_fromnodes + '\n' + query_index + '\n' + query_tonodes + '\n';
@@ -1428,6 +1432,9 @@ function show_network(network){
     if ( network in points_cache){
 	points=points_cache[network];
 	show_map(network);
+	if (points.length > 0)
+	    // Some nodes are available. Plot the links too.
+	    get_topology();
     } else {
 	// Fetch nodes and coordinates
 	load_coords_from_all_sources(network);
@@ -2083,7 +2090,7 @@ function hhmmss(d){
 	  load_name_to_address();
 	  show_network(parms.net);
 	  // await new Promise(r => setTimeout(r, 5000)); // Sleep 5 sec for loading of node-data to complete. WARNING! THIS DESPERATELY NEEDS REDESIGN.
-	  // get_topology();
+	  //get_topology();
 	  update_url();
 	  $("#tabs").tabs("option", "active", 0);
       });
