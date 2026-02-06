@@ -208,7 +208,7 @@ if ( $min_delay ){
 
 
 
-$sort_time = '"sort" : [ { "datetime": { "order" : "asc" } } ]';
+$sort_time = '"sort" : [ { "@date": { "order" : "asc" } } ]';
 
 if ( $path_addr){
     $query_head .= ',    "filter": {
