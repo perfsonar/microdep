@@ -451,7 +451,7 @@ export function update_props() {
 	// Config file data is available. Update lists.
 	prop_names_list ={}; 
 	prop_desc ={};
-	prop_long_desc ={};
+	prop_long_desc ={};      // Table (indexed by event_type and field) of verbose descriptions (applied in mouse-over help texts) of measurement variables 
 	event_names = [];
 	event_desc={};
 	event_long_desc={};
@@ -476,11 +476,16 @@ export function update_props() {
 		prop_names_list[e].push(f);
 		var unit = conffile[parms.net].event_type[e].field[f].unit
 		var title = conffile[parms.net].event_type[e].field[f].title
-		prop_desc[f] = title +  ( unit ? " (" + unit + ")" : "") ;
+		if ( typeof prop_desc[e] == 'undefined' )
+		    prop_desc[e]=[];
+		prop_desc[e][f] = title +  ( unit ? " (" + unit + ")" : "") ;
 		prop_aggr[f] = conffile[parms.net].event_type[e].field[f].aggr;
+		if ( typeof prop_long_desc[e] == 'undefined' )
+		    prop_long_desc[e]=[];
+		prop_long_desc[e][f]='';
 		if (! jQuery.isEmptyObject(conffile[parms.net].event_type[e].field[f].descr) ) {
-		    // Get long descriptions too
-		    prop_long_desc[f] = conffile[parms.net].event_type[e].field[f].descr;
+		    // Long description found too
+		    prop_long_desc[e][f] = conffile[parms.net].event_type[e].field[f].descr;
 		}
 	    }
 	    // Store event type and properties for summary info
@@ -495,11 +500,16 @@ export function update_props() {
 		    prop_names_list[event_sum_type[e]].push(f);
 		    var unit = conffile[parms.net].event_type[e].summary_field[f].unit
 		    var title = conffile[parms.net].event_type[e].summary_field[f].title
-		    var descr = title +  ( unit ? " (" + unit + ")" : "") ; 
-		    prop_desc[f] = descr;
+		    var title_with_unit = title +  ( unit ? " (" + unit + ")" : "") ; 
+		    if ( typeof prop_desc[event_sum_type[e]] == 'undefined' )
+			prop_desc[event_sum_type[e]]=[];
+		    prop_desc[event_sum_type[e]][f] = title_with_unit;
+		    if ( typeof prop_long_desc[event_sum_type[e]] == 'undefined' )
+			prop_long_desc[event_sum_type[e]]=[];
+		    prop_long_desc[event_sum_type[e]][f] = prop_long_desc[e][f];    // Apply long descr from standard field as default for summary fields
 		    if (! jQuery.isEmptyObject(conffile[parms.net].event_type[e].summary_field[f].descr) ) {
-			// Get long descriptions too
-			prop_long_desc[f] = conffile[parms.net].event_type[e].summary_field[f].descr;
+			// Long description for summary event found
+			prop_long_desc[event_sum_type[e]][f] = conffile[parms.net].event_type[e].summary_field[f].descr;
 		    }
 		    prop_aggr[f] = conffile[parms.net].event_type[e].summary_field[f].aggr;
 		    if (! jQuery.isEmptyObject(conffile[parms.net].event_type[e].summary_field[f].threshold_low) && ! jQuery.isEmptyObject(conffile[parms.net].event_type[e].summary_field[f].threshold_high ) ) {
@@ -540,7 +550,7 @@ export function update_props() {
 		conffile[parms.net].event_type[parms.event].field[prop_names[n]].type != "number" )
 		// Remove unsupported or none-numeric properties
 		prop_names.splice(n,1);
-	make_prop_select("prop_select", prop_names, prop_desc, prop_long_desc );
+	make_prop_select("prop_select", prop_names, prop_desc[parms.event], prop_long_desc[parms.event] );
 	// Select measurement variable
 	if (parms.property && (prop_names.indexOf(parms.property) > -1) ) {
 	    // Reapply already selected 
@@ -556,7 +566,7 @@ export function update_props() {
 		conffile[parms.net].event_type[parms.event].summary_field[prop_names[n]].type != "number" )
 		// Remove unsupported or none-numeric properties
 		prop_names.splice(n,1);
-	make_prop_select("prop_select", prop_names, prop_desc, prop_long_desc );
+	make_prop_select("prop_select", prop_names, prop_desc[event_sum_type[parms.event]], prop_long_desc[event_sum_type[parms.event]] );
 	// Select measurement variable
 	if (parms.property && (prop_names.indexOf(parms.property) > -1) ) {
 	    // Reapply already selected 

@@ -454,7 +454,7 @@ function link_popup(link){
     html = 'Plot <button class=knapp><a title="Curve over queues in this period" target="_blank" href="' + url + '">Queues</a></button>' + "\n";
 
     url='curve-chart.html?net=' + parms.net + '&index=' + event_index[parms.event] + '&from=' + link.from + '&to=' + link.to + '&event=' + parms.event + '&property=' + parms.property + '&start=' + start + '&end=' + end + '&title="From ' + link.from + ' to ' + link.to + ' for ' + parms.property + '"';
-    html += '\n<button class=knapp><a title="Detailed report for report" target="_blank" href="' + url + '">' + prop_desc[parms.property] + '</a></button>' + "\n";
+    html += '\n<button class=knapp><a title="Detailed report for report" target="_blank" href="' + url + '">' + prop_desc[parms.event][parms.property] + '</a></button>' + "\n";
 
     let tail=document.createElement("div");
     tail.innerHTML = html;
@@ -489,7 +489,7 @@ function link_popup(link){
 	      for (const sum_var in conffile[parms.net].event_type[parms.event].field) {
 		  if ( typeof link[sum_var] != 'undefined' ) {
 		      var prop_value = Math.round((link[sum_var] + Number.EPSILON) * 100) / 100;  // Round off to (max) 2 decimals
-		      tip+= '<tr><td>' + prop_desc[sum_var] + '<td align=right>' + prop_value; 
+		      tip+= '<tr><td>' + prop_desc[parms.event][sum_var] + '<td align=right>' + prop_value; 
 		      nrows++;
 		  }
 	      }
@@ -498,7 +498,7 @@ function link_popup(link){
 		  //ok var sum_var = conffile[parms.net].event_type[parms.event].popup.summary[s];
 		  if ( typeof link[sum_var] != 'undefined' ) {
 		      var prop_value = Math.round((link[sum_var] + Number.EPSILON) * 100) / 100;  // Round off to (max) 2 decimals
-		      tip+= '<tr><td>' + prop_desc[sum_var] + '<td align=right>' + prop_value; 
+		      tip+= '<tr><td>' + prop_desc[conffile[parms.net].event_type[parms.event].summary_event_type][sum_var] + '<td align=right>' + prop_value; 
 		      nrows++;
 		  }
 	      }
@@ -562,7 +562,7 @@ function make_tooltip(title, link){
 function link_tooltip( title, link, prop){
     if ( prop in link){
 	var val=link[prop];
-	var tip='<b>' + title + '</b>' + "<p>" + prop_desc[prop] + ": " ;
+	var tip='<b>' + title + '</b>' + "<p>" + prop_desc[parms.event][prop] + ": " ;
 	if ( typeof(val) !== "string" ){
 	    tip += val.toFixed(1);
 	    if ( prop === "down_ppm" && typeof link[prop] == 'number' ){
@@ -604,10 +604,10 @@ function gap_list( from, to, hits, lines, sort_type){
 		for (const col in conffile[parms.net].event_type[etype].popup.table) {
 		    // Prepare colum heading with popup title text.
 		    var title_text = "";
-		    if (typeof prop_long_desc[conffile[parms.net].event_type[etype].popup.table[col]] != "undefined") {
-			title_text = prop_long_desc[conffile[parms.net].event_type[etype].popup.table[col]];
+		    if (typeof prop_long_desc[etype][conffile[parms.net].event_type[etype].popup.table[col]] != "undefined") {
+			title_text = prop_long_desc[etype][conffile[parms.net].event_type[etype].popup.table[col]];
 		    }
-		    html += "<th  title='" + title_text + "'>" + prop_desc[conffile[parms.net].event_type[etype].popup.table[col]];
+		    html += "<th  title='" + title_text + "'>" + prop_desc[etype][conffile[parms.net].event_type[etype].popup.table[col]];
 		}
 		html += "</thead>";
 	    }
@@ -808,7 +808,7 @@ function digest_aggregates(aggs, stats_type){
 function draw_links(hits, prop){
     // remove_links(links);
     get_thresholds(hits, prop);
-    update_legend(prop_desc[prop],threshes);
+    update_legend(prop_desc[event_sum_type[parms.event]][prop],threshes);
     hits.sort(sort_hits); // sort by from, to
     var new_ends=[];
 
@@ -1035,7 +1035,7 @@ function draw_topology(topo){
 
 function taint_topology( topo, prop){
     get_thresholds(topo, prop);
-    update_legend(prop_desc[prop],threshes);
+    update_legend(prop_desc[event_sum_type[parms.event]][prop],threshes);
 
     for (var i=0; i < topo.length; i++){
 	var link=topo[i];
@@ -1058,7 +1058,7 @@ function taint_links( hits, prop){
 
     if ( hits.length > 0){
         get_thresholds(hits, prop);
-	update_legend(prop_desc[prop],threshes);
+	update_legend(prop_desc[event_sum_type[parms.event]][prop],threshes);
 
 	for (var i=0; i < hits.length; i++){
 	    var link=hits[i];
@@ -1566,7 +1566,7 @@ function check_ends(){
 	  html+='</table>';
 	  html+='<p>' + "Ok " + nok + " Missing " + nmiss;
 
-	  html += "<h3>Asymmetry in " + prop_desc[ $("#prop_select").val() ] + "</h3>";
+	  html += "<h3>Asymmetry in " + prop_desc[parms.event][ $("#prop_select").val() ] + "</h3>";
       } else {
 	  
 	  // html += '<input type="text" id="' + div_id + '_input" onkeyup="filter_table(\'' + div_id + '\')" placeholder="Search for names..">';
@@ -1613,7 +1613,7 @@ function report_summary(div_id){
 	    html += '<thead title="Click to sort"><th>from<th>to';
 	    for ( const prop of prop_names){
 //		html+='<th align=right>'+prop;
-		html+='<th align=right title="' +prop_aggr[prop] + ' values - click to sort">'+prop_desc[prop];
+		html+='<th align=right title="' +prop_aggr[prop] + ' values - click to sort">'+prop_desc[conffile[parms.net].event_type[parms.event].summary_event_typ][prop];
 		    + " - " +prop_aggr[prop];
 	    }
 	    html+='</thead><tbody>';
@@ -2075,7 +2075,7 @@ function hhmmss(d){
 	      links_on=true;
 	      focus_node="";
 	      prop_names = prop_names_list[ $("#event_type").val() ];
-	      make_prop_select("prop_select", prop_names, prop_desc, prop_long_desc );
+	      make_prop_select("prop_select", prop_names, prop_desc[event_sum_type[parms.event]], prop_long_desc[event_sum_type[parms.event]]);
 	      get_connections();
 	      // document.location.href =
 	      removeParam( 'node');
