@@ -2,7 +2,7 @@
 import { parms, conffile, 
 	 get_parms, get_config, update_props, add_tab, update_url,
 	 colors, make_palette,
-	 prop_desc, prop_names, prop_names_list, make_prop_select,
+	 prop_desc, prop_names, make_prop_select,
 	 periods, get_period, period_units, anhour, aday, aweek,
 	 selected_date_is_today_or_future, adjust_to_timezone }
 from "./map-lib.js" ;
@@ -85,7 +85,7 @@ function make_curve(tab_id, property, start, end){
 
 		   if (resp.hits && resp.hits.total.value > 0){
 		       var nrecs=resp.hits.total.value.toString();
-		       add_tab( "canvas", prop_desc[property], $("main#tabs ul li").length , '');
+		       add_tab( "canvas", prop_desc[parms.event][property], $("main#tabs ul li").length , '');
 
 		       chart_curve( tab_id, resp.hits.hits, property, title, xunit);			     
 		   } else {
@@ -125,7 +125,7 @@ function init_module(){
     // prop_names = conffile.prop_names_list[ parms.event ];
     //prop_names = prop_names_list[ parms.event ];
     update_props();
-    make_prop_select("check", prop_names, prop_desc );
+    make_prop_select("check", prop_names[parms.event], prop_desc[parms.event] );
     $("#check").val(parms.property);
 
     make_palette(parms.palette);

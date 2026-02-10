@@ -71,10 +71,11 @@ export function get_color( val, threshes){
 
 export function get_thresholds( hits, prop){
     var thresh=[];
-    if ( thresholds[prop]){
-	thresh=thresholds[prop];
+    if ( typeof prop_thresholds[event_sum_type[parms.event]] != 'undefined' && typeof prop_thresholds[event_sum_type[parms.event]][prop] != 'undefined' ){
+	// Thresholds are available
+	thresh=prop_thresholds[event_sum_type[parms.event]][prop];
     } else {
-	// ends=[];
+	// No thresholds configured. Create some.
 	var vals=[];
 
 	$.each(hits, function(i, link){
@@ -105,7 +106,9 @@ export function get_thresholds( hits, prop){
 	    }
 	}
     }
-    if ( reversed[prop] ) thresh.reverse();
+    if ( prop_reversed[event_sum_type[parms.event]][prop] )
+	// Reverse all thresholds
+	thresh.reverse();
     // update_legend(prop_desc[prop],thresh);
     threshes=thresh; // global
 }
@@ -394,16 +397,18 @@ export function removeParam(parameter){
 
 export var parms={};
 export var conffile=[];   //Config file loaded initially
-export var thresholds={};
+
+// *** A general comment with respect to data structures applied and exported ***
+// The current semi-flat architecture with seperate hashes for net, event and
+// properties (measurement variables) is an iheritance from "old days" of prototype
+// development, i.e. before a structured yaml-config-file was avaiable as data model
+// source. Cleaning this up at some point is probably a good idea...
+//
+// Note that 'property', '(measurement) variable', and 'field' are often the same "shit"
 
 export var net_names=[];
 export var net_descr={};
 export var net_long_descr={};
-
-export var reversed={};
-export var prop_long_desc={};
-export var prop_sum = ['tloss', 'anomaly_count'];
-export var prop_aggr = { tloss: 'sum', anomaly_count: 'sum' };
 
 export var event_names;
 export var event_index = {}; 
@@ -414,10 +419,13 @@ export var event_long_desc={};
 
 export var stats_on={ jitter:true}; // show stats_type field
 
-export var prop_names;
-export var prop_names_list = {};
-export var prop_desc= {}; 
-
+export var prop_names = {};        // Hash table (infexed by event_type) with list of field per event type
+export var prop_desc= {};          // Hash table (indexed by event_type and field) of short titles (applied in menus and lists) of measurement variables 
+export var prop_long_desc={};      // Hash table (indexed by event_type and field) of verbose descriptions (applied in mouse-over help texts) of measurement variables 
+export var prop_sum = ['tloss', 'anomaly_count'];              // OBSOLETE 
+export var prop_aggr = {};         // Hash table (indexed by event_type and field) of aggregation methods to be applied for field values (in summary popups and tables).
+export var prop_reversed = {};     // Hash table (indexed by event_type and field) of flags indicating reversed ordering for a field values (to be applied in summary popups, tables and legends).
+export var prop_thresholds={};     // Hash table (indexed by event_type and field) of thresholds for field values (to be applied in legends and heatmaps).
 
 export function get_config( conffilename, call_back){
     // Fetch config info and initialize page
@@ -449,10 +457,10 @@ export function update_props() {
     
     if (! jQuery.isEmptyObject(conffile)) {
 	// Config file data is available. Update lists.
-	prop_names_list ={}; 
-	prop_desc ={};
-	prop_long_desc ={};      // Table (indexed by event_type and field) of verbose descriptions (applied in mouse-over help texts) of measurement variables 
-	event_names = [];
+	prop_names ={}; 
+	prop_desc ={};           
+	prop_long_desc ={};   
+	event_names = [];        
 	event_desc={};
 	event_long_desc={};
 	event_index={};
@@ -463,7 +471,7 @@ export function update_props() {
 		// Skip disabeld events or events marked as historic only if current date is today date
 		continue;
 	    }
-	    prop_names_list[e]=[];
+	    prop_names[e]=[];
 	    event_names.push(e);
 	    if (! jQuery.isEmptyObject(conffile[parms.net].event_type[e].descr) ) {
 		// Get long descriptions too
@@ -473,13 +481,15 @@ export function update_props() {
 	    event_index[e] = conffile[parms.net].event_type[e].index
 	    for (const f in conffile[parms.net].event_type[e].field) {
 		// Add properties/variables
-		prop_names_list[e].push(f);
+		prop_names[e].push(f);
 		var unit = conffile[parms.net].event_type[e].field[f].unit
 		var title = conffile[parms.net].event_type[e].field[f].title
 		if ( typeof prop_desc[e] == 'undefined' )
 		    prop_desc[e]=[];
 		prop_desc[e][f] = title +  ( unit ? " (" + unit + ")" : "") ;
-		prop_aggr[f] = conffile[parms.net].event_type[e].field[f].aggr;
+		if ( typeof prop_aggr[e] == 'undefined' )
+		    prop_aggr[e]=[];
+		prop_aggr[e][f] = conffile[parms.net].event_type[e].field[f].aggr;
 		if ( typeof prop_long_desc[e] == 'undefined' )
 		    prop_long_desc[e]=[];
 		prop_long_desc[e][f]='';
@@ -490,14 +500,14 @@ export function update_props() {
 	    }
 	    // Store event type and properties for summary info
 	    event_sum_type[e] = conffile[parms.net].event_type[e].summary_event_type;
-	    if( typeof prop_names_list[event_sum_type[e]] == 'undefined')
+	    if( typeof prop_names[event_sum_type[e]] == 'undefined')
 		// New property/variable.
-		prop_names_list[event_sum_type[e]]=[];
+		prop_names[event_sum_type[e]]=[];
 	    for (const f in conffile[parms.net].event_type[e].summary_field) {
 		// Add  properties/variables
-		if( prop_names_list[event_sum_type[e]].indexOf(f) == -1) {
+		if( prop_names[event_sum_type[e]].indexOf(f) == -1) {
 		    // Field not yet added. Add.
-		    prop_names_list[event_sum_type[e]].push(f);
+		    prop_names[event_sum_type[e]].push(f);
 		    var unit = conffile[parms.net].event_type[e].summary_field[f].unit
 		    var title = conffile[parms.net].event_type[e].summary_field[f].title
 		    var title_with_unit = title +  ( unit ? " (" + unit + ")" : "") ; 
@@ -511,20 +521,25 @@ export function update_props() {
 			// Long description for summary event found
 			prop_long_desc[event_sum_type[e]][f] = conffile[parms.net].event_type[e].summary_field[f].descr;
 		    }
-		    prop_aggr[f] = conffile[parms.net].event_type[e].summary_field[f].aggr;
+		    if ( typeof prop_aggr[event_sum_type[e]] == 'undefined' )
+			prop_aggr[event_sum_type[e]]=[];
+		    prop_aggr[event_sum_type[e]][f] = conffile[parms.net].event_type[e].summary_field[f].aggr;
 		    if (! jQuery.isEmptyObject(conffile[parms.net].event_type[e].summary_field[f].threshold_low) && ! jQuery.isEmptyObject(conffile[parms.net].event_type[e].summary_field[f].threshold_high ) ) {
 			// Add/update thresholds values for property/variable.
-			thresholds[f] = [ Number(conffile[parms.net].event_type[e].summary_field[f].threshold_low), Number(conffile[parms.net].event_type[e].summary_field[f].threshold_high) ];
+			if ( typeof prop_thresholds[event_sum_type[e]] == 'undefined' )
+			    prop_thresholds[event_sum_type[e]]=[];
+			prop_thresholds[event_sum_type[e]][f] = [ Number(conffile[parms.net].event_type[e].summary_field[f].threshold_low), Number(conffile[parms.net].event_type[e].summary_field[f].threshold_high) ];
 		    }
-		    if ( conffile[parms.net].event_type[e].summary_field[f].scale === 'reversed')
-			reversed[f]=true;
+		    // Add/update ordering for property/variable
+		    if ( typeof prop_reversed[event_sum_type[e]] == 'undefined' )
+			prop_reversed[event_sum_type[e]]=[];
+		    prop_reversed[event_sum_type[e]][f]= ( conffile[parms.net].event_type[e].summary_field[f].scale === 'reversed');
 		}
 	    }
 	}
     }
     
     // Init select list for measurement types / datasets / event types
-    //event_names = Object.keys(prop_names_list);
     make_prop_select("event_type", event_names, event_desc, event_long_desc );
     // Select event type
     if (parms.event && (event_names.indexOf(parms.event) > -1)) {
@@ -544,15 +559,14 @@ export function update_props() {
     // Init measurement variable select list
     if (selected_date_is_today_or_future()) {
 	// No summary event is available. Use "none-summary" properties.
-	prop_names = prop_names_list[ parms.event];
-	for (var n = prop_names.length-1; n >= 0; n--)
+	for (var n = prop_names[parms.event].length-1; n >= 0; n--)
 	    if (typeof conffile[parms.net].event_type[parms.event].field[prop_names[n]] == "undefined" ||
 		conffile[parms.net].event_type[parms.event].field[prop_names[n]].type != "number" )
 		// Remove unsupported or none-numeric properties
-		prop_names.splice(n,1);
-	make_prop_select("prop_select", prop_names, prop_desc[parms.event], prop_long_desc[parms.event] );
+		prop_names[parms.event].splice(n,1);
+	make_prop_select("prop_select", prop_names[parms.event], prop_desc[parms.event], prop_long_desc[parms.event] );
 	// Select measurement variable
-	if (parms.property && (prop_names.indexOf(parms.property) > -1) ) {
+	if (parms.property && (prop_names[parms.event].indexOf(parms.property) > -1) ) {
 	    // Reapply already selected 
 	    $("#prop_select").val(parms.property);
 	} else  if ( "default_field" in conffile[parms.net].event_type[parms.event] ) {
@@ -560,15 +574,14 @@ export function update_props() {
 	    $("#prop_select").val(conffile[parms.net].event_type[parms.event].default_field);
 	}
     } else {
-	prop_names = prop_names_list[ event_sum_type[parms.event] ];
-	for (var n = prop_names.length-1; n >= 0; n--)
-	    if (typeof conffile[parms.net].event_type[parms.event].summary_field[prop_names[n]] == "undefined" ||
-		conffile[parms.net].event_type[parms.event].summary_field[prop_names[n]].type != "number" )
+	for (var n = prop_names[event_sum_type[parms.event]].length-1; n >= 0; n--)
+	    if (typeof conffile[parms.net].event_type[parms.event].summary_field[prop_names[event_sum_type[parms.event]][n]] == "undefined" ||
+		conffile[parms.net].event_type[parms.event].summary_field[prop_names[event_sum_type[parms.event]][n]].type != "number" )
 		// Remove unsupported or none-numeric properties
-		prop_names.splice(n,1);
-	make_prop_select("prop_select", prop_names, prop_desc[event_sum_type[parms.event]], prop_long_desc[event_sum_type[parms.event]] );
+		prop_names[event_sum_type[parms.event]].splice(n,1);
+	make_prop_select("prop_select", prop_names[event_sum_type[parms.event]], prop_desc[event_sum_type[parms.event]], prop_long_desc[event_sum_type[parms.event]] );
 	// Select measurement variable
-	if (parms.property && (prop_names.indexOf(parms.property) > -1) ) {
+	if (parms.property && (prop_names[event_sum_type[parms.event]].indexOf(parms.property) > -1) ) {
 	    // Reapply already selected 
 	    $("#prop_select").val(parms.property);
 	} else if ( "default_summary_field" in conffile[parms.net].event_type[parms.event] ) {

@@ -1,9 +1,9 @@
 // main js for microdep-map to be included at bottom of html
 
 import LatLon from "./latlon-spherical.js";
-import {parms, conffile, reversed, prop_sum, update_url, stats_on,
+import {parms, conffile, prop_sum, update_url, stats_on,
 	event_names, event_desc, event_long_desc, event_index, event_sum_type,
-	prop_names, prop_names_list, prop_desc, prop_long_desc, prop_aggr,
+	prop_names, prop_desc, prop_long_desc, prop_aggr,
 	colors, get_color, make_palette, threshes, get_thresholds, 
 	get_parms,removeParam, parse_hhmm, hhmm , adjust_to_timezone,
 	get_config, update_props, make_prop_select, add_tab,
@@ -511,11 +511,14 @@ function link_popup(link){
 	  return tip;
 	      
       } else {
-	  // Return default (legacy) summary content 
-	  return make_tooltip(title, link)
+	  console.log('Error: No config loaded. Not able to prepare tooltips.');
+	  return;
+//	  // Return default (legacy) summary content 
+//	  return make_tooltip(title, link)
       }
   }
-  
+
+/* OBSOLETE
 function make_tooltip(title, link){
     var nrows=0;
     var tip="<table width=100%><caption><b>" + title + '</b></caption>';
@@ -558,6 +561,7 @@ function make_tooltip(title, link){
     }
     return tip;
 }
+*/
 
 function link_tooltip( title, link, prop){
     if ( prop in link){
@@ -696,18 +700,18 @@ function gap_list( from, to, hits, lines, sort_type){
 		stat[ab]=[];
 		stat[ab].from = event.from;
 		stat[ab].to = event.to;
-		for ( const prop of prop_names_list[etype]){
+		for ( const prop of prop_names[etype]){
 		    stat[ab][prop]=new stats();
 		}
 		msg[ab]=[];
 		msg[ab].from = event.from;
 		msg[ab].to = event.to;
-		for ( const prop of prop_names_list[etype]){
+		for ( const prop of prop_names[etype]){
 		    msg[ab][prop]=[];
 		}
 	    }
 	    // accumulate values
-	    for ( const prop of prop_names_list[etype] ){
+	    for ( const prop of prop_names[etype] ){
 		let value=event[prop];
 		if ( typeof(value) === "undefined" )
 		    value="";
@@ -725,13 +729,13 @@ function gap_list( from, to, hits, lines, sort_type){
     // make stats
     for ( const ab in stat ){
 	var rec={ from: stat[ab].from, to: stat[ab].to};
-	for ( const prop of prop_names_list[etype] ){
+	for ( const prop of prop_names[etype] ){
 	    if ( stat[ab][prop].n > 0 ){
 //		if ( prop_sum.indexOf(prop) >= 0 )
 		//		    rec[prop]=stat[ab][prop].sum;
-		if ( prop in prop_aggr ) {
+		if ( prop in prop_aggr[etype] ) {
 		    // Variable (property) has aggregation method specified
-		    switch (prop_aggr[prop]) {
+		    switch (prop_aggr[etype][prop]) {
 		    case "sum":
 			rec[prop]=stat[ab][prop].sum
 			break;
@@ -1602,25 +1606,26 @@ function report_summary(div_id){
     let html='';
     html+='<table border=1 id=' + div_id + '_table class=sortable>\n';
     html+='<caption>Summary ' + title_state() + '</caption>';
-    var header=true;
-    var sel_prop= $("#prop_select").val();
+    var header_missing=true;
+    //var sel_prop= $("#prop_select").val();
 
     for (let i=0;i< summary.length;i++){
 	var entry=summary[i]._source;
 	var a=entry.from + " " + entry.to;
 
-	if (header){
-	    html += '<thead title="Click to sort"><th>from<th>to';
-	    for ( const prop of prop_names){
-//		html+='<th align=right>'+prop;
-		html+='<th align=right title="' +prop_aggr[prop] + ' values - click to sort">'+prop_desc[conffile[parms.net].event_type[parms.event].summary_event_typ][prop];
-		    + " - " +prop_aggr[prop];
+	if (header_missing){
+	    // Compose table header row
+	    html += '<thead title="Click to sort"><th>From<th>To';
+	    for ( const prop of prop_names[event_sum_type[parms.event]]){
+		html+='<th align=right title="' + prop_long_desc[event_sum_type[parms.event]][prop] + ' - Click to sort">' + prop_desc[event_sum_type[parms.event]][prop];
+		    + " (" + prop_aggr[event_sum_type[parms.event]][prop] + ")";
 	    }
 	    html+='</thead><tbody>';
-	    header=false;
+	    header_missing=false;
 	}
+	// Compose table rows
 	html+='<tr><td>' + entry['from'] + '<td>' + entry['to'];
-	for ( const prop of prop_names){
+	for ( const prop of prop_names[event_sum_type[parms.event]]){
 	    let val= entry[prop];
 	    if ( typeof val === 'number' && ! val.isInteger){
 		if ( val < 100 )
@@ -2067,20 +2072,19 @@ function hhmmss(d){
       } );
 
       // mechanism to flip network drawing
-      $("#draw").click(  function () {
-	  if ( links_on ){
-	      remove_links(links);
-	      links_on=false;
-	  } else {
-	      links_on=true;
-	      focus_node="";
-	      prop_names = prop_names_list[ $("#event_type").val() ];
-	      make_prop_select("prop_select", prop_names, prop_desc[event_sum_type[parms.event]], prop_long_desc[event_sum_type[parms.event]]);
-	      get_connections();
-	      // document.location.href =
-	      removeParam( 'node');
-	  }
-      });
+//      $("#draw").click(  function () {
+//	  if ( links_on ){
+//	      remove_links(links);
+//	      links_on=false;
+//	  } else {
+//	      links_on=true;
+//	      focus_node="";
+//	      make_prop_select("prop_select", prop_names[event_sum_type[parms.event]], prop_desc[event_sum_type[parms.event]], prop_long_desc[event_sum_type[parms.event]]);
+//	      get_connections();
+//	      // document.location.href =
+//	      removeParam( 'node');
+//	  }
+//      });
 
       // network change
       $("#network").change( async function(){
