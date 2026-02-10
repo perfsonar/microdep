@@ -1,7 +1,7 @@
 // library to produce graphs
 // depends on d3.js
 
-import {prop_desc} from "./map-lib.js";
+import {parms, prop_desc, prop_long_desc} from "./map-lib.js";
 
 export var chart;
 
@@ -374,7 +374,7 @@ export function chart_curve( div, hits, property, title, unit ){
     const data_desc = {
         // labels: obs[0],
         datasets: [{
-            label: property,
+            label: prop_long_desc[parms.event][property],
             backgroundColor: 'yellow',
             borderColor: 'red',
             borderWidth:1,
@@ -428,7 +428,7 @@ export function chart_curve( div, hits, property, title, unit ){
 		    },
                     title: {
                         display: true,
-                        text: prop_desc[property],
+                        text: prop_desc[parms.event][property],
 			font:{ size: 22}
                     }
 		}
