@@ -48,7 +48,7 @@ event_type:
         type: "number"
         aggr: "sum"
       h_ddelay:
-        title: "Queue"
+        title: "Queueing time"
         descr: "Difference between delay ahead of gap and minimum delay."
         unit: "ms"
         type: "number"
@@ -75,12 +75,11 @@ event_type:
     summary_field:      # From summary event type
       down_ppm:
         title: "Unavailability"
-        descr: "Fraction of downtime over total time in parts-per-million (10 ppm <=> \"five-nines\")."
         unit: "ppm"
         type: "number"
         aggr: "sum"
       h_ddelay:
-        title: "Queue"
+        title: "Queueing time"
         unit: "ms"
         type: "number"
         aggr: "avg"
@@ -95,22 +94,26 @@ event_type:
         type: "number"
         aggr: "min"
       big_gaps:
-        title: "Big gaps"
+        title: "Large gaps"
+        descr: "Number of gaps in test flow where 5 or more packets are missing."
         unit: "#"
         type: "number"
         aggr: "sum"
       big_time:
-        title: "Big gap time"
+        title: "Large gap time"
+        descr: "Total downtime caused by large gaps."
         unit: "s"
         type: "number"
         aggr: "sum"
       small_gaps:
         title: "Small gaps"
+        descr: "Number of gaps in test flow where less than 5 packets are missing."
         unit: "#"
         type: "number"
         aggr: "sum"
       small_time:
         title: "Small gap time"
+        descr: "Total downtime caused by small gaps."
         unit: "s"
         type: "number"
         aggr: "sum"
@@ -137,7 +140,7 @@ event_type:
     default_field: "h_ddelay"
     field:
       h_ddelay:
-        title: "Queue"
+        title: "Queueing time"
         descr: "Difference between abnormal delay and minimum delay."
         unit: "ms"
         type: "number"
@@ -163,7 +166,7 @@ event_type:
     default_summary_field: "h_ddelay"
     summary_field:      # From summary event type
       h_ddelay:
-        title: "Queue"
+        title: "Queueing time"
         unit: "ms"
         type: "number"
         aggr: "avg"

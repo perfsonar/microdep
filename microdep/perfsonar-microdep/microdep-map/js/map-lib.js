@@ -407,8 +407,8 @@ export var conffile=[];   //Config file loaded initially
 // Note that 'property', '(measurement) variable', and 'field' are often the same "shit"
 
 export var net_names=[];
-export var net_descr={};
-export var net_long_descr={};
+export var net_desc={};
+export var net_long_desc={};
 
 export var event_names;
 export var event_index = {}; 
@@ -436,11 +436,11 @@ export function get_config( conffilename, call_back){
 	    // Fetch measurment network/variant details from config
 	    for (const n in conffile) {
 		net_names.push(n);
-		net_descr[n]=conffile[n].title;
-		net_long_descr[n]=conffile[n].descr;
+		net_desc[n]=conffile[n].title;
+		net_long_desc[n]=conffile[n].descr;
 	    }
 	    // Update select-boks for networks/variants
-	    make_prop_select("network", net_names, net_descr, net_long_descr);
+	    make_prop_select("network", net_names, net_desc, net_long_desc);
 	    call_back();
 	}
 
