@@ -100,10 +100,15 @@ if [ "$DISTRO" = "rpm" ]; then
     
     echo "Refreshing repo list ..."
     $RSH $USER@$HOST dnf clean all
-#    $RSH $USER@$HOST dnf -y update --nogpgcheck
     echo "Done!"
-    echo "Packages in local repo:"
-    $RSH $USER@$HOST dnf list | grep unibuild-repo
+    read -p "List packages in new local repo on $HOST (y/N)? " YESNO
+    if [  "$YESNO" = "y" -o  "$YESNO" = "Y" ]; then
+	$RSH $USER@$HOST dnf list | grep unibuild-repo
+    fi
+    read -p "Update installed packages on $HOST (y/N)? " YESNO
+    if [  "$YESNO" = "y" -o  "$YESNO" = "Y" ]; then
+	$RSH $USER@$HOST dnf -y update --nogpgcheck
+    fi
 
 elif [ "$DISTRO" = "deb" ]; then
 
@@ -125,9 +130,14 @@ elif [ "$DISTRO" = "deb" ]; then
     echo "Refreshing repo list ..."
     $RSH $USER@$HOST apt-get -y update
     echo "Done!"
-    echo "Packages in local repo:"
-    $RSH $USER@$HOST apt list | grep "/unibuild"
-   
+    read -p "List packages in new local repo on $HOST (y/N)? " YESNO
+    if [  "$YESNO" = "y" -o  "$YESNO" = "Y" ]; then
+	$RSH $USER@$HOST apt list | grep "/unibuild"
+    fi
+    read -p "Update installed packages on $HOST (y/N)? " YESNO
+    if [  "$YESNO" = "y" -o  "$YESNO" = "Y" ]; then
+	$RSH $USER@$HOST apt-get -y upgrade
+    fi
 else
     echo "Error: Unknown distro $DISTRO."
     exit 1
