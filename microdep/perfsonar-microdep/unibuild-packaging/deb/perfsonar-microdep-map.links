@@ -4,8 +4,8 @@
 /usr/share/javascript/chart.js-plugin-zoom/chartjs-plugin-zoom.min.js /usr/lib/perfsonar/microdep-map/js/chartjs-plugin-zoom.min.js
 /usr/share/javascript/chart.js-plugin-zoom/chartjs-plugin-zoom.js /usr/lib/perfsonar/microdep-map/js/chartjs-plugin-zoom.js
 /usr/share/javascript/chart.js-plugin-zoom/chartjs-plugin-zoom.esm.js /usr/lib/perfsonar/microdep-map/js/chartjs-plugin-zoom.esm.js
-/usr/share/javascript/d3/d3.js /usr/lib/perfsonar/microdep-map/js/d3.v4.js
 /usr/share/javascript/d3/d3.js /usr/lib/perfsonar/microdep-map/js/d3.js
+/usr/share/javascript/d3/d3.min.js /usr/lib/perfsonar/microdep-map/js/d3.min.js
 /usr/share/javascript/jquery-datatables/jquery.dataTables.min.js /usr/lib/perfsonar/microdep-map/js/datatables.min.js
 /usr/share/javascript/jquery-datatables/css/jquery.dataTables.min.css /usr/lib/perfsonar/microdep-map/datatables.min.css
 /usr/share/javascript/jquery-datatables/css/jquery.dataTables.min.css /usr/lib/perfsonar/microdep-map/css/datatables.min.css

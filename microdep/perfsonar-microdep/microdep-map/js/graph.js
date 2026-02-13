@@ -1,7 +1,7 @@
 // library to produce graphs
 // depends on d3.js
 
-import {parms, prop_desc, prop_long_desc} from "./map-lib.js";
+import {parms, prop_desc, prop_long_desc, event_sum_type} from "./map-lib.js";
 
 export var chart;
 
@@ -162,7 +162,7 @@ export function heatmap( div, hits, property, get_color, threshes, title, templa
         .attr("y", -50)
         .attr("text-anchor", "left")
         .style("font-size", "22px")
-        .text( 'Heatmap ' + title + ' for ' + property);
+        .text( 'Heatmap of ' + prop_desc[event_sum_type[parms.event]][property] + ' for ' + title);
 
     // Add subtitle to graph
     svg.append("text")

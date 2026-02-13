@@ -1,0 +1,4 @@
+*.js /usr/share/javascript/d3/
+LICENSE /usr/share/doc/libjs-d3/copyright
+*.md /usr/share/doc/libjs-d3/
+

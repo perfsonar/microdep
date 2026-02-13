@@ -64,7 +64,7 @@ deb-systemd-services:
 unibuild-repo/Packages: deb-systemd-services unibuild-compose.yml pstracetree/unibuild-repo/Packages
 	@echo "Build Microdep deb packages for ${DEBDIST}..."
 #	${COMPOSECMD} -f unibuild-compose.yml run ${DEBDIST}_${ARCH} bash -c "apt -y update && ${BUILDCMD}"
-	${COMPOSECMD} -f unibuild-compose.yml run ${DEBDIST}_${ARCH} bash -c "echo 'deb [trusted=yes] file:/app/pstracetree/unibuild-repo ./' > /etc/apt/sources.list.d/local-pstracetree-repo.list && apt -y update && unibuild build"
+	${COMPOSECMD} -f unibuild-compose.yml run ${DEBDIST}_${ARCH} bash -c "echo 'deb [trusted=yes] file:/app/pstracetree/unibuild-repo ./' > /etc/apt/sources.list.d/local-pstracetree-repo.list && apt -y update && ${BUILDCMD}"
 
 #rpm-build: unibuild-repo/RPMS 
 rpm-build: pstracetree/unibuild-repo/RPMS unibuild-repo/RPMS

@@ -20,7 +20,8 @@ changecom()dnl
 chartjs
 chartjs-adapter-moment
 chartjs-plugin-zoom
-d3js
+# Ensure d3.js version >= 4
+d3js 
 datatablesjs
 hammerjs
 geodesyjs

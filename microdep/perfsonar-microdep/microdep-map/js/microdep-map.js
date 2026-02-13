@@ -1,7 +1,7 @@
 // main js for microdep-map to be included at bottom of html
 
 import LatLon from "./latlon-spherical.js";
-import {parms, conffile, prop_sum, update_url, stats_on,
+import {parms, conffile, prop_sum, update_url, stats_on, net_names, net_desc, net_long_desc,
 	event_names, event_desc, event_long_desc, event_index, event_sum_type,
 	prop_names, prop_desc, prop_long_desc, prop_aggr,
 	colors, get_color, make_palette, threshes, get_thresholds, 
@@ -1474,7 +1474,7 @@ function sort_missing(a ,b){
 }
 
 function check_ends(){
-    var html= '<h2>Missing opposite end of links</h2>';
+    var html= '<h2>Missing flows in dataset? </h2>';
     html += '<table><tr><th>From<th>To';
     var ab=[], i;
     var nok=0, nmiss=0, missing=[];
@@ -1508,7 +1508,7 @@ function check_ends(){
 
 }
 
-  function sort_diff(a , b){
+function sort_diff(a , b){
     //  return
     var aa=a.split(" ");
     var bb=b.split(" ");
@@ -1519,93 +1519,96 @@ function check_ends(){
     }
 }
 
-  
-  function check_asymmetry(report, div_id){
-      var ab=[], down=[], diff=[], pair=[], i;
-      var nok=0, nmiss=0, missing=[];
 
-      for (i=0;i< summary.length;i++){
-	  var entry=summary[i]._source;
-	  var a=entry.from + " " + entry.to;
-	  down[a]= entry[ $("#prop_select").val() ];
-	  ab[a]=true;
-      }
-      for (i=0;i<summary.length;i++){
-	  var entry=summary[i]._source;
-	  var a=entry.from + " " + entry.to;
-	  var b=entry.to + " " + entry.from;
+function check_asymmetry(report, div_id){
+    var ab=[], down=[], diff=[], pair=[], i;
+    var nok=0, nmiss=0, missing=[];
+    
+    for (i=0;i< summary.length;i++){
+	var entry=summary[i]._source;
+	var a=entry.from + " " + entry.to;
+	down[a]= entry[ parms.property ];
+	ab[a]=true;
+    }
+    for (i=0;i<summary.length;i++){
+	var entry=summary[i]._source;
+	var a=entry.from + " " + entry.to;
+	var b=entry.to + " " + entry.from;
+	
+	if ( ! ( b in pair ) ){
+	    var delta=0;
+	    if ( typeof(down[b]) === "number" && typeof(down[a]) === "number" )
+		delta= down[b] - down[a];
+	    diff.push( {id: a, val: Math.abs( delta ) } );
+	}
+	pair[a] = b;
+	pair[b] = a;
+	
+	if (ab[b]){
+	    nok++;
+	} else {
+	    // console.log( "Missing link : " + b);
+	    missing.push(b);
+	    nmiss++;
+	}
+    }
+    
+    let html='';
+    
+    if ( report === 'missing' ){
+	if (nmiss > 0) {
+	    html+= '<h2>Missing opposite flows for ' +  title_state() + '</h2>';
+	    html+='<p>The below ' + nmiss + ' (out of ' + summary.length + ") flows might be missing";
+	    html += '<table id=' + div_id + '_miss_table title="Missing opposite flows?" class=sortable>';
+	    //html+='<caption>Missing opposite end ' + title_state() + '</caption>';
+	    html += '<tr><th>From<th>To';
+	    missing.sort(sort_missing);
+	    for (i=0; i< missing.length; i++){
+		var ft=missing[i].split(" ");
+		html+='<tr><td>' +ft[0] + '<td>'+ ft[1];
+	    }
+	    html+='</table>';
+	    html += "<p>The above analysis is based on " + prop_desc[event_sum_type[parms.event]][ parms.property ] + " data sets.</p>";
+	} else {
+	    html+= '<h2>No missing flows for ' +  title_state() + '</h2>';
+	}
+    } else {
+	if (diff.length > 0) {
+	    html+='<h2>Asymmetry in ' + prop_desc[event_sum_type[parms.event]][parms.property] + ' for ' + title_state() + '</h2>';
+	    html += '<table id=' + div_id + '_table border=1 class=sortable ><thead title="Click to sort on column"><tr><th>From<th>To<th>From-To<th>To-From<th>Diff</thead>';
+	    
+	    diff.sort( function(a,b){
+		if ( typeof(a.val) === "number" && typeof(b.val) === "number" )
+		    return b.val - a.val;
+		return 0;
+	    });
+	    for (i=0; i< diff.length; i++){
+		let a = diff[i].id;
+		let ft=a.split(" ");
+		let aval= down[a] ? down[a].toFixed(1) : down[a];
+		let bval= down[pair[a]] ? down[pair[a]].toFixed(1) : down[pair[a]];
+		let diffval = diff[i].val  ? diff[i].val.toFixed(1) : 0 ;
+		html+='<tr><td>' +ft[0] + '<td>'+ ft[1] +
+		    '<td align=right>' + aval + '<td align=right>' + bval + '<td align=right>' + diffval;
 
-	  if ( ! ( b in pair ) ){
-	      var delta=0;
-	      if ( typeof(down[b]) === "number" && typeof(down[a]) === "number" )
-		  delta= down[b] - down[a];
-	      diff.push( {id: a, val: Math.abs( delta ) } );
-	  }
-	  pair[a] = b;
-	  pair[b] = a;
-	  
-	  if (ab[b]){
-	      nok++;
-	  } else {
-	      // console.log( "Missing link : " + b);
-	      missing.push(b);
-	      nmiss++;
-	  }
-      }
-
-      let html='';
-
-      if ( report === 'missing' ){
-	  html= '<h3>Missing opposite end of links for ' +  title_state() + '</h3>';
-	  html += '<table title="Missing oposite end">';
-	  // html+='<caption>Missing oposite end ' + title_state() + '</caption>';
-	  html += '<tr><th>From<th>To';
-	  missing.sort(sort_missing);
-	  for (i=0; i< missing.length; i++){
-	      var ft=missing[i].split(" ");
-	      html+='<tr><td>' +ft[0] + '<td>'+ ft[1];
-
-	  }
-	  // console.log("Ok " + nok + " Missing " + nmiss );
-	  html+='</table>';
-	  html+='<p>' + "Ok " + nok + " Missing " + nmiss;
-
-	  html += "<h3>Asymmetry in " + prop_desc[parms.event][ $("#prop_select").val() ] + "</h3>";
-      } else {
-	  
-	  // html += '<input type="text" id="' + div_id + '_input" onkeyup="filter_table(\'' + div_id + '\')" placeholder="Search for names..">';
-	  html += '<table id=' + div_id + '_table border=1 class=sortable ><thead title="Click to sort on column"><tr><th>From<th>To<th>from-to<th>to-from<th> Diff</thead>';
-	  html+='<caption>Asymmetry in ' + $("#prop_select").val() + ' for ' + title_state() + '</caption>';
-	  
-	  diff.sort( function(a,b){
-	      if ( typeof(a.val) === "number" && typeof(b.val) === "number" )
-		  return b.val - a.val;
-	      return 0;
-	  });
-	  for (i=0; i< diff.length; i++){
-	      let a = diff[i].id;
-	      let ft=a.split(" ");
-	      let aval= down[a] ? down[a].toFixed(1) : down[a];
-	      let bval= down[pair[a]] ? down[pair[a]].toFixed(1) : down[pair[a]];
-	      let diffval = diff[i].val  ? diff[i].val.toFixed(1) : 0 ;
-	      html+='<tr><td>' +ft[0] + '<td>'+ ft[1] +
-		  '<td align=right>' + aval + '<td align=right>' + bval + '<td align=right>' + diffval;
-
-	  }
-	  html+='</table>';
-      }
-      return(html);
-      // $("#missing").html(html);
-      // $("#missing").dialog("open");
-      // alert(html);
+	    }
+	    html+='</table>';
+	} else {
+	    html+= '<h2>No asymmetry found in ' + prop_desc[event_sum_type[parms.event]][parms.property] + ' for ' + title_state() + '</h2>';
+	}
+    }
+    return(html);
+    // $("#missing").html(html);
+    // $("#missing").dialog("open");
+    // alert(html);
 
 }
 
 function report_summary(div_id){
     //let html='<input type="text" id="' + div_id + '_input" onkeyup="filter_table(\'' + div_id + '\')" placeholder="Search for names..">';
     let html='';
+    html+='<h2>Summary for ' + title_state() + '</h2>';
     html+='<table border=1 id=' + div_id + '_table class=sortable>\n';
-    html+='<caption>Summary ' + title_state() + '</caption>';
     var header_missing=true;
     //var sel_prop= $("#prop_select").val();
 
@@ -1956,8 +1959,16 @@ function hhmmss(d){
     return( pad( d.getHours() ) + ":" + pad( d.getMinutes()) + ":" + pad( d.getSeconds() ) );
 }
 
-  function title_state(){
-      let state = $("#network").val() + ', ' + conffile[parms.net].event_type[$("#event_type").val()].title
+/*
+function title_state(){
+    let state = $("#network").val() + ', ' + conffile[parms.net].event_type[$("#event_type").val()].title
+	+ ' from ' + $("#datepicker").val() + ' for ' + $("#period").val() + ' hours';
+    return state;
+}
+*/
+
+function title_state(){
+      let state =  event_desc[parms.event] + ' in ' + net_desc[parms.net]  
 	  + ' from ' + $("#datepicker").val() + ' for ' + $("#period").val() + ' hours';
       return state;
   }
@@ -2142,15 +2153,16 @@ function hhmmss(d){
 
       //$("#check").click( function(){check_asymmetry()} );
       $("#check").change( function(){
-	  var title = $("#check").val();
+	  var report_type = $("#check").val();
+	  var title = $("#check").find(":selected").text();
 	  let num_tabs = $("main#tabs ul li").length ;
 	  let tab_id = 'tab' + num_tabs;
-	  switch(title ){
+	  switch(report_type ){
 	  case 'missing':
-	      add_tab( 'div', title, num_tabs, check_asymmetry(title, tab_id) );
+	      add_tab( 'div', title, num_tabs, check_asymmetry(report_type, tab_id) );
 	      break;
 	  case 'asymmetry':
-	      add_tab( 'div', title, num_tabs, check_asymmetry(title, tab_id) );
+	      add_tab( 'div', title, num_tabs, check_asymmetry(report_type, tab_id) );
 	      break;
 	  case 'summary':
 	      add_tab( 'div', title, num_tabs, report_summary(tab_id) );
@@ -2158,7 +2170,7 @@ function hhmmss(d){
 	  case 'heatmap':
 	      let template_url='curve-chart.html?net=' + parms.net + '&index=' + event_index[parms.event] + '&from={0}&to={1}&event=' + parms.event + '&property=h_ddelay&start=' + start + '&end=' + end + "&title=\"From {2} to {3}\"";
 	      add_tab( 'div', title, num_tabs, 'This will be graph soon');
-	      heatmap(tab_id, summary, $("#prop_select").val(), get_color, threshes, title_state(),template_url );
+	      heatmap(tab_id, summary, $("#prop_select").val(), get_color, threshes, title_state(), template_url );
 	      break;
 	  case 'curve':
 	      add_tab( 'div', title, num_tabs, 'This will be graph soon');

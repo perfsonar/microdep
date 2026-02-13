@@ -1,0 +1,20 @@
+Source: d3
+Section: javascript
+Priority: optional
+Maintainer: perfSONAR developers <debian@perfsonar.net>
+Uploaders: Otto J Wittner <otto.wittner@sikt.no>
+Build-Depends: debhelper (>= 10)
+Standards-Version: 4.7.0.0
+Homepage: https://d3js.org
+Vcs-Git: https://github.com/d3/d3.git
+#Vcs-Browser: 
+
+Package: libjs-d3
+Architecture: all
+Recommends: javascript-common
+Description: JavaScript visualization library for HTML and SVG.
+ D3 is a free, open-source JavaScript library for visualizing data
+ via HTML and SVG.
+
+
+

@@ -66,7 +66,7 @@ Requires:               datatablesjs
 Requires:               chartjs = 4.4.2
 Requires:               chartjs-adapter-moment
 Requires:               chartjs-plugin-zoom
-Requires:               d3js = 4
+Requires:               d3js = 4.13.0
 Requires:               hammerjs = 2.0.8
 Requires:               leafletjs = 1.0.3
 Requires:               leafletjs-contextmenu
@@ -183,7 +183,8 @@ ln -sr /usr/share/javascript/chartjs-adapter-moment/0.1.1/chartjs-adapter-moment
 ln -sr /usr/share/javascript/chartjs-plugin-zoom/1.2.1/chartjs-plugin-zoom.min.js %{buildroot}/%{microdep_web_dir}/js/
 ln -sr /usr/share/javascript/chartjs-plugin-zoom/1.2.1/chartjs-plugin-zoom.js %{buildroot}/%{microdep_web_dir}/js/
 ln -sr /usr/share/javascript/chartjs-plugin-zoom/1.2.1/chartjs-plugin-zoom.esm.js %{buildroot}/%{microdep_web_dir}/js/
-ln -sr /usr/share/javascript/d3js/d3.v4.js %{buildroot}/%{microdep_web_dir}/js/
+ln -sr /usr/share/javascript/d3/latest/d3.js %{buildroot}/%{microdep_web_dir}/js/
+ln -sr /usr/share/javascript/d3/latest/d3.min.js %{buildroot}/%{microdep_web_dir}/js/
 ln -sr /usr/share/javascript/datatablesjs/1.13.1/datatables.min.js %{buildroot}/%{microdep_web_dir}/js/
 ln -sr /usr/share/javascript/datatablesjs/1.13.1/datatables.min.css %{buildroot}/%{microdep_web_dir}/css/
 ln -sr /usr/share/javascript/datatablesjs/1.13.1/datatables.min.css %{buildroot}/%{microdep_web_dir}/js/
