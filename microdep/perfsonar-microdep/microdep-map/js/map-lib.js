@@ -560,8 +560,8 @@ export function update_props() {
     if (selected_date_is_today_or_future()) {
 	// No summary event is available. Use "none-summary" properties.
 	for (var n = prop_names[parms.event].length-1; n >= 0; n--)
-	    if (typeof conffile[parms.net].event_type[parms.event].field[prop_names[n]] == "undefined" ||
-		conffile[parms.net].event_type[parms.event].field[prop_names[n]].type != "number" )
+	    if (typeof conffile[parms.net].event_type[parms.event].field[prop_names[parms.event][n]] == "undefined" ||
+		conffile[parms.net].event_type[parms.event].field[prop_names[parms.event][n]].type != "number" )
 		// Remove unsupported or none-numeric properties
 		prop_names[parms.event].splice(n,1);
 	make_prop_select("prop_select", prop_names[parms.event], prop_desc[parms.event], prop_long_desc[parms.event] );

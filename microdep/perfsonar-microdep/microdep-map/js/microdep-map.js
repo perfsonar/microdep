@@ -111,28 +111,6 @@ function show_map (network) {
 
 }
 
-
-  /*
-  function  make_prop_select(id, names, desc, long_desc = {}){
-    var selectList=document.getElementById(id);
-    selectList.options.length = 0; // remove previous
-   
-    for (var i = 0; i < names.length; i++) {
-	var option = document.createElement("option");
-	option.value = names[i];
-	var text=desc[names[i]];
-	if ( ! text ) text = names[i];
-	option.text = text;
-	if (typeof long_desc[names[i]] != "undefined")
-	    option.title = long_desc[names[i]]; 
-	selectList.appendChild(option);
-    }
-    // Sort list alphabetically (from https://stackoverflow.com/questions/667010/sorting-dropdown-list-using-javascript/667198#667198)
-    $("#" + id).html($("#" + id + " option").sort(function (a, b) {
-	return a.text == b.text ? 0 : a.text < b.text ? -1 : 1
-    }))
-} */
-
 function remove_markers(){
     clustergroup.eachLayer(function(m) {
 	clustergroup.removeLayer(m);
@@ -984,7 +962,7 @@ function draw_topology(topo){
     for (var i=0; i < topo.length; i++){
         var ab=topo[i];
 	var abs= ab.join();
-	if (! new_ends[ab]) new_ends.lenght++;  // Ensure correct length.
+	if (! new_ends[abs]) new_ends.length++;  // Ensure correct length.
 	new_ends[abs]=1;
 
 	if ( ! linkByName[abs]){ // draw line
