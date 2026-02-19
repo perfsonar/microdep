@@ -158,7 +158,7 @@ mkdir -p %{buildroot}/%{_unitdir}
 install -D -m 0644 -t %{buildroot}/%{_unitdir} %{buildroot}/%{install_base}/scripts/*.service
 install -D -m 0644 -t %{buildroot}/%{_unitdir} %{buildroot}/%{install_base}/scripts/*.timer
 systemctl daemon-reload || true
-# Move microdep map, httpd and logstash configs into correct folders
+# Copy microdep map, httpd and logstash configs into correct folders
 install -D -m 0644 -t %{buildroot}/%{microdep_config_base}/mp-dragonlab/etc/ %{buildroot}/%{microdep_config_base}/microdep.db
 install -D -m 0644 -t %{buildroot}/etc/httpd/conf.d/ %{buildroot}/%{microdep_config_base}/apache-microdep-map.conf
 install -D -m 0644 -t %{buildroot}/%{install_base}/logstash/microdep_pipeline/ %{buildroot}/%{microdep_config_base}/logstash/microdep/*
@@ -345,7 +345,7 @@ systemctl stop perfsonar-microdep-restart.timer || true
 %{microdep_config_base}/dragonlab-base-geo.json.example
 %config %{microdep_config_base}/mp-dragonlab/etc/microdep.db
 %{microdep_config_base}/grafana_dashboard_patch
-%config /etc/httpd/conf.d/apache-microdep-map.conf
+/etc/httpd/conf.d/apache-microdep-map.conf
 %config %{microdep_web_dir}/dragonlab/dragonlab-base-geo.json
 
 %files ana
@@ -365,13 +365,12 @@ systemctl stop perfsonar-microdep-restart.timer || true
 /usr/local/bin/opensearch_config_microdep.sh
 /usr/local/bin/rabbitmq-consume.py
 /usr/local/bin/json2table.pl
-%config %{install_base}/logstash/microdep_pipeline/01-microdep-inputs.conf
-%config %{install_base}/logstash/microdep_pipeline/02-microdep-filter.conf
-%config %{install_base}/logstash/microdep_pipeline/03-microdep-outputs.conf
-%config %{microdep_config_base}/logstash/microdep-pipelines.yml
+%{install_base}/logstash/microdep_pipeline/*.conf
+%{microdep_config_base}/logstash/microdep-pipelines.yml
+%{microdep_config_base}/microdep_default_policy.json
 %config /var/lib/logstash/microdep 
-%config %{microdep_config_base}/os-template-gap-ana.json
-%config %{microdep_config_base}/os-template-trace-ana.json
+%{microdep_config_base}/os-template-gap-ana.json
+%{microdep_config_base}/os-template-trace-ana.json
 %{microdep_config_base}/roles_yml_patch
 %{microdep_config_base}/microdep-tests.json.example
 %{microdep_config_base}/microdep-tests-packet-subcount.json.example
