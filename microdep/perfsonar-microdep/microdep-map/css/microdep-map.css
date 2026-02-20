@@ -22,7 +22,7 @@
     th {
 	cursor: pointer;
     }
-    caption { font-size: x-large;  font-weight: bold; }
+    caption { font-size: x-large;  font-weight: bold; width:100% }
     
     table.sortable thead {
 	background-color:#eee;

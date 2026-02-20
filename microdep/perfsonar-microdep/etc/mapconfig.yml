@@ -13,8 +13,8 @@ event_type:
     enable: true               # Show explicitly in map
     title: "Gaps"
     descr: "Flow downtime events, i.e. probe packets are lost."
-    index: "gap-index"          # NEEDS TO BE OVERRIDDEN
-    topology_index: ""          # Empty here implies using "index" as source of topology data          
+    index: "gap-index"            # NEEDS TO BE OVERRIDDEN
+    topology_index: ""            # Empty here implies using "index" as source of topology data          
     summary_event_type: "gapsum"  # Additional event type for summary info to include 
     popup:
       # Data for popup windows
@@ -122,9 +122,9 @@ event_type:
     enable: true
     title: "Queues"
     descr: "Events with significant delay variations."
-    index: "jitter-index"          # NEEDS TO BE OVERRIDDEN
-    topology_index: ""          # Empty here implies using "index" as source of topology data          
-#    summary_event_type: "gapsum"  # Additional event type for summary info to include 
+    index: "jitter-index"         # NEEDS TO BE OVERRIDDEN
+    topology_index: ""            # Empty here implies using "index" as source of topology data          
+    summary_event_type: ""        # Additional event type for summary info to include. Empty implies summaries from main event. 
     popup:
       # Data for popup windows
       summary:
