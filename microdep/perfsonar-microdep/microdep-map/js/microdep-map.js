@@ -406,38 +406,45 @@ function link_popup(link){
     var dato = $("#datepicker").val();
     var html = make_tooltip_v2(link.from + ' to ' + link.to, link);
 
-    var to_adr=link.to; // aggregations don't have *_adr.
-    if (link.to_adr)
-	to_adr=link.to_adr;
-    else if ( name_to_ip[link.to] )
-	to_adr = name_to_ip[link.to];
+    if (Object.keys(link).length > 2) {
+	// Link object has more than just "from" and "to" properties. Add buttons for routes and graphs. 
+	var to_adr=link.to; // aggregations don't have *_adr.
+	if (link.to_adr)
+	    to_adr=link.to_adr;
+	else if ( name_to_ip[link.to] )
+	    to_adr = name_to_ip[link.to];
+	
+	//    var url = 'tracetree.html?topo=/' + parms.net + '/mp/' + link.from + '/' +  dato
+	//	+ '/trace/' + to_adr + '1.json' + '&to=' + link.to;
+	//    if (! jQuery.isEmptyObject(conffile[parms.net].event_type[parms.event].popup.see_routes)) {
+	//	// Add traceroute type prefix
+	//	url += "&prefix=" + conffile[parms.net].event_type[parms.event].popup.see_routes;
+	//    }
+	var url = '/pstracetree/ls.html?mahost=localhost:443&verify_SSL=0&api=opensearch&from=' + link.from + '&to=' + link.to +'&time-start=' + dato;
+	html +='\nSee ';
+	html += '\n<button class=knapp onclick="window.open(\'' + url +'\');" title="See the routes graph and stats in this period">Routes'  + '</button>' + "\n";
+    }
     
-//    var url = 'tracetree.html?topo=/' + parms.net + '/mp/' + link.from + '/' +  dato
-//	+ '/trace/' + to_adr + '1.json' + '&to=' + link.to;
-//    if (! jQuery.isEmptyObject(conffile[parms.net].event_type[parms.event].popup.see_routes)) {
-//	// Add traceroute type prefix
-//	url += "&prefix=" + conffile[parms.net].event_type[parms.event].popup.see_routes;
-//    }
-    var url = '/pstracetree/ls.html?mahost=localhost:443&verify_SSL=0&api=opensearch&from=' + link.from + '&to=' + link.to +'&time-start=' + dato;
-    html +='\nSee ';
-    html += '\n<button class=knapp onclick="window.open(\'' + url +'\');" title="See the routes graph and stats in this period">Routes'  + '</button>' + "\n";
-
     const div = document.createElement("div");
     div.classList.add("sprettom");
     div.innerHTML = html;
-
-    gap_popup( div, link);
-
-    url = 'curve-chart.html?net=' + parms.net + '&index=' + parms.net + '_jitter&from=' + link.from + '&to=' + link.to + '&event=jitter&property=h_ddelay&start=' + start + '&end=' + end + "&title=From " + link.from + " to " + link.to ;
-    html = 'Plot <button class=knapp><a title="Curve over queues in this period" target="_blank" href="' + url + '">Queues</a></button>' + "\n";
-
-    url='curve-chart.html?net=' + parms.net + '&index=' + event_index[parms.event] + '&from=' + link.from + '&to=' + link.to + '&event=' + parms.event + '&property=' + parms.property + '&start=' + start + '&end=' + end + '&title="From ' + link.from + ' to ' + link.to + ' for ' + parms.property + '"';
-    html += '\n<button class=knapp><a title="Detailed report for report" target="_blank" href="' + url + '">' + prop_desc[parms.event][parms.property] + '</a></button>' + "\n";
-
-    let tail=document.createElement("div");
-    tail.innerHTML = html;
-    div.appendChild(tail);
-
+    
+    
+    if (Object.keys(link).length > 2) {
+	// Link object has more than just "from" and "to" properties. Add top-10 list. 
+	gap_popup( div, link);
+	
+	url = 'curve-chart.html?net=' + parms.net + '&index=' + parms.net + '_jitter&from=' + link.from + '&to=' + link.to + '&event=jitter&property=h_ddelay&start=' + start + '&end=' + end + "&title=From " + link.from + " to " + link.to ;
+	html = 'Plot <button class=knapp><a title="Curve over queues in this period" target="_blank" href="' + url + '">Queues</a></button>' + "\n";
+	
+	url='curve-chart.html?net=' + parms.net + '&index=' + event_index[parms.event] + '&from=' + link.from + '&to=' + link.to + '&event=' + parms.event + '&property=' + parms.property + '&start=' + start + '&end=' + end + '&title="From ' + link.from + ' to ' + link.to + ' for ' + parms.property + '"';
+	html += '\n<button class=knapp><a title="Detailed report for report" target="_blank" href="' + url + '">' + prop_desc[parms.event][parms.property] + '</a></button>' + "\n";
+     
+	let tail=document.createElement("div");
+	tail.innerHTML = html;
+	div.appendChild(tail);
+    }
+   
 
     // if( parms.debug) console.log(knapp);
     // html += knapp;
@@ -457,44 +464,47 @@ function link_popup(link){
     return div;
 }
 
-  function make_tooltip_v2(title, link){
-      // Create summary table (based on config file) intended for top part of popup windows
-      if (! jQuery.isEmptyObject(conffile)) {
-	  var nrows=0;
-	  var tip="<table width=100%><caption><b>" + title + '</b></caption>';
-	  if ( selected_date_is_today_or_future() ) {
-	      // Only digested summary of none-summary properties is available.
-	      for (const sum_var in conffile[parms.net].event_type[parms.event].field) {
-		  if ( typeof link[sum_var] != 'undefined' ) {
-		      var prop_value = Math.round((link[sum_var] + Number.EPSILON) * 100) / 100;  // Round off to (max) 2 decimals
-		      tip+= '<tr><td>' + prop_desc[parms.event][sum_var] + '<td align=right>' + prop_value; 
-		      nrows++;
-		  }
-	      }
-	  } else {
-	      for (const sum_var of conffile[parms.net].event_type[parms.event].popup.summary) {
-		  //ok var sum_var = conffile[parms.net].event_type[parms.event].popup.summary[s];
-		  if ( typeof link[sum_var] != 'undefined' ) {
-		      var prop_value = Math.round((link[sum_var] + Number.EPSILON) * 100) / 100;  // Round off to (max) 2 decimals
-		      tip+= '<tr><td>' + prop_desc[conffile[parms.net].event_type[parms.event].summary_event_type][sum_var] + '<td align=right>' + prop_value; 
-		      nrows++;
-		  }
-	      }
-	  }
-	  if ( nrows > 0 ){
-	      tip+="</table>";
-	  } else {
-	      tip="<b>" + title + "</b>";
-	  }
-	  return tip;
-	      
-      } else {
-	  console.log('Error: No config loaded. Not able to prepare tooltips.');
-	  return;
-//	  // Return default (legacy) summary content 
-//	  return make_tooltip(title, link)
-      }
-  }
+function make_tooltip_v2(title, link){
+    // Create summary table (based on config file) intended for top part of popup windows
+    if (! jQuery.isEmptyObject(conffile)) {
+	var nrows=0;
+//	var tip = "<h3>" + title + "</h3>";
+//	var tip="<table width=100%><caption><b>" + title + '</b></caption>';
+	var tip="<table width=100%><caption>" + title + "</caption>";
+	tip += "<table width=100%>";
+	if ( selected_date_is_today_or_future() ) {
+	    // Only digested summary of none-summary properties is available.
+	    for (const sum_var in conffile[parms.net].event_type[parms.event].field) {
+		if ( typeof link[sum_var] != 'undefined' ) {
+		    var prop_value = Math.round((link[sum_var] + Number.EPSILON) * 100) / 100;  // Round off to (max) 2 decimals
+		    tip+= '<tr><td>' + prop_desc[parms.event][sum_var] + '<td align=right>' + prop_value; 
+		    nrows++;
+		}
+	    }
+	} else {
+	    for (const sum_var of conffile[parms.net].event_type[parms.event].popup.summary) {
+		//ok var sum_var = conffile[parms.net].event_type[parms.event].popup.summary[s];
+		if ( typeof link[sum_var] != 'undefined' ) {
+		    var prop_value = Math.round((link[sum_var] + Number.EPSILON) * 100) / 100;  // Round off to (max) 2 decimals
+		    tip+= '<tr><td>' + prop_desc[conffile[parms.net].event_type[parms.event].summary_event_type][sum_var] + '<td align=right>' + prop_value; 
+		    nrows++;
+		}
+	    }
+	}
+//	if ( nrows > 0 ){
+	    tip+="</table>";
+//	} else {
+//	    tip="<b>" + title + "</b>";
+//	}
+	return tip;
+	
+    } else {
+	console.log('Error: No config loaded. Not able to prepare tooltips.');
+	return;
+	//	  // Return default (legacy) summary content 
+	//	  return make_tooltip(title, link)
+    }
+}
 
 /* OBSOLETE
 function make_tooltip(title, link){
@@ -1088,7 +1098,7 @@ function taint_links( hits, prop){
 	}
     }
 
-    for ( var abs in ends ){ 
+    for ( var abs of ends ){ 
 	if ( ! done[abs]){ // links without data
 	    if ( linkByName[abs] ){
 		var ft = abs.split(",");
@@ -1538,7 +1548,7 @@ function check_asymmetry(report, div_id){
 	    html+= '<h2>Missing opposite flows for ' +  title_state() + '</h2>';
 	    html+='<p>The below ' + nmiss + ' (out of ' + summary.length + ") flows might be missing";
 	    html += '<table id=' + div_id + '_miss_table title="Missing opposite flows?" class=sortable>';
-	    //html+='<caption>Missing opposite end ' + title_state() + '</caption>';
+//	    html+='<caption>Missing opposite end ' + title_state() + '</caption>';
 	    html += '<tr><th>From<th>To';
 	    missing.sort(sort_missing);
 	    for (i=0; i< missing.length; i++){
@@ -1745,23 +1755,25 @@ function get_peer_data(from, to, div){
 function get_connections(){
     //links=[];
     var index=parms.net;
-    var etype= $("#event_type").val();
+//    var etype= $("#event_type").val();
+    var etype= parms.event;
     var sum_etype="";
     var sum_index="";
     if ( ! jQuery.isEmptyObject(event_index)) {
 	// Apply ES indexnames from config file
 	index = event_index[parms.event];
-	if ( parms.event === 'jitter')
-	    sum_etype = event_index['gap']; // i.e. 
-	else
-	    sum_etype = event_sum_type[parms.event];
-    } else if ( etype === "gap" || etype === "gapsum" ) {
-	sum_etype = "gapsum";
-    } else if ( etype === "routeerr" || etype === "routesum" ) {
-	index = index + "_" + "routemon";
-	sum_etype = "routesum";
+//	if ( parms.event === 'jitter')
+//	    sum_etype = event_index['gap']; // i.e. 
+//	else
+	sum_etype = event_sum_type[parms.event];
+//    } else if ( etype === "gap" || etype === "gapsum" ) {
+//	sum_etype = "gapsum";
+//    } else if ( etype === "routeerr" || etype === "routesum" ) {
+//	index = index + "_" + "routemon";
+//	sum_etype = "routesum";
     } else {
 	index = index + "_" + etype;
+	console.log("Warning: No index specified. Missing config file? Applying '", + index + "'");
     }
     
     var hour=0;
@@ -1820,77 +1832,81 @@ function get_connections(){
     last_hits=[];
     summary=[];
 
-    // get all detail if today
     var now = new Date();
     
-    if ( etype === 'jitter' || start.substr(0,10) === now.toISOString().substr(0,10) ){ // read todays details
-    var url="elastic-get-date-type.pl?index=" + index + "&event_type=" + etype
-	+ "&start=" + start + "&end=" + end ;
-    if ( tloss > 0 && etype === "gap" )
-	url += "&tloss=" + tloss;
+//    if ( etype === 'jitter' || start.substr(0,10) === now.toISOString().substr(0,10) ){ // read todays details
+    if ( ! sum_etype || typeof sum_etype == 'undefined' || start.substr(0,10) === now.toISOString().substr(0,10) ){
+	// No summary events are available and/or it's todays date. Fetch and summarize "normal" event details.
+	var url="elastic-get-date-type.pl?index=" + index + "&event_type=" + etype + "&start=" + start + "&end=" + end ;
+	if ( tloss > 0 && etype === "gap" )
+	    url += "&tloss=" + tloss;
 
-    if (parms.debug) console.log(url);
+	if (parms.debug) console.log(url);
 
-     $.getJSON( url,
-	       function(resp){
-		  if (resp.hits && resp.hits.total.value > 0){
-		      var nrecs=resp.hits.total.value.toString();
-		      
-		      if ( etype === "gapsum" || etype === "routesum" ){
-			  summary=resp.hits.hits;
-		      } else if ( resp.aggregations){
-			  aggregates=resp.aggregations;
-			  summary=digest_aggregates(aggregates, $("#stats_type").val());
-			  nrecs = count_aggregates( aggregates );
-		      } else { // gap records
-			  if (! sum_etype || start.substr(0,10) === now.toISOString().substr(0,10)) {
-			      // No event type for summaries given or it's today's date
-			      summary=digest_es_data(etype, resp.hits.hits);
-			  }
-			  last_hits=resp.hits.hits;
-		      }
-		      harvest_ip_name(summary);
-		      
-		      var msg = hhmmss(new Date()) + " Got " + nrecs + " " + etype + " records for "  + $("#datepicker").val() + " " + $("#period_input").val()  + " ;;";
-		      $("#status").html( msg );
+	$.getJSON( url,
+		   function(resp){
+		       if (resp.hits && resp.hits.total.value > 0){
+			   var nrecs=resp.hits.total.value.toString();
+			   
+			   if ( etype === "gapsum" || etype === "routesum" ){
+			       console.log("Warning: Unexpected summary events found (in legacy code). Using anyway.")
+			       summary=resp.hits.hits;
+			   } else if ( resp.aggregations){
+			       aggregates=resp.aggregations;
+			       summary=digest_aggregates(aggregates, $("#stats_type").val());
+			       nrecs = count_aggregates( aggregates );
+			   } else { // gap records
+			       if (! sum_etype || start.substr(0,10) === now.toISOString().substr(0,10)) {
+				   // No event type for summaries given or it's today's date
+				   summary=digest_es_data(etype, resp.hits.hits);
+			       }
+			       last_hits=resp.hits.hits;
+			   }
+			   harvest_ip_name(summary);
+			   
+			   var msg = hhmmss(new Date()) + " Found " + nrecs + " " + etype + " records for " + $("#datepicker").val() + " " + $("#period_input").val()  + " ;;";
+			   $("#status").html( msg );
 
-		      if (! jQuery.isEmptyObject(conffile) && conffile[parms.net].event_type[parms.event].asn_source ) {
-			  // Extract and add relevant as-numbers to each connection
-			  for (const h in last_hits) {
-			      var ab = last_hits[h]._source.from + ',' + last_hits[h]._source.to;
-			      if (linkByName[ab] && last_hits[h]._source.routechange_asn ) {
-				  linkByName[ab].asn_search += last_hits[h]._source[conffile[parms.net].event_type[parms.event].asn_source] + " ";
-			      }
-			  }
-		      }
-		      // Refresh all links 
-		      if ( ! parms.connections)
-			  taint_links(summary, $("#prop_select").val() );
-		      else
-			  draw_links(summary, $("#prop_select").val() );
-		  } else {
-		      taint_links([], "empty");
-		      $("#error").html(hhmmss(new Date()) + " : No " + $("#event_type").val() + " data for " + $("#datepicker").val() + " " + $("#period_input").val() + ";;");
-		  }
+			   if (! jQuery.isEmptyObject(conffile) && conffile[parms.net].event_type[parms.event].asn_source ) {
+			       // Extract and add relevant as-numbers to each connection
+			       for (const h in last_hits) {
+				   var ab = last_hits[h]._source.from + ',' + last_hits[h]._source.to;
+				   if (linkByName[ab] && last_hits[h]._source.routechange_asn ) {
+				       linkByName[ab].asn_search += last_hits[h]._source[conffile[parms.net].event_type[parms.event].asn_source] + " ";
+				   }
+			       }
+			   }
+			   // Refresh all links 
+			   if ( ! parms.connections)
+			       taint_links(summary, $("#prop_select").val() );
+			   else
+			       draw_links(summary, $("#prop_select").val() );
+		       } else {
+			   taint_links([], "empty");
+			   $("#error").html(hhmmss(new Date()) + " : No " + $("#event_type").val() + " data for " + $("#datepicker").val() + " " + $("#period_input").val() + ";;");
+		       }
 
 
-	      })
-	.fail( function(e, textStatus, error ) {
-	    //remove_links(links);
-	    console.log("### Failed to get data from server :" + textStatus + ", " + error + " url: " + url);
-	});
+		   })
+	    .fail( function(e, textStatus, error ) {
+		//remove_links(links);
+		console.log("### Failed to get data from server :" + textStatus + ", " + error + " url: " + url);
+	    });
 
     } else if ( sum_etype) { // get the summary records
-    // if ( sum_etype && start.substr(0,10) != now.toISOString().substr(0,10)) {
+	// if ( sum_etype && start.substr(0,10) != now.toISOString().substr(0,10)) {
 	// Event type for summary info is set and it's not todays date...
 
+	// BEGIN: LEGACY CODE
 	if ( etype === 'jitter'){
+	    console.log("Warning: jitter data do no have sum records. This should not happen.");	    
 	    index = parms.net; // conffile in error
 	    sum_etype = 'gapsum';
 	}
+	// END: LEGACY CODE
+	
 	// Prepare to fetch summary info
-	var sum_url="elastic-get-date-type.pl?index=" + index + "&event_type=" + sum_etype
-	    + "&start=" + start + "&end=" + end;
+	var sum_url="elastic-get-date-type.pl?index=" + index + "&event_type=" + sum_etype + "&start=" + start + "&end=" + end;
 
 	if (parms.debug) console.log(sum_url);
 
@@ -1910,6 +1926,7 @@ function get_connections(){
 			   else
 			       draw_links(summary, $("#prop_select").val() );
 		       } else {
+			   taint_links([], "empty");
 			   $("#error").html(hhmmss(new Date()) + " : No " + sum_etype + " data for " + $("#datepicker").val() + " " + $("#period_input").val() + ";;");
 		       }
 		       

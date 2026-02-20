@@ -1,6 +1,8 @@
 #
 # Map config for Dragonlab
 #
+#  (see mapconfig.yaml for more comments)
+#
 
 dragonlab:
   # Measuremet network/variant parameters
@@ -13,7 +15,7 @@ dragonlab:
       index: "dragonlab"
     jitter:
       index: "dragonlab_jitter" 
-      topology_index: "dragonlab"           # Empty here implies using "index" as source of topology data          
+      topology_index: "dragonlab" 
     routeerr:
       index: "dragonlab_routemon" 
     routechange:
@@ -24,5 +26,5 @@ dragonlab:
       index: "dragonlab_routemon" 
     correlation:
       index: "dragonlab_correvents"
-      topology_index: "dragonlab"           # Empty here implies using "index" as source of topology data          
+      topology_index: "dragonlab" 
 

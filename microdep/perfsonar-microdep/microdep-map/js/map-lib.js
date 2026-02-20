@@ -410,7 +410,7 @@ export var net_names=[];
 export var net_desc={};
 export var net_long_desc={};
 
-export var event_names;
+export var event_names = [];
 export var event_index = {}; 
 export var event_sum_type = {}; 
 
