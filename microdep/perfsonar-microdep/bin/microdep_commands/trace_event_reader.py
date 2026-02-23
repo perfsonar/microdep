@@ -767,6 +767,9 @@ class Resolver:
                 ip = socket.gethostbyname(name)   #NOTE: Needs to be replaced by socket.getaddrinfo() to support ipv6
                 # Add mapping
                 self.ip[name] = ip
+                if (ip == name):
+                    # gethostbyname resolved ip to ip. Fix it.
+                    name = self.get_name(ip)
                 self.name[ip] = name
                 return ip
             except:
