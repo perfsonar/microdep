@@ -771,6 +771,7 @@ class Resolver:
                     # gethostbyname resolved ip to ip. Fix it.
                     name = self.get_name(ip)
                 self.name[ip] = name
+                self.refresh_geopos(ip)
                 return ip
             except:
                 if param["verbose"] > 2:
