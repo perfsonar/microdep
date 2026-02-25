@@ -552,9 +552,14 @@ function make_tooltip(title, link){
 */
 
 function link_tooltip( title, link, prop){
-    if ( prop in link){
+    if ( prop in link ){
 	var val=link[prop];
-	var tip='<b>' + title + '</b>' + "<p>" + prop_desc[parms.event][prop] + ": " ;
+	var event = event_sum_type[parms.event]
+	if ( selected_date_is_today_or_future() ) {
+	    // (No sum-data available)
+	    event = parms.event
+	}
+	var tip='<b>' + title + '</b>' + "<p>" + prop_desc[event][prop] + ": " ;
 	if ( typeof(val) !== "string" ){
 	    tip += val.toFixed(1);
 	    if ( prop === "down_ppm" && typeof link[prop] == 'number' ){
@@ -1651,9 +1656,9 @@ function change_date(delta){
     $("#datepicker").datepicker('setDate', p);
     //$("#draw").click();
     update_url();
-    show_network(parms.net);
-    get_topology();
-    get_connections();
+    show_network(parms.net); // ... calls get_topology()
+    // get_topology(); // ... calls get_connections()
+    // get_connections();
     update_url();
  
     // var curd = $("#datepicker").datepicker('GetDate');
@@ -1835,8 +1840,8 @@ function get_connections(){
     var now = new Date();
     
 //    if ( etype === 'jitter' || start.substr(0,10) === now.toISOString().substr(0,10) ){ // read todays details
-    if ( ! sum_etype || typeof sum_etype == 'undefined' || start.substr(0,10) === now.toISOString().substr(0,10) ){
-	// No summary events are available and/or it's todays date. Fetch and summarize "normal" event details.
+    if ( ! sum_etype || typeof sum_etype == 'undefined' || start.substr(0,10) === now.toISOString().substr(0,10) || period < 24){
+	// No summary events are available and/or it's todays date and/or time scale on hourly basis is set. Fetch and summarize "normal" event details.
 	var url="elastic-get-date-type.pl?index=" + index + "&event_type=" + etype + "&start=" + start + "&end=" + end ;
 	if ( tloss > 0 && etype === "gap" )
 	    url += "&tloss=" + tloss;
@@ -2017,22 +2022,28 @@ function title_state(){
 	      $("#next").prop('dsabled', selected_hour_is_future() ); // Make next-button available if relevant
 	      //ok update_props();
 	      update_url();
-	      show_network(parms.net);
-	      get_topology();
-	      get_connections();
+	      show_network(parms.net); //... calls get_topology()
+	      //get_topology();  // ... calls get_connections()
+	      //get_connections();
 	  });
 
       //$("#period").select2();	
       $("#period").change( function(){
-	  get_connections();
+	  parms.period = $("#period").val();
+	  update_props();
 	  update_url();
+	  get_topology(); // ... calls get_connections()
+	  //get_connections();
 	  $("#period_input").val('00:00');
       });
       
       $("#period_input").change( function(){
+	  parms.period_input = $("#period").val();
 	  $("#period").val(1); // hour
+	  parms.period = $("#period").val();
 	  update_url();
-	  get_connections();
+	  get_topology(); // ... calls get_connections()
+	  //get_connections();
       });
 
       /* does not work 
@@ -2062,13 +2073,15 @@ function title_state(){
 	  } else {
 	      refresh_active=true;
 	      $("#datepicker").datepicker('setDate', new Date());
-	      get_connections();
+	      get_topology(); // .. calls  get_connections();
+	      //get_connections();
 	      
 	      active_color=$(this).css("background-color");
 	      $(this).css("background-color", refresh_color);
 	      
 	      setInterval( function(){
-		  get_connections();
+		  get_topology(); // .. calls  get_connections();
+		  //get_connections();
 	      }, refresh_period );
 	  }
       } );
@@ -2098,7 +2111,7 @@ function title_state(){
 	  update_props();
 	  remove_links(links);
 	  load_name_to_address();
-	  show_network(parms.net);
+	  show_network(parms.net); // ... calls get_topology()
 	  // await new Promise(r => setTimeout(r, 5000)); // Sleep 5 sec for loading of node-data to complete. WARNING! THIS DESPERATELY NEEDS REDESIGN.
 	  //get_topology();
 	  update_url();
@@ -2110,21 +2123,22 @@ function title_state(){
 	  parms.event = $("#event_type").val()    
 	  update_props();
 	  //remove_links();
-	  get_topology();
-	  get_connections();
+	  load_coords_from_all_sources(network); // ... calls get_topology() which again call get_connetions()
+	  //get_topology();           // ... calls get_connetions()
+	  //get_connections();
 	  update_url();
 	  $("#tabs").tabs("option", "active", 0);
       });
 
       // select parameter change
       $("#prop_select").change( function(){
+	  parms.property = $("#prop_select").val();
 	  // remove_links(links);
 	  // links=[];
 	  //draw_links(summary, $("#prop_select").val() );
 
 	  taint_links(summary, $("#prop_select").val() );
 	  update_url();
-	  parms.property = $("#prop_select").val();
 	  $("#tabs").tabs("option", "active", 0);
       });
 
@@ -2141,7 +2155,8 @@ function title_state(){
       // draw network at startup if focus on node    
       if ( parms.node){
 	  focus_node=parms.node;
-	  get_connections();
+	  get_topology(); // .. calls  get_connections();
+	  //get_connections();
 	  // draw_links(summary, $("#prop_select").val() );
 	  links_on=true;
       }

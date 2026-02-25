@@ -546,7 +546,7 @@ export function update_props() {
 	// Reapply already selected 
 	$("#event_type").val(parms.event);
     } else {
-	if ( "default_event_type_live" in conffile[parms.net] && selected_date_is_today_or_future() ) {
+	if ( "default_event_type_live" in conffile[parms.net] && ( selected_date_is_today_or_future() || parms.period < 24 )  ) {
 	    // Apply default event type for "live" (todays date) events
 	    $("#event_type").val(conffile[parms.net].default_event_type_live);
 	} else if ( "default_event_type" in conffile[parms.net] ) {
@@ -557,7 +557,7 @@ export function update_props() {
     }
 
     // Init measurement variable select list
-    if (selected_date_is_today_or_future()) {
+    if (selected_date_is_today_or_future() || parms.period < 24 ) {
 	// No summary event is available. Use "none-summary" properties.
 	for (var n = prop_names[parms.event].length-1; n >= 0; n--)
 	    if (typeof conffile[parms.net].event_type[parms.event].field[prop_names[parms.event][n]] == "undefined" ||
