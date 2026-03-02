@@ -4,9 +4,10 @@
 # Measuremet network/variant parameters
 title: "Network-name"           # NEEDS TO BE OVERRIDDEN
 descr: "My measurement network" # NEEDS TO BE OVERRIDDEN
-archive: "/opensearch"  # Url to relevant Opensearch DB holding indices
-default_event_type: "gap"     # Event type to apply if no relevant is available
-default_event_type_live: "gap"     # Event type to apply if no relevant is available and date is today
+archive: "/opensearch"          # Url to relevant Opensearch DB holding indices
+default_event_type: "gap"       # Event type to apply if no relevant is available
+default_event_type_live: "gap"  # Event type to apply if no relevant is available and date is today
+ip_version: ""                  # All ip versions includene if empty. "4" filters ipv4 only and "6" filters ipv6 only.   
 event_type:
   # Event types for variant
   gap:

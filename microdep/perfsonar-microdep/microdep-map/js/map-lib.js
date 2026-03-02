@@ -409,6 +409,7 @@ export var conffile=[];   //Config file loaded initially
 export var net_names=[];
 export var net_desc={};
 export var net_long_desc={};
+export var net_ip_version={};
 
 export var event_names = [];
 export var event_index = {}; 
@@ -438,6 +439,7 @@ export function get_config( conffilename, call_back){
 		net_names.push(n);
 		net_desc[n]=conffile[n].title;
 		net_long_desc[n]=conffile[n].descr;
+		net_ip_version[n]=conffile[n].ip_version;
 	    }
 	    // Update select-boks for networks/variants
 	    make_prop_select("network", net_names, net_desc, net_long_desc);
