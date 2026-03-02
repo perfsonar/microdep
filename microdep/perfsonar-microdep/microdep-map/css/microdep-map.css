@@ -354,8 +354,33 @@ input[type="search"]::placeholder { color: var(--c-text-3); font-style: italic; 
 /* Toggle row for autorefresh */
 .toggle-row {
     display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 6px;
 }
 .toggle-label { font-size: .85rem; color: var(--c-text-2); }
+
+/* Refresh controls group */
+.refresh-controls {
+    display: flex; align-items: center; gap: 4px;
+}
+.refresh-input {
+    width: 52px !important;
+    padding: 6px 4px !important;
+    text-align: center;
+    font-family: var(--font-mono) !important;
+    font-size: .8rem !important;
+    -moz-appearance: textfield;
+}
+.refresh-input::-webkit-outer-spin-button,
+.refresh-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+.refresh-unit {
+    font-size: .75rem;
+    color: var(--c-text-3);
+    font-family: var(--font-mono);
+    margin-right: 4px;
+}
 
 /* Active autorefresh — JS sets inline background-color */
 #live[style*="background-color"] {

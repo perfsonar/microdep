@@ -149,7 +149,11 @@
         <div class="filter-group">
           <div class="toggle-row">
             <span class="toggle-label">Auto-refresh</span>
-            <button class="knapp" id="live" title="Refresh display every minute" type="button">Autorefresh</button>
+            <div class="refresh-controls">
+              <input type="number" id="refresh_interval" class="knapp refresh-input" value="60" min="5" max="3600" title="Refresh interval in seconds">
+              <span class="refresh-unit">s</span>
+              <button class="knapp" id="live" title="Refresh display every minute" type="button">Autorefresh</button>
+            </div>
           </div>
         </div>
 
@@ -306,6 +310,30 @@
           $("#mapid").height(mapH);
         }
       });
+
+      // --- Refresh interval sync ---
+      // Hook into the interval input to update global refresh_period before autorefresh starts
+      var intervalInput = document.getElementById('refresh_interval');
+      if (intervalInput) {
+        // Update global variable when input changes
+        intervalInput.addEventListener('change', function(){
+          var secs = parseInt(this.value, 10);
+          if (secs < 5) secs = 5;
+          if (secs > 3600) secs = 3600;
+          this.value = secs;
+          window.refresh_period = secs * 1000;
+        });
+        // Also update on blur and before click on live button
+        intervalInput.addEventListener('blur', function(){
+          var secs = parseInt(this.value, 10) || 60;
+          if (secs < 5) secs = 5;
+          if (secs > 3600) secs = 3600;
+          this.value = secs;
+          window.refresh_period = secs * 1000;
+        });
+        // Set initial value from input
+        window.refresh_period = parseInt(intervalInput.value, 10) * 1000 || 60000;
+      }
     });
   })();
   </script>
