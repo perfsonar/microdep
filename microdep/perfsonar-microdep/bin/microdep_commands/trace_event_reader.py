@@ -137,6 +137,29 @@ STATE_PARTIAL = 3
 state_str = [ "dummy","success", "failed", "partialfail" ]
 
 
+# From https://www.geeksforgeeks.org/python/python-program-to-find-the-type-of-ip-address-using-regex/
+IP4_RE = '''^(25[0-5]|2[0-4][0-9]|[0-1]?[0-9][0-9]?)\.( 
+            25[0-5]|2[0-4][0-9]|[0-1]?[0-9][0-9]?)\.( 
+            25[0-5]|2[0-4][0-9]|[0-1]?[0-9][0-9]?)\.( 
+            25[0-5]|2[0-4][0-9]|[0-1]?[0-9][0-9]?)$'''
+IP6_RE = '''(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|
+        ([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:)
+        {1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1
+        ,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}
+        :){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{
+        1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA
+        -F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a
+        -fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0
+        -9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,
+        4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}
+        :){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9
+        ])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0
+        -9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]
+        |1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]
+        |1{0,1}[0-9]){0,1}[0-9]))'''
+
+
+
 # Make sure SIGTERM also triggers exception handeling
 def sigterm_handler(_signo, _stack_frame):
     # Raises SystemExit(0) on SIGTERM
@@ -613,12 +636,18 @@ class Resolver:
         """
         try:
             # Check if the ip is valid
-            socket.inet_aton(ip)
+            if param['ipv6']:
+                socket.inet_pton(socket.AF_INET6, ip)
+            else:
+                socket.inet_aton(ip)
         except socket.error:
             # Invalid ip. Maybe a domain name? Attempt lookup.
             try:
                 maybe_name = ip
-                ip = socket.gethostbyname(maybe_name)   #NOTE: Needs to be replaced by socket.getaddrinfo() to support ipv6
+                if param['ipv6']:
+                    ip = socket.getaddrinfo(maybe_name, None, socket.AF_INET6)[0][4][0]
+                else:
+                    ip = socket.gethostbyname(maybe_name)
             except socket.error:
                 # Give up and leave foney ip as is
                 if param['verbose'] > 2:
@@ -764,10 +793,17 @@ class Resolver:
             return name
         else:
             try:
-                ip = socket.gethostbyname(name)   #NOTE: Needs to be replaced by socket.getaddrinfo() to support ipv6
+                if param['ipv6']:
+                    ip = socket.getaddrinfo(name, None, socket.AF_INET6)[0][4][0]
+                else:
+                    ip = socket.gethostbyname(name)
                 # Add mapping
                 self.ip[name] = ip
+                if (ip == name):
+                    # gethostbyname resolved ip to ip. Fix it.
+                    name = self.get_name(ip)
                 self.name[ip] = name
+                self.refresh_geopos(ip)
                 return ip
             except:
                 if param["verbose"] > 2:
@@ -786,7 +822,10 @@ class Resolver:
                 # Missing ip for name. Attempt lookup.
                 try:
                     # lookup name
-                    ip = socket.gethostbyname(name)
+                    if param['ipv6']:
+                        ip = socket.getaddrinfo(name, None, socket.AF_INET6)[0][4][0]
+                    else:
+                        ip = socket.gethostbyname(name)
                 except:
                     # Maybe name is really an ip...
                     if not name in self.name.keys():
@@ -937,6 +976,7 @@ def printLengthAlert(unique_pair, normal, cursor, anomaly, time):
         "src": resolver.get_name(n[0][0].split("/")[0]),
         "dst": resolver.get_name(n[0][0].split("/")[1]),
         "timestamp": str(time),
+        "ip_version": 6 if param["ipv6"] else 4,
         "anomaly_type": "length change",
         "normal_length": normal,
         "abnormal_lengths": list(set(anomaly)),
@@ -959,6 +999,7 @@ def printRTTalert(unique_pair, cursor, average, abnormal, time):
         "src": resolver.get_name(n[0][0].split("/")[0]),
         "dst": resolver.get_name(n[0][0].split("/")[1]),
         "timestamp": str(time),
+        "ip_version": 6 if param["ipv6"] else 4,
         "anomaly_type": "atypical RTT",
         "expected_RTT_avg_per_hop": average,
         "abnormal_RTT_avg_per_hop": abnormal
@@ -1064,6 +1105,7 @@ def printRouteAlert(threadid, tr_type, unique_pair, normalRoute, n, abnormalrout
         "timestamp_zone": 'GMT',
         "anomaly_class": "new route",
         "thread": threadid,              # Id of running thread
+        "ip_version": 6 if param["ipv6"] else 4, 
         "event_type": tr_type + "routechange",
         "new_normal": normalRoute,
         "prev_normal": abnormalroute,
@@ -1161,6 +1203,7 @@ def printAlert(threadid, tr_type, n, time, mode, normal=None, new=None):
         "timestamp": str(time),
         "timestamp_ms": str(time * 1000),
         "timestamp_zone": 'GMT',
+        "ip_version": 6 if param["ipv6"] else 4, 
         "anomaly_class": "end state",
         "thread": threadid              # Id of running thread
     }
@@ -2418,10 +2461,10 @@ def read(path, srchost, srcdate, mode="batch", thread=0, starttime=0):
                     traceroutes[time]["src"] = resolver.get_ip(word[6])
                     traceroutes[time]["dst"] = resolver.get_ip(word[10])
                     traceroutes[time]["ipversion"] = int(word[4][-1])
-                    if traceroutes[time]["ipversion"] == 6 and not param["ipv6"]:
-                        # Do not parse ipv6 traceroutes
+                    if traceroutes[time]["ipversion"] == 6 and not param["ipv6"] or traceroutes[time]["ipversion"] == 4 and param["ipv6"]:
+                        # Do not parse traceroutes with wrong ip version
                         if param["verbose"] > 2:
-                            print("Unsupported ipv6 traceroute. Skipping.")
+                            print("Unsupported ip-version in traceroute. Skipping.")
                         parser_state = PS_INIT
                         continue
                     tracesummary.set_current_pair(traceroutes[time]["src"] + "/" + traceroutes[time]["dst"], time, thread)
@@ -2476,6 +2519,10 @@ def read(path, srchost, srcdate, mode="batch", thread=0, starttime=0):
                         # IPv4 address found
                         adresses.append(w)
                         new_ip_found_and_added = True
+                    elif re.search(IP6_RE, w) and param["ipv6"]:
+                        # Valid IPv6 addess found
+                        adresses.append(w)
+                        new_ip_found_and_added = True
                     elif w == "[open]":
                         # tcptraceroute endport status found
                         tracesummary.count('tcp_routes_to_open')
@@ -2487,7 +2534,7 @@ def read(path, srchost, srcdate, mode="batch", thread=0, starttime=0):
                         adresses.append(w)
                     elif re.match("^((?!-)[A-Za-z0-9-]{1, 63}(?<!-)\\.)+[A-Za-z]{2, 6}$", w):
                         # Valid domain name found. Convert to ip.
-                        adresses.append(get_ip(w))
+                        adresses.append(resolver.get_ip(w))
                     else:
                         if param["verbose"] > 2:
                             print("Warning: Strange string '" + w + "' found in traceroute line")
@@ -2816,9 +2863,9 @@ if __name__ == "__main__":
         import isodate
         import pika        
 
-    if param["ipv6" ]:
-        print("Error: Parsing of Ipv6 addresses not yet supported.")
-        sys.exit()
+#    if param["ipv6" ]:
+#        print("Error: Parsing of Ipv6 addresses not yet supported.")
+#        sys.exit()
         
     asn_lookup = geoip2.database.Reader(param['geodb'])  # Instansiate ASN lookup object
     resolver = Resolver(param['namemap'])  # Initiate ip-to-name and name-to-ip resolver 

@@ -170,8 +170,8 @@ if ( $opt_topoevents && ! $opt_json ) {
     printf "Topology events only output in JSON format. Apply -json <filename>.\n";
     exit(1);
 }	
-if ( $opt_ipv6) {
-    printf "Ipv6 is not yet supported.\n";
+if ( $opt_ipv6 && ! $opt_owamp) {
+    printf "Ipv6 only supported for owamp data. Apply --owamp <url>.\n";
     exit(1);
 }
 
@@ -602,12 +602,13 @@ sub store_geopos{
 }
 
 sub validate_ip{
-    # Check validity of ipv4 address, and attempt to fix if possible
+    # Check validity of ip-address (ipv4 and ipv6), and attempt to fix if possible
     # Attempt to find geo-position also
     my $ip = shift;
     $ip =~ s/^\s+|\s+$//g ; # Trim off white space
-    if ( $ip =~ /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/ ) {
-	print "validat_ip Ok:", $ip, "\n" if $opt_debug > 3;
+    if ( !$opt_ipv6 && $ip =~ /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/ ||
+	((($ip =~ s/:/:/g) <= 7) && $ip =~ /^(::([a-f0-9]{1,4}:){0,6}|([a-f0-9]{1,4}:){7}|([a-f0-9]{1,4}:){0,7}([a-f0-9]{1,4}::){1}([a-f0-9]{1,4}:){0,7})[a-f0-9]{1,4}(%[a-z]+[0-9]+){0,1}$/i) ) {
+	print "validate_ip Ok: ", $ip, "\n" if $opt_debug > 3;
     } else {
 	print "Strange ip:", $ip, "\n" if $opt_debug > 3;
 	# Maybe ip is really a name? 
@@ -618,16 +619,35 @@ sub validate_ip{
 	    print "validate_ip in cache: ", $ip, "\n" if $opt_debug > 3;
 	} else {
 	    # Attempt lookup
-	    my $packed_ip = gethostbyname($maybe_name);
-	    if (defined $packed_ip) {
-		# Lookup succeeded.
-		$ip = inet_ntoa($packed_ip);
-		print "validate_ip lookup: ", $ip, "\n" if $opt_debug > 3;
-		$ip_addr{$maybe_name} = $ip;
-		$hostname{$ip} = $maybe_name;
+	    if ($opt_ipv6) {
+		my ( $err, @addrs ) = Socket::getaddrinfo( $maybe_name, 0, { 'protocol' => Socket::IPPROTO_TCP, 'family' => Socket::AF_INET6 } );
+		if (! $err && @addrs) {
+		    my $maybe_ip;
+		    # Decode first address, ignore others
+		    ( $err, $maybe_ip ) = Socket::getnameinfo( $addrs[0]->{addr}, Socket::NI_NUMERICHOST );
+		    if (! $err) {
+			# IPv6 address found
+			$ip = $maybe_ip;
+			print "validate_ip lookup: ", $ip, "\n" if $opt_debug > 3;
+			$ip_addr{$maybe_name} = $ip;
+			$hostname{$ip} = $maybe_name;
+		    }
+		}
+		if($err) {
+		    warn "Unrecognized ip address '". $ip . "', applying anyway (Error: " . $err .")";  
+		}
 	    } else {
-		# Give up.
-		warn "Unrecognized ip address '". $ip . "', applying anyway.";
+		my $packed_ip = gethostbyname($maybe_name);
+		if (defined $packed_ip) {
+		    # Lookup succeeded.
+		    $ip = inet_ntoa($packed_ip);
+		    print "validate_ip lookup: ", $ip, "\n" if $opt_debug > 3;
+		    $ip_addr{$maybe_name} = $ip;
+		    $hostname{$ip} = $maybe_name;
+		} else {
+		    # Give up.
+		    warn "Unrecognized ip address '". $ip . "', applying anyway.";
+		}
 	    }
 	}
     }
@@ -781,9 +801,9 @@ sub owamp_ana($){
 	(my $src, my $dst)=($data->{'test'}->{'spec'}->{'source'}, $data->{'test'}->{'spec'}->{'dest'} );
 
 	my $ip_version = $data->{'test'}->{'spec'}->{'ip-version'} || 4;
-	if ( $opt_ipv6 && $ip_version == 4  || ! $opt_ipv6 && $ip_version != 4 ) {
+	if ( $opt_ipv6 && $ip_version != 6  || $ip_version != 4 ) {
 	    # Wrong ip version. Ignore batch.
-	    print("Wrong ip version. Ignoring batch of results.\n") if $opt_debug > 3;
+	    print("Wrong ip version " . $ip_version . " . Ignoring batch of results.\n") if $opt_debug > 3;
 	    return;
 	}
 	
@@ -887,19 +907,24 @@ sub read_owamp_follow{
 	    my $owamp_resp = $query_req->post($url_str, 'Content-Type' => 'application/json', Content => $search_query );
 	    if (defined $owamp_resp) {
 		print "owamp data from ", $url_str, ":\n", Dumper($owamp_resp) if $opt_debug > 3;
-		$owamp_data = decode_json $owamp_resp->{'_content'};
-		if (%{$owamp_data} && $owamp_data->{'hits'} && $owamp_data->{'hits'}->{'total'}{'value'} > 0 ) {
-		    # Record/docs found
-		    foreach $result (@{$owamp_data->{'hits'}->{'hits'}}) {
-			# Analyse each result-set found
-			owamp_ana(encode_json($result->{'_source'}));
-			# Ensure only new recordes are fetch in next loop
-			$date_last_read_rec = $result->{'_source'}->{'@timestamp'};
+		if ($owamp_resp->{'_rc'} == 200) {
+		    # Successfull request. Decode response.
+		    $owamp_data = decode_json $owamp_resp->{'_content'};
+		    if (%{$owamp_data} && $owamp_data->{'hits'} && $owamp_data->{'hits'}->{'total'}{'value'} > 0 ) {
+			# Record/docs found
+			foreach $result (@{$owamp_data->{'hits'}->{'hits'}}) {
+			    # Analyse each result-set found
+			    owamp_ana(encode_json($result->{'_source'}));
+			    # Ensure only new recordes are fetch in next loop
+			    $date_last_read_rec = $result->{'_source'}->{'@timestamp'};
+			}
 		    }
+		} else {
+		    print "Warning: Failed to access ", $url_str, " (http-rc: ", $owamp_resp->{'_rc'}, ")\n" if $opt_debug > 3;
 		}
 	    } else {
 		warn "Missing response from $url_str." if ($opt_v || $opt_debug > 1);
-	    }		
+	    }
 	    # Wait and try again
 	    sleep $followinterval;
 	}

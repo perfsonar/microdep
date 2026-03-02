@@ -84,6 +84,19 @@ if ( parm('start')){ # list active peers
 	$end=time;
     }
 
+    if (! -e $database) {
+	# No database found.
+	if ( $debug > 1 ){
+	    print "Error: No database found at " . $database . "\n";
+	    exit(1);
+	} else {
+	    # Return empty json structure.
+	    print $q->header( -type=>'application/json'	);
+	    print "{}\n";
+	    exit(0);
+	}
+    }
+	    
     connect_db();
     my $query_str = 'SELECT from_name, to_name FROM peers WHERE start < ' . $end . ' AND end > ' . $start . ' ORDER BY from_name, to_name LIMIT 10000;' ;
     if ($mode eq "nodes") {

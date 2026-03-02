@@ -1,7 +1,7 @@
 // main js for microdep-map to be included at bottom of html
 
 import LatLon from "./latlon-spherical.js";
-import {parms, conffile, prop_sum, update_url, stats_on, net_names, net_desc, net_long_desc,
+import {parms, conffile, prop_sum, update_url, stats_on, net_names, net_desc, net_long_desc, net_ip_version,
 	event_names, event_desc, event_long_desc, event_index, event_sum_type,
 	prop_names, prop_desc, prop_long_desc, prop_aggr,
 	colors, get_color, make_palette, threshes, get_thresholds, 
@@ -552,9 +552,14 @@ function make_tooltip(title, link){
 */
 
 function link_tooltip( title, link, prop){
-    if ( prop in link){
+    if ( prop in link ){
 	var val=link[prop];
-	var tip='<b>' + title + '</b>' + "<p>" + prop_desc[parms.event][prop] + ": " ;
+	var event = event_sum_type[parms.event]
+	if ( selected_date_is_today_or_future() ) {
+	    // (No sum-data available)
+	    event = parms.event
+	}
+	var tip='<b>' + title + '</b>' + "<p>" + prop_desc[event][prop] + ": " ;
 	if ( typeof(val) !== "string" ){
 	    tip += val.toFixed(1);
 	    if ( prop === "down_ppm" && typeof link[prop] == 'number' ){
@@ -871,6 +876,12 @@ function get_topology(source = "archive"){
     // Fetch topology data from relevant source
     // and initiate drawing of topology
 
+    if (points.length == 0) {
+	// No nodes loaded yet. Do that first.
+	load_coords_from_all_sources(network); // NOTE: This function call get_topology() again on success.
+	return;
+    }
+    
     let start = new Date($("#datepicker").val() + " 00:00:00").getTime()/1000;
     let start_iso = new Date($("#datepicker").val() + " 00:00:00").toISOString();
     let end= new Date($("#datepicker").val() + " 23:59:59").getTime()/1000;
@@ -915,25 +926,21 @@ function get_topology(source = "archive"){
 	    // Override with index from config
 	    query_index = conffile[parms.net].event_type[parms.event].topology_index ;
 	}	    
-	var url = conffile[parms.net].archive + "/" + query_index + "/_search";
-	var query = JSON.stringify ({ "query": { "range": { "@date": { "gte": start_iso,  "lt": end_iso  } } },
-				      "size": 0,
-				      "aggs": { "peer": { "terms": { "field": "from_to.keyword", "size" : 1000000  } } }
-				    });
-	$.post( {url: url, data: query, contentType: "application/json", dataType: "json", success: 
-		 function(result){
+
+	var url="elastic-get-date-type.pl?index=" + event_index[parms.event] + "&start=" + start_iso + "&end=" + end_iso;
+	if (net_ip_version[parms.net]) {
+	    // Add filtering on ip version
+	    url += "&ip_version=" + net_ip_version[parms.net];
+	}
+    
+	$.getJSON( url,
+		   function(result){
 		     var topology = [];
 		     if (! result.aggregations.peer.buckets.length) {
 			 console.log("No topology data returned from archive for time period " + start + " to " + end + ". Trying sqlite db ...");
 			 // No topology data returned. Try sqlite-db instead.
 			 get_topology("sqlite-db");
 		     } else {
-			 if (points.length == 0) {
-			     // No nodes loaded yet. Do that first.
-			     load_coords_from_all_sources(network); // NOTE: This function call get_topology() again on success.
-			     return;
-			 }
-    
 			 for (var p=0; p < result.aggregations.peer.buckets.length; p++) {
 			     topology.push(result.aggregations.peer.buckets[p].key.split("_"));
 			 }
@@ -941,11 +948,11 @@ function get_topology(source = "archive"){
 			 get_connections();
 			 // draw_topology( duplex_topology( topology) );
 		     }
-		 }, fail: function( jqxhr, textStatus, error ) {
-		     var err = textStatus + ", " + error;
-		     console.log( "Request" + url + " Failed: " + err );
-		 } } );
-	
+		   }).fail( function(e, textStatus, error ) {
+		       //remove_links(links);
+		       console.log("failed to get data from server :" + textStatus + ", " + error);
+		   });
+
 	break;
     }
 }
@@ -1259,14 +1266,17 @@ function load_coords(network, service, goal){
 	} else if (conffile[parms.net].event_type[parms.event].topology_index) {
 	    // Override with index from config
 	    query_index = JSON.stringify( { "index": conffile[parms.net].event_type[parms.event].topology_index });
-	}	    
-	var query_fromnodes = get_node_query( "from", start_iso, end_iso);
-	var query_tonodes = get_node_query( "to", start_iso, end_iso);
-	var query = query_index + '\n' + query_fromnodes + '\n' + query_index + '\n' + query_tonodes + '\n';
-	var url = conffile[parms.net].archive + "/_msearch";
+	}
 
-	$.post( {url: url, data: query, contentType: "application/json", dataType: "json", success: 
-		   function(result){
+	var url="elastic-get-date-type.pl?index=" + event_index[parms.event] + "&start=" + start_iso + "&end=" + end_iso + "&event_type=topology";
+	if (net_ip_version[parms.net]) {
+	    // Add filtering on ip version
+	    url += "&ip_version=" + net_ip_version[parms.net];
+	}
+    
+	$.getJSON( url,
+
+	function(result){
 		       for (var r = 0; r < result.responses.length; r++) {
 			   if (typeof result.responses[r].aggregations != "undefined" ) {
 			       // Aggregated results are available
@@ -1311,11 +1321,13 @@ function load_coords(network, service, goal){
 			       // Some nodes are available. Plot the links too.
 			       get_topology();
 		       }
-		   }, fail:  function( jqxhr, textStatus, error ) {
-		       var err = textStatus + ", " + error;
-		       console.log( "Request" + url + " Failed: " + err );
-		       loads++;
-		   } } );
+
+	}).fail( function(e, textStatus, error ) {
+	    var err = textStatus + ", " + error;
+	    console.log( "Request" + url + " Failed: " + err );
+	    loads++;
+	    });
+
 	return;
     } 
 
@@ -1409,16 +1421,16 @@ function load_coords_from_all_sources(network){
     // Load topology nodes with coordinates from all available sources
 
     // Exctract node coordinates from topology events
-    load_coords(network, "topoevents", 5);
+    load_coords(network, "topoevents", 2);
     // Load node coordinates from config db
-    load_coords(network, "db", 5);
+    load_coords(network, "db", 2);
     // Load node coordinates from json files
-    load_coords(network, "base", 5);
-    load_coords(network, "extra", 5);
-    load_coords(network, "cnaas", 5);
+//    load_coords(network, "base", 5);
+//    load_coords(network, "extra", 5);
+//    load_coords(network, "cnaas", 5);
     // NOTE: Last arg (int) must equal no of consequtive calls to 'load_coords'
  }
-    
+/*    
 function show_network(network){
     points=[];
     if ( network in points_cache){
@@ -1430,6 +1442,21 @@ function show_network(network){
     } else {
 	// Fetch nodes and coordinates
 	load_coords_from_all_sources(network);
+    }
+}
+*/
+function show_network(network){
+    points=[];
+    if ( network in points_cache){
+	// Get nodes from cache
+	points=points_cache[network];
+    }
+    if (points.length == 0) {
+	// Cache is empty. Attempt to load nodes and coordinates 
+	load_coords_from_all_sources(network);  // ... calls show_map and get_topology
+    } else {
+	show_map(network);
+	get_topology();
     }
 }
 
@@ -1651,9 +1678,9 @@ function change_date(delta){
     $("#datepicker").datepicker('setDate', p);
     //$("#draw").click();
     update_url();
-    show_network(parms.net);
-    get_topology();
-    get_connections();
+    show_network(parms.net); // ... calls get_topology()
+    // get_topology(); // ... calls get_connections()
+    // get_connections();
     update_url();
  
     // var curd = $("#datepicker").datepicker('GetDate');
@@ -1727,7 +1754,11 @@ function get_peer_data(from, to, div){
     var url="elastic-get-date-type.pl?index=" + event_index[parms.event] + "&event_type=" + parms.event
 	+ "&start=" + tz_start + "&end=" + tz_end
 	+ "&from=" + from + "&to=" + to;
-
+    if (net_ip_version[parms.net]) {
+	// Add filtering on ip version
+	url += "&ip_version=" + net_ip_version[parms.net];
+    }
+    
     $.getJSON( url,
                function(resp){
                    if (resp.hits && resp.hits.total.value > 0){
@@ -1835,9 +1866,13 @@ function get_connections(){
     var now = new Date();
     
 //    if ( etype === 'jitter' || start.substr(0,10) === now.toISOString().substr(0,10) ){ // read todays details
-    if ( ! sum_etype || typeof sum_etype == 'undefined' || start.substr(0,10) === now.toISOString().substr(0,10) ){
-	// No summary events are available and/or it's todays date. Fetch and summarize "normal" event details.
+    if ( ! sum_etype || typeof sum_etype == 'undefined' || start.substr(0,10) === now.toISOString().substr(0,10) || period < 24){
+	// No summary events are available and/or it's todays date and/or time scale on hourly basis is set. Fetch and summarize "normal" event details.
 	var url="elastic-get-date-type.pl?index=" + index + "&event_type=" + etype + "&start=" + start + "&end=" + end ;
+	if (net_ip_version[parms.net]) {
+	    // Add filtering on ip version
+	    url += "&ip_version=" + net_ip_version[parms.net];
+	}
 	if ( tloss > 0 && etype === "gap" )
 	    url += "&tloss=" + tloss;
 
@@ -1907,6 +1942,10 @@ function get_connections(){
 	
 	// Prepare to fetch summary info
 	var sum_url="elastic-get-date-type.pl?index=" + index + "&event_type=" + sum_etype + "&start=" + start + "&end=" + end;
+	if (net_ip_version[parms.net]) {
+	    // Add filtering on ip version
+	    sum_url += "&ip_version=" + net_ip_version[parms.net];
+	}
 
 	if (parms.debug) console.log(sum_url);
 
@@ -2017,22 +2056,28 @@ function title_state(){
 	      $("#next").prop('dsabled', selected_hour_is_future() ); // Make next-button available if relevant
 	      //ok update_props();
 	      update_url();
-	      show_network(parms.net);
-	      get_topology();
-	      get_connections();
+	      show_network(parms.net); //... calls get_topology()
+	      //get_topology();  // ... calls get_connections()
+	      //get_connections();
 	  });
 
       //$("#period").select2();	
       $("#period").change( function(){
-	  get_connections();
+	  parms.period = $("#period").val();
+	  update_props();
 	  update_url();
+	  get_topology(); // ... calls get_connections()
+	  //get_connections();
 	  $("#period_input").val('00:00');
       });
       
       $("#period_input").change( function(){
+	  parms.period_input = $("#period").val();
 	  $("#period").val(1); // hour
+	  parms.period = $("#period").val();
 	  update_url();
-	  get_connections();
+	  get_topology(); // ... calls get_connections()
+	  //get_connections();
       });
 
       /* does not work 
@@ -2062,13 +2107,15 @@ function title_state(){
 	  } else {
 	      refresh_active=true;
 	      $("#datepicker").datepicker('setDate', new Date());
-	      get_connections();
+	      get_topology(); // .. calls  get_connections();
+	      //get_connections();
 	      
 	      active_color=$(this).css("background-color");
 	      $(this).css("background-color", refresh_color);
 	      
 	      setInterval( function(){
-		  get_connections();
+		  get_topology(); // .. calls  get_connections();
+		  //get_connections();
 	      }, refresh_period );
 	  }
       } );
@@ -2098,7 +2145,7 @@ function title_state(){
 	  update_props();
 	  remove_links(links);
 	  load_name_to_address();
-	  show_network(parms.net);
+	  show_network(parms.net); // ... calls get_topology()
 	  // await new Promise(r => setTimeout(r, 5000)); // Sleep 5 sec for loading of node-data to complete. WARNING! THIS DESPERATELY NEEDS REDESIGN.
 	  //get_topology();
 	  update_url();
@@ -2110,21 +2157,22 @@ function title_state(){
 	  parms.event = $("#event_type").val()    
 	  update_props();
 	  //remove_links();
-	  get_topology();
-	  get_connections();
+	  load_coords_from_all_sources(network); // ... calls get_topology() which again call get_connetions()
+	  //get_topology();           // ... calls get_connetions()
+	  //get_connections();
 	  update_url();
 	  $("#tabs").tabs("option", "active", 0);
       });
 
       // select parameter change
       $("#prop_select").change( function(){
+	  parms.property = $("#prop_select").val();
 	  // remove_links(links);
 	  // links=[];
 	  //draw_links(summary, $("#prop_select").val() );
 
 	  taint_links(summary, $("#prop_select").val() );
 	  update_url();
-	  parms.property = $("#prop_select").val();
 	  $("#tabs").tabs("option", "active", 0);
       });
 
@@ -2141,7 +2189,8 @@ function title_state(){
       // draw network at startup if focus on node    
       if ( parms.node){
 	  focus_node=parms.node;
-	  get_connections();
+	  get_topology(); // .. calls  get_connections();
+	  //get_connections();
 	  // draw_links(summary, $("#prop_select").val() );
 	  links_on=true;
       }

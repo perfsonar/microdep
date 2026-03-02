@@ -1,5 +1,7 @@
 /var/lib/logstash/microdep/gap-ana.json
+/var/lib/logstash/microdep/gap-ana-6.json
 /var/lib/logstash/microdep/trace-ana.json
+/var/lib/logstash/microdep/trace-ana-6.json
 {
         su perfsonar perfsonar
         rotate 4

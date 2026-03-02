@@ -5,6 +5,7 @@
 # Changelog:
 # - Created by Olav Kvittem
 # - 2024-04-17 Otto J Wittner: Added credentials from config file
+# - 2026-02-27 Otto J Wittner: Added fetching of list of flows (for topology plotting)
 
 use CGI;
 #use CGI qw/:standard -debug/;
@@ -15,26 +16,27 @@ use YAML;
 # Fetch config file
 $config = YAML::LoadFile("/etc/perfsonar/microdep/microdep-config.yml");
 
-my $esurl='http://admin:no+nz+br@localhost:9200';
+my $esurl='http://localhost:9200';
 $esurl = $config->{opensearch_url} if $config->{opensearch_url};
     
 my $q = CGI->new;
 my $yesterday= `date --date yesterday "+%Y-%m-%d"`;
 chomp($yesterday);
-my $start= parm('start') || $yesterday;
-my $type= parm('event_type') || "gapsum";
+my $start = parm('start') || $yesterday;
+my $ip_version = parm('ip_version');
+#my $type = parm('event_type') || "gapsum";
+my $type = parm('event_type');          # No event_type results in list of unique flows for time period
 my $end = parm('end') || $start;
 my $from = parm('from');
 my $to = parm('to');
 my $min_delay = parm('min_delay');
 my ($stats_type, $stats_field ) = split( ",", parm('stats') );
-
 my $path_addr=parm('path_addr'); # list of ips 
 my $date_field='@date';
 $date_field = '@timestamp' if $path_addr;
+my $load_coords = parm('load_coords');
 
 my $ip_list; # make an array for ES
-    
 
 my $debug = 0; # off by default
 if ( $q->param("debug")){
@@ -67,9 +69,14 @@ my $query_head = '
                "lte": "' . $end . '",
               "time_zone":"Europe/Oslo"
            }
-	  } },
-          { "match_phrase": {"event_type":"' . $type . '"}}
+	  } }
 ';
+
+if ($type) {
+    # Filter on event type
+    $query_head .=', { "match_phrase": {"event_type":"' . $type . '"}}';
+}
+
 my $query_tail='
    }
 }
@@ -177,6 +184,8 @@ my $stats_aggr='
    }
 ';
 
+my $flow_aggr = '"aggs": { "peer": { "terms": { "field": "from_to.keyword", "size" : 1000000  } } }';
+
 my $search;
 
 if ( $from ){
@@ -185,6 +194,10 @@ if ( $from ){
 }
 if ( $to ){
     $query_head .= '          , { "match_phrase": {"to.keyword":"' . $to . '"}}
+    ';
+}
+if ( $ip_version ){
+    $query_head .= '          , { "match_phrase": {"ip_version": ' . $ip_version . ' }}
     ';
 }
 
@@ -206,8 +219,6 @@ if ( $min_delay ){
     # $query_head .= ', { "range": { "h_min_d": { "gte": ' . $min_delay . ' } } }';
 }
 
-
-
 $sort_time = '"sort" : [ { "@date": { "order" : "asc" } } ]';
 
 if ( $path_addr){
@@ -228,8 +239,18 @@ if ( $path_addr){
 ';
 }
 
-if ( $stats_type){
-    $search =  '{ "size":10000, ' . $query_head . $query_tail . ", " . $stats_aggr . '}';    
+if (! $type) {
+    # Fetch only list of flows seen (incl. address data)
+    $search ='{ "size": 0, ' . $query_head . $query_tail . ', ' . $flow_aggr .'}'; 
+} elsif ( $type eq "topology" ) {
+    # Fetch coordinates from topology-events 
+    my $query_fromnodes = '{ "size": 0, ' . $query_head . $query_tail . ', ' . aggr_node_query("from") .'}';
+    $query_fromnodes =~ s/\R//g ; # Clean away newlines
+    my $query_tonodes = '{ "size": 0, ' . $query_head . $query_tail . ', ' . aggr_node_query("to") .'}';
+    $query_tonodes =~ s/\R//g ; # Clean away newlines
+    $search = "{ \"index\": \"" . $index . "\" }\n" . $query_fromnodes . "\n{ \"index\": \"" . $index . "\" }\n" . $query_tonodes . "\n";
+} elsif ( $stats_type){
+    $search =  '{ "size":10000, ' . $query_head . $query_tail . ', ' . $stats_aggr . '}';    
 } elsif ( $min_delay ){
     my $limit='{ "range": { "h_min_d": { "gte": ' . $min_delay . ' } } }';
 
@@ -247,7 +268,11 @@ print $search."\n" if $debug > 0;
 
 #my $url='http://admin:no+nz+br@localhost:9200/' . $index . '/_search?';
 my $url=$esurl . '/' . $index . '/_search?';
-
+if ($type eq "topology") {
+    # Requires multi-search
+    $url=$esurl . '/_msearch';
+}
+  
 # $curl->setopt(CURLOPT_URL, $url);
 # my $response_body;
 # $curl->setopt(CURLOPT_WRITEDATA,\$response_body);
@@ -264,7 +289,7 @@ my $url=$esurl . '/' . $index . '/_search?';
 #}
 
 my $cmd='curl -X POST --insecure -H "Content-Type: application/json" "' . $url . '"  -d \'' . $search . '\' 2>/dev/null';
-print "<p>$cmd\n" if $debug > 0;
+print "<p>$cmd</p>\n" if $debug > 0;
 print `$cmd`;
 
 
@@ -275,3 +300,10 @@ sub parm{
     $v=~s/[^\w_\-\:\.,]/_/g if $v;
     return $v;
 }
+
+sub aggr_node_query{
+    # Produce a JSON string for querying node info from Opensearch
+    my $tofrom=shift;
+    return  '"aggs": { "nodes": { "terms": { "field": "' . $tofrom . '.keyword", "size" : 10000  }, "aggs": { "ip": { "terms": { "field": "' . $tofrom . '_adr.keyword"}}, "city": { "terms": { "field": "' . $tofrom . '_geo.city_name.keyword"}}, "lat": { "terms":  { "field": "' . $tofrom . '_geo.latitude" } },  "lon": { "terms":  { "field": "' . $tofrom . '_geo.longitude" } } } } }';
+}
+    

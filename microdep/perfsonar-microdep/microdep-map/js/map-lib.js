@@ -409,6 +409,7 @@ export var conffile=[];   //Config file loaded initially
 export var net_names=[];
 export var net_desc={};
 export var net_long_desc={};
+export var net_ip_version={};
 
 export var event_names = [];
 export var event_index = {}; 
@@ -438,6 +439,7 @@ export function get_config( conffilename, call_back){
 		net_names.push(n);
 		net_desc[n]=conffile[n].title;
 		net_long_desc[n]=conffile[n].descr;
+		net_ip_version[n]=conffile[n].ip_version;
 	    }
 	    // Update select-boks for networks/variants
 	    make_prop_select("network", net_names, net_desc, net_long_desc);
@@ -546,7 +548,7 @@ export function update_props() {
 	// Reapply already selected 
 	$("#event_type").val(parms.event);
     } else {
-	if ( "default_event_type_live" in conffile[parms.net] && selected_date_is_today_or_future() ) {
+	if ( "default_event_type_live" in conffile[parms.net] && ( selected_date_is_today_or_future() || parms.period < 24 )  ) {
 	    // Apply default event type for "live" (todays date) events
 	    $("#event_type").val(conffile[parms.net].default_event_type_live);
 	} else if ( "default_event_type" in conffile[parms.net] ) {
@@ -557,7 +559,7 @@ export function update_props() {
     }
 
     // Init measurement variable select list
-    if (selected_date_is_today_or_future()) {
+    if (selected_date_is_today_or_future() || parms.period < 24 ) {
 	// No summary event is available. Use "none-summary" properties.
 	for (var n = prop_names[parms.event].length-1; n >= 0; n--)
 	    if (typeof conffile[parms.net].event_type[parms.event].field[prop_names[parms.event][n]] == "undefined" ||
