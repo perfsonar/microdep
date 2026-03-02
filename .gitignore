@@ -34,3 +34,6 @@ make.log
 docker-compose.yml
 unibuild-compose.yml
 pstracetree/
+
+# IDE files
+/.idea/
