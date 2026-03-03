@@ -801,7 +801,7 @@ sub owamp_ana($){
 	(my $src, my $dst)=($data->{'test'}->{'spec'}->{'source'}, $data->{'test'}->{'spec'}->{'dest'} );
 
 	my $ip_version = $data->{'test'}->{'spec'}->{'ip-version'} || 4;
-	if ( $opt_ipv6 && $ip_version != 6  || $ip_version != 4 ) {
+	if ( $opt_ipv6 && $ip_version != 6  || ! $opt_ipv6 && $ip_version != 4 ) {
 	    # Wrong ip version. Ignore batch.
 	    print("Wrong ip version " . $ip_version . " . Ignoring batch of results.\n") if $opt_debug > 3;
 	    return;
