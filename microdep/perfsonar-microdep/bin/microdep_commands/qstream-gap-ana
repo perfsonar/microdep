@@ -36,17 +36,117 @@ use LWP::UserAgent;
 use IO::Socket::SSL;
 # use LWP::Protocol::https;
 
-# make sure that summary records are produced when killed
+# Make sure summary records are output when script is terminated
 use sigtrap qw/handler handle_signals normal-signals/;
 
-my $version="1.0.5";
+my $version="5.3.0-ps";   # Cloned and tailored for perfsonar
 
-# date --date 'jan 1 2000' +%s
+# Define all options
+my ($opt_h, $opt_help, $opt_id, $opt_slep,
+    $opt_minloss, $opt_win, $opt_recover,
+    $opt_max_small_graphs,
+    $opt_head, $opt_rhead, $opt_graph, $opt_outdir,
+    $opt_title, $opt_addresses, $opt_names, $opt_json,
+    $opt_jitter, $opt_threshold, $opt_owamp,
+    $opt_rtp,  $opt_ddelay_low, $opt_ddelay_high,
+    $opt_debug, $opt_batchsize,
+    $opt_change_factor, $opt_v, $opt_version,
+    $opt_topoevents, $opt_topointerval,
+    $opt_pslookup, $opt_pslookup_wait, $opt_ipv6,
+    $opt_follow, $opt_followinterval, $opt_config_file );
+
+# Fetch options (if any) from commandline
+GetOptions( 'h' => \$opt_h, 'help' => \$opt_help, 'id=s' => \$opt_id, 'slep=s' => \$opt_slep, 
+	    'minloss=s' => \$opt_minloss, 'win=s' => \$opt_win, 'recover=s' => \$opt_recover,
+	    'max-small-graphs=s' => \$opt_max_small_graphs, 
+	    'head' => \$opt_head, 'rhead=s' => \$opt_rhead, 'graph=s' => \$opt_graph, 'outdir=s' => \$opt_outdir, 
+	    'title=s' => \$opt_title, 'addresses=s'=> \$opt_addresses, 'names=s' => \$opt_names, 'json=s' => \$opt_json,  
+	    'jitter=s' => \$opt_jitter, 'threshold' => \$opt_threshold, 'owamp=s' => \$opt_owamp,
+	    'rtp=s' => \$opt_rtp, 'ddelay_low=s' => \$opt_ddelay_low, 'ddelay_high=s' => \$opt_ddelay_high,
+	    'debug=s' => \$opt_debug, 'batchsize=s' => \$opt_batchsize,
+	    'change_factor=s' => \$opt_change_factor, 'v' => \$opt_v, 'version' => \$opt_version,
+	    'topoevents' => \$opt_topoevents, 'topointerval=s' => \$opt_topointerval,
+	    'pslookup=s' => \$opt_pslookup, 'wait=s' => \$opt_pslookup_wait, 'ipv6' =>\$opt_ipv6,
+	    'follow' => \$opt_follow, 'followinterval=s' => \$opt_followinterval, 'conf=s' =>\$opt_config_file
+    ) or $opt_h = 1;   # (Output help text on failure)
+
+if ( ! $opt_h && ! $opt_help && -e $opt_config_file ) {
+    # A config file is available. Parse it and set option values.
+    use YAML;
+    $config = YAML::LoadFile($opt_config_file);
+    # Prepare list of supported options ( Copied for GetOptions() above!)
+    my %supported_options = (
+	'h' => \$opt_h, 'help' => \$opt_help, 'id=s' => \$opt_id, 'slep=s' => \$opt_slep, 
+	    'minloss=s' => \$opt_minloss, 'win=s' => \$opt_win, 'recover=s' => \$opt_recover,
+	    'max-small-graphs=s' => \$opt_max_small_graphs, 
+	    'head' => \$opt_head, 'rhead' => \$opt_rhead, 'graph=s' => \$opt_graph, 'outdir=s' => \$opt_outdir, 
+	    'title=s' => \$opt_title, 'addresses=s'=> \$opt_addresses, 'names=s' => \$opt_names, 'json=s' => \$opt_json,  
+	    'jitter=s' => \$opt_jitter, 'threshold' => \$opt_threshold, 'owamp=s' => \$opt_owamp,
+	    'rtp=s' => \$opt_rtp, 'ddelay_low=s' => $opt_ddelay_low, 'ddelay_high=s' => \$opt_ddelay_high,
+	    'debug=s' => \$opt_debug, 'batchsize=s' => $opt_batchsize,
+	    'change_factor=s' => \$opt_change_factor, 'v' => \$opt_v, 'version' => \$opt_version,
+	    'topoevents' => \$opt_topoevents, 'topointerval=s' => \$opt_topointerval,
+	    'pslookup=s' => \$opt_pslookup, 'wait=s' => \$opt_pslookup_wait, 'ipv6' =>\$opt_ipv6,
+	    'follow' => \$opt_follow, 'followinterval=s' => \$opt_followinterval, 'conf=s' =>\$opt_config_file
+	); 
+    foreach my $opt (keys %{$config}) {
+	# Set option based on value from config file
+	if (exists $supported_options{$opt} && ! ${$supported_options->{$opt}} ) {
+	    # A boolean option not yet set. Apply value from config file.
+	    ${$supported_options{$opt}} = $config->{$opt};
+	} elsif (exists $supported_options{$opt . '=s'} && ! ${$supported_options->{$opt . '=s'}} ) {
+	    # A key-value option
+	    ${$supported_options{$opt . '=s'}} = $config->{$opt};
+	} else {
+	    # Unsupported config option
+	    warn "Unsupported option '$opt' in config file '$configfile'. Ignoring."
+	}
+    }
+}
+
+# Set default values for options( not yet set)
+$opt_h ||= 0;          # Flag: Show help text.
+$opt_help ||= 0;       # Flag: Show help text.
+$opt_id ||= '';        # Force id tag for an end-to-end flow. Defaults to source address (or <src>_<dst> for pscheduler data). 
+$opt_slep ||= 10000 ;  # Number of packets kept in window for analysis.
+$opt_minloss ||= 5;    # Number of lost packets interpreted as a 'big'. Each big gap generates an event.
+$opt_win ||= 50;       # Number of packets to analyse before and after a big gap.
+$opt_recover ||= 5;    # Number of in sequence to be receieved for a big gap to be considered ended. 
+$opt_max_small_graphs ||= 20;   # Number of graphs to output from small packet losses.
+$opt_head ||= 0;       # Flag: Output headers.
+$opt_rhead ||= '';     # Output headers so that R can make the headings in the text tables.
+$opt_graph ||= 0;      # Flag: Output graphs.
+$opt_outdir ||= ".";   # Output directory.
+$opt_title ||= 'Delay';   # Set title for graphs.
+$opt_addresses ||= ''; # Set source of ip-to-name mappings.
+$opt_names ||= '';     # Set source of ip-to-name mappings. 
+$opt_json ||= '';      # Enable events output in JSON format to given file. 
+$opt_jitter ||= 600;   # Emit jitter statistics at intervals.
+$opt_threshold |= '10,10,0.5';  # Threshold values for reporting, in form of a vector.
+$opt_owamp ||= '';     # Get json owamp data from url
+$opt_rtp ||= 5;        # Number of ddelays to average before test
+$opt_ddelay_low ||=  2;  # End of burst limit
+$opt_ddelay_high ||= 10; # Start of burst limit
+$opt_debug ||= 0;      # Debug level     
+$opt_batchsize ||= 0;  # Override batch size (packet count) of measurement result set produced by owamp source. 
+$opt_change_factor ||= 0.3;  # (Obsolete)
+$opt_v ||= 0;          # Flag: Be verbose
+$opt_version ||= 0;    # Flag: Show version
+$opt_topoevents ||= 0;       # Flag: Enable toplogy events
+$opt_topointerval ||= 3600;  # Min interval between topology events
+$opt_pslookup ||= "http://ps-west.es.net/lookup/activehosts.json";  # Source of perfSONAR Lookup Service hosts;
+$opt_pslookup_wait ||= 3600; # Min interval between attempts to fetch info from ps-lookup service
+$opt_ipv6 ||= 0;             # Flag to turn on ipv6 packet analysis
+$opt_follow ||= 0;           # Flag to turn on rereading of owamp input source 
+$opt_followinterval ||= 10;  # Reread interval of owamp input source
+$opt_config_file ||= '';     # Filename of configfile
+
+# Misc global variables
 my $min_tx=946681200;
 my $max_tx=1893452400; # 2030-01-01
 my $maxseqreorder=1000; # 
 my $max_small_gap=10; # the max size of a small graph
-my $max_small_graphs=20;
+my $max_small_graphs= $opt_max_small_graphs;
 my $max_big_graphs=20;
 my $gap_limit={'big'=>5000, 'small'=>50, 'tiny'=>0}; # lost packets of that kind
 my $max_gaps={'big'=>1000, 'small'=>1000, 'tiny'=>1000}; # count of that kind
@@ -64,16 +164,9 @@ my %small_tx=();
 
 my $rmq_cv;  # Conditional variable applied when reading from Rabbit message queue
 
-my $opt_ddelay_low=2;   # end of burst limit
-my $opt_ddelay_high=10; # start of burst limit
-my $opt_rtp = 5; # number of ddelays to average before test
-
 # parms for jitter report
 my %n_normal=();  # count of normal packets for modulo
-my $min_jit = 10;  # jitter in ms
-my $min_ddelay = 10;
-my $min_slope=0.5;
-my $jitter_period=600; # seconds between jitter reports
+my $jitter_period= $opt_jitter_period; # seconds between jitter reports
 my %jitter_last=(); # last time jitter reported
 my %jitter_values=(); # last jitter values reported
 
@@ -81,22 +174,14 @@ my %mindelay; # minimum delay last slep
 my %minseq; # minimum delay last slep
 my $packet_interval=(); # packet interval guestimate per id
 
-my $opt_debug = 0;   # Debug level     
-my $opt_batchsize = 0;   # Override batch size (packet count) of measurement result set produced by owamp source. 
-
 my %owamp_batch;      # Memory for sequence numbers data for owamp sessions. Applied to handle seq num wrap-arround cases.
 
 my $last_topoevent = time(); # Epoch time when last topology event was output
-my $opt_topoevents = 0;       # Flag enabling toplogy events
-my $opt_topointerval = 3600;  # Min interval between topology events
 
-my $opt_pslookup = "http://ps-west.es.net/lookup/activehosts.json";  # Source of perfSONAR Lookup Service hosts;
 my $pslookuphost;               # Ref to hash of perfSONAR Lookup Service hosts;
-my $opt_pslookup_wait = 3600;   # Min interval between attempts to fetch info from ps-lookup service
-my $opt_ipv6 = 0;           # Flag to turn on ipv6 packet analysis
-my $opt_follow = 0;         # Flag to turn on rereding of owamp input source 
-my $opt_followinterval = 10;   # Reread interval of owamp input source 
+my $config={};           # Config loaded from file
 
+# Prepare help text
 my $usage="$0 '[options] [file]...
 Analyses for gaps in packet logs (crude logs or owamp data from pscheduler).  
 When gaps are found a list of statistical qos parameters is output as text or json.
@@ -107,25 +192,24 @@ Summary statistics are ouput when analysis is terminated.
 Options
   -h -help             Help message
   -id flow-id	       Set id tag for an end-to-end flow. Defaults to source address (or <src>_<dst> for pscheduler data). 
-  -slep n              Number of packets kept in window for analysis. Defaults to 10000.
-  -minloss n           Number of lost packets interpreted as a 'big'. Each big gap generates an event. Default is 5.
-  -win n               Number of packets to analyse before and after a big gap. Default is 10.
-  -recover n	       Nubmer of in sequence to be receieved for a big gap to be considered ended. Default is 5.
-  -max-small-graphs n  Number of graphs to output from small packet losses. Default is 20.
-  -head		       Output headers.
-  -rhead n             Output headers so that R can make the headings in the text tables.
+  -slep n              Number of packets kept in window for analysis. Defaults to $opt_slep.
+  -minloss n           Number of lost packets interpreted as a 'big'. Each big gap generates an event. Default is $opt_minloss.
+  -win n               Number of packets to analyse before and after a big gap. Default is $opt_win.
+  -recover n	       Number of in sequence to be receieved for a big gap to be considered ended. Default is $opt_recover.
+  -max-small-graphs n  Number of graphs to output from small packet losses. Default is $opt_max_small_graphs.
+  -head		       Output headers. (Requires -v).
+  -rhead 'h1 h2. ..'   Output headers so that R can make the headings in the text tables.
   -graph 	       Output graphs.
   -outdir dir	       Set output directory.
-  -title string	       Set title for graphs. Default is 'Delay'.
+  -title string	       Set title for graphs. Default is '$opt_title'.
   -addresses file      Set source of ip-to-name mappings. Both '<hostname> <address>' format and perfsonar psConfig json is accepted.
   -names file	       Set source of ip-to-name mappings. '<name> <user> <dns> <ip>' format acccepted.
   -threshold vector    Threshold values for reporting, in form of a vector '<min-jitter>,<min-ddelay>,<min-slope>'. Default is $min_jit,$min_ddelay,$min_slope .
   -owamp url           Get json owamp data from pscheduler (http://) og from rabbit message queue (ampq://)
-  -follow	       Reread input source at intervals and analyse newly arrived packets. Applys only for owamp url. (Use input-piping, and 'tail -f' to follow files.)   	       
+  -follow	       Reread input source at intervals and analyse newly arrived packets. Applys only for http* owamp url. (To follow files apply '| tail -f'.)   	       
   -followinterval n    Interval for rereading input source. Default is $opt_followinterval sec.       	       
   -json file           Enable events output in JSON format to given file. 
-  -jitter secs         Emit jitter statistics at intervals. Default is $jitter_period sec.
-  -change_factor f     Fraction change to cause threshold jitter report. Default is 0.3.
+  -jitter secs         Emit jitter statistics at intervals. Default is $opt_jitter sec.
   -v		       Be verbose.
   -rtp n               RTP jitter algorithm with 1/n change of average, Default is $opt_rtp.
   -ddelay_low n        Lower limit for recording jitter burst. Default is $opt_ddelay_low ms.
@@ -136,26 +220,11 @@ Options
   -topointerval n      Min interval (sec) between topology events. Default is $opt_topointerval
   -pslookup url        Source url for perfSONAR lookup service hosts. Default is $opt_pslookup
   -wait seconds        Min no of seconds to wait between refreshing info fetched from pslookup-service. Default is $opt_pslookup_wait
-  -6                   Analyse ipv6 packets (and ignore ipv4). Default is the opposite.
+  -ipv6                Analyse ipv6 packets (and ignore ipv4). Default is the opposite.
+  -conf filename       Filename to config file. Note that config file overrides CLI options.
     ";
+#  -change_factor f     Fraction change to cause threshold jitter report. Default is 0.3.
 
-my ($opt_h, $opt_help, $opt_id, $opt_slep, $opt_minloss, $opt_win, $opt_recover, $opt_max_small_graphs, $opt_head, $opt_rhead, $opt_graph, $opt_outdir, $opt_title, $opt_addresses, $opt_names, $opt_threshold, $opt_owamp, $opt_json, $opt_jitter, $opt_change_factor, $opt_v, $opt_version);
-
-
-GetOptions( 'h' => \$opt_h, 'help' => \$opt_help, 'id=s' => \$opt_id, 'slep=s' => \$opt_slep, 
-	    'minloss=s' => \$opt_minloss, 'win=s' => \$opt_win, 'recover=s' => \$opt_recover,
-	    'max-small-graphs=s' => \$opt_max_small_graphs, 
-	    'head' => \$opt_head, 'rhead' => \$opt_rhead, 'graph=s' => \$opt_graph, 'outdir=s' => \$opt_outdir, 
-	    'title=s' => \$opt_title, 'addresses=s'=> \$opt_addresses, 'names=s' => \$opt_names, 'json=s' => \$opt_json,  
-	    'jitter=s' => \$opt_jitter, 'threshold' => \$opt_threshold, 'owamp=s' => \$opt_owamp,
-	    'rtp=s' => \$opt_rtp, 'ddelay_low=s' => $opt_ddelay_low, 'ddelay_high=s' => \$opt_ddelay_high,
-	    'debug=s' => \$opt_debug, 'batchsize=s' => $opt_batchsize,
-	    'change_factor=s' => \$opt_change_factor, 'v' => \$opt_v, 'version' => \$opt_version,
-	    'topoevents' => \$opt_topoevents, 'topointerval=s' => \$opt_topointerval,
-	    'pslookup=s' => \$opt_pslookup, 'wait=s' => \$opt_pslookup_wait, '6' =>\$opt_ipv6,
-	    'follow' => \$opt_follow, 'followinterval=s' => \$opt_followinterval 
-    ) or die $usage;
-# &NGetOpt( 'h', 'help', 'id=s', 'slep=s', 'minloss=s', 'win=s', 'max-small-graphs=s', 'head', 'rhead', 'graph=s', 'outdir=s', 'title=s', 'names=s', 'json=s', 'index=s', 'v', 'version') || die "$!" . $usage ."\n";
 
 if ( $opt_h || $opt_help) {
     printf "Version $version\n";
@@ -166,6 +235,8 @@ if ( $opt_version) {
     printf "Version $version\n";
     exit(0);
 }
+
+
 if ( $opt_topoevents && ! $opt_json ) {
     printf "Topology events only output in JSON format. Apply -json <filename>.\n";
     exit(1);
@@ -181,20 +252,15 @@ if ($opt_owamp){
     require AnyEvent::RabbitMQ;
     require Net::AMQP;
     require URI;
-    # Prepare conditional event-variabel applied when reading from rabbit message queue
+    # Prepare conditional event-variable applied when reading from rabbit message queue
     $rmq_cv = AnyEvent->condvar;
 }
 
-if ($opt_threshold){
-    my ( $min_jit, $min_dddelay, $min_slope) = split(',', $opt_threshold);
-}
+my ( $min_jit, $min_dddelay, $min_slope) = split(',', $opt_threshold);
 my $jitter_delta={'jit'=> $min_jit/2, 'ddelay'=> $min_ddelay/2, 'slope'=>$min_slope/2};
 
-$jitter_period= $opt_jitter if $opt_jitter;
-my $change_factor= $opt_change_factor || 0.3;
-my $jitter_factor={'jit'=> $change_factor, 'ddelay'=> $change_factor, 'slope'=>$change_factor};
-
-    
+#my $change_factor= $opt_change_factor;
+#my $jitter_factor={'jit'=> $change_factor, 'ddelay'=> $change_factor, 'slope'=>$change_factor};
 
 my @heads= qw/id date time tunix x1 nloss tloss seqloss x2 seqtail overlap x3 h_n h_jit h_ddelay h_delay h_min_d h_slope_10 h_slope_20 h_slope_30 h_slope_40 h_slope_50 x4 t_n t_jit t_ddelay t_delay t_min_d t_slope_10 t_slope_20 t_slope_30 t_slope_40 t_slope_50 dTTL/;
 
@@ -247,16 +313,14 @@ if ( $opt_names){
     get_names($opt_names);
 }
 
-
-
-my $maxslep=$opt_slep || 10000 ;
-my $maxhead=$opt_win || 10; # packets to keep before
-my $maxtail=$opt_win || 10; # packets to keep after 
+my $maxslep=$opt_slep;
+my $maxhead=$opt_win; # packets to keep before
+my $maxtail=$opt_win; # packets to keep after 
 my $min_slopes=5; # slopes to report on text report
-my $minloss= $opt_minloss || 5;
-my $minrecover = $opt_recover || 5;
-my $outdir=$opt_outdir || ".";
-my $title=$opt_title || 'Delay';
+my $minloss= $opt_minloss;
+my $minrecover = $opt_recover;
+my $outdir=$opt_outdir;
+my $title=$opt_title;
 
 my $crude_fmt='^ID=(\d+) SEQ=(\d+) SRC=([\w\:\.]+):\d+ DST=([\w\:\.]+):\d+\s+Tx=([\d\.]+)\s+Rx=([\d\.]+)\s+SIZE=(\d+)';
 my $bv_fmt='^([\d]+)\s+([\d\.\:]+)\s+([\d\.]+)\s+([\d\.]+)'; # BV's condensed format for crude

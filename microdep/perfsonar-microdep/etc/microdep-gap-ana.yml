@@ -1,0 +1,45 @@
+#
+# Microdep analytics config file for gap analysis
+#
+#   Usage: qstream-gap-ana -conf /etc/perfsonar/microdep/microdep-gap-ana.yml
+#
+# Note: Remember to restart analysis after updating configfile, i.e. 'systemctl restart perfsonar-microdep-gap-ana.service'
+
+# Default values are given in comments
+#h: false               # Show help message and exit
+#help: false            # Show help message and exit
+#id: ""                 # Force setting of id tag for an end-to-end flow. Defaults to source address (or <src>_<dst> for #pscheduler data). 
+#slep: 10000            # Number of packets kept in window for analysis.
+#minloss: 5             # Number of lost packets interpreted as a 'big' gap. Each big gap generates an event. 
+#win: 50                # Number of packets to analyse before and after a big gap.
+#recover: 5	       # Number of in-sequence packets to be receieved for a 'big' gap to be considered ended.
+#head: false            # Output additional headers. (Requires -v).
+#rhead: ""              # Output headers for R to make headings in text tables. A space separated string.
+#graph: false 	       # Output graphs.
+#max-small-graphs: 20   # Number of graphs to output from small packet losses.
+#title: "Delay"	       # Set title for graphs. Default is 'Delay'.
+#outdir: "."	       # Set output directory. Defaut is current directory.
+#addresses: ""          # Filename to source of ip-to-name mappings. Both '<hostname> <address>' format and perfsonar psConfig json is accepted.
+#names: ""	       # Filename to source of ip-to-name mappings. '<name> <user> <dns> <ip>' format acccepted.
+#threshold: "10,10,0.5"  # Threshold values for reporting, in form of a vector-string '<min-jitter>,<min-ddelay>,<min-slope>'.
+#owamp: ""             # Url to source of json owamp data. Protocols supported: http, https, ampq, ampqs.
+owamp: "https://localhost/opensearch"
+#follow: false	       # Reread input source at intervals and analyse newly arrived packets. Applys only for owamp http* urls.
+follow: true
+#followinterval: 10     # Interval in seconds for rereading input source.
+#json: ""               # Output event data in JSON format to given file.
+#jitter: 600            # Emit jitter statistics at at least given interval.
+#v: false               # Be verbose.
+#rtp: 5                 # RTP jitter algorithm with 1/n change of average.
+#ddelay_low: 2          # Lower limit in ms for recording jitter burst.
+#ddelay_high: 10        # Upper limit in ms for recording jitter burst.
+#debug: 0               # Level of debug info to output. 0 = no debug.
+#batchsize: 0           # When >0 overrides detected batch size (packet count) when reading owamp subsession data sets.
+#topoevents: false      # Enable output of topology events whenever a topology change is detected. Requires -json. 
+topoevents: true  
+#topointerval: 3600     # Min interval (sec) between topology events.
+#pslookup: "http://ps-west.es.net/lookup/activehosts.json"  # Source url for perfSONAR lookup service hosts. 
+#wait:  3600            # Min no of seconds to wait between refreshing info fetched from pslookup-service. 
+#ipv6: false            # Analyse ipv6 packets (and ignore ipv4).
+#conf: ""               # Filename to config file, i.e. THIS FILE. Note that CLI options override options for file.
+

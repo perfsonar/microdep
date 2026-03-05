@@ -374,6 +374,7 @@ systemctl stop perfsonar-microdep-restart.timer || true
 %{microdep_config_base}/roles_yml_patch
 %{microdep_config_base}/microdep-tests.json.example
 %{microdep_config_base}/microdep-tests-packet-subcount.json.example
+%config %{microdep_config_base}/microdep-gap-ana.yml
 %config /etc/logrotate.d/microdep
 %changelog
 * Thu Oct 24 2025 Otto J Wittner <otto.wittner@sikt.no>
