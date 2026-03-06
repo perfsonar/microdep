@@ -91,12 +91,16 @@ if ( ! $opt_h && ! $opt_help && -e $opt_config_file ) {
 	); 
     foreach my $opt (keys %{$config}) {
 	# Set option based on value from config file
-	if (exists $supported_options{$opt} && ! ${$supported_options->{$opt}} ) {
-	    # A boolean option not yet set. Apply value from config file.
-	    ${$supported_options{$opt}} = $config->{$opt};
-	} elsif (exists $supported_options{$opt . '=s'} && ! ${$supported_options->{$opt . '=s'}} ) {
-	    # A key-value option
-	    ${$supported_options{$opt . '=s'}} = $config->{$opt};
+	if (exists $supported_options{$opt}) {
+	    if ( ! ${$supported_options{$opt}} ) {
+		# A boolean option not yet set. Apply value from config file.
+		${$supported_options{$opt}} = ( $config->{$opt} eq 'true' );
+	    }
+	} elsif (exists $supported_options{$opt . '=s'}) {
+	    if (! ${$supported_options{$opt . '=s'}} ) {
+		# A key-value option not yet set. Apply value from config file.
+		${$supported_options{$opt . '=s'}} = $config->{$opt};
+	    }
 	} else {
 	    # Unsupported config option
 	    warn "Unsupported option '$opt' in config file '$configfile'. Ignoring."
@@ -104,7 +108,7 @@ if ( ! $opt_h && ! $opt_help && -e $opt_config_file ) {
     }
 }
 
-# Set default values for options( not yet set)
+# Set default values for options (not yet set)
 $opt_h ||= 0;          # Flag: Show help text.
 $opt_help ||= 0;       # Flag: Show help text.
 $opt_id ||= '';        # Force id tag for an end-to-end flow. Defaults to source address (or <src>_<dst> for pscheduler data). 
@@ -166,7 +170,7 @@ my $rmq_cv;  # Conditional variable applied when reading from Rabbit message que
 
 # parms for jitter report
 my %n_normal=();  # count of normal packets for modulo
-my $jitter_period= $opt_jitter_period; # seconds between jitter reports
+my $jitter_period= $opt_jitter; # seconds between jitter reports
 my %jitter_last=(); # last time jitter reported
 my %jitter_values=(); # last jitter values reported
 

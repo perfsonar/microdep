@@ -9,7 +9,7 @@ Group=perfsonar
 # Run analysis for both ipv4 and ipv6
 ExecStart=/bin/bash -c ' \
   /usr/lib/perfsonar/bin/microdep_commands/qstream-gap-ana -conf /etc/perfsonar/microdep/microdep-gap-ana.yml & \
-  /usr/lib/perfsonar/bin/microdep_commands/qstream-gap-ana -conf /etc/perfsonar/microdep/microdep-gap-ana.yml -ipv6 & \
+  /usr/lib/perfsonar/bin/microdep_commands/qstream-gap-ana -conf /etc/perfsonar/microdep/microdep-gap-ana.yml -ipv6 -json /var/lib/logstash/microdep/gap-ana-6.json & \
   wait \
 '
 Restart=on-failure

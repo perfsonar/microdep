@@ -28,6 +28,7 @@ owamp: "https://localhost/opensearch"
 follow: true
 #followinterval: 10     # Interval in seconds for rereading input source.
 #json: ""               # Output event data in JSON format to given file.
+json: "/var/lib/logstash/microdep/gap-ana.json"
 #jitter: 600            # Emit jitter statistics at at least given interval.
 #v: false               # Be verbose.
 #rtp: 5                 # RTP jitter algorithm with 1/n change of average.
