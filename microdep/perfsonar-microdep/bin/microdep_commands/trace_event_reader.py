@@ -380,39 +380,39 @@ def parse_cmd(param):
     """
 
     # Parse arguments from commandline
-    cmdparser = argparse.ArgumentParser(description="Analyses traceroute output and reports detected anomalities.",
-                                        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    # Configure parser
-    cmdparser.add_argument('file',  nargs="*", default=param['file'], help='Path to traceroute file')
-    cmdparser.add_argument('--date', '-d', default=param['date'], help='ISO-date for traceroute file search')
-    cmdparser.add_argument('--live', '-l', action='count', default=param['live'], help='Run live analysis on todays date')
-    cmdparser.add_argument('--all', '-a', action='count', default=param['all'], help='Process all traceoutes, also older than last processed (according to db)')
-    cmdparser.add_argument('--tcp', '-T', action='count', default=param['tcp'], help='Look for tcptraceroute files.')
-    cmdparser.add_argument('--pssrc', default=param['pssrc'], help='URL to perfsonar data source.')
-    cmdparser.add_argument('--path', '-p', default=param['path'], help='Base path to apply when searching based on date')
-    cmdparser.add_argument('--reportpath', '-r', default=param['reportpath'], help='Base path to apply when storing output for date based input.')
-    cmdparser.add_argument('--reportpostpath', '-R', default=param['reportpostpath'], help='Finale path level to add below reportpath, source host and date.')
-    cmdparser.add_argument('--output', '-o', default=param['output'], help='Filename for output. Default is timestamp+"R"+hash')
-    cmdparser.add_argument('--oneoutput', '-O', default=param['oneoutput'], help='All output to single file.')
-    cmdparser.add_argument('--samepath', '-s', action='count', default=param['samepath'], help='Place output file in same path as input file')
-    cmdparser.add_argument('--namemap', '-n', default=param['namemap'], help='Name and path for name-to-ip mapping-file.')
-    cmdparser.add_argument('--geodb', '-g', default=param['geodb'], help='Name and path for ip-to-asn mapping-database (MaxMind).')
-    cmdparser.add_argument('--dbtype', default=param['dbtype'], help='Database type. \'mysql\' and \'postgresql\' supported.')
-    cmdparser.add_argument('--dbname', default=param['dbname'], help='Name of anomality parameter DB')
-    cmdparser.add_argument('--dbuser', default=param['dbuser'], help='User name for db access')
-    cmdparser.add_argument('--dbpasswd', default=param['dbpasswd'], help='Password for db access')
-    cmdparser.add_argument('--dbhost', default=param['dbhost'], help='Host name for db access')
-    cmdparser.add_argument('--dbclear', '-c', action='count', default=param['dbclear'], help='Clear database before running.')
-    cmdparser.add_argument('--verbose', '-v', action='count', default=param['verbose'], help='Verbose output to stderr. Apply multiple to increase level.')
-    cmdparser.add_argument('--profiler', '-P', action='count', default=param['profiler'], help='Run performance profiling per file.')
-    cmdparser.add_argument('--maxprocs', '-m', default=param['maxprocs'], help='Max no of processes in batch mode.')
-    cmdparser.add_argument('--topoevents', '-t', action='count', default=param['topoevents'], help='Detect and output events when topology changes are detected.')
-    cmdparser.add_argument('--topointerval', default=param['topointerval'], help='Min no of seconds between topology events.')
-    cmdparser.add_argument('--pslookup', default=param['pslookup'], help='Source of perfSONAR Lookup Service hosts.')
-    cmdparser.add_argument('--pslookupwait', default=param['pslookupwait'], help='Min interval between attempts to fetch info from ps-lookup service.')
-    cmdparser.add_argument('--ipv6', '-6', action='count', default=param['ipv6'], help='Enable parsing of ipv6 addresses.')
-    cmdparser.add_argument('--followinterval', default=param['followinterval'], help='No of seconds to wait between requests for data from openseach archive.')
-    cmdparser.add_argument('--config', default=param['config'], help='Path to configuration file. Note that commandline options overrides config file settings.')
+    cmdparser = argparse.ArgumentParser(description="Analyses traceroute output and reports detected anomalities.")
+
+    # Configure parser (Do not apply defaults since param[] hash already holds these.)
+    cmdparser.add_argument('file',  nargs="*", help='Path to traceroute file. Default is ' + param['file'] + '.')
+    cmdparser.add_argument('--date', '-d', help='ISO-date for traceroute file search. Default is ' + param['date'] + '.')
+    cmdparser.add_argument('--live', '-l', action='count', help='Run live analysis on todays date.')
+    cmdparser.add_argument('--all', '-a', action='count', help='Process all traceoutes, also older than last processed (according to db)')
+    cmdparser.add_argument('--tcp', '-T', action='count', help='Look for tcptraceroute files.')
+    cmdparser.add_argument('--pssrc', help='URL to perfsonar data source. http(s) and amqp(s) are supported.')
+    cmdparser.add_argument('--path', '-p', help='Base path to apply when searching based on date. Default is ' + param['path'] + '.')
+    cmdparser.add_argument('--reportpath', '-r', help='Base path to apply when storing output for date based input. Default is ' + param['reportpath'] + '.')
+    cmdparser.add_argument('--reportpostpath', '-R', help='Finale path level to add below reportpath, source host and date. Default is ' + param['reportpostpath'] + '.')
+    cmdparser.add_argument('--output', '-o', help='Filename for output. Default is timestamp+"R"+hash')
+    cmdparser.add_argument('--oneoutput', '-O', help='All output to single file.')
+    cmdparser.add_argument('--samepath', '-s', action='count', help='Place output file in same path as input file.')
+    cmdparser.add_argument('--namemap', '-n', help='Name and path for name-to-ip mapping-file. Default is ' + param['namemap'] + '.')
+    cmdparser.add_argument('--geodb', '-g', help='Name and path for ip-to-asn mapping-database (MaxMind). Default is ' + param['geodb'] + '.')
+    cmdparser.add_argument('--dbtype', help='Database type. \'mysql\' and \'postgresql\' supported. Default is ' + param['dbtype'] + '.')
+    cmdparser.add_argument('--dbname', help='Name of anomality parameter DB. Default is ' + param['dbname'] + '.')
+    cmdparser.add_argument('--dbuser', help='User name for db access. Default is ' + param['dbuser'] + '.')
+    cmdparser.add_argument('--dbpasswd', help='Password for db access. Default is ' + param['dbpasswd'] + '.')
+    cmdparser.add_argument('--dbhost', help='Host name for db access. Default is ' + param['dbhost'] + '.')
+    cmdparser.add_argument('--dbclear', '-c', action='count', help='Clear database before running.')
+    cmdparser.add_argument('--verbose', '-v', action='count', help='Verbose output to stderr. Apply multiple to increase level.')
+    cmdparser.add_argument('--profiler', '-P', action='count', help='Run performance profiling per file.')
+    cmdparser.add_argument('--maxprocs', '-m', help='Max no of processes in batch mode. Default is ' + str(param['maxprocs']) + '.')
+    cmdparser.add_argument('--topoevents', '-t', action='count', help='Detect and output events when topology changes are detected.')
+    cmdparser.add_argument('--topointerval', help='Min no of seconds between topology events. Default is ' + str(param['topointerval']) + '.')
+    cmdparser.add_argument('--pslookup', help='Source of perfSONAR Lookup Service hosts. Default is ' + param['pslookup'] + '.')
+    cmdparser.add_argument('--pslookupwait', help='Min interval between attempts to fetch info from ps-lookup service. Default is ' + str(param['pslookupwait']) + '.')
+    cmdparser.add_argument('--ipv6', '-6', action='count', help='Enable parsing of ipv6 addresses.')
+    cmdparser.add_argument('--followinterval', help='No of seconds to wait between requests for data from openseach archive. Default is ' + str(param['followinterval']) + '.')
+    cmdparser.add_argument('--config', help='Path to configuration file. Note that commandline options overrides config file settings.')
 
     # Run parser
     args = cmdparser.parse_args()
@@ -441,15 +441,15 @@ def parse_cmd(param):
 
     # Extract all commandline parameters 
     for p in args.__dict__:
-        if (p in param):
-            # Update parameter
+        if (args.__dict__[p] and p in param):
+            # New value from commandline. Update parameter
             param[p] = args.__dict__[p]
 
     if param['live'] > 0 or len(param['file']) > 0 or param['date'] or param['pssrc']:
         # Minimim params given, continue
         return param
     else:
-        print('Error: Missing commandline option. --file, --date, --live or --pssrc required.')
+        print('Error: Missing option. --file, --date, --live or --pssrc required.')
         cmdparser.print_help()
         sys.exit()
 

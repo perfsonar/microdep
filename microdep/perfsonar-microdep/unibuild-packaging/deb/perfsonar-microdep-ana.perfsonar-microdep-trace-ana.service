@@ -9,8 +9,8 @@ User=perfsonar
 Group=perfsonar
 # Run analysis for both ipv4 and ipv6
 ExecStart=/bin/bash -c '\
-  /usr/lib/perfsonar/bin/microdep_commands/trace_event_reader.py -s -O /var/lib/logstash/microdep/trace-ana.json --pssrc https://localhost//opensearch --dbtype postgresql --geodb /etc/perfsonar/microdep/GeoLite2/GeoLite2-ASN.mmdb --topoevents &\
-  /usr/lib/perfsonar/bin/microdep_commands/trace_event_reader.py -s -O /var/lib/logstash/microdep/trace-ana-6.json --pssrc https://localhost//opensearch --dbtype postgresql --geodb /etc/perfsonar/microdep/GeoLite2/GeoLite2-ASN.mmdb --topoevents --ipv6 &\
+  /usr/lib/perfsonar/bin/microdep_commands/trace_event_reader.py --config /etc/perfsonar/microdep/microdep-trace-ana.yml &\
+  /usr/lib/perfsonar/bin/microdep_commands/trace_event_reader.py --config /etc/perfsonar/microdep/microdep-trace-ana.yml --ipv6 -O /var/lib/logstash/microdep/trace-ana-6.json &\
   wait \
 '
 Restart=on-failure
