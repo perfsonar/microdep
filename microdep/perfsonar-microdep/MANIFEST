@@ -27,6 +27,7 @@ etc/roles_yml_patch
 etc/grafana_dashboard_patch
 etc/microdep_default_policy.json
 etc/microdep-gap-ana.yml
+etc/microdep-trace-ana.yml
 bin/microdep_commands/rabbitmq-consume.py
 bin/microdep_commands/json2table.pl
 bin/microdep_commands/qstream-gap-ana

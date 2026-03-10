@@ -119,6 +119,7 @@ Requires:               python3-pika
 Requires:               python3-psycopg2
 Requires:               python3-pytz
 Requires:               python3-tzlocal
+Requires:               python3-pyyaml
 Requires:               perfsonar-microdep-geolite2
 Requires:               logrotate
 Requires:               perfsonar-raw-data
@@ -375,6 +376,7 @@ systemctl stop perfsonar-microdep-restart.timer || true
 %{microdep_config_base}/microdep-tests.json.example
 %{microdep_config_base}/microdep-tests-packet-subcount.json.example
 %config %{microdep_config_base}/microdep-gap-ana.yml
+%config %{microdep_config_base}/microdep-trace-ana.yml
 %config /etc/logrotate.d/microdep
 %changelog
 * Thu Oct 24 2025 Otto J Wittner <otto.wittner@sikt.no>

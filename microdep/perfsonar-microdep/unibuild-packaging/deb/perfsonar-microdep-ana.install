@@ -7,6 +7,7 @@ etc/roles_yml_patch etc/perfsonar/microdep/
 etc/microdep-tests.json.example etc/perfsonar/microdep/
 etc/microdep-tests-packet-subcount.json.example etc/perfsonar/microdep/
 etc/microdep-gap-ana.yml etc/perfsonar/microdep/
+etc/microdep-trace-ana.yml etc/perfsonar/microdep/
 bin/microdep_commands/qstream-gap-ana usr/lib/perfsonar/bin/microdep_commands/
 bin/microdep_commands/trace_event_reader.py usr/lib/perfsonar/bin/microdep_commands/ 
 bin/microdep_commands/create_new_db.sh usr/lib/perfsonar/bin/microdep_commands/

@@ -5,7 +5,7 @@
 #
 # Note: Remember to restart analysis after updating configfile, i.e. 'systemctl restart perfsonar-microdep-gap-ana.service'
 
-# Default values are given in comments
+## Default values in comments
 #h: false               # Show help message and exit
 #help: false            # Show help message and exit
 #id: ""                 # Force setting of id tag for an end-to-end flow. Defaults to source address (or <src>_<dst> for #pscheduler data). 
@@ -23,12 +23,9 @@
 #names: ""	       # Filename to source of ip-to-name mappings. '<name> <user> <dns> <ip>' format acccepted.
 #threshold: "10,10,0.5"  # Threshold values for reporting, in form of a vector-string '<min-jitter>,<min-ddelay>,<min-slope>'.
 #owamp: ""             # Url to source of json owamp data. Protocols supported: http, https, ampq, ampqs.
-owamp: "https://localhost/opensearch"
 #follow: false	       # Reread input source at intervals and analyse newly arrived packets. Applys only for owamp http* urls.
-follow: true
 #followinterval: 10     # Interval in seconds for rereading input source.
 #json: ""               # Output event data in JSON format to given file.
-json: "/var/lib/logstash/microdep/gap-ana.json"
 #jitter: 600            # Emit jitter statistics at at least given interval.
 #v: false               # Be verbose.
 #rtp: 5                 # RTP jitter algorithm with 1/n change of average.
@@ -37,10 +34,14 @@ json: "/var/lib/logstash/microdep/gap-ana.json"
 #debug: 0               # Level of debug info to output. 0 = no debug.
 #batchsize: 0           # When >0 overrides detected batch size (packet count) when reading owamp subsession data sets.
 #topoevents: false      # Enable output of topology events whenever a topology change is detected. Requires -json. 
-topoevents: true  
 #topointerval: 3600     # Min interval (sec) between topology events.
 #pslookup: "http://ps-west.es.net/lookup/activehosts.json"  # Source url for perfSONAR lookup service hosts. 
 #wait:  3600            # Min no of seconds to wait between refreshing info fetched from pslookup-service. 
 #ipv6: false            # Analyse ipv6 packets (and ignore ipv4).
 #conf: ""               # Filename to config file, i.e. THIS FILE. Note that CLI options override options for file.
 
+## perfSONAR Microdep settings
+owamp: "https://localhost/opensearch"
+follow: true
+json: "/var/lib/logstash/microdep/gap-ana.json"
+topoevents: true  
