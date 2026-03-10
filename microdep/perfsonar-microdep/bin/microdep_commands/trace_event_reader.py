@@ -50,47 +50,44 @@ from io import StringIO
 import hashlib
 from operator import itemgetter
 import re
+import yaml
 
 #Tweaks for comparing final status of traceroute
-
 f_reduction = 0.5 #From 0 to 1. If set to 0, alarm is reset every time a normal occurence is seen.
-f_swapping = 30 #Amount of traceroutes a state has to have been in the lead to be declared the normal state
-f_swapping_min = 5 #The minimum amount of traceroutes a state has to have been in the lead lately to be or keep being declared the normal state
+#f_swapping = 30 #Amount of traceroutes a state has to have been in the lead to be declared the normal state
+#f_swapping_min = 5 #The minimum amount of traceroutes a state has to have been in the lead lately to be or keep being declared the normal state
 f_majority = 30 #How many more traceroutes than second place a state has to have to be declared the normal state.
-f_freshness = 0.12 #From 0 to 1. If set to 1, traceroutes used to determine normality are never outdated.
+#f_freshness = 0.12 #From 0 to 1. If set to 1, traceroutes used to determine normality are never outdated.
 f_max_state_counter = 1000 # Maximum value for state counters (i.e. a kind of window size). Counters are all to be decreased if one reach this value.
 #f_wsensitivity = 3 #Amount of traceroutes in an anomalous report before printing a warning.
 #f_csensitivity = 2 #Amount of traceroutes in an anomalous report before printing a summary.
-f_csensitivity = 0.9 #Amount of traceroutes in an anomalous report before printing a summary.
+f_csensitivity = 1 #Amount of traceroutes in an anomalous report before printing a summary.
 
-#Tweaks for comparing the length of traceroutes
+#Tweaks for comparing the length of traceroutes. NOT CURRENTLY IN USE
+#l_swapping = 30 #Amount of times a hop length must be seen to be declared the normal length
+#l_majority = 30 #How many more traceroutes than second place a state has to have to be declared the normal state.
+#l_sensitivity = 5 #Determines how many abnormal lengths need to be seen to trigger a report.
+#l_reduction = 0.12 #How much to decrease the anomaly when a normal traceroute is seen.
+#l_freshness = 0.7 #How much to subtract the anomaly with time.
+#l_difference = 1 #Minimum difference in hop length that system is sensitive to.
 
-l_swapping = 30 #Amount of times a hop length must be seen to be declared the normal length
-l_majority = 30 #How many more traceroutes than second place a state has to have to be declared the normal state.
-l_sensitivity = 5 #Determines how many abnormal lengths need to be seen to trigger a report.
-l_reduction = 0.12 #How much to decrease the anomaly when a normal traceroute is seen.
-l_freshness = 0.7 #How much to subtract the anomaly with time.
-l_difference = 1 #Minimum difference in hop length that system is sensitive to.
+#Tweaks for comparing RTT. NOT CURRENTLY IN USE
+#rtt_threshold = 300 #Minimum amount of RTTs needed until we think there is a point in checking for outliers.
+#rtt_tukeyfactor = 3.5 #A factor of 1.5 makes it register slight anomalies, 3 makes it register only high anomalies.
+#rtt_minimum = 5 #Minimum unusual RTTs in a traceroute hop needed to increase the anomaly quotient on the given route.
+#rtt_freshness = 0.2 #How much we decrement the anomaly quotient each time to make sure the value is based on recent traceroutes.
+#rtt_reduction = 0.7 #How much we multiply the anomaly quotient when we see a normal state again.
+#rtt_sensitivity = 7 #The total anomaly quotient required to consider this feature as being in an anomalous state.
 
-#Tweaks for comparing RTT
-
-rtt_threshold = 300 #Minimum amount of RTTs needed until we think there is a point in checking for outliers.
-rtt_tukeyfactor = 3.5 #A factor of 1.5 makes it register slight anomalies, 3 makes it register only high anomalies.
-rtt_minimum = 5 #Minimum unusual RTTs in a traceroute hop needed to increase the anomaly quotient on the given route.
-rtt_freshness = 0.2 #How much we decrement the anomaly quotient each time to make sure the value is based on recent traceroutes.
-rtt_reduction = 0.7 #How much we multiply the anomaly quotient when we see a normal state again.
-rtt_sensitivity = 7 #The total anomaly quotient required to consider this feature as being in an anomalous state.
-
-#Tweaks for comparing routes
-
-r_freshness = 0.12 #From 0 to 1. If set to 1, count of route variance occurences are never outdated.
-r_partialreq = 0.6 #Minimum ratio to consider a route variance partially matched.
-r_partialmatch = 1 #If partialmatch is set to 1, then the exact matching ratio is added to the anomaly counter.
-r_majority = 30 #How many more traceroutes than second place a state has to have to be declared the normal state.
-r_swapping = 30 #Amount of traceroutes a route variance has to have been in the lead to be declared the normal state
-r_comboaccel = 1.1 #The rate at which the points awarded for anomalous hops in a row grows.
-r_minimum = 4 #Minimum anomaly count for all hops in a traceroute to consider whole traceroute anomalous.
-r_reduction = 0.7 #From 0 to 1. If set to 0, alarm is reset every time a normal occurence is seen.
+#Tweaks for comparing routes. NOT CURRENTLY IN USE
+#r_freshness = 0.12 #From 0 to 1. If set to 1, count of route variance occurences are never outdated.
+#r_partialreq = 0.6 #Minimum ratio to consider a route variance partially matched.
+#r_partialmatch = 1 #If partialmatch is set to 1, then the exact matching ratio is added to the anomaly counter.
+#r_majority = 30 #How many more traceroutes than second place a state has to have to be declared the normal state.
+#r_swapping = 30 #Amount of traceroutes a route variance has to have been in the lead to be declared the normal state
+#r_comboaccel = 1.1 #The rate at which the points awarded for anomalous hops in a row grows.
+#r_minimum = 4 #Minimum anomaly count for all hops in a traceroute to consider whole traceroute anomalous.
+#r_reduction = 0.7 #From 0 to 1. If set to 0, alarm is reset every time a normal occurence is seen.
 
 # Cross Entropy parameters
 CE_DELTA_LIMIT = 3.0          # Level of change in ce-level for a hop to consider a route change to have happened.
@@ -104,13 +101,13 @@ param = {
     'all': 0,     # Flag to enable processing of older-than-latest traceroutes
     'tcp': 0,     # Flag to enable processing tcptraceroute files
     'pssrc': '',  # Url to perfsonar data source, amqp://<user:passwd@localhost>/<vhost>/queue=<traceroute> or, https://<archive-host>/opensearch 
-    'path': '/var/lib/microdep/mp-dragonlab/data',             # Path to apply when searching based on date               
-    'reportpath': '/var/lib/microdep/mp-dragonlab/report/mp',  # Path to apply for output files when searching based on date               
+    'path': '/var/lib/microdep/my-network/data',             # Path to apply when searching based on date               
+    'reportpath': '/var/lib/microdep/my-network/report/mp',  # Path to apply for output files when searching based on date               
     'reportpostpath': 'trace-ana',                             # Finale path level to add below reportpath,  source host and date               
     'output':'',                  # Output filename.
     'oneoutput':'',               # Output filename for single file output.
     'samepath': 0,                # Flag to enable placement of outputfile in same folder as input file 
-    'namemap': '/var/lib/microdep/mp-dragonlab/etc/mp-address.txt',    # File path to name-to-ip mapping db
+    'namemap': '/var/lib/microdep/my-network/etc/mp-address.txt',    # File path to name-to-ip mapping db
     'geodb': '/usr/share/GeoIP/GeoLite2-ASN.mmdb',                     # File path to ip-to-ASN mapping db
     'dbtype': 'mysql',            # Database type. 'mysql' and 'postgresql' supported.
     'dbname': 'routingmonitor',   # Name of database for anomality parameters
@@ -127,8 +124,11 @@ param = {
     'pslookup': 'http://ps-west.es.net/lookup/activehosts.json',  # Source of perfSONAR Lookup Service hosts
     'pslookupwait': 3600,         # Min no of seconds to wait between refreshing info fetched from pslookup-service
     'ipv6': 0,                    # Flag enabling ipv6 address parsing
-    'followinterval': 10          # No of seconds to wait between requests for data from openseach archive
+    'followinterval': 10,          # No of seconds to wait between requests for data from openseach archive
+    'config': ''                  # Path to configuration file. Note that commandline options override config file.               
 }
+
+config = {} # Config structure loaded from configuration file (if any)
 
 # State constants
 STATE_SUCCESS = 1
@@ -380,52 +380,76 @@ def parse_cmd(param):
     """
 
     # Parse arguments from commandline
-    cmdparser = argparse.ArgumentParser(description="Analyses traceroute output and reports detected anomalities.",
-                                        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    # Configure parser
-    cmdparser.add_argument('file',  nargs="*", default=param['file'], help='Path to traceroute file')
-    cmdparser.add_argument('--date', '-d', default=param['date'], help='ISO-date for traceroute file search')
-    cmdparser.add_argument('--live', '-l', action='count', default=param['live'], help='Run live analysis on todays date')
-    cmdparser.add_argument('--all', '-a', action='count', default=param['all'], help='Process all traceoutes, also older than last processed (according to db)')
-    cmdparser.add_argument('--tcp', '-T', action='count', default=param['tcp'], help='Look for tcptraceroute files.')
-    cmdparser.add_argument('--pssrc', default=param['pssrc'], help='URL to perfsonar data source.')
-    cmdparser.add_argument('--path', '-p', default=param['path'], help='Base path to apply when searching based on date')
-    cmdparser.add_argument('--reportpath', '-r', default=param['reportpath'], help='Base path to apply when storing output for date based input.')
-    cmdparser.add_argument('--reportpostpath', '-R', default=param['reportpostpath'], help='Finale path level to add below reportpath, source host and date.')
-    cmdparser.add_argument('--output', '-o', default=param['output'], help='Filename for output. Default is timestamp+"R"+hash')
-    cmdparser.add_argument('--oneoutput', '-O', default=param['oneoutput'], help='All output to single file.')
-    cmdparser.add_argument('--samepath', '-s', action='count', default=param['samepath'], help='Place output file in same path as input file')
-    cmdparser.add_argument('--namemap', '-n', default=param['namemap'], help='Name and path for name-to-ip mapping-file.')
-    cmdparser.add_argument('--geodb', '-g', default=param['geodb'], help='Name and path for ip-to-asn mapping-database (MaxMind).')
-    cmdparser.add_argument('--dbtype', default=param['dbtype'], help='Database type. \'mysql\' and \'postgresql\' supported.')
-    cmdparser.add_argument('--dbname', default=param['dbname'], help='Name of anomality parameter DB')
-    cmdparser.add_argument('--dbuser', default=param['dbuser'], help='User name for db access')
-    cmdparser.add_argument('--dbpasswd', default=param['dbpasswd'], help='Password for db access')
-    cmdparser.add_argument('--dbhost', default=param['dbhost'], help='Host name for db access')
-    cmdparser.add_argument('--dbclear', '-c', action='count', default=param['dbclear'], help='Clear database before running.')
-    cmdparser.add_argument('--verbose', '-v', action='count', default=param['verbose'], help='Verbose output to stderr. Apply multiple to increase level.')
-    cmdparser.add_argument('--profiler', '-P', action='count', default=param['profiler'], help='Run performance profiling per file.')
-    cmdparser.add_argument('--maxprocs', '-m', default=param['maxprocs'], help='Max no of processes in batch mode.')
-    cmdparser.add_argument('--topoevents', '-t', action='count', default=param['topoevents'], help='Detect and output events when topology changes are detected.')
-    cmdparser.add_argument('--topointerval', default=param['topointerval'], help='Min no of seconds between topology events.')
-    cmdparser.add_argument('--pslookup', default=param['pslookup'], help='Source of perfSONAR Lookup Service hosts.')
-    cmdparser.add_argument('--pslookupwait', default=param['pslookupwait'], help='Min interval between attempts to fetch info from ps-lookup service.')
-    cmdparser.add_argument('--ipv6', '-6', action='count', default=param['ipv6'], help='Enable parsing of ipv6 addresses.')
-    cmdparser.add_argument('--followinterval', default=param['followinterval'], help='No of seconds to wait between requests for data from openseach archive.')
+    cmdparser = argparse.ArgumentParser(description="Analyses traceroute output and reports detected anomalities.")
+
+    # Configure parser (Do not apply defaults since param[] hash already holds these.)
+    cmdparser.add_argument('file',  nargs="*", help='Path to traceroute file. Default is ' + param['file'] + '.')
+    cmdparser.add_argument('--date', '-d', help='ISO-date for traceroute file search. Default is ' + param['date'] + '.')
+    cmdparser.add_argument('--live', '-l', action='count', help='Run live analysis on todays date.')
+    cmdparser.add_argument('--all', '-a', action='count', help='Process all traceoutes, also older than last processed (according to db)')
+    cmdparser.add_argument('--tcp', '-T', action='count', help='Look for tcptraceroute files.')
+    cmdparser.add_argument('--pssrc', help='URL to perfsonar data source. http(s) and amqp(s) are supported.')
+    cmdparser.add_argument('--path', '-p', help='Base path to apply when searching based on date. Default is ' + param['path'] + '.')
+    cmdparser.add_argument('--reportpath', '-r', help='Base path to apply when storing output for date based input. Default is ' + param['reportpath'] + '.')
+    cmdparser.add_argument('--reportpostpath', '-R', help='Finale path level to add below reportpath, source host and date. Default is ' + param['reportpostpath'] + '.')
+    cmdparser.add_argument('--output', '-o', help='Filename for output. Default is timestamp+"R"+hash')
+    cmdparser.add_argument('--oneoutput', '-O', help='All output to single file.')
+    cmdparser.add_argument('--samepath', '-s', action='count', help='Place output file in same path as input file.')
+    cmdparser.add_argument('--namemap', '-n', help='Name and path for name-to-ip mapping-file. Default is ' + param['namemap'] + '.')
+    cmdparser.add_argument('--geodb', '-g', help='Name and path for ip-to-asn mapping-database (MaxMind). Default is ' + param['geodb'] + '.')
+    cmdparser.add_argument('--dbtype', help='Database type. \'mysql\' and \'postgresql\' supported. Default is ' + param['dbtype'] + '.')
+    cmdparser.add_argument('--dbname', help='Name of anomality parameter DB. Default is ' + param['dbname'] + '.')
+    cmdparser.add_argument('--dbuser', help='User name for db access. Default is ' + param['dbuser'] + '.')
+    cmdparser.add_argument('--dbpasswd', help='Password for db access. Default is ' + param['dbpasswd'] + '.')
+    cmdparser.add_argument('--dbhost', help='Host name for db access. Default is ' + param['dbhost'] + '.')
+    cmdparser.add_argument('--dbclear', '-c', action='count', help='Clear database before running.')
+    cmdparser.add_argument('--verbose', '-v', action='count', help='Verbose output to stderr. Apply multiple to increase level.')
+    cmdparser.add_argument('--profiler', '-P', action='count', help='Run performance profiling per file.')
+    cmdparser.add_argument('--maxprocs', '-m', help='Max no of processes in batch mode. Default is ' + str(param['maxprocs']) + '.')
+    cmdparser.add_argument('--topoevents', '-t', action='count', help='Detect and output events when topology changes are detected.')
+    cmdparser.add_argument('--topointerval', help='Min no of seconds between topology events. Default is ' + str(param['topointerval']) + '.')
+    cmdparser.add_argument('--pslookup', help='Source of perfSONAR Lookup Service hosts. Default is ' + param['pslookup'] + '.')
+    cmdparser.add_argument('--pslookupwait', help='Min interval between attempts to fetch info from ps-lookup service. Default is ' + str(param['pslookupwait']) + '.')
+    cmdparser.add_argument('--ipv6', '-6', action='count', help='Enable parsing of ipv6 addresses.')
+    cmdparser.add_argument('--followinterval', help='No of seconds to wait between requests for data from openseach archive. Default is ' + str(param['followinterval']) + '.')
+    cmdparser.add_argument('--config', help='Path to configuration file. Note that commandline options overrides config file settings.')
 
     # Run parser
     args = cmdparser.parse_args()
-    # Extract parameters
+    if args.config:
+        # A config file is given. Load and parse.
+        with open(args.config, 'r') as file:
+            try:
+                config = yaml.safe_load(file)
+            except yaml.YAMLError as exc:
+                print("Error: Failed parsing config file " + args.config + ": ",  exc)
+                sys.exit()
+            
+        for p in config:
+            if (p in param):
+                # Update (default) parameter
+                param[p] = config[p]
+            else:
+                # Handle additional parameters
+                match p:
+                    case "f_reduction":  f_reduction = config[p]
+                    case "f_majority":  f_majority = config[p]
+                    case "f_max_state_counter":  f_max_state_counter = config[p]
+                    case "f_csensitivity":  f_csensitivity = config[p]
+                    case "ce_delta_limit":  CE_DELTA_LIMIT = config[p]
+                    case "hopdist_init_window": HOPDIST_INIT_WINDOW = config[p]
+
+    # Extract all commandline parameters 
     for p in args.__dict__:
-        if (p in param):
-            # Update parameter
+        if (args.__dict__[p] and p in param):
+            # New value from commandline. Update parameter
             param[p] = args.__dict__[p]
 
     if param['live'] > 0 or len(param['file']) > 0 or param['date'] or param['pssrc']:
         # Minimim params given, continue
         return param
     else:
-        print('Error: Missing commandline option. --file, --date, --live or --pssrc required.')
+        print('Error: Missing option. --file, --date, --live or --pssrc required.')
         cmdparser.print_help()
         sys.exit()
 
@@ -1765,7 +1789,7 @@ def errorCheck(traceroute, unique_pair, time, analysis_state):
                     analysis_state["report"] = json.dumps(data)
             elif data["status"] == "Errors":
                 if len(errors) == 0 and most_common_state != STATE_FAILED and state == STATE_FAILED:
-                    if (data["count"] - data["ncount"]) > f_csensitivity:
+                    if (data["count"] - data["ncount"]) >= f_csensitivity:
                         printAlert(threadid, tr_type, n, time, "completed")
                     data = initialize(time, state, lastip, errors, errorsIP, most_common_state, lasthop)
                     analysis_state["anomaly"] = 1
@@ -1773,7 +1797,7 @@ def errorCheck(traceroute, unique_pair, time, analysis_state):
                     v = tuple(analysis_state.values())   # Convert to tuple for "backward compatibility" with summerjob-code
                     printAlert( threadid, tr_type, v, time, "warning")
                 elif data["errorsip"] != errorsIP and len(errors) > 0:
-                    if (data["count"] - data["ncount"]) > f_csensitivity:
+                    if (data["count"] - data["ncount"]) >= f_csensitivity:
                         printAlert(threadid, tr_type, n, time, "completed")
                     data = initialize(time, state, lastip, errors, errorsIP, most_common_state, lasthop)
                     analysis_state["anomaly"] = 1
@@ -1788,7 +1812,7 @@ def errorCheck(traceroute, unique_pair, time, analysis_state):
                     analysis_state["report"] = json.dumps(data)
             elif data["status"] == "Stopped":
                 if len(errors) > 0:
-                    if (data["count"] - data["ncount"]) > f_csensitivity:
+                    if (data["count"] - data["ncount"]) >= f_csensitivity:
                         printAlert(threadid, tr_type, n, time, "completed")
                     data = initialize(time, state, lastip, errors, errorsIP, most_common_state, lasthop)
                     analysis_state["anomaly"] = 1
@@ -1796,7 +1820,7 @@ def errorCheck(traceroute, unique_pair, time, analysis_state):
                     v = tuple(analysis_state.values())   # Convert to tuple for "backward compatibility" with summerjob-code
                     printAlert( threadid, tr_type, v, time, "warning")
                 elif data["lastip"] != lastip and most_common_state != STATE_FAILED and state == STATE_FAILED:
-                    if (data["count"] - data["ncount"]) > f_csensitivity:
+                    if (data["count"] - data["ncount"]) >= f_csensitivity:
                         printAlert(threadid, tr_type, n, time, "completed")
                     data = initialize(time, state, lastip, errors, errorsIP, most_common_state, lasthop)
                     analysis_state["anomaly"] = 1
@@ -1815,7 +1839,7 @@ def errorCheck(traceroute, unique_pair, time, analysis_state):
         #If anomaly < 1, consider printing and delete timestamp and error message
         if analysis_state["anomaly"] < 1:
             data = json.loads(analysis_state['report'])
-            if data["status"] != "Normal" and (data["count"] - data["ncount"]) > f_csensitivity:
+            if data["status"] != "Normal" and (data["count"] - data["ncount"]) >= f_csensitivity:
                 printAlert(threadid, tr_type, n, time, "completed")
             analysis_state["anomaly"] = 0
             #analysis_state["report"] = json.dumps(data)
@@ -1829,6 +1853,8 @@ def errorCheck(traceroute, unique_pair, time, analysis_state):
         analysis_state["success"] = int(analysis_state["success"]) - 1
         analysis_state["failed"] = int(analysis_state["failed"]) - 1
 
+'''
+### BEGIN: NOT CURRENTLY IN USE ###
 
 def lengthCompare(traceroute, cursor, unique_pair, time):
     #Compares the amount of hops in each traceroute
@@ -1984,7 +2010,6 @@ def lengthCompare(traceroute, cursor, unique_pair, time):
         printLengthAlert(unique_pair, lengths[int(lpos)], cursor, anomalies, time)
         cursor.execute(('UPDATE length SET anomalies = %s, anomaly = 0 WHERE unique_pair = %s'), (json.dumps([-1]), unique_pair))
 
-
 #Creates the quartiles used to check if an RTT is anomalous 
 #despite reference points not being evenly distributed
 
@@ -2117,6 +2142,9 @@ def rttCompare(traceroute, cursor, unique_pair, time):
     #n = cursor.fetchall()
     #print(n)
 
+### END: NOT CURRENLTY IN USE ###  
+'''
+    
 DB_STRINGFIELDS=[ 'unique_pair', 'report', 'destinations', 'normal', 'memory']
     
 def build_sql_insert(state, table):

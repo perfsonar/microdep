@@ -146,12 +146,12 @@ if [ "$REMOVE" ]; then
     wait_opensearch
     wait_opensearch_api
     # Remove all
-    msg "Removing Opensearch templates, policies and datastreams/indices for raw data ..."
-    curl -k -u admin:${ADMIN_PASS} -s -XDELETE "$OPENSEARCH_URL/_index_template/pscheduler_raw_data_policy" 2>/dev/null ; echo
-    curl -k -u admin:${ADMIN_PASS} -s -XDELETE "$OPENSEARCH_URL/_plugins/_ism/policies/pscheduler_raw_data_policy" 2>/dev/null ; echo
+    msg "Removing Opensearch datastreams/indices, policies and templates for raw data ..."
     for i in $INDICES; do
 	curl -k -u admin:${ADMIN_PASS} -s -XDELETE "$OPENSEARCH_URL/_data_stream/$i" 2>/dev/null ; echo
     done
+    curl -k -u admin:${ADMIN_PASS} -s -XDELETE "$OPENSEARCH_URL/_plugins/_ism/policies/pscheduler_raw_data_policy" 2>/dev/null ; echo
+    curl -k -u admin:${ADMIN_PASS} -s -XDELETE "$OPENSEARCH_URL/_index_template/pscheduler_raw_data_policy" 2>/dev/null ; echo
 
     msg "Removal completed."
     exit 0

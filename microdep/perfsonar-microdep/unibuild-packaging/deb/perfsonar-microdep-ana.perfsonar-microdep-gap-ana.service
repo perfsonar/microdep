@@ -6,7 +6,12 @@ After=network.target
 Type=simple
 User=perfsonar
 Group=perfsonar
-ExecStart=/usr/lib/perfsonar/bin/microdep_commands/qstream-gap-ana -minloss 5 -head -win 50 -jitter 600 -rtp 5 -owamp https://localhost/opensearch -follow -json /var/lib/logstash/microdep/gap-ana.json -topoevents 
+# Run analysis for both ipv4 and ipv6
+ExecStart=/bin/bash -c ' \
+  /usr/lib/perfsonar/bin/microdep_commands/qstream-gap-ana -conf /etc/perfsonar/microdep/microdep-gap-ana.yml & \
+  /usr/lib/perfsonar/bin/microdep_commands/qstream-gap-ana -conf /etc/perfsonar/microdep/microdep-gap-ana.yml -ipv6 -json /var/lib/logstash/microdep/gap-ana-6.json & \
+  wait \
+'
 Restart=on-failure
 
 [Install]

@@ -88,6 +88,7 @@ Depends: ${misc:Depends}, ${perl:Depends},
  python3-mysqldb,
  python3-pika,
  python3-psycopg2,
+ python3-yaml,
 # pytz
  python3-tz,
  python3-tzlocal,

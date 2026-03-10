@@ -1,0 +1,53 @@
+#
+# Microdep analytics config file for trace analysis
+#
+#   Usage: trace_event_reader.py --conf /etc/perfsonar/microdep/microdep-trace-ana.yml
+#
+# Note: Remember to restart analysis after updating configfile, i.e. 'systemctl restart perfsonar-microdep-trace-ana.service'
+
+## Default values in comments
+#f_reduction: 0.5 # Memory factor for a detected anomaly. Range 0 to 1. If 0, state of anomality is "forgotten" every time a normal occurence is seen.
+#f_majority: 30   # No of similar traceroutes required to be observed for them to be considered current state in measurement flow (i.e. normal state).
+#f_max_state_counter: 1000 # Maximum value for state counters (i.e. a window size). Counters are all to be decreased if one reach this value.
+#f_csensitivity: 1         # No of traceroutes in an anomalous report before printing a summary.
+#ce_delta_limit: 3.0       # Level of change in cross-entropy for a hop to tigger a route change event.
+#hopdist_init_window: 2500 # Min no of probes seen for a hop to consider its host distribution to be representativ.
+#file: ''       # Path to traceroutes source
+#date: ''       # Date to consider when searching for files to analyse
+#live: false    # Flag to enable live (real-time) analysis
+#all: false     # Flag to enable processing of older-than-latest traceroutes
+#tcp: false     # Flag to enable processing tcptraceroute files
+#pssrc: ''      # Url to perfsonar data source, amqp://<user:passwd@localhost>/<vhost>/queue=<traceroute> or, https://<archive-host>/opensearch 
+#path: '/var/lib/microdep/my-network/data'              # Path to apply when searching based on date               
+#reportpath: '/var/lib/microdep/my-network/report/mp'   # Path to apply for output files when searching based on date               
+#reportpostpath: 'trace-ana'      # Finale path level to add below reportpath, source host and date, e.g. '/var/lib/microdep/report/mp/my-host/2026-01-01/trace-ana'
+#output: ''        # Output filename.
+#oneoutput: ''     # Output filename for single file output.
+#samepath: false   # Flag to enable placement of outputfile in same folder as input file 
+#namemap: '/var/lib/microdep/my-network/etc/mp-address.txt'    # File path to name-to-ip mapping db
+#geodb: '/usr/share/GeoIP/GeoLite2-ASN.mmdb'                   # File path to ip-to-ASN mapping db
+#dbtype: 'mysql'            # Database type. 'mysql' and 'postgresql' supported.
+#dbname: 'routingmonitor'   # Name of database for anomality parameters
+#dbuser: 'traceroute'       # User name for db access
+#dbpasswd: 'NeeLeoth9e'     # Password for db access
+#dbhost: 'localhost'        # Host name for db access
+#dbclear: 0                 # Clear db before running
+#help: false                # Help text flag
+#verbose: 0                 # Verbosity level for message output
+#profiler: 0                # Output performance profile per file
+#maxprocs: 1                # Max no of parallel processes in batch mode
+#topoevents: 0              # Flag to enable detection and output of topology events
+#topointerval: 3600         # Min no of seconds between topology events
+#pslookup: 'http://ps-west.es.net/lookup/activehosts.json'  # Source of perfSONAR Lookup Service hosts
+#pslookupwait: 3600         # Min no of seconds to wait between refreshing info fetched from pslookup-service
+#ipv6: 0                    # Flag enabling ipv6 address parsing
+#followinterval: 10         # No of seconds to wait between requests for data from openseach archive
+#config: ''                 # Path to configuration file (this one). Note that commandline options override config file.               
+
+## perfSONAR Microdep settings
+samepath: True
+oneoutput: /var/lib/logstash/microdep/trace-ana.json
+pssrc: https://localhost/opensearch
+dbtype: postgresql
+geodb: /etc/perfsonar/microdep/GeoLite2/GeoLite2-ASN.mmdb
+topoevents: True
