@@ -420,7 +420,12 @@ function link_popup(link){
 	//	// Add traceroute type prefix
 	//	url += "&prefix=" + conffile[parms.net].event_type[parms.event].popup.see_routes;
 	//    }
-	var url = '/pstracetree/ls.html?mahost=localhost:443&verify_SSL=0&api=opensearch&from=' + link.from + '&to=' + link.to +'&time-start=' + dato;
+	var url = '/pstracetree/ls.html?mahost=localhost:443&verify_SSL=0&api=opensearch&from=' + link.from + '&from_adr=' + from_adr + '&to=' + link.to +'&to_adr=' + to_adr +'&time-start=' + dato;
+	if (net_ip_version[parms.net]) {
+	    // Add filtering on ip version
+	    url += "&ip-version=" + net_ip_version[parms.net];
+	}
+
 	html +='\nSee ';
 	html += '\n<button class=knapp onclick="window.open(\'' + url +'\');" title="See the routes graph and stats in this period">Routes'  + '</button>' + "\n";
     }
