@@ -409,10 +409,16 @@ function link_popup(link){
     if (Object.keys(link).length > 2) {
 	// Link object has more than just "from" and "to" properties. Add buttons for routes and graphs. 
 	var to_adr=link.to; // aggregations don't have *_adr.
+	var from_adr=link.from; // aggregations don't have *_adr.
 	if (link.to_adr)
 	    to_adr=link.to_adr;
 	else if ( name_to_ip[link.to] )
 	    to_adr = name_to_ip[link.to];
+	if (link.from_adr)
+	    from_adr=link.from_adr;
+	else if ( name_to_ip[link.from] )
+	    from_adr = name_to_ip[link.from];
+	
 	
 	//    var url = 'tracetree.html?topo=/' + parms.net + '/mp/' + link.from + '/' +  dato
 	//	+ '/trace/' + to_adr + '1.json' + '&to=' + link.to;
