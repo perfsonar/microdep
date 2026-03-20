@@ -37,6 +37,9 @@ case "$1" in
 
 	# Add Microdep to Opensearch setup (including Logstash) 
 	/usr/lib/perfsonar/bin/microdep_commands/opensearch_config_microdep.sh || true
+
+	# Prepare archive config for analytic results
+	/usr/lib/perfsonar/bin/microdep_commands/opensearch_config_microdep.sh || true
 	
 	# Enable executing of microdep ana scripts if SElinux is enabled
 	if [ -f /sbin/restorecon ]; then

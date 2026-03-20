@@ -1,3 +1,4 @@
+etc/apache-microdep-ana.conf etc/apache2/conf-available/
 etc/logstash/microdep/* usr/lib/perfsonar/logstash/microdep_pipeline/
 etc/logstash/microdep-pipelines.yml etc/perfsonar/microdep/logstash/
 etc/microdep_default_policy.json etc/perfsonar/microdep/
@@ -13,6 +14,7 @@ bin/microdep_commands/trace_event_reader.py usr/lib/perfsonar/bin/microdep_comma
 bin/microdep_commands/create_new_db.sh usr/lib/perfsonar/bin/microdep_commands/
 bin/microdep_commands/fix-pgsql-access.sh usr/lib/perfsonar/bin/microdep_commands/
 bin/microdep_commands/opensearch_config_microdep.sh usr/lib/perfsonar/bin/microdep_commands/
+bin/microdep_commands/psconfig_archive_ana.sh usr/lib/perfsonar/bin/microdep_commands/
 bin/microdep_commands/rabbitmq-consume.py usr/lib/perfsonar/bin/microdep_commands/
 bin/microdep_commands/json2table.pl usr/lib/perfsonar/bin/microdep_commands/
 etc/logrotate.d/microdep /etc/logrotate.d/

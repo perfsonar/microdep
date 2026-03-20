@@ -162,6 +162,7 @@ systemctl daemon-reload || true
 # Copy microdep map, httpd and logstash configs into correct folders
 install -D -m 0644 -t %{buildroot}/%{microdep_config_base}/mp-dragonlab/etc/ %{buildroot}/%{microdep_config_base}/microdep.db
 install -D -m 0644 -t %{buildroot}/etc/httpd/conf.d/ %{buildroot}/%{microdep_config_base}/apache-microdep-map.conf
+install -D -m 0644 -t %{buildroot}/etc/httpd/conf.d/ %{buildroot}/%{microdep_config_base}/apache-microdep-ana.conf
 install -D -m 0644 -t %{buildroot}/%{install_base}/logstash/microdep_pipeline/ %{buildroot}/%{microdep_config_base}/logstash/microdep/*
 install -D -m 0644 -t %{buildroot}/etc/logrotate.d/ %{buildroot}/%{microdep_config_base}/logrotate.d/microdep
 
@@ -172,6 +173,7 @@ mkdir -p %{buildroot}/var/lib/logstash/microdep
 rm -rf %{buildroot}/%{install_base}/scripts
 rm -f %{buildroot}/%{install_base}/Makefile
 rm -rf %{buildroot}/%{microdep_config_base}/apache-microdep-map.conf
+rm -rf %{buildroot}/%{microdep_config_base}/apache-microdep-ana.conf
 rm -rf %{buildroot}/%{microdep_config_base}/logstash/microdep
 rm -rf %{buildroot}/%{microdep_config_base}/microdep.db
 rm -rf %{buildroot}/%{microdep_config_base}/psconfig
@@ -223,6 +225,7 @@ ln -sr %{microdep_config_base}/mapconfig.yml %{buildroot}/%{microdep_web_dir}
 # Link up some handy tools
 mkdir -p %{buildroot}/usr/local/bin/ || true
 ln -sr %{command_base}/opensearch_config_microdep.sh  %{buildroot}/usr/local/bin/opensearch_config_microdep.sh
+ln -sr %{command_base}/psconfig_archive_ana.sh  %{buildroot}/usr/local/bin/psconfig_archive_ana.sh
 ln -sr %{command_base}/rabbitmq-consume.py  %{buildroot}/usr/local/bin/rabbitmq-consume.py
 ln -sr %{command_base}/json2table.pl  %{buildroot}/usr/local/bin/json2table.pl
 
@@ -361,11 +364,13 @@ systemctl stop perfsonar-microdep-restart.timer || true
 %attr(0755,perfsonar,perfsonar) %{command_base}/create_new_db.sh
 %attr(0755,perfsonar,perfsonar) %{command_base}/fix-pgsql-access.sh
 %attr(0755,perfsonar,perfsonar) %{command_base}/opensearch_config_microdep.sh
+%attr(0755,perfsonar,perfsonar) %{command_base}/psconfig_archive_ana.sh
 %attr(0755,perfsonar,perfsonar) %{command_base}/json2table.pl
 %attr(0755,perfsonar,perfsonar) %{command_base}/rabbitmq-consume.py
 /usr/local/bin/opensearch_config_microdep.sh
 /usr/local/bin/rabbitmq-consume.py
 /usr/local/bin/json2table.pl
+/etc/httpd/conf.d/apache-microdep-map.conf
 %{install_base}/logstash/microdep_pipeline/*.conf
 %{microdep_config_base}/logstash/microdep-pipelines.yml
 %{microdep_config_base}/microdep_default_policy.json
