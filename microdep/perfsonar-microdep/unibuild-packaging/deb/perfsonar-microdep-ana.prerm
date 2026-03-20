@@ -17,7 +17,8 @@ set -e
 # the debian-policy package
 
 case "$1" in
-    remove|deconfigure)
+#    remove|deconfigure)
+    remove|deconfigure|upgrade|failed-upgrade)
 
 	# Remove Microdep from Opensearch setup (including Logstash) 
 	/usr/lib/perfsonar/bin/microdep_commands/opensearch_config_microdep.sh -r config || true
@@ -39,8 +40,8 @@ case "$1" in
 	fi
     ;;
 
-    upgrade|failed-upgrade)
-    ;;
+#    upgrade|failed-upgrade)
+#    ;;
 
     *)
         echo "prerm called with unknown argument \`$1'" >&2

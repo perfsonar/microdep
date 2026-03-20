@@ -17,7 +17,8 @@ set -e
 # the debian-policy package
 
 case "$1" in
-    remove | deconfigure)
+#    remove | deconfigure)
+    remove | deconfigure | upgrade | failed-upgrade)
 	
 	# Remove Microdep button from Grafana main dashboard (if present)
 	if [ -e /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json ]; then
@@ -29,8 +30,8 @@ case "$1" in
 	fi
 	;;
 
-    upgrade|failed-upgrade)
-	;;
+#    upgrade|failed-upgrade)
+#	;;
     
     *)
         echo "prerm called with unknown argument \`$1'" >&2
