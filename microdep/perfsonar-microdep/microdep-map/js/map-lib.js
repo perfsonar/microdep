@@ -174,7 +174,7 @@ export function max( max, val){
 export function round_number(num){
     var digits=Math.floor(Math.log10(num));
     var round=Math.round( num / 10**digits) * 10**digits;
-    return round;
+    return parseFloat(round.toPrecision(4));
 }
 
 export function zero_fill(n){

@@ -59,7 +59,207 @@ var lat, lng;
 var loads=0; // number of loaded point series
 var duplines=[];
 var points_cache=[];
-  
+var arrowMarkers=[]; // store arrow direction markers by link name
+var extendedLinks=[]; // track links extended to full length
+
+// --- Arrow direction marker helpers ---
+
+function getPointOnQuadBezier(t, p0, p1, p2) {
+    var mt = 1 - t;
+    return [
+        mt * mt * p0[0] + 2 * mt * t * p1[0] + t * t * p2[0],
+        mt * mt * p0[1] + 2 * mt * t * p1[1] + t * t * p2[1]
+    ];
+}
+
+function getBezierAngle(t, p0, p1, p2) {
+    var mt = 1 - t;
+    var dlat = 2 * mt * (p1[0] - p0[0]) + 2 * t * (p2[0] - p1[0]);
+    var dlng = 2 * mt * (p1[1] - p0[1]) + 2 * t * (p2[1] - p1[1]);
+    var angle = Math.atan2(dlng, dlat) * 180 / Math.PI;
+    if (angle < 0) angle += 360;
+    return angle;
+}
+
+function makeArrowSvg(color, angle) {
+    return '<svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">' +
+        '<polygon points="18,12 6,4 6,20" fill="' + color + '" ' +
+        'transform="rotate(' + angle.toFixed(1) + ' 12 12)"/></svg>';
+}
+
+function createArrowMarker(latlng, angle, color) {
+    var svgAngle = angle - 90;
+    var icon = L.divIcon({
+        html: makeArrowSvg(color, svgAngle),
+        className: 'arrow-marker',
+        iconSize: [24, 24],
+        iconAnchor: [12, 12]
+    });
+    return L.marker(latlng, { icon: icon, interactive: false, zIndexOffset: -100 });
+}
+
+function addArrowsToLine(lineName, p0, p1, p2, color) {
+    removeArrowMarkers(lineName);
+    var markers = [];
+    var positions = [0.33, 0.66];
+
+    var zoom = mymap.getZoom();
+    var px0 = mymap.project(p0, zoom);
+    var px1 = mymap.project(p1, zoom);
+    var px2 = mymap.project(p2, zoom);
+
+    for (var i = 0; i < positions.length; i++) {
+        var t = positions[i];
+        var mt = 1 - t;
+        var px = mt * mt * px0.x + 2 * mt * t * px1.x + t * t * px2.x;
+        var py = mt * mt * px0.y + 2 * mt * t * px1.y + t * t * px2.y;
+        var latlng = mymap.unproject([px, py], zoom);
+
+        var dx = 2 * mt * (px1.x - px0.x) + 2 * t * (px2.x - px1.x);
+        var dy = 2 * mt * (px1.y - px0.y) + 2 * t * (px2.y - px1.y);
+        var angle = Math.atan2(dx, -dy) * 180 / Math.PI;
+        if (angle < 0) angle += 360;
+
+        var m = createArrowMarker([latlng.lat, latlng.lng], angle, color);
+        m.addTo(mymap);
+        markers.push(m);
+    }
+    arrowMarkers[lineName] = markers;
+}
+
+function removeArrowMarkers(lineName) {
+    if (arrowMarkers[lineName]) {
+        for (var i = 0; i < arrowMarkers[lineName].length; i++) {
+            arrowMarkers[lineName][i].remove();
+        }
+        delete arrowMarkers[lineName];
+    }
+}
+
+function addArrowsToCubicLine(lineName, p0, c1, c2, p3, color) {
+    removeArrowMarkers(lineName);
+    var markers = [];
+    var positions = [0.25, 0.5, 0.75];
+
+    var zoom = mymap.getZoom();
+    var px0 = mymap.project(p0, zoom);
+    var pxC1 = mymap.project(c1, zoom);
+    var pxC2 = mymap.project(c2, zoom);
+    var px3 = mymap.project(p3, zoom);
+
+    for (var i = 0; i < positions.length; i++) {
+        var t = positions[i];
+        var mt = 1 - t;
+        var px = mt*mt*mt*px0.x + 3*mt*mt*t*pxC1.x + 3*mt*t*t*pxC2.x + t*t*t*px3.x;
+        var py = mt*mt*mt*px0.y + 3*mt*mt*t*pxC1.y + 3*mt*t*t*pxC2.y + t*t*t*px3.y;
+        var latlng = mymap.unproject([px, py], zoom);
+
+        var dx = 3*mt*mt*(pxC1.x-px0.x) + 6*mt*t*(pxC2.x-pxC1.x) + 3*t*t*(px3.x-pxC2.x);
+        var dy = 3*mt*mt*(pxC1.y-px0.y) + 6*mt*t*(pxC2.y-pxC1.y) + 3*t*t*(px3.y-pxC2.y);
+        var angle = Math.atan2(dx, -dy) * 180 / Math.PI;
+        if (angle < 0) angle += 360;
+
+        var m = createArrowMarker([latlng.lat, latlng.lng], angle, color);
+        m.addTo(mymap);
+        markers.push(m);
+    }
+    arrowMarkers[lineName] = markers;
+}
+
+function updateArrowColors(lineName, color) {
+    if (arrowMarkers[lineName]) {
+        for (var i = 0; i < arrowMarkers[lineName].length; i++) {
+            var m = arrowMarkers[lineName][i];
+            var html = m.getIcon().options.html;
+            var match = html.match(/rotate\(([-\d.]+)/);
+            var svgAngle = match ? parseFloat(match[1]) : 0;
+            var newIcon = L.divIcon({
+                html: makeArrowSvg(color, svgAngle),
+                className: 'arrow-marker',
+                iconSize: [24, 24],
+                iconAnchor: [12, 12]
+            });
+            m.setIcon(newIcon);
+        }
+    }
+}
+
+var currentPanelLink = null; // track which link source is shown in panel
+var highlightedLink = null; // track which leaflet line is highlighted for open panel
+
+function openLinkPanel(content, linkSource) {
+    var panel = document.getElementById('link-panel');
+    var body = document.getElementById('linkPanelBody');
+    if (panel && body) {
+        if (linkSource) currentPanelLink = linkSource;
+        body.innerHTML = '';
+        if (typeof content === 'string') {
+            body.innerHTML = content;
+        } else if (content instanceof HTMLElement) {
+            body.appendChild(content);
+        }
+        panel.classList.remove('hidden');
+    }
+}
+
+function setHighlightedLink(leafletLine) {
+    // Remove highlight from previous link
+    if (highlightedLink && highlightedLink !== leafletLine) {
+        var prevColor = color_store[highlightedLink.leaflet_id] || highlightedLink._originalColor || empty_color;
+        highlightedLink.setStyle({"color": prevColor});
+        // Restore arrow colors on previous link
+        for (var abs in linkByName) {
+            if (linkByName[abs] === highlightedLink) {
+                updateArrowColors(abs, prevColor);
+                break;
+            }
+        }
+        // Close tooltip on previous link
+        if (highlightedLink.getTooltip && highlightedLink.getTooltip()) {
+            highlightedLink.closeTooltip();
+        }
+    }
+    // Highlight current link
+    if (leafletLine) {
+        if (!leafletLine._originalColor || leafletLine._originalColor === "blue") {
+            leafletLine._originalColor = color_store[leafletLine.leaflet_id] || leafletLine.options.color;
+        }
+        leafletLine.setStyle({"color": "blue"});
+        leafletLine.bringToFront();
+        // Update arrow colors to blue
+        for (var abs in linkByName) {
+            if (linkByName[abs] === leafletLine) {
+                updateArrowColors(abs, "blue");
+                break;
+            }
+        }
+    }
+    highlightedLink = leafletLine;
+}
+
+function clearHighlightedLink() {
+    if (highlightedLink) {
+        var prevColor = color_store[highlightedLink.leaflet_id] || highlightedLink._originalColor || empty_color;
+        highlightedLink.setStyle({"color": prevColor});
+        // Restore arrow colors
+        for (var abs in linkByName) {
+            if (linkByName[abs] === highlightedLink) {
+                updateArrowColors(abs, prevColor);
+                break;
+            }
+        }
+        highlightedLink = null;
+    }
+}
+window.clearHighlightedLink = clearHighlightedLink;
+
+function refreshLinkPanel() {
+    if (currentPanelLink && !document.getElementById('link-panel').classList.contains('hidden')) {
+        var newContent = link_popup(currentPanelLink);
+        openLinkPanel(newContent);
+    }
+}
+
   // sorting table
   function comparer(index) {
       return function(a, b) {
@@ -82,10 +282,9 @@ function show_map (network) {
     if ( ! mymap ){
 	mymap = L.map('mapid');
 	myRenderer = L.canvas({ padding: 0.5, tolerance: 20 });
-	// create the tile layer with correct attribution
 	var osmUrl='https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
 	var osmAttrib='Map data © <a href="http://openstreetmap.org">OpenStreetMap</a> contributors';
-	var osm = new L.TileLayer(osmUrl, {minZoom: 1, maxZoom: 20, attribution: osmAttrib});		
+	var osm = new L.TileLayer(osmUrl, {minZoom: 1, maxZoom: 20, attribution: osmAttrib});
 	mymap.addLayer(osm);
 
 	mymap.addEventListener('mousemove', function(ev) {
@@ -95,7 +294,7 @@ function show_map (network) {
 
 	$(window).on("resize", function () {
 	    $("#mapid").height( $(window).height()-250 );
-	}).trigger("resize"); 
+	}).trigger("resize");
     }
 
     if ( active_cluster){
@@ -108,17 +307,13 @@ function show_map (network) {
     active_cluster = clustergroup[network];
     mymap.addLayer( active_cluster);
     points_cache[network]=points;
-
 }
 
 function remove_markers(){
     clustergroup.eachLayer(function(m) {
 	clustergroup.removeLayer(m);
-	// console.log('marker', m._tooltip.options._content + " " + m);
     });
 }
-
-// spread points that share position
 
 function spread_points(points){
     var locations=[];
@@ -137,55 +332,44 @@ function spread_points(points){
 
 function make_markers ( network, points, focus) {
     var i;
-    
     var bounds = new L.LatLngBounds();
-
     spread_points(points);
 
     for (i=0; i < points.length; i++){
 	var id=points[i].id;
 	var marker = L.marker ([points[i].lat, points[i].lon]).addTo(clustergroup[network]);
-
 	bounds.extend(marker.getLatLng());
 	marker.bindTooltip( points[i].name, {permanent: false, className: "my-label", offset: [0, 0] });
-	// var nodeurl= window.location.origin + window.location.pathname+ "?net=" + parms.net + "&;
-	// var nodeurl = fix_url( window.location.href, "node", id );
-	// var html = '<br><a href="' + nodeurl + '">Focus on</a>';
-	// var html = '<br><button id="' + id + '" class="trigger">Focus on</button>';
 	var html = '<br><a href="#" class=trigger id="' + id + '">Focus on</a>';
 	var url;
 	if (points[i].url){
 	    url = points[i].url;
-	} else { 
+	} else {
 	    url = "http://" + id;
 	}
 	marker.bindPopup("<b><a href=\"" + url + "\">" + "Home for " + id + "</a></b>"+html);
 	$("#" + id ).on('click', "a.trigger", function(e){
 	    focus_links( e.id, 'flip' );
 	});
-
     }
 
     if ( points.length == 0 ){
-	// No markers to focus on. Show the whole world (repeated as many times as necessary)
         bounds =  [[-90,-180],   [90,180]];
     }
-    
     if ( focus ){
 	mymap.fitBounds(bounds);
     }
 }
 
-//function draw_net(){
-//}
-
-
 function remove_links(){
     var i;
     for ( i=0; i<links.length; i++ ){
-	// mymap.removeLayer(links[i]);
 	if ( links[i] ) links[i].remove();
     }
+    for (var name in arrowMarkers) {
+        removeArrowMarkers(name);
+    }
+    arrowMarkers=[];
     links=[];
     linkByName=[];
     ends=[];
@@ -194,14 +378,28 @@ function remove_links(){
 function remove_link(ab){
     if ( linkByName[ab] ){
 	linkByName[ab].remove();
+	removeArrowMarkers(ab);
 	delete linkByName[ab];
 	ends.splice( ends, ends.indexOf(ab), 1);
+    }
+}
+
+function showArrows(ab) {
+    if (arrowMarkers[ab]) {
+        for (var i = 0; i < arrowMarkers[ab].length; i++) { arrowMarkers[ab][i].addTo(mymap); }
+    }
+}
+
+function hideArrows(ab) {
+    if (arrowMarkers[ab]) {
+        for (var i = 0; i < arrowMarkers[ab].length; i++) { arrowMarkers[ab][i].remove(); }
     }
 }
 
 function show_links(){
     for ( var ab in linkByName ){
 	linkByName[ab].addTo(mymap);
+	showArrows(ab);
     }
 }
 
@@ -209,13 +407,14 @@ function hide_links_by_color(color){
     for ( var ab in linkByName ){
 	var link=linkByName[ab];
 	if ( link.options.color === color){
-	    link.remove(); // remove from map
+	    link.remove();
+	    hideArrows(ab);
 	    linkHidden[ab]=true;
 	} else if (linkHidden[ab]) {
-	    link.addTo(mymap);	    
+	    link.addTo(mymap);
+	    showArrows(ab);
 	    linkHidden[ab]=false;
 	}
-	    
     }
 }
 
@@ -223,14 +422,14 @@ function show_links_by_color(color){
     for ( var ab in linkByName ){
 	var link=linkByName[ab];
 	if ( link.options.color === color){
-	    link.addTo(mymap); // add to map
+	    link.addTo(mymap);
+	    showArrows(ab);
 	    linkHidden[ab]=false;
 	}
     }
 }
 
 function refresh_links_by_color(){
-
     if ( links_on ){
 	show_links_by_color(empty_color);
     } else {
@@ -241,20 +440,24 @@ function refresh_links_by_color(){
 function only_links_by_color(color){
     if ( color_on[color] ){
 	for ( var ab in linkByName ){
-	    if ( linkHidden[ab] )
-		linkByName[ab].addTo(mymap); // add to map
+	    if ( linkHidden[ab] ) {
+		linkByName[ab].addTo(mymap);
+		showArrows(ab);
+	    }
 	}
 	color_on[color]=false;
     } else {
-	
 	for ( var ab in linkByName ){
 	    var link=linkByName[ab];
 	    if ( link.options.color === color){
-		if ( linkHidden[ab] )
-		    link.addTo(mymap); // add to map
+		if ( linkHidden[ab] ) {
+		    link.addTo(mymap);
+		    showArrows(ab);
+		}
 		link.bringToFront();
 	    } else {
-		link.remove(); // remove from map
+		link.remove();
+		hideArrows(ab);
 		linkHidden[ab]=true;
 	    }
 	}
@@ -264,16 +467,14 @@ function only_links_by_color(color){
     }
 }
 
-
   function focus_links( node, mode ){
-    if ( mode === 'flip' && focus_node === node ){ // flip back
+    if ( mode === 'flip' && focus_node === node ){
 	focus_node = "";
 	links_on=true;
 	show_links();
 	removeParam("node");
     } else {
-
-	if ( focus_node !== "" && node !== focus_node ) { // redraw first
+	if ( focus_node !== "" && node !== focus_node ) {
 	    focus_node="";
 	    links_on=true;
 	    show_links();
@@ -286,23 +487,25 @@ function only_links_by_color(color){
 	}
 	var asn_search=false;
 	if (node.indexOf("@") >= 0){
-	    // Search for AS numbers specified
 	    asn_search=true;
 	    search=node.substr(1,node.length);
 	}
-	
 	for ( var ab in linkByName ){
 	    if (asn_search) {
 		if ( ! linkByName[ab].asn_search || linkByName[ab].asn_search.indexOf(search) < 0) {
-		    // AS num not available or not found
 		    linkByName[ab].remove();
+		    hideArrows(ab);
 		}
-	    } else if ( ab.indexOf(search) < 0 ){ // string not found
-		if ( ! inverse )
+	    } else if ( ab.indexOf(search) < 0 ){
+		if ( ! inverse ) {
 		    linkByName[ab].remove();
-	    } else { // string found
-		if ( inverse )
+		    hideArrows(ab);
+		}
+	    } else {
+		if ( inverse ) {
 		    linkByName[ab].remove();
+		    hideArrows(ab);
+		}
 	    }
 	}
 	links_on=false;
@@ -311,8 +514,6 @@ function only_links_by_color(color){
 	update_url("node", node);
     }
 }
-
- 
 
 function update_legend(title, threshes){
     var html="<table border=1 align=center id=legend> ";
@@ -326,24 +527,13 @@ function update_legend(title, threshes){
 	    "<button class=knapp title='Push to hide/show other links' style=width:100%" + " id=legend" + i + " bgcolor="
 	    + colors[i] + ">" + lower[i] + "</button></td>";
     }
-
-    // Add dashboard button if configured
     if (! jQuery.isEmptyObject(conffile[parms.net].dashboardURL)) {
 	html += '<td><button class=knapp title="Database dashboard" onclick=\'window.open("' + conffile[parms.net].dashboardURL + '", "_blank");\'>Dashboard</button>';
     }
     html +=  "</tr></table>";
     $("#legend").html(html);
-    
+
     $("#farge0").click(  function () {
-	// only_links_by_color(empty_color);
-	/* better to see only grey
-	if ( links_on ){
-	    hide_links_by_color(empty_color);
-	    links_on=false;
-	} else {
-	    links_on=true;
-	    show_links_by_color(empty_color);
-	} */
 	only_links_by_color(empty_color);
     });
     for ( i in lower ){
@@ -351,23 +541,22 @@ function update_legend(title, threshes){
 	$("#legend" + i).click( function(e){
 	    only_links_by_color(this.attributes.bgcolor.value);
 	    $("#tabs").tabs("option", "active", 0);
-
-	    //hide_links_by_color(this.attributes.bgcolor.value);
 	});
 	$("#legend" + i).css( "background-color", colors[i] );
 	color_on[colors[i]]=false;
     }
-    
 }
 
-function gap_popup( div, link){
+function gap_popup( containerDiv, link){
     const button = document.createElement("button");
+    button.className = "knapp";
     let etype = parms.event;
-    button.innerHTML = "Top " + etype + "s";
+    let etypeLabel = (event_desc[etype] || etype);
+    button.innerHTML = "Top " + etypeLabel;
     button.onclick = function(event) {
 	let idiv;
-	let etag = 'event ' + parms.event + ' ' + parms.date + ' ' + parms.period; // mark with tag to reuse data
-	if ( this[etag]){ // cycle through top, all, hide
+	let etag = 'event ' + parms.event + ' ' + parms.date + ' ' + parms.period;
+	if ( this[etag]){
 	    idiv = this[etag];
 	    if ( this.innerText.substr(0,4) == 'Hide'){
 		idiv.style.display = "none";
@@ -377,186 +566,137 @@ function gap_popup( div, link){
 		if ( this.innerText.substr(0,3) == 'All'){
 		    idiv.innerHTML=gap_list( link.from, link.to, idiv['hits'+parms.event] );
 		    this.innerText='Hide';
-		} else { // top
+		} else {
 		    idiv.innerHTML=gap_list( link.from, link.to, idiv['hits'+parms.event], 10, 'num_desc');
 		    this.innerText='All';
 		}
 	    }
-	    this.innerText += ' ' + etype + 's'; 
-	    sorttable.makeSortable( div.getElementsByClassName('sortable')[0] );
-	    mymap._popup.update();
+	    this.innerText += ' ' + etypeLabel;
+	    var sortables = idiv.getElementsByClassName('sortable');
+	    if (sortables.length > 0) sorttable.makeSortable( sortables[0] );
 	} else {
 	    idiv = document.createElement("div");
 	    idiv.classList.add("sprettopp");
-	    //idiv.classList.add("popupList");
-	    button.classList.add("knapp");
-	    div.appendChild(idiv);
-	    this[etag]=idiv; // store reference
+	    // Append results div to the parent card, not the button container
+	    var parentCard = containerDiv.closest ? containerDiv.closest('.panel-card') : containerDiv.parentElement;
+	    if (parentCard) parentCard.appendChild(idiv);
+	    else containerDiv.appendChild(idiv);
+	    this[etag]=idiv;
 	    get_peer_data( link.from, link.to, idiv);
-	    this.innerText='All ' + etype +'s';
+	    this.innerText='All ' + etypeLabel;
 	}
     }
-    div.appendChild(button);
+    containerDiv.appendChild(button);
 }
 
-
 function link_popup(link){
-    // Prepare HTML content for popup windows to appera when clicking on links
-      
     var dato = $("#datepicker").val();
-    var html = make_tooltip_v2(link.from + ' to ' + link.to, link);
+    var html = make_tooltip_v2(link.from, link.to, link);
+
+    const div = document.createElement("div");
+    div.classList.add("sprettom");
+    div.innerHTML = html;
 
     if (Object.keys(link).length > 2) {
-	// Link object has more than just "from" and "to" properties. Add buttons for routes and graphs. 
-	var to_adr=link.to; // aggregations don't have *_adr.
+	var to_adr=link.to;
 	if (link.to_adr)
 	    to_adr=link.to_adr;
 	else if ( name_to_ip[link.to] )
 	    to_adr = name_to_ip[link.to];
-	
-	//    var url = 'tracetree.html?topo=/' + parms.net + '/mp/' + link.from + '/' +  dato
-	//	+ '/trace/' + to_adr + '1.json' + '&to=' + link.to;
-	//    if (! jQuery.isEmptyObject(conffile[parms.net].event_type[parms.event].popup.see_routes)) {
-	//	// Add traceroute type prefix
-	//	url += "&prefix=" + conffile[parms.net].event_type[parms.event].popup.see_routes;
-	//    }
-	var url = '/pstracetree/ls.html?mahost=localhost:443&verify_SSL=0&api=opensearch&from=' + link.from + '&to=' + link.to +'&time-start=' + dato;
-	html +='\nSee ';
-	html += '\n<button class=knapp onclick="window.open(\'' + url +'\');" title="See the routes graph and stats in this period">Routes'  + '</button>' + "\n";
+
+	// --- "See" card ---
+	var seeCard = document.createElement("div");
+	seeCard.className = "panel-card";
+	var seeLabel = document.createElement("label");
+	seeLabel.className = "panel-card-label";
+	seeLabel.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> See';
+	seeCard.appendChild(seeLabel);
+
+	var seeBtns = document.createElement("div");
+	seeBtns.className = "panel-card-buttons";
+
+	var routesUrl = '/pstracetree/ls.html?mahost=localhost:443&verify_SSL=0&api=opensearch&from=' + link.from + '&to=' + link.to +'&time-start=' + dato;
+	var routesBtn = document.createElement("button");
+	routesBtn.className = "knapp";
+	routesBtn.title = "See the routes graph and stats in this period";
+	routesBtn.innerHTML = 'Routes';
+	routesBtn.onclick = function(){ window.open(routesUrl); };
+	seeBtns.appendChild(routesBtn);
+
+	seeCard.appendChild(seeBtns);
+	div.appendChild(seeCard);
+
+	// Add "Top events" button via gap_popup (appends to seeCard buttons)
+	gap_popup( seeBtns, link);
+
+	// --- "Plot" card ---
+	var plotCard = document.createElement("div");
+	plotCard.className = "panel-card";
+	var plotLabel = document.createElement("label");
+	plotLabel.className = "panel-card-label";
+	plotLabel.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10M12 20V4M6 20v-6"/></svg> Plot';
+	plotCard.appendChild(plotLabel);
+
+	var plotBtns = document.createElement("div");
+	plotBtns.className = "panel-card-buttons";
+
+	var queuesUrl = 'curve-chart.html?net=' + parms.net + '&index=' + parms.net + '_jitter&from=' + link.from + '&to=' + link.to + '&event=jitter&property=h_ddelay&start=' + start + '&end=' + end + "&title=From " + link.from + " to " + link.to;
+	var queuesBtn = document.createElement("button");
+	queuesBtn.className = "knapp";
+	queuesBtn.innerHTML = '<a title="Curve over queues in this period" target="_blank" href="' + queuesUrl + '">Queues</a>';
+	plotBtns.appendChild(queuesBtn);
+
+	var propUrl = 'curve-chart.html?net=' + parms.net + '&index=' + event_index[parms.event] + '&from=' + link.from + '&to=' + link.to + '&event=' + parms.event + '&property=' + parms.property + '&start=' + start + '&end=' + end + '&title="From ' + link.from + ' to ' + link.to + ' for ' + parms.property + '"';
+	var propBtn = document.createElement("button");
+	propBtn.className = "knapp";
+	var propLabel = (prop_desc[parms.event] && prop_desc[parms.event][parms.property]) ? prop_desc[parms.event][parms.property] : (prop_desc[event_sum_type[parms.event]] && prop_desc[event_sum_type[parms.event]][parms.property]) ? prop_desc[event_sum_type[parms.event]][parms.property] : parms.property;
+	propBtn.innerHTML = '<a title="Detailed report" target="_blank" href="' + propUrl + '">' + propLabel + '</a>';
+	plotBtns.appendChild(propBtn);
+
+	plotCard.appendChild(plotBtns);
+	div.appendChild(plotCard);
     }
-    
-    const div = document.createElement("div");
-    div.classList.add("sprettom");
-    div.innerHTML = html;
-    
-    
-    if (Object.keys(link).length > 2) {
-	// Link object has more than just "from" and "to" properties. Add top-10 list. 
-	gap_popup( div, link);
-	
-	url = 'curve-chart.html?net=' + parms.net + '&index=' + parms.net + '_jitter&from=' + link.from + '&to=' + link.to + '&event=jitter&property=h_ddelay&start=' + start + '&end=' + end + "&title=From " + link.from + " to " + link.to ;
-	html = 'Plot <button class=knapp><a title="Curve over queues in this period" target="_blank" href="' + url + '">Queues</a></button>' + "\n";
-	
-	url='curve-chart.html?net=' + parms.net + '&index=' + event_index[parms.event] + '&from=' + link.from + '&to=' + link.to + '&event=' + parms.event + '&property=' + parms.property + '&start=' + start + '&end=' + end + '&title="From ' + link.from + ' to ' + link.to + ' for ' + parms.property + '"';
-	html += '\n<button class=knapp><a title="Detailed report for report" target="_blank" href="' + url + '">' + prop_desc[parms.event][parms.property] + '</a></button>' + "\n";
-     
-	let tail=document.createElement("div");
-	tail.innerHTML = html;
-	div.appendChild(tail);
-    }
-   
-
-    // if( parms.debug) console.log(knapp);
-    // html += knapp;
-
-    // html += '<p>' + gap_list(link.from, link.to);
-    // html += ' <button class=knapp onclick=console.log(window.parent.name);console.log(window.name);window.parent.gap_list("' + link.from + '","' + link.to + '");' + '>Gap list</button>';
-
-    /*
-    html += '\n<p>Focus on: ';
-    var abs=[link.from,link.to].join();
-    // html += '<button class=knapp id="' + abs + '-from">' + link.from + '</button>';
-    // html += '<button class=knapp id="' + abs + '-to">' + link.to   + '</button>';
-    html += '<button class=knapp><a href=' + fix_url( document.location.href, "node", link.from ) + '>' + link.from + '</a></button>';
-    html += ', <button class=knapp><a href=' + fix_url( document.location.href, "node", link.to ) + '>' + link.to + '</a></button>';
-    */
-    // html+='</body>';
     return div;
 }
 
-function make_tooltip_v2(title, link){
-    // Create summary table (based on config file) intended for top part of popup windows
+function make_tooltip_v2(fromHost, toHost, link){
     if (! jQuery.isEmptyObject(conffile)) {
 	var nrows=0;
-//	var tip = "<h3>" + title + "</h3>";
-//	var tip="<table width=100%><caption><b>" + title + '</b></caption>';
-	var tip="<table width=100%><caption>" + title + "</caption>";
+	var tip='<div class="link-panel-endpoints">';
+	tip += '<div class="link-endpoint"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg> <span>' + fromHost + '</span></div>';
+	tip += '<div class="link-endpoint"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg> <span>' + toHost + '</span></div>';
+	tip += '</div>';
 	tip += "<table width=100%>";
 	if ( selected_date_is_today_or_future() ) {
-	    // Only digested summary of none-summary properties is available.
 	    for (const sum_var in conffile[parms.net].event_type[parms.event].field) {
 		if ( typeof link[sum_var] != 'undefined' ) {
-		    var prop_value = Math.round((link[sum_var] + Number.EPSILON) * 100) / 100;  // Round off to (max) 2 decimals
-		    tip+= '<tr><td>' + prop_desc[parms.event][sum_var] + '<td align=right>' + prop_value; 
+		    var prop_value = Math.round((link[sum_var] + Number.EPSILON) * 100) / 100;
+		    tip+= '<tr><td>' + prop_desc[parms.event][sum_var] + '<td align=right>' + prop_value;
 		    nrows++;
 		}
 	    }
 	} else {
 	    for (const sum_var of conffile[parms.net].event_type[parms.event].popup.summary) {
-		//ok var sum_var = conffile[parms.net].event_type[parms.event].popup.summary[s];
 		if ( typeof link[sum_var] != 'undefined' ) {
-		    var prop_value = Math.round((link[sum_var] + Number.EPSILON) * 100) / 100;  // Round off to (max) 2 decimals
-		    tip+= '<tr><td>' + prop_desc[conffile[parms.net].event_type[parms.event].summary_event_type][sum_var] + '<td align=right>' + prop_value; 
+		    var prop_value = Math.round((link[sum_var] + Number.EPSILON) * 100) / 100;
+		    tip+= '<tr><td>' + prop_desc[conffile[parms.net].event_type[parms.event].summary_event_type][sum_var] + '<td align=right>' + prop_value;
 		    nrows++;
 		}
 	    }
 	}
-//	if ( nrows > 0 ){
-	    tip+="</table>";
-//	} else {
-//	    tip="<b>" + title + "</b>";
-//	}
+	tip+="</table>";
 	return tip;
-	
     } else {
 	console.log('Error: No config loaded. Not able to prepare tooltips.');
 	return;
-	//	  // Return default (legacy) summary content 
-	//	  return make_tooltip(title, link)
     }
 }
-
-/* OBSOLETE
-function make_tooltip(title, link){
-    var nrows=0;
-    var tip="<table width=100%><caption><b>" + title + '</b></caption>';
-    if ( link.big_time){
-	tip+= '<tr><td>Sum downtime(s)<td align=right>' + ( link.big_time + link.small_time ).toFixed(1) 
-    	    + '<tr><td>Sum gaps(#)<td align=right>' + ( parseInt( link.small_gaps) + parseInt( link.big_gaps) );
-    }
-    for ( var prop of prop_names){
-	if ( prop in link ){
-	    var desc=prop_desc[prop] != null ? prop_desc[prop] : "no description";
-	    // var val=  ! isNaN(link[prop]) ? link[prop].toFixed(1) : 'no data';
-	    var val = link[prop];
-
-	    if ( isNaN(link[prop]) ){
-		 ; // som text value
-	    } else {
-		let pname = prop;
-		// if ( prop_sum.indexOf(prop) >= 0 && link[prop + "_sum"] )
-		//    pname=prop + "_sum";
-		try {val = parseFloat( link[pname] ).toFixed(1) ; }
-		catch(e) {
-		    console.log('Invalid value of "' + title + '" prop:' + pname + ' val:' + link[pname] );
-		}
-		nrows++;
-	    }
-	    tip+= "<tr><td>" + desc +  '<td align=right>' + val + "\n";
-
-	    if ( prop === "down_ppm" && typeof link[prop] == 'number' ){
-		tip+= "<tr><td>" + "Unavail (sec/day)" +  '<td align=right>' +
-		    ( link[prop] * 86400 / 10**6 ).toFixed(1) + "\n";
-	    }
-	} else {
-	    console.log('Invalid property ' + prop + ' of ' + title );
-	}
-    }
-    if ( nrows > 0 ){
-	tip+="</table>";
-    } else {
-	tip="<b>" + title + "</b>";
-    }
-    return tip;
-}
-*/
 
 function link_tooltip( title, link, prop){
     if ( prop in link ){
 	var val=link[prop];
 	var event = event_sum_type[parms.event]
 	if ( selected_date_is_today_or_future() ) {
-	    // (No sum-data available)
 	    event = parms.event
 	}
 	var tip='<b>' + title + '</b>' + "<p>" + prop_desc[event][prop] + ": " ;
@@ -568,38 +708,31 @@ function link_tooltip( title, link, prop){
 	}
     } else {
 	tip += "undef";
-    }	
-    return tip  ;
+    }
+    return tip;
 }
-
 
 function gap_list( from, to, hits, lines, sort_type){
     var etype, html;
-    var n=0; //  line number
-
-    // sort descending on tloss
+    var n=0;
     if ( sort_type){
-	// let sort_col = conffile[parms.net].event_type[parms.event].popup.table[0];
 	let sort_col = conffile[parms.net].event_type[parms.event].default_field;
 	hits.sort( function(a,b){
 	    if ( sort_type === 'num_desc')
 		return b._source[sort_col] - a._source[sort_col];
-	    else // num_asc
+	    else
 		return a._source[sort_col] - a._source[sort_col];
 	} );
     }
-
     for ( var hit of hits){
 	var gap = hit._source;
-	if ( ! etype) { // take first record as defining
+	if ( ! etype) {
 	    etype = gap.event_type;
 	    var amount_head = etype === "gap" ? "Queue(ms)" : "Cause";
 	    html="<table class=sortable><thead><td>Day Time<td>Lost(s)<td>" + amount_head + "</thead>";
 	    if (! jQuery.isEmptyObject(prop_desc)) {
-		// Config from file available. Build table header row.
 		html="<table class=sortable><thead title=\"Click to sort on column\"><th>Day Time";
 		for (const col in conffile[parms.net].event_type[etype].popup.table) {
-		    // Prepare colum heading with popup title text.
 		    var title_text = "";
 		    if (typeof prop_long_desc[etype][conffile[parms.net].event_type[etype].popup.table[col]] != "undefined") {
 			title_text = prop_long_desc[etype][conffile[parms.net].event_type[etype].popup.table[col]];
@@ -611,56 +744,41 @@ function gap_list( from, to, hits, lines, sort_type){
 	}
 	if ( gap.from === from && gap.to === to ){
 	    var d = new Date( Number(gap.timestamp * 1000) );
-	    var tid = zero_fill( d.getDate() ) + " " + zero_fill( d.getHours() ) + ":" + zero_fill( d.getMinutes() ); // ddhh
-
+	    var tid = zero_fill( d.getDate() ) + " " + zero_fill( d.getHours() ) + ":" + zero_fill( d.getMinutes() );
 	    var syslog_url = 'https://iou2.uninett.no/es-syslog-lookup/es-syslog-lookup.cgi?syslogwindow=3600&epoch=1&redirect=1'
-		+ '&timestamp=' + gap.timestamp 
-		+ '&from=' + gap.from_adr + '&to=' + gap.to_adr + '&ip=1';
+		+ '&timestamp=' + gap.timestamp + '&from=' + gap.from_adr + '&to=' + gap.to_adr + '&ip=1';
 	    var telemetry_url = 'https://telemetri.uninett.no/telemetri-lookup/telemetri-lookup.cgi?telemetrywindow=60'
-                  + '&redirect=1&timestamp=' + gap.timestamp
-		  + '&from=' + gap.from_adr + '&to=' + gap.to_adr + '&ip=1';
+                  + '&redirect=1&timestamp=' + gap.timestamp + '&from=' + gap.from_adr + '&to=' + gap.to_adr + '&ip=1';
 	    var telemetry_href = tid;
 	    var sec;
-	    if ( etype === "gap"){
-		sec = ( gap.tloss / 1000 ).toFixed(1);
-	    } else if ( etype === "routeerr" )
-		sec = ( gap.duration ).toFixed(1);
+	    if ( etype === "gap"){ sec = ( gap.tloss / 1000 ).toFixed(1); }
+	    else if ( etype === "routeerr" ) sec = ( gap.duration ).toFixed(1);
 	    var syslog_href= sec;
 	    var tail="";
 	    if ( $("#network").val() === "uninett" ){
 	        syslog_href = '<a title="See router logs" href="' + syslog_url + '" target=_blank>' + "Log" + '</a>';
 	        telemetry_href = '<a title="See telemetry data" href="' + telemetry_url + '" target=_blank>' + "Mon" + '</a>';
-		tail =  "<td><button class=knapp>" + syslog_href + "</button>"
-		    + "<td><button class=knapp>" + telemetry_href + "</button>";
+		tail =  "<td><button class=knapp>" + syslog_href + "</button>" + "<td><button class=knapp>" + telemetry_href + "</button>";
 	    }
 	    var amount;
 	    if ( etype === "gap"){
 		amount = gap.h_ddelay;
 		if ( typeof amount == "number") amount = amount.toFixed(1) ;
 	    } else if ( etype === "routeerr" ){
-		//amount = typeof gap.icmp_errors === "undefined" ? "" : JSON.stringify( gap.icmp_errors );
-		amount = gap.cause + " " + gap.last_reply_from; 
+		amount = gap.cause + " " + gap.last_reply_from;
 	    }
-
 	    if (! jQuery.isEmptyObject(event_desc)){
-		// Config from file available. Add table row.
 		html += "<tr><td>" + tid;
 		for (const col in conffile[parms.net].event_type[etype].popup.table) {
 		    if (typeof gap[conffile[parms.net].event_type[etype].popup.table[col]] != "undefined" ) {
 			var value_tooltip_field = conffile[parms.net].event_type[etype].field[ conffile[parms.net].event_type[etype].popup.table[col] ].mouseover;
 			var value_tooltip = "";
-			if (typeof value_tooltip_field != "undefined" ) {
-			    // Get value of other field for mouse-over tooltip in current field.
-			    value_tooltip = gap[ value_tooltip_field ];
-			}
+			if (typeof value_tooltip_field != "undefined" ) { value_tooltip = gap[ value_tooltip_field ]; }
 			html += "<td align=right title='" + value_tooltip + "' >" + gap[conffile[parms.net].event_type[etype].popup.table[col]];
-		    } else {
-			html += "<td align=right>-";
-		    }
+		    } else { html += "<td align=right>-"; }
 		}
 		html += "<td>" + tail + "\n";
 	    } else {
-		//html += "<tr><td>" + syslog_href + "<td>" + telemetry_href + "<td>" + gap.h_ddelay.toFixed(1) + "<td>" + "\n";
 		html += "<tr><td>" + tid +  "<td align=right>" + sec + "<td align=right>" + amount + "<td>" + tail + "\n";
 	    }
 	    if ( lines &&  n >= lines) break;
@@ -668,97 +786,52 @@ function gap_list( from, to, hits, lines, sort_type){
 	}
     }
     html += "</table>";
-    if (n>0)
-	return(html);
-    else
-	return("No events.");
-    /* not reached :
-    $("#dialog").html(html);
-    $("#dialog").dialog("open");
-    */
-
+    if (n>0) return(html);
+    else return("No events.");
 }
+
 // summarize gap and jitter records into gapsum format
   function digest_es_data(etype, hits){
-      var stat=[]; // numeric stats
-      var msg=[];  // text lists
-    var digest=[];
-
+      var stat=[]; var msg=[]; var digest=[];
     for (var i=0; i < hits.length; i++){
 	var event = hits[i]._source;
 	if ( event.event_type === etype){
 	    var ab = event.from + "," + event.to;
-	    
-	    if ( ! (ab in stat) ){ // first record for event
-		stat[ab]=[];
-		stat[ab].from = event.from;
-		stat[ab].to = event.to;
-		for ( const prop of prop_names[etype]){
-		    stat[ab][prop]=new stats();
-		}
-		msg[ab]=[];
-		msg[ab].from = event.from;
-		msg[ab].to = event.to;
-		for ( const prop of prop_names[etype]){
-		    msg[ab][prop]=[];
-		}
+	    if ( ! (ab in stat) ){
+		stat[ab]=[]; stat[ab].from = event.from; stat[ab].to = event.to;
+		for ( const prop of prop_names[etype]){ stat[ab][prop]=new stats(); }
+		msg[ab]=[]; msg[ab].from = event.from; msg[ab].to = event.to;
+		for ( const prop of prop_names[etype]){ msg[ab][prop]=[]; }
 	    }
-	    // accumulate values
 	    for ( const prop of prop_names[etype] ){
 		let value=event[prop];
-		if ( typeof(value) === "undefined" )
-		    value="";
-		else if ( typeof value === "object" )
-		    value = JSON.stringify(value);
+		if ( typeof(value) === "undefined" ) value="";
+		else if ( typeof value === "object" ) value = JSON.stringify(value);
 		if ( typeof value === "string"){
-		    if ( msg[ab][prop].indexOf( value) < 0 )
-			msg[ab][prop].push(value);
-		} else {
-		    stat[ab][prop].add( value );
-		}
+		    if ( msg[ab][prop].indexOf( value) < 0 ) msg[ab][prop].push(value);
+		} else { stat[ab][prop].add( value ); }
 	    }
 	}
     }
-    // make stats
     for ( const ab in stat ){
 	var rec={ from: stat[ab].from, to: stat[ab].to};
 	for ( const prop of prop_names[etype] ){
 	    if ( stat[ab][prop].n > 0 ){
-//		if ( prop_sum.indexOf(prop) >= 0 )
-		//		    rec[prop]=stat[ab][prop].sum;
 		if ( prop in prop_aggr[etype] ) {
-		    // Variable (property) has aggregation method specified
 		    switch (prop_aggr[etype][prop]) {
-		    case "sum":
-			rec[prop]=stat[ab][prop].sum
-			break;
-		    case "avg":
-			rec[prop]=stat[ab][prop].average()
-		    case "max":
-			rec[prop]=stat[ab][prop].max();
-			break;
-		    case "min":
-			rec[prop]=stat[ab][prop].min();
-			break;
-		    default:
-			console.log("Unsupported aggregation method " + prop_aggr[prop] + ". Applying average.");
-			rec[prop]=stat[ab][prop].average()
+		    case "sum": rec[prop]=stat[ab][prop].sum; break;
+		    case "avg": rec[prop]=stat[ab][prop].average()
+		    case "max": rec[prop]=stat[ab][prop].max(); break;
+		    case "min": rec[prop]=stat[ab][prop].min(); break;
+		    default: rec[prop]=stat[ab][prop].average()
 		    }
-		} else {
-		    console.log("Aggregation method unspecified. Applying average.");
-		    rec[prop]=stat[ab][prop].average()
-		}
-		rec[prop]=Math.round((rec[prop] + Number.EPSILON) * 100) / 100;  // Round off to (max) 2 decimals
+		} else { rec[prop]=stat[ab][prop].average() }
+		rec[prop]=Math.round((rec[prop] + Number.EPSILON) * 100) / 100;
 		rec[prop + "_max"] = stat[ab][prop].max();
-		rec[prop + "_sum"] = stat[ab][prop].sum; 
-	    } else {
-		rec[prop] = msg[ab][prop].join();
-	    }
+		rec[prop + "_sum"] = stat[ab][prop].sum;
+	    } else { rec[prop] = msg[ab][prop].join(); }
 	}
-	if ( stat[ab].tloss ){
-	    rec.down_ppm = ( stat[ab].tloss.sum * 1000000 / 1000 / period_length );
-	}
-	
+	if ( stat[ab].tloss ){ rec.down_ppm = ( stat[ab].tloss.sum * 1000000 / 1000 / period_length ); }
 	digest.push( {_source: rec} );
     }
     return digest;
@@ -767,121 +840,65 @@ function gap_list( from, to, hits, lines, sort_type){
 function count_aggregates(aggs){
     var n = 0;
     var from_buckets=aggs.from.buckets;
-    for (var i=0; i < from_buckets.length; i++){
-    	n += from_buckets[i].doc_count;
-    }
+    for (var i=0; i < from_buckets.length; i++){ n += from_buckets[i].doc_count; }
     return ("" + n + ", skipped " + aggs.from.sum_other_doc_count);
 }
 
 function digest_aggregates(aggs, stats_type){
     var digest=[];
     var from_buckets=aggs.from.buckets;
-
     for (var i=0; i < from_buckets.length; i++){
 	var fra = from_buckets[i].key;
 	var to_buckets= from_buckets[i].to.buckets;
-	
 	for (var j=0; j < to_buckets.length; j++){
 	    var til=to_buckets[j].key;
 	    if (parms.debug) console.log(fra + " - " + til + " = " + to_buckets[j].h_ddelay.avg );
 	    var rec={ from: fra, to: til};
-
-	    for ( const prop in to_buckets[j] ){ // go through names
-		if ( typeof( to_buckets[j][prop] ) === 'object' ) { // stats record
-		    rec[prop]= to_buckets[j][prop]['values'][stats_type];
-		    //rec[prop + "_max"]=to_buckets[j][prop].max;
-		}
+	    for ( const prop in to_buckets[j] ){
+		if ( typeof( to_buckets[j][prop] ) === 'object' ) { rec[prop]= to_buckets[j][prop]['values'][stats_type]; }
 	    }
 	    digest.push( {_source: rec} );
-	}	
+	}
     }
     return digest;
 }
 
-
-/* function to draw links from stats data */
-
-
 function draw_links(hits, prop){
-    // remove_links(links);
     get_thresholds(hits, prop);
     update_legend(prop_desc[event_sum_type[parms.event]][prop],threshes);
-    hits.sort(sort_hits); // sort by from, to
+    hits.sort(sort_hits);
     var new_ends=[];
-
     for (var i=0; i < hits.length; i++){
-	var link=hits[i];
-	var ab=[link._source.from, link._source.to];
-	var abs=ab.join();
-	if(!new_ends[abs]) new_ends.length++; // Ensure updated array length
-	new_ends[abs]=1;
-
-	// if ( ! ( parms.node && ! (ab.indexOf( parms.node) >= 0) ) ){ // only with node
+	var link=hits[i]; var ab=[link._source.from, link._source.to]; var abs=ab.join();
+	if(!new_ends[abs]) new_ends.length++; new_ends[abs]=1;
 	if ( focus_node === "" || ab.indexOf(focus_node) >= 0 ){
 	    var color=get_color( link._source[prop], threshes);
-
-	    if ( ! linkByName[abs]){ // draw line
+	    if ( ! linkByName[abs]){
 		var tooltip= link_tooltip( link._source.from + " to " + link._source.to , link._source, prop );
-
 		var l=draw_link(ab, color, tooltip, link_popup(link._source) );
 		if (l){
 		    links.push(l);
-		    if(!linkByName[abs]) linkByName.length++;  // Ensure updated array length
- 		    linkByName[abs]=l;
-		    ends.push(abs);
+		    if(!linkByName[abs]) linkByName.length++;
+ 		    linkByName[abs]=l; ends.push(abs);
 		    l.on("mouseover", function(e){
-			if (! mouseover) {
-                            mouseover = true;  // Flag required since mouseover is retriggered as long as the mouse hovers over a link
- 			    color_store[e.target.leaflet_id]=e.target.options.color;
-			    e.target.bringToFront();
-			    taint_link(e.target,"blue");
-			}
+			if (! mouseover) { mouseover = true; color_store[e.target.leaflet_id]=e.target.options.color; e.target.bringToFront(); taint_link(e.target,"blue"); }
 		    });
-		    l.on("mouseout", function(e){
-			taint_link(e.target, color_store[e.target.leaflet_id]);
-			mouseover=false;
-		    });
+		    l.on("mouseout", function(e){ taint_link(e.target, color_store[e.target.leaflet_id]); mouseover=false; });
 		}
-	    } /* else { // no need to redraw
-		taint_link(linkByName[ab], color);
-	    } */
-	} else {
-	    // console.log('### draw_link: excluded ' + ab);
-	    n_excluded++;
-	    remove_link(ab);		
-	}
+	    }
+	} else { n_excluded++; remove_link(ab); }
     }
-    // Find stale links
     var stale_link=[];
-    for (var i=0; i < ends.length; i++){
-	if ( ! new_ends[ ends[i]] ) {
-	    stale_link.push(ends[i]);
-	}
-    }
-    // Remove stale links 
-    for (var i=0; i < stale_link.length; i++){
-	    remove_link(stale_link[i]);
-    }
-    // refocus map 
-    /* if (mymap){
-	var group = new L.featureGroup(links);
-	mymap.fitBounds(group.getBounds());
-    } // else alert("undefined map");
-    */
-    
+    for (var i=0; i < ends.length; i++){ if ( ! new_ends[ ends[i]] ) { stale_link.push(ends[i]); } }
+    for (var i=0; i < stale_link.length; i++){ remove_link(stale_link[i]); }
     taint_links(hits, prop);
 }
 
 function get_topology(source = "archive"){
-    // Fetch topology data from relevant source
-    // and initiate drawing of topology
-
     if (points.length == 0) {
-	// No nodes loaded yet. Do that first.
-	load_coords_from_all_sources(network); // NOTE: This function call get_topology() again on success.
+	load_coords_from_all_sources(network);
 	return;
     }
-    
     let start = new Date($("#datepicker").val() + " 00:00:00").getTime()/1000;
     let start_iso = new Date($("#datepicker").val() + " 00:00:00").toISOString();
     let end= new Date($("#datepicker").val() + " 23:59:59").getTime()/1000;
@@ -889,224 +906,109 @@ function get_topology(source = "archive"){
     var network=parms.net;
 
     switch (source) {
-	
     case "sqlite-db":
-	// Ask for topology-info from (legacy) sqllite db 
 	var url="microdep-config.cgi?secret=\"" + conffile[parms.net].database_secret + "\"&variant=mp-" + network + "&start=" + start + "&end=" + end;
-	$.getJSON( url,
-		   function(topology){
-		       if (topology.length == 0) {
-			   $("#error").html(hhmmss(new Date()) + " : No topology data found for " + parms.event + " events on " + $("#datepicker").val() + " " + $("#period_input").val() + ";;");
-			   // Empty topology. Remove all links.
-			   remove_links(links);
-			   console.log("No topology data found.");
-		       } else {
-			   if (points.length == 0) {
-			       // No nodes loaded yet. Do that first.
-			       load_coords_from_all_sources(network); // NOTE: This function call get_topology() again on success.
-			       return;
-			   }
-			   draw_topology( topology );
-			   get_connections();
-			   // draw_topology( duplex_topology( topology) );
-		       }
-		   }).fail( function( jqxhr, textStatus, error ) {
-		       var err = textStatus + ", " + error;
-		       console.log( "Request" + url + " Failed: " + err );
-		   });
+	$.getJSON( url, function(topology){
+	    if (topology.length == 0) {
+		$("#error").html(hhmmss(new Date()) + " : No topology data found for " + parms.event + " events on " + $("#datepicker").val() + " " + $("#period_input").val() + ";;");
+		remove_links(links);
+	    } else {
+		if (points.length == 0) { load_coords_from_all_sources(network); return; }
+		draw_topology( topology ); get_connections();
+	    }
+	}).fail( function( jqxhr, textStatus, error ) { console.log( "Request" + url + " Failed: " + textStatus + ", " + error ); });
 	break;
-	
-    case "archive": 
-	// Fetch all unique from-to peers (flows) for time period from Opensearch archive
+    case "archive":
 	var query_index = event_index[parms.event];
-	if ( conffile[parms.net].event_type.topology.index ) {
-	    // Override with index from config
-	    query_index = conffile[parms.net].event_type.topology.index;
-	} else if (conffile[parms.net].event_type[parms.event].topology_index) {
-	    // Override with index from config
-	    query_index = conffile[parms.net].event_type[parms.event].topology_index ;
-	}	    
-
+	if ( conffile[parms.net].event_type.topology.index ) { query_index = conffile[parms.net].event_type.topology.index; }
+	else if (conffile[parms.net].event_type[parms.event].topology_index) { query_index = conffile[parms.net].event_type[parms.event].topology_index ; }
 	var url="elastic-get-date-type.pl?index=" + event_index[parms.event] + "&start=" + start_iso + "&end=" + end_iso;
-	if (net_ip_version[parms.net]) {
-	    // Add filtering on ip version
-	    url += "&ip_version=" + net_ip_version[parms.net];
-	}
-    
-	$.getJSON( url,
-		   function(result){
-		     var topology = [];
-		     if (! result.aggregations.peer.buckets.length) {
-			 console.log("No topology data returned from archive for time period " + start + " to " + end + ". Trying sqlite db ...");
-			 // No topology data returned. Try sqlite-db instead.
-			 get_topology("sqlite-db");
-		     } else {
-			 for (var p=0; p < result.aggregations.peer.buckets.length; p++) {
-			     topology.push(result.aggregations.peer.buckets[p].key.split("_"));
-			 }
-			 draw_topology( topology );
-			 get_connections();
-			 // draw_topology( duplex_topology( topology) );
-		     }
-		   }).fail( function(e, textStatus, error ) {
-		       //remove_links(links);
-		       console.log("failed to get data from server :" + textStatus + ", " + error);
-		   });
-
+	if (net_ip_version[parms.net]) { url += "&ip_version=" + net_ip_version[parms.net]; }
+	$.getJSON( url, function(result){
+	    var topology = [];
+	    if (! result.aggregations.peer.buckets.length) {
+		console.log("No topology data returned from archive. Trying sqlite db ...");
+		get_topology("sqlite-db");
+	    } else {
+		for (var p=0; p < result.aggregations.peer.buckets.length; p++) { topology.push(result.aggregations.peer.buckets[p].key.split("_")); }
+		draw_topology( topology ); get_connections();
+	    }
+	}).fail( function(e, textStatus, error ) { console.log("failed to get data from server :" + textStatus + ", " + error); });
 	break;
     }
 }
 
-// done by api
 function duplex_topology(topo){
-    var dup=[];
-    for ( var link of topo ){
-	dup.push( [ link[1], link[0] ] );
-    }
-    return topo.concat(dup);
+    var dup=[]; for ( var link of topo ){ dup.push( [ link[1], link[0] ] ); } return topo.concat(dup);
 }
 
-var mouseover=false; 
+var mouseover=false;
 
 function draw_topology(topo){
-    if (topo.length == 0) {
-	// Empty topology. Remove all links.
-	remove_links(links);
-	return;
-    }
+    if (topo.length == 0) { remove_links(links); return; }
     var new_ends=[];
-
     for (var i=0; i < topo.length; i++){
-        var ab=topo[i];
-	var abs= ab.join();
-	if (! new_ends[abs]) new_ends.length++;  // Ensure correct length.
-	new_ends[abs]=1;
-
-	if ( ! linkByName[abs]){ // draw line
-
+        var ab=topo[i]; var abs= ab.join();
+	if (! new_ends[abs]) new_ends.length++; new_ends[abs]=1;
+	if ( ! linkByName[abs]){
 	    var l=draw_link(ab, empty_color, ab, ab );
 	    if (l){
-		links.push(l);
-		linkByName[abs]=l;
-		ends.push(abs);
-		l.on("mouseover", function(e){
-		    if (! mouseover) {
-			mouseover = true;  // Flag required since mouseover is retriggered as long as the mouse hovers over a link
-			color_store[e.target.leaflet_id]=e.target.options.color;
-			e.target.bringToFront();
-			taint_link(e.target,"blue");
-		    }
-		});
-		l.on("mouseout", function(e){
-		    taint_link(e.target, color_store[e.target.leaflet_id]);
-		    mouseover=false;
-		});
+		links.push(l); linkByName[abs]=l; ends.push(abs);
+		l.on("mouseover", function(e){ if (! mouseover) { mouseover = true; color_store[e.target.leaflet_id]=e.target.options.color; e.target.bringToFront(); taint_link(e.target,"blue"); } });
+		l.on("mouseout", function(e){ taint_link(e.target, color_store[e.target.leaflet_id]); mouseover=false; });
 	    }
-	}  else { // no need to redraw
-	    // console.log("link already there : " + abs);
-	    taint_link(linkByName[abs], empty_color);
-	} 
+	} else { taint_link(linkByName[abs], empty_color); }
     }
-    // Find stale links
     var stale_link=[];
-    for (var i=0; i < ends.length; i++){
-	if ( ! new_ends[ ends[i]] ) {
-	    stale_link.push(ends[i]);
-	}
-    }
-    // Remove stale links 
-    for (var i=0; i < stale_link.length; i++){
-	    remove_link(stale_link[i]);
-    }
-    
-//    ends=new_ends;
+    for (var i=0; i < ends.length; i++){ if ( ! new_ends[ ends[i]] ) { stale_link.push(ends[i]); } }
+    for (var i=0; i < stale_link.length; i++){ remove_link(stale_link[i]); }
     links_on=true;
-    
-    // refocus map 
-    /* if (mymap){
-	var group = new L.featureGroup(links);
-	mymap.fitBounds(group.getBounds());
-    } // else alert("undefined map");
-    */
-    
-    //taint_links(hits, prop);
 }
 
 function taint_topology( topo, prop){
     get_thresholds(topo, prop);
     update_legend(prop_desc[event_sum_type[parms.event]][prop],threshes);
-
     for (var i=0; i < topo.length; i++){
-	var link=topo[i];
-	var ab=[link._source.from, link._source.to];
-	var abs = ab.join();
+	var link=topo[i]; var ab=[link._source.from, link._source.to]; var abs = ab.join();
 	if ( linkByName[abs] ){
 	    var color=get_color( link._source[prop], threshes);
 	    taint_link( linkByName[abs], color );
-
 	    var popup=link_popup(link._source);
 	    var tooltip= link_tooltip( link._source.from + " to " + link._source.to , link._source, prop );
-	    annotate_link( abs, linkByName[abs], tooltip, popup );
+	    annotate_link( abs, linkByName[abs], tooltip, popup, link._source );
 	}
     }
-
 }
 
 function taint_links( hits, prop){
     var done=[];
-
     if ( hits.length > 0){
         get_thresholds(hits, prop);
 	update_legend(prop_desc[event_sum_type[parms.event]][prop],threshes);
-
 	for (var i=0; i < hits.length; i++){
-	    var link=hits[i];
-	    var ab=[link._source.from, link._source.to];
-	    // if ( link._source.from_adr === "185.71.209.4" ) ab[0]="runar-mp";
-	    // if ( link._source.to_adr === "185.71.209.4" ) ab[1]="runar-mp";
-	    var abs = ab.join();
-
+	    var link=hits[i]; var ab=[link._source.from, link._source.to]; var abs = ab.join();
 	    done[abs]=1;
 	    if ( linkByName[abs] ){
 		var color=get_color( link._source[prop], threshes);
 		taint_link( linkByName[abs], color );
-//		dash_link(linkByName[abs], false); // Remove dashed-mode link if set
-		
 		var popup=link_popup(link._source);
 		var tooltip= link_tooltip( link._source.from + " to " + link._source.to , link._source, prop );
-		annotate_link( abs, linkByName[abs], tooltip, popup );
+		annotate_link( abs, linkByName[abs], tooltip, popup, link._source );
 	    } else {
-		console.log("Property " + prop + " reported on unexpected link " + abs + ". Adopting and presenting it anyway.");
-	        // Draw missing link 
+		console.log("Property " + prop + " reported on unexpected link " + abs + ". Adopting.");
 		var color=get_color( link._source[prop], threshes);
 		var tooltip= link_tooltip( link._source.from + " to " + link._source.to , link._source, prop );
-		    
 		var l=draw_link(ab, color, tooltip, link_popup(link._source) );
-
 		if (l){
-		    //		    dash_link(l);        // Turn out to be complicated to toggle correctly !
-		    linkByName[abs]=l;
-		    links.push(l);
-		    ends.push(abs);
-		    l.on("mouseover", function(e){
-			if (! mouseover) {
-			    mouseover = true;
-			    color_store[e.target.leaflet_id]=e.target.options.color;
-			    e.target.bringToFront();
-			    taint_link(e.target,"blue");
-			}
-		    });
-		    l.on("mouseout", function(e){
-			taint_link(e.target, color_store[e.target.leaflet_id]);
-			mouseover = false;
-		    });
+		    linkByName[abs]=l; links.push(l); ends.push(abs);
+		    l.on("mouseover", function(e){ if (! mouseover) { mouseover = true; color_store[e.target.leaflet_id]=e.target.options.color; e.target.bringToFront(); taint_link(e.target,"blue"); } });
+		    l.on("mouseout", function(e){ taint_link(e.target, color_store[e.target.leaflet_id]); mouseover = false; });
 		}
 	    }
 	}
     }
-
-    for ( var abs of ends ){ 
-	if ( ! done[abs]){ // links without data
+    for ( var abs of ends ){
+	if ( ! done[abs]){
 	    if ( linkByName[abs] ){
 		var ft = abs.split(",");
 		taint_link( linkByName[abs], empty_color );
@@ -1115,41 +1017,104 @@ function taint_links( hits, prop){
 	}
     }
     refresh_links_by_color();
-    /* filter links */
+    extend_unidirectional_links();
+    refreshLinkPanel();
     if ( $("#search_input").val() !== "" )
-	focus_links( $("#search_input").val(), 'noflip' ); 
+	focus_links( $("#search_input").val(), 'noflip' );
 }
 
 function taint_link( link, color ){
     if (link){
 	link.setStyle( {"color": color} );
+        for (var abs in linkByName) {
+            if (linkByName[abs] === link) {
+                updateArrowColors(abs, color);
+                break;
+            }
+        }
+    }
+}
+
+function extend_unidirectional_links() {
+    for (var abs in extendedLinks) {
+        if (linkByName[abs] && extendedLinks[abs]) {
+            var orig = extendedLinks[abs];
+            var currentColor = linkByName[abs].options.color;
+            linkByName[abs].remove();
+            var halfLine = L.curve(['M', orig.bp0, 'Q', orig.bp1, orig.bp2], { color: currentColor, fill: false, weight: 6 });
+            halfLine._bezierP0 = orig.bp0; halfLine._bezierP1 = orig.bp1; halfLine._bezierP2 = orig.bp2;
+            halfLine._fullStart = orig.fullStart; halfLine._fullEnd = orig.fullEnd; halfLine._fullControl = orig.fullControl;
+            halfLine.addTo(mymap);
+            if (orig.tooltip) halfLine.bindTooltip(orig.tooltip, {"sticky":true});
+            if (orig.popup) halfLine.on('click', function(){ openLinkPanel(orig.popup); });
+            halfLine.on("mouseover", function(e){ if (!mouseover) { mouseover = true; color_store[e.target.leaflet_id] = e.target.options.color; e.target.bringToFront(); taint_link(e.target, "blue"); } });
+            halfLine.on("mouseout", function(e){ taint_link(e.target, color_store[e.target.leaflet_id]); mouseover = false; });
+            linkByName[abs] = halfLine;
+            removeArrowMarkers(abs);
+            addArrowsToLine(abs, orig.bp0, orig.bp1, orig.bp2, currentColor);
+        }
+    }
+    extendedLinks = [];
+    for (var abs in linkByName) {
+        var parts = abs.split(","); var inverse = parts[1] + "," + parts[0];
+        if (!linkByName[inverse] && linkByName[abs]) {
+            var link = linkByName[abs];
+            if (link._fullStart && link._fullEnd && link._fullControl) {
+                var color = link.options.color;
+                var tooltipContent = link.getTooltip() ? link.getTooltip().getContent() : null;
+                var popupContent = link.getPopup ? null : null;
+                extendedLinks[abs] = { bp0: link._bezierP0, bp1: link._bezierP1, bp2: link._bezierP2, fullStart: link._fullStart, fullEnd: link._fullEnd, fullControl: link._fullControl, tooltip: tooltipContent, popup: popupContent };
+                link.remove();
+                var newBP0 = link._fullStart; var newBP2 = link._fullEnd;
+                var cubicC1 = link._fullControl; var cubicC2 = link._bezierP1 || link._fullControl;
+                var newLine = L.curve(['M', newBP0, 'C', cubicC1, cubicC2, newBP2], { color: color, fill: false, weight: 6 });
+                newLine._bezierP0 = link._bezierP0; newLine._bezierP1 = link._bezierP1; newLine._bezierP2 = link._bezierP2;
+                newLine._fullStart = link._fullStart; newLine._fullEnd = link._fullEnd; newLine._fullControl = link._fullControl;
+                newLine.addTo(mymap);
+                if (tooltipContent) newLine.bindTooltip(tooltipContent, {"sticky":true});
+                if (popupContent) newLine.on('click', function(){ openLinkPanel(popupContent); });
+                newLine.on("mouseover", function(e){ if (!mouseover) { mouseover = true; color_store[e.target.leaflet_id] = e.target.options.color; e.target.bringToFront(); taint_link(e.target, "blue"); } });
+                newLine.on("mouseout", function(e){ taint_link(e.target, color_store[e.target.leaflet_id]); mouseover = false; });
+                linkByName[abs] = newLine;
+                removeArrowMarkers(abs);
+                addArrowsToCubicLine(abs, newBP0, cubicC1, cubicC2, newBP2, color);
+            }
+        }
     }
 }
 
 function dash_link( link, dash=true){
-    // Make a link dashed 
-    if (link){
-	if (dash) {
-	    link.setStyle( { "dashArray": "10 10" });
-	} else {
-	    link.setStyle( { "dashArray": "" });
-	} 
-    }
-}
-  
-function annotate_link(abs,link, tooltip, popup){
-    if (link){
-	link.bindTooltip( tooltip, {"sticky":true} );
-	link.bindPopup( popup );
-    }
-    $("#" + abs + '-from' ).on('click', "button.knapp" , function( e){
-	focus_links(e.id, 'flip');
-    });
-    $("#" + abs + '-to' ).on('click', "button.knapp" , function( e){
-	focus_links(e.id, 'flip');
-    });
+    if (link){ if (dash) { link.setStyle( { "dashArray": "10 10" }); } else { link.setStyle( { "dashArray": "" }); } }
 }
 
+function annotate_link(abs,link, tooltip, popup, linkSourceData){
+    if (link){
+	link.bindTooltip( tooltip, {"sticky":true} );
+	link.off('click');
+	link.off('mouseout');
+	if (linkSourceData) {
+	    link._panelSource = linkSourceData;
+	    link.on('click', function(e){ setHighlightedLink(e.target); openLinkPanel(popup, linkSourceData); });
+	} else {
+	    link.on('click', function(e){ setHighlightedLink(e.target); openLinkPanel(popup); });
+	}
+	link.on("mouseout", function(e){
+	    mouseover = false;
+	    e.target.closeTooltip();
+	    // Don't restore color if this link is highlighted (panel open)
+	    if (highlightedLink !== e.target) {
+	        if (color_store[e.target.leaflet_id]) {
+	            e.target.setStyle({"color": color_store[e.target.leaflet_id]});
+	            for (var k in linkByName) {
+	                if (linkByName[k] === e.target) { updateArrowColors(k, color_store[e.target.leaflet_id]); break; }
+	            }
+	        }
+	    }
+	});
+    }
+    $("#" + abs + '-from' ).on('click', "button.knapp" , function( e){ focus_links(e.id, 'flip'); });
+    $("#" + abs + '-to' ).on('click', "button.knapp" , function( e){ focus_links(e.id, 'flip'); });
+}
 
 function draw_link( ends, color, tooltip, popup){
     var line_name=ends.join("-");
@@ -1159,498 +1124,248 @@ function draw_link( ends, color, tooltip, popup){
     var cp1, cp2, mp1, bear2, utslag;
     if ( parms.debug) console.log(ends + latlon1);
     if ( latlon1 && latlon2 && latlon1.lat && latlon1.lon && latlon2.lat && latlon2.lon ){
-
         let distance = (0+(latlon1.distanceTo(latlon2)));
-	if ( distance < 5000000) { // 500 mil
-	    mp1 = latlon1.midpointTo(latlon2);
-	} else {
-	    mp1 = new LatLon ( latlon1.lat + (latlon2.lat - latlon1.lat) / 2,
-			       latlon1.lon + (latlon2.lon - latlon1.lon) / 2 );
-	}
+	if ( distance < 5000000) { mp1 = latlon1.midpointTo(latlon2); }
+	else { mp1 = new LatLon ( latlon1.lat + (latlon2.lat - latlon1.lat) / 2, latlon1.lon + (latlon2.lon - latlon1.lon) / 2 ); }
         let bearing = mp1.initialBearingTo(latlon2);
         if ( typeof bearing === "undefined" || isNaN(bearing) ) {
 	    console.log( "No bearing for ends " + ends + " : latlon1: "+latlon1,", latlon2: ",latlon2);
             return(0);
         }
-
 	let sign=1;
-	if (! duplines[line_name] ) {
-	    duplines[line_name]=0;
-	} else {
-	    if (duplines[line_name] % 2 ){
-		sign=1;
-	    }
-	}
-
+	if (! duplines[line_name] ) { duplines[line_name]=0; } else { if (duplines[line_name] % 2 ){ sign=1; } }
 	let bearing_offset = sign * ( 5 * ( 1+ ++duplines[line_name]) + ( 5 * Math.random())*10 );
 	if ( middle_point[inverse_line]){
-	    cp1 = middle_point[inverse_line];
-	    utslag = line_utslag[inverse_line];
+	    cp1 = middle_point[inverse_line]; utslag = line_utslag[inverse_line];
 	} else {
 	    utslag= ( Math.random() - 0.5 )/ 10 ;
-	    if ( distance < 5000000 ){
-		cp1 = latlon1.destinationPoint((distance/2), bearing + bearing_offset);
-	    } else {
-		cp1 =new LatLon( mp1.lat + (latlon2.lat - latlon1.lat) * utslag,
-				 mp1.lon + (latlon2.lon - latlon1.lon) * utslag );
-	    }
-	    if (parms.debug){
-		var m=L.circle([cp1.lat,cp1.lon], {weight:6, radius:100, color:"blue"})
-		    .addTo(mymap).bindTooltip('cp1 '+line_name);
-	    }
+	    if ( distance < 5000000 ){ cp1 = latlon1.destinationPoint((distance/2), bearing + bearing_offset); }
+	    else { cp1 =new LatLon( mp1.lat + (latlon2.lat - latlon1.lat) * utslag, mp1.lon + (latlon2.lon - latlon1.lon) * utslag ); }
+	    if (parms.debug){ var m=L.circle([cp1.lat,cp1.lon], {weight:6, radius:100, color:"blue"}).addTo(mymap).bindTooltip('cp1 '+line_name); }
 	}
-	middle_point[line_name]=cp1;
-	line_utslag[line_name]=utslag;
-	
-	var mid = cp1.midpointTo(latlon2);
-	var dist2=(0+(cp1.distanceTo(latlon2)));
-
-	if ( line_bearing[inverse_line]){
-	    bear2 = 360 - line_bearing[inverse_line] % 360;
-	} else {
-	    bear2 = bearing;
-	    // bear2 = cp1.initialBearingTo(latlon2);
-	}
+	middle_point[line_name]=cp1; line_utslag[line_name]=utslag;
+	var mid = cp1.midpointTo(latlon2); var dist2=(0+(cp1.distanceTo(latlon2)));
+	if ( line_bearing[inverse_line]){ bear2 = 360 - line_bearing[inverse_line] % 360; }
+	else { bear2 = bearing; }
 	line_bearing[line_name]=bear2;
-	
-	if ( distance < 50000000 ){
-	    cp2 = cp1.destinationPoint((dist2/2), bearing + bearing_offset);
-	} else {
-	    cp2 =new LatLon( mp1.lat + (latlon2.lat - mp1.lat) * utslag,
-				 mp1.lon + (latlon2.lon - mp1.lon) * utslag );
-
-	}
-
-
+	if ( distance < 50000000 ){ cp2 = cp1.destinationPoint((dist2/2), bearing + bearing_offset); }
+	else { cp2 =new LatLon( mp1.lat + (latlon2.lat - mp1.lat) * utslag, mp1.lon + (latlon2.lon - mp1.lon) * utslag ); }
 	if (parms.debug){
 	    console.log(ends + [[cp2.lat, cp2.lon], [latlon2.lat, latlon2.lon]] + ' dist: ' + distance);
 	    var m=L.circle([cp2.lat,cp2.lon], {weight:6, radius:100, color:"red"}).addTo(mymap).bindTooltip('cp2 '+line_name);
 	    var m=L.circle([mp1.lat,mp1.lon], {weight:6, radius:100, color:"violet"}).addTo(mymap).bindTooltip('mp1 '+line_name);
 	}
 	var line;
-	if (parms.curve === 'line' )
+	var bezierP0, bezierP1, bezierP2;
+	if (parms.curve === 'line' ) {
 	    line =L.polyline( [mid, latlon2], {color: color, weight:6, renderer: myRenderer});
-	else
-	    line = L.curve(['M', [cp1.lat, cp1.lon], 'Q', [cp2.lat, cp2.lon], [latlon2.lat, latlon2.lon] ],
-			   { color: color, fill: false, weight:6 /*, renderer: myRenderer */ });
-	if (line)
-	    line.addTo(mymap);
-	else
-	    console.log('Line draw failed ' + line_name);
-	
+	} else {
+	    bezierP0 = [cp1.lat, cp1.lon]; bezierP1 = [cp2.lat, cp2.lon]; bezierP2 = [latlon2.lat, latlon2.lon];
+	    line = L.curve(['M', bezierP0, 'Q', bezierP1, bezierP2 ], { color: color, fill: false, weight:6 });
+	}
+	line._bezierP0 = bezierP0; line._bezierP1 = bezierP1; line._bezierP2 = bezierP2;
+	line._fullStart = [latlon1.lat, latlon1.lon]; line._fullEnd = [latlon2.lat, latlon2.lon]; line._fullControl = [cp1.lat, cp1.lon];
+	if (line) line.addTo(mymap);
+	else console.log('Line draw failed ' + line_name);
+	if (bezierP0 && bezierP1 && bezierP2) { addArrowsToLine(ends.slice().reverse().join(","), bezierP0, bezierP1, bezierP2, color); }
 	line.bindTooltip(tooltip, {"sticky":true});
-	line.bindPopup(popup,{ maxHeight: "800", maxWidth:"800", keepInView: true, autoClose: true      });
-    } else {
-	console.log("no coords for ends" + ends.length + ' ends ' + ends + ' coords ' + latlon1 + ' - ' + latlon2);
-    }
+	line.on('click', function(){ openLinkPanel(popup); });
+    } else { console.log("no coords for ends" + ends.length + ' ends ' + ends + ' coords ' + latlon1 + ' - ' + latlon2); }
     return(line);
 }
 
 function get_node_query(tofrom, start, end) {
-    // Produce a JSON string for querying node info from Opensearch
     return JSON.stringify( { "query": { "bool": { "filter": [ { "term": { "event_type": "topology" } }, { "range": { "@date": { "gte": start, "lt": end } } } ] } }, "size": 0, "aggs": { "nodes": { "terms": { "field": tofrom + ".keyword", "size" : 10000  }, "aggs": { "ip": { "terms": { "field": tofrom + "_adr.keyword"}}, "city": { "terms": { "field": tofrom + "_geo.city_name.keyword"}}, "lat": { "terms":  { "field": tofrom + "_geo.latitude" } },  "lon": { "terms":  { "field": tofrom + "_geo.longitude" } } } } } } );
 }
 
 function load_coords(network, service, goal){
-    // Load global coordinate for nodes in topology
-
     if ( service === "topoevents" ) {
-	// Extract and load coordinates from topology-events fetched from archive db (Opensearch)
 	var start_iso = new Date($("#datepicker").val() + " 00:00:00").toISOString();
 	var end_iso = new Date($("#datepicker").val() + " 23:59:59").toISOString();
-	// Query for both source (from) nodes and destination (to) nodes
-	var query_index = JSON.stringify( { "index": event_index[parms.event] }); 
-	if ( conffile[parms.net].event_type.topology.index ) {
-	    // Override with index from config
-	    query_index = JSON.stringify( { "index": conffile[parms.net].event_type.topology.index }); 
-	} else if (conffile[parms.net].event_type[parms.event].topology_index) {
-	    // Override with index from config
-	    query_index = JSON.stringify( { "index": conffile[parms.net].event_type[parms.event].topology_index });
-	}
-
+	var query_index = JSON.stringify( { "index": event_index[parms.event] });
+	if ( conffile[parms.net].event_type.topology.index ) { query_index = JSON.stringify( { "index": conffile[parms.net].event_type.topology.index }); }
+	else if (conffile[parms.net].event_type[parms.event].topology_index) { query_index = JSON.stringify( { "index": conffile[parms.net].event_type[parms.event].topology_index }); }
 	var url="elastic-get-date-type.pl?index=" + event_index[parms.event] + "&start=" + start_iso + "&end=" + end_iso + "&event_type=topology";
-	if (net_ip_version[parms.net]) {
-	    // Add filtering on ip version
-	    url += "&ip_version=" + net_ip_version[parms.net];
-	}
-    
-	$.getJSON( url,
-
-	function(result){
-		       for (var r = 0; r < result.responses.length; r++) {
-			   if (typeof result.responses[r].aggregations != "undefined" ) {
-			       // Aggregated results are available
-			       for (var n=0; n < result.responses[r].aggregations.nodes.buckets.length; n++) {
-				   // Add node info to points structure
-				   var p={ id: "", name: "Unknown", lat: 0, lon: 0, ip: "n/a"};
-				   p.id = result.responses[r].aggregations.nodes.buckets[n].key;
-				   if (typeof result.responses[r].aggregations.nodes.buckets[n].city.buckets[0] != "undefined" ) {
-				       p.name = result.responses[r].aggregations.nodes.buckets[n].city.buckets.at(-1).key;  // Grab last city in list
-				   } else {
-				       p.name = p.id;
-				   }			       
-				   if (typeof result.responses[r].aggregations.nodes.buckets[n].lat.buckets[0] != "undefined")
-				       p.lat = result.responses[r].aggregations.nodes.buckets[n].lat.buckets.at(-1).key ?? 0 ; // Get last value seen
-				   if (typeof result.responses[r].aggregations.nodes.buckets[n].lon.buckets[0] != "undefined") 
-				       p.lon = result.responses[r].aggregations.nodes.buckets[n].lon.buckets.at(-1).key ?? 0 ; // Get last value seen
-				   if (typeof result.responses[r].aggregations.nodes.buckets[n].ip.buckets[0] != "undefined") { 
-				       reg_ip_adr(p.id, result.responses[r].aggregations.nodes.buckets[n].ip.buckets.at(-1).key );  // Register last ip in list
-				       p.ip = result.responses[r].aggregations.nodes.buckets[n].ip.buckets.at(-1).key;
-				   }
-				   let point_already_loaded = points.find(o => o.id === p.id);
-				   if (! point_already_loaded) {
-				       points.push( p);
-				   } else {
-				       console.log( "Duplicate node info for node " + p.id );
-				   }
-			       }
-			   } else if (typeof result.responses[r].error.reason != "undefined" ) {
-			       // Something is "suboptimal"
-			       console.log("Failed to access data from Opensearch: " + result.responses[r].error.reason + ".");
-			   }
-		       }
-		       if ( ! result.responses.length ) {
-			   console.log("No node data returned from archive for time period " + start_iso + " to " + end_iso + ".");
-		       }
-		       loads++;
-		       if (loads >= goal) {
-			   // All other calls to load_coords() have completed.
-			   loads=0;
-			   show_map(network);
-			   if (points.length > 0)
-			       // Some nodes are available. Plot the links too.
-			       get_topology();
-		       }
-
-	}).fail( function(e, textStatus, error ) {
-	    var err = textStatus + ", " + error;
-	    console.log( "Request" + url + " Failed: " + err );
+	if (net_ip_version[parms.net]) { url += "&ip_version=" + net_ip_version[parms.net]; }
+	$.getJSON( url, function(result){
+	    for (var r = 0; r < result.responses.length; r++) {
+		if (typeof result.responses[r].aggregations != "undefined" ) {
+		    for (var n=0; n < result.responses[r].aggregations.nodes.buckets.length; n++) {
+			var p={ id: "", name: "Unknown", lat: 0, lon: 0, ip: "n/a"};
+			p.id = result.responses[r].aggregations.nodes.buckets[n].key;
+			if (typeof result.responses[r].aggregations.nodes.buckets[n].city.buckets[0] != "undefined" ) { p.name = result.responses[r].aggregations.nodes.buckets[n].city.buckets.at(-1).key; } else { p.name = p.id; }
+			if (typeof result.responses[r].aggregations.nodes.buckets[n].lat.buckets[0] != "undefined") p.lat = result.responses[r].aggregations.nodes.buckets[n].lat.buckets.at(-1).key ?? 0 ;
+			if (typeof result.responses[r].aggregations.nodes.buckets[n].lon.buckets[0] != "undefined") p.lon = result.responses[r].aggregations.nodes.buckets[n].lon.buckets.at(-1).key ?? 0 ;
+			if (typeof result.responses[r].aggregations.nodes.buckets[n].ip.buckets[0] != "undefined") { reg_ip_adr(p.id, result.responses[r].aggregations.nodes.buckets[n].ip.buckets.at(-1).key ); p.ip = result.responses[r].aggregations.nodes.buckets[n].ip.buckets.at(-1).key; }
+			let point_already_loaded = points.find(o => o.id === p.id);
+			if (! point_already_loaded) { points.push( p); } else { console.log( "Duplicate node info for node " + p.id ); }
+		    }
+		} else if (typeof result.responses[r].error.reason != "undefined" ) { console.log("Failed to access data from Opensearch: " + result.responses[r].error.reason + "."); }
+	    }
+	    if ( ! result.responses.length ) { console.log("No node data returned from archive for time period " + start_iso + " to " + end_iso + "."); }
 	    loads++;
-	    });
-
+	    if (loads >= goal) { loads=0; show_map(network); if (points.length > 0) get_topology(); }
+	}).fail( function(e, textStatus, error ) { console.log( "Request" + url + " Failed: " + textStatus + ", " + error ); loads++; });
 	return;
-    } 
-
+    }
     if ( service === "db" ) {
-	// Load coordinates from config db
 	start = new Date($("#datepicker").val() + " 00:00:00").getTime()/1000;
 	end= new Date($("#datepicker").val() + " 23:59:59").getTime()/1000;
 	var network=parms.net;
 	var url="microdep-config.cgi?mode=nodes&secret=virre-virre-vapp&variant=mp-" + network + "&start=" + start + "&end=" + end;
-	$.getJSON( url,
-		   function(nodes){
-		       for ( var n=0; n < nodes.length; n++) {
-			   // Add node info to points structure
-			   var p={};
-			   p.id = nodes[n][0];
-			   p.name = nodes[n][1];
-			   p.lat = nodes[n][2];
-			   p.lon = nodes[n][3];
-			   reg_ip_adr(p.name, nodes[n][4]);
-			   let point_already_loaded = points.find(o => o.id === p.id);
-			   if (! point_already_loaded) {
-			       points.push( p);
-			   } else {
-			       console.log( "Duplicate node info for node " + p.id );
-			   }
-		       }
-		       loads++;
-		       if (loads >= goal) { // i.e. wait until data loaded
-			   loads=0;
-			   show_map(network);
-			   if (points.length > 0)
-			       // Some nodes are available. Plot the links too.
-			       get_topology();
-		       }  
-		   }).fail( function( jqxhr, textStatus, error ) {
-		       var err = textStatus + ", " + error;
-		       console.log( "Request" + url + " Failed: " + err );
-		       loads++;
-		   });
-	return;
-    } 
-
-    // Load nodes and coordinates from json-file
-    var url= "./" + network + "/" + network + "-" + service + "-geo.json";
-    $.getJSON( url,
-	function(tjenester){
-	    if ( "_meta" in tjenester ){
-		$.each(tjenester._meta.hostvars, function(id, host){
-		    if( host.utm){
-		      var utm=host.utm.split(" ");
-		      var utm_o = L.utm( { x:utm[2], y:utm[1], zone: utm[0], band:"N" } );
-		      var latlon = utm_o.latLng();
-
-		      var ytid=id; 
-		      if ( id.indexOf("ytelse") >= 0){ // kutt uninett.no pga db
-			  ytid = id.substr(0, id.indexOf(".uninett.no") );
-		      }
-			points.push( {id:ytid, name:host.nettinstallasjon, lat:latlon.lat, lon:latlon.lng });
-		    }
-		  });
-	    } else { // assume array of points
-//		points = points.concat(tjenester);
-		for (var t=0; t<tjenester.length; t++) {
-		    let point_already_loaded = points.find(o => o.id === tjenester[t].id);
-		    if (! point_already_loaded) {
-			// Add new point (node / vertex)
-			points.push( tjenester[t]);
-		    } else {
-			console.log( "Duplicate node info for node " + t.id );
-		    }
-		}
+	$.getJSON( url, function(nodes){
+	    for ( var n=0; n < nodes.length; n++) {
+		var p={}; p.id = nodes[n][0]; p.name = nodes[n][1]; p.lat = nodes[n][2]; p.lon = nodes[n][3];
+		reg_ip_adr(p.name, nodes[n][4]);
+		let point_already_loaded = points.find(o => o.id === p.id);
+		if (! point_already_loaded) { points.push( p); } else { console.log( "Duplicate node info for node " + p.id ); }
 	    }
 	    loads++;
-	    if (loads >= goal) { // i.e. wait until data loaded
-		loads=0;
-		show_map(network);
-		if (points.length > 0)
-		    // Some nodes are available. Plot the links too.
-		    get_topology();
-	    }  
-
-	}).fail( function( jqxhr, textStatus, error ) {
-	    var err = textStatus + ", " + error;
-	    console.log( "Request" + url + " Failed: " + err );
-	    loads++;
-	});
-
+	    if (loads >= goal) { loads=0; show_map(network); if (points.length > 0) get_topology(); }
+	}).fail( function( jqxhr, textStatus, error ) { console.log( "Request" + url + " Failed: " + textStatus + ", " + error ); loads++; });
+	return;
+    }
+    var url= "./" + network + "/" + network + "-" + service + "-geo.json";
+    $.getJSON( url, function(tjenester){
+	if ( "_meta" in tjenester ){
+	    $.each(tjenester._meta.hostvars, function(id, host){
+		if( host.utm){
+		    var utm=host.utm.split(" "); var utm_o = L.utm( { x:utm[2], y:utm[1], zone: utm[0], band:"N" } ); var latlon = utm_o.latLng();
+		    var ytid=id; if ( id.indexOf("ytelse") >= 0){ ytid = id.substr(0, id.indexOf(".uninett.no") ); }
+		    points.push( {id:ytid, name:host.nettinstallasjon, lat:latlon.lat, lon:latlon.lng });
+		}
+	    });
+	} else {
+	    for (var t=0; t<tjenester.length; t++) {
+		let point_already_loaded = points.find(o => o.id === tjenester[t].id);
+		if (! point_already_loaded) { points.push( tjenester[t]); } else { console.log( "Duplicate node info for node " + t.id ); }
+	    }
+	}
+	loads++;
+	if (loads >= goal) { loads=0; show_map(network); if (points.length > 0) get_topology(); }
+    }).fail( function( jqxhr, textStatus, error ) { console.log( "Request" + url + " Failed: " + textStatus + ", " + error ); loads++; });
 }
 
 function load_coords_from_all_sources(network){
-    // Load topology nodes with coordinates from all available sources
-
-    // Exctract node coordinates from topology events
     load_coords(network, "topoevents", 2);
-    // Load node coordinates from config db
     load_coords(network, "db", 2);
-    // Load node coordinates from json files
-//    load_coords(network, "base", 5);
-//    load_coords(network, "extra", 5);
-//    load_coords(network, "cnaas", 5);
-    // NOTE: Last arg (int) must equal no of consequtive calls to 'load_coords'
- }
-/*    
-function show_network(network){
-    points=[];
-    if ( network in points_cache){
-	points=points_cache[network];
-	show_map(network);
-	if (points.length > 0)
-	    // Some nodes are available. Plot the links too.
-	    get_topology();
-    } else {
-	// Fetch nodes and coordinates
-	load_coords_from_all_sources(network);
-    }
-}
-*/
-function show_network(network){
-    points=[];
-    if ( network in points_cache){
-	// Get nodes from cache
-	points=points_cache[network];
-    }
-    if (points.length == 0) {
-	// Cache is empty. Attempt to load nodes and coordinates 
-	load_coords_from_all_sources(network);  // ... calls show_map and get_topology
-    } else {
-	show_map(network);
-	get_topology();
-    }
 }
 
-			 
+function show_network(network){
+    points=[];
+    if ( network in points_cache){ points=points_cache[network]; }
+    if (points.length == 0) { load_coords_from_all_sources(network); }
+    else { show_map(network); get_topology(); }
+}
+
 function get_coords(end){
     var coords, i;
-
     for (i=0; i < points.length; i++){
 	var p=points[i];
-	if ( p.id === end ){
-	    coords=new LatLon(p.lat,p.lon);
-	    return coords;
-	}
+	if ( p.id === end ){ coords=new LatLon(p.lat,p.lon); return coords; }
     }
-    // if not found . make fake location
     var p={id:end, name:end, lat:no_coords.lat, lon:no_coords.lon};
-    points.push( p);
-    make_markers( $("#network").val(), [p], false);
-    return no_coords;  // find fake location
+    points.push( p); make_markers( $("#network").val(), [p], false);
+    return no_coords;
 }
 
 function sort_missing(a ,b){
-    var aa=a.split(" ");
-    var bb=b.split(" ");
-    if ( aa[0] === bb[0]){
-	return aa[1].localeCompare( bb[1] );
-    } else {
-	return aa[0].localeCompare( bb[0] );	
-    }
+    var aa=a.split(" "); var bb=b.split(" ");
+    if ( aa[0] === bb[0]){ return aa[1].localeCompare( bb[1] ); } else { return aa[0].localeCompare( bb[0] ); }
 }
 
 function check_ends(){
-    var html= '<h2>Missing flows in dataset? </h2>';
-    html += '<table><tr><th>From<th>To';
-    var ab=[], i;
-    var nok=0, nmiss=0, missing=[];
-
-    for (i=0;i<ends.length;i++){
-	a=ends[i][0] + ' ' + ends[i][1];
-	ab[a]=true;
-    }
-    for (i=0;i<ends.length;i++){
-	var b=ends[i][1] + ' ' + ends[i][0];
-	if (ab[b]){
-	    nok++;
-	} else {
-	    // console.log( "Missing link : " + b);
-	    missing.push(b);
-	    nmiss++;
-	}
-    }
+    var html= '<h2>Missing flows in dataset? </h2>'; html += '<table><tr><th>From<th>To';
+    var ab=[], i; var nok=0, nmiss=0, missing=[];
+    for (i=0;i<ends.length;i++){ a=ends[i][0] + ' ' + ends[i][1]; ab[a]=true; }
+    for (i=0;i<ends.length;i++){ var b=ends[i][1] + ' ' + ends[i][0]; if (ab[b]){ nok++; } else { missing.push(b); nmiss++; } }
     missing.sort(sort_missing);
-    for (i=0; i< missing.length; i++){
-	var ft=missing[i].split(" ");
-	html+='<tr><td>' +ft[0] + '<td>'+ ft[1];
-
-    }
-    // console.log("Ok " + nok + " Missing " + nmiss );
-    html+='</table>';
-    html+='<p>' + "Ok " + nok + " Missing " + nmiss;
-    $("#missing").html(html);
-    $("#missing").dialog("open");
-    // alert(html);
-
+    for (i=0; i< missing.length; i++){ var ft=missing[i].split(" "); html+='<tr><td>' +ft[0] + '<td>'+ ft[1]; }
+    html+='</table>'; html+='<p>' + "Ok " + nok + " Missing " + nmiss;
+    $("#missing").html(html); $("#missing").dialog("open");
 }
 
 function sort_diff(a , b){
-    //  return
-    var aa=a.split(" ");
-    var bb=b.split(" ");
-    if ( aa[0] === bb[0]){
-	return aa[1].localeCompare( bb[1] );
-    } else {
-	return aa[0].localeCompare( bb[0] );	
-    }
+    var aa=a.split(" "); var bb=b.split(" ");
+    if ( aa[0] === bb[0]){ return aa[1].localeCompare( bb[1] ); } else { return aa[0].localeCompare( bb[0] ); }
 }
 
-
 function check_asymmetry(report, div_id){
-    var ab=[], down=[], diff=[], pair=[], i;
-    var nok=0, nmiss=0, missing=[];
-    
-    for (i=0;i< summary.length;i++){
-	var entry=summary[i]._source;
-	var a=entry.from + " " + entry.to;
-	down[a]= entry[ parms.property ];
-	ab[a]=true;
-    }
+    var ab=[], down=[], diff=[], pair=[], i; var nok=0, nmiss=0, missing=[];
+    for (i=0;i< summary.length;i++){ var entry=summary[i]._source; var a=entry.from + " " + entry.to; down[a]= entry[ parms.property ]; ab[a]=true; }
     for (i=0;i<summary.length;i++){
-	var entry=summary[i]._source;
-	var a=entry.from + " " + entry.to;
-	var b=entry.to + " " + entry.from;
-	
-	if ( ! ( b in pair ) ){
-	    var delta=0;
-	    if ( typeof(down[b]) === "number" && typeof(down[a]) === "number" )
-		delta= down[b] - down[a];
-	    diff.push( {id: a, val: Math.abs( delta ) } );
-	}
-	pair[a] = b;
-	pair[b] = a;
-	
-	if (ab[b]){
-	    nok++;
-	} else {
-	    // console.log( "Missing link : " + b);
-	    missing.push(b);
-	    nmiss++;
-	}
+	var entry=summary[i]._source; var a=entry.from + " " + entry.to; var b=entry.to + " " + entry.from;
+	if ( ! ( b in pair ) ){ var delta=0; if ( typeof(down[b]) === "number" && typeof(down[a]) === "number" ) delta= down[b] - down[a]; diff.push( {id: a, val: Math.abs( delta ) } ); }
+	pair[a] = b; pair[b] = a;
+	if (ab[b]){ nok++; } else { missing.push(b); nmiss++; }
     }
-    
     let html='';
-    
     if ( report === 'missing' ){
 	if (nmiss > 0) {
-	    html+= '<h2>Missing opposite flows for ' +  title_state() + '</h2>';
+	    html+= '<h2>Missing opposite flows for ' + title_state() + '</h2>';
 	    html+='<p>The below ' + nmiss + ' (out of ' + summary.length + ") flows might be missing";
 	    html += '<table id=' + div_id + '_miss_table title="Missing opposite flows?" class=sortable>';
-//	    html+='<caption>Missing opposite end ' + title_state() + '</caption>';
-	    html += '<tr><th>From<th>To';
+	    html += '<thead><tr><th class="summary-link-header">' + fromIcon + 'From<br>' + toIcon + 'To</th></tr></thead>';
 	    missing.sort(sort_missing);
 	    for (i=0; i< missing.length; i++){
 		var ft=missing[i].split(" ");
-		html+='<tr><td>' +ft[0] + '<td>'+ ft[1];
+		html+='<tr><td class="summary-link-cell">';
+		html+='<div class="summary-from">' + fromIcon + '<span>' + ft[0] + '</span></div>';
+		html+='<div class="summary-to">' + toIcon + '<span>' + ft[1] + '</span></div>';
+		html+='</td>';
 	    }
 	    html+='</table>';
 	    html += "<p>The above analysis is based on " + prop_desc[event_sum_type[parms.event]][ parms.property ] + " data sets.</p>";
-	} else {
-	    html+= '<h2>No missing flows for ' +  title_state() + '</h2>';
-	}
+	} else { html+= '<h2>No missing flows for ' + title_state() + '</h2>'; }
     } else {
 	if (diff.length > 0) {
 	    html+='<h2>Asymmetry in ' + prop_desc[event_sum_type[parms.event]][parms.property] + ' for ' + title_state() + '</h2>';
-	    html += '<table id=' + div_id + '_table border=1 class=sortable ><thead title="Click to sort on column"><tr><th>From<th>To<th>From-To<th>To-From<th>Diff</thead>';
-	    
-	    diff.sort( function(a,b){
-		if ( typeof(a.val) === "number" && typeof(b.val) === "number" )
-		    return b.val - a.val;
-		return 0;
-	    });
+	    html += '<table id=' + div_id + '_table border=1 class=sortable><thead title="Click to sort on column"><tr>';
+	    html += '<th class="summary-link-header">' + fromIcon + 'From<br>' + toIcon + 'To';
+	    html += '<th align=right>From→To<th align=right>To→From<th align=right>Diff</tr></thead>';
+	    diff.sort( function(a,b){ if ( typeof(a.val) === "number" && typeof(b.val) === "number" ) return b.val - a.val; return 0; });
 	    for (i=0; i< diff.length; i++){
-		let a = diff[i].id;
-		let ft=a.split(" ");
-		let aval= down[a] ? down[a].toFixed(1) : down[a];
-		let bval= down[pair[a]] ? down[pair[a]].toFixed(1) : down[pair[a]];
-		let diffval = diff[i].val  ? diff[i].val.toFixed(1) : 0 ;
-		html+='<tr><td>' +ft[0] + '<td>'+ ft[1] +
-		    '<td align=right>' + aval + '<td align=right>' + bval + '<td align=right>' + diffval;
-
+		let a = diff[i].id; let ft=a.split(" ");
+		let aval= down[a] ? down[a].toFixed(1) : down[a]; let bval= down[pair[a]] ? down[pair[a]].toFixed(1) : down[pair[a]];
+		let diffval = diff[i].val ? diff[i].val.toFixed(1) : 0 ;
+		html+='<tr><td class="summary-link-cell">';
+		html+='<div class="summary-from">' + fromIcon + '<span>' + ft[0] + '</span></div>';
+		html+='<div class="summary-to">' + toIcon + '<span>' + ft[1] + '</span></div>';
+		html+='</td>';
+		html+='<td align=right>' + aval + '<td align=right>' + bval + '<td align=right>' + diffval;
 	    }
 	    html+='</table>';
-	} else {
-	    html+= '<h2>No asymmetry found in ' + prop_desc[event_sum_type[parms.event]][parms.property] + ' for ' + title_state() + '</h2>';
-	}
+	} else { html+= '<h2>No asymmetry found in ' + prop_desc[event_sum_type[parms.event]][parms.property] + ' for ' + title_state() + '</h2>'; }
     }
     return(html);
-    // $("#missing").html(html);
-    // $("#missing").dialog("open");
-    // alert(html);
-
 }
 
+var fromIcon = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:4px;color:var(--c-accent)"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>';
+var toIcon = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:4px;color:var(--c-accent)"><path d="M5 12h14M12 5l7 7-7 7"/></svg>';
+
 function report_summary(div_id){
-    //let html='<input type="text" id="' + div_id + '_input" onkeyup="filter_table(\'' + div_id + '\')" placeholder="Search for names..">';
     let html='';
     html+='<h2>Summary for ' + title_state() + '</h2>';
     html+='<table border=1 id=' + div_id + '_table class=sortable>\n';
     var header_missing=true;
-    //var sel_prop= $("#prop_select").val();
-
     for (let i=0;i< summary.length;i++){
 	var entry=summary[i]._source;
-	var a=entry.from + " " + entry.to;
-
 	if (header_missing){
-	    // Compose table header row
-	    html += '<thead title="Click to sort"><th>From<th>To';
+	    html += '<thead title="Click to sort"><tr><th class="summary-link-header">' + fromIcon + 'From<br>' + toIcon + 'To';
 	    for ( const prop of prop_names[event_sum_type[parms.event]]){
-		html+='<th align=right title="' + prop_long_desc[event_sum_type[parms.event]][prop] + ' - Click to sort">' + prop_desc[event_sum_type[parms.event]][prop];
-		    + " (" + prop_aggr[event_sum_type[parms.event]][prop] + ")";
+		var desc = prop_desc[event_sum_type[parms.event]][prop] || prop;
+		var longDesc = prop_long_desc[event_sum_type[parms.event]][prop] || '';
+		html+='<th align=right title="' + longDesc + ' - Click to sort" class="summary-prop-header">' + desc;
 	    }
-	    html+='</thead><tbody>';
-	    header_missing=false;
+	    html+='</tr></thead><tbody>'; header_missing=false;
 	}
-	// Compose table rows
-	html+='<tr><td>' + entry['from'] + '<td>' + entry['to'];
+	html+='<tr><td class="summary-link-cell">';
+	html+='<div class="summary-from">' + fromIcon + '<span>' + entry['from'] + '</span></div>';
+	html+='<div class="summary-to">' + toIcon + '<span>' + entry['to'] + '</span></div>';
+	html+='</td>';
 	for ( const prop of prop_names[event_sum_type[parms.event]]){
 	    let val= entry[prop];
-	    if ( typeof val === 'number' && ! val.isInteger){
-		if ( val < 100 )
-		    val = val.toFixed(1);
-		else
-		    val = val.toFixed(0);
-	    }
+	    if ( typeof val === 'number' && ! val.isInteger){ if ( val < 100 ) val = val.toFixed(1); else val = val.toFixed(0); }
 	    html+='<td align=right>' + val;
 	}
     }
@@ -1658,603 +1373,170 @@ function report_summary(div_id){
     return(html);
 }
 
-
 function change_date(delta){
-    var p= $("#datepicker").datepicker("getDate"); // .getMilliseconds() + 86400*1000*delta;
-    //$("#datepicker").datepicker('setDate', $("#datepicker").datepicker("getDate").getDate() + delta );
-    var increment=$("#period").val(); // hours
-    var hour=0;
-    if (  increment === "now" || increment < 24 ){ // hour navigation
-	increment = 1;
-	var period_input=$("#period_input").val();
-	hour=parse_hhmm(period_input);
+    var p= $("#datepicker").datepicker("getDate");
+    var increment=$("#period").val(); var hour=0;
+    if ( increment === "now" || increment < 24 ){
+	increment = 1; var period_input=$("#period_input").val(); hour=parse_hhmm(period_input);
 	p.setHours(p.getHours() + hour + increment * delta);
-    } else {
-	var days = Math.round(increment / 24);
-	p.setDate( p.getDate() + days * delta );
-    }
-
-    $("#period_input").val(hhmm(p));
-    $("#datepicker").datepicker('setDate', p);
-    //$("#draw").click();
-    update_url();
-    show_network(parms.net); // ... calls get_topology()
-    // get_topology(); // ... calls get_connections()
-    // get_connections();
-    update_url();
- 
-    // var curd = $("#datepicker").datepicker('GetDate');
-    // $("#datepicker").datepicker('SetDate', curd+delta)
-    
+    } else { var days = Math.round(increment / 24); p.setDate( p.getDate() + days * delta ); }
+    $("#period_input").val(hhmm(p)); $("#datepicker").datepicker('setDate', p);
+    update_url(); show_network(parms.net); update_url();
 }
 
-
 function reg_ip_adr(name, adr){
-    if ( name && adr ){
-	if ( ! ip_to_name[adr] )
-		ip_to_name[adr] = name;
-	if ( ! name_to_ip[name] )
-		name_to_ip[name] = adr;
-    }	
+    if ( name && adr ){ if ( ! ip_to_name[adr] ) ip_to_name[adr] = name; if ( ! name_to_ip[name] ) name_to_ip[name] = adr; }
 }
 
 function harvest_ip_name(summary){
-    for (var link_obj of summary){
-	var link=link_obj._source;
-	reg_ip_adr( link.from, link.from_adr);
-	reg_ip_adr( link.to, link.to_adr);
-    }
+    for (var link_obj of summary){ var link=link_obj._source; reg_ip_adr( link.from, link.from_adr); reg_ip_adr( link.to, link.to_adr); }
 }
 
 function load_name_to_address(){
     var network=$("#network").val();
     if ( ! name_loaded[network] ){
-	
 	var config_url='microdep-config.cgi';
 	var url= config_url + "?secret=virre-virre-vapp&variant=mp-" + network + "&file=mp-address.txt";
-	$.get( url, function( lines ){ 
-	    for ( var line of lines.split(/\n/) ){
-		var l=line.split(/\s+/);
-		if ( ! name_to_ip[ l[0] ] )
-		    name_to_ip[ l[0] ] = l[1];
-	    }
+	$.get( url, function( lines ){
+	    for ( var line of lines.split(/\n/) ){ var l=line.split(/\s+/); if ( ! name_to_ip[ l[0] ] ) name_to_ip[ l[0] ] = l[1]; }
 	    name_loaded[network]=true;
-	}).fail( function( jqxhr, textStatus, error ) {
-	    var err = textStatus + ", " + error;
-	    console.log( "Request" + url + " Failed: " + err );
-	});
-    }
-
-}
-
-
-// log query data for debug
-
-function log_summary(summary){
-
-    for (let i=0; i<summary.length; i++){
-	console.log(  summary[i]._source.from + "-" + summary[i]._source.to );
+	}).fail( function( jqxhr, textStatus, error ) { console.log( "Request" + url + " Failed: " + textStatus + ", " + error ); });
     }
 }
 
+function log_summary(summary){ for (let i=0; i<summary.length; i++){ console.log( summary[i]._source.from + "-" + summary[i]._source.to ); } }
+function present_table( parameters, div, data){}
 
-// fill html table with parameters
-
-function present_table( parameters, div, data){
-}
-
-
-// get peer data
 function get_peer_data(from, to, div){
     var data=[];
-    // adjust time from UTC to experiment timezone
-    let tz_start = adjust_to_timezone(start);
-    let tz_end = adjust_to_timezone(end);
-
-    var url="elastic-get-date-type.pl?index=" + event_index[parms.event] + "&event_type=" + parms.event
-	+ "&start=" + tz_start + "&end=" + tz_end
-	+ "&from=" + from + "&to=" + to;
-    if (net_ip_version[parms.net]) {
-	// Add filtering on ip version
-	url += "&ip_version=" + net_ip_version[parms.net];
-    }
-    
-    $.getJSON( url,
-               function(resp){
-                   if (resp.hits && resp.hits.total.value > 0){
-                       // present_table( parameters, div, resp.hits.hits);
-                       let html=gap_list( from, to, resp.hits.hits, 10, 'num_desc');
-                       div.innerHTML = html;
-                       div['hits'+parms.event] =  resp.hits.hits;
-                       sorttable.makeSortable( div.getElementsByClassName('sortable')[0] );
-                       mymap._popup.update();
-                   } else {
-                       $("#error").html(hhmmss(new Date()) + " : No " + parms.event + " data for " + $("#datepicker").val() + " " + $("#period_input").val() + ";;");
-                   }
-
-	       })
-	.fail( function(e, textStatus, error ) {
-            //remove_links(links);
-            console.log("failed to get data from server :" + textStatus + ", " + error);
-        });
+    let tz_start = adjust_to_timezone(start); let tz_end = adjust_to_timezone(end);
+    var url="elastic-get-date-type.pl?index=" + event_index[parms.event] + "&event_type=" + parms.event + "&start=" + tz_start + "&end=" + tz_end + "&from=" + from + "&to=" + to;
+    if (net_ip_version[parms.net]) { url += "&ip_version=" + net_ip_version[parms.net]; }
+    $.getJSON( url, function(resp){
+        if (resp.hits && resp.hits.total.value > 0){
+            let html=gap_list( from, to, resp.hits.hits, 10, 'num_desc');
+            div.innerHTML = html; div['hits'+parms.event] = resp.hits.hits;
+            sorttable.makeSortable( div.getElementsByClassName('sortable')[0] );
+            // panel auto-updates, no need for popup update
+        } else { $("#error").html(hhmmss(new Date()) + " : No " + parms.event + " data for " + $("#datepicker").val() + " " + $("#period_input").val() + ";;"); }
+    }).fail( function(e, textStatus, error ) { console.log("failed to get data from server :" + textStatus + ", " + error); });
 }
 
-// get measurement data
-  var links_on = false;
-  const index_extension={};
+var links_on = false;
+const index_extension={};
 
 function get_connections(){
-    //links=[];
-    var index=parms.net;
-//    var etype= $("#event_type").val();
-    var etype= parms.event;
-    var sum_etype="";
-    var sum_index="";
-    if ( ! jQuery.isEmptyObject(event_index)) {
-	// Apply ES indexnames from config file
-	index = event_index[parms.event];
-//	if ( parms.event === 'jitter')
-//	    sum_etype = event_index['gap']; // i.e. 
-//	else
-	sum_etype = event_sum_type[parms.event];
-//    } else if ( etype === "gap" || etype === "gapsum" ) {
-//	sum_etype = "gapsum";
-//    } else if ( etype === "routeerr" || etype === "routesum" ) {
-//	index = index + "_" + "routemon";
-//	sum_etype = "routesum";
-    } else {
-	index = index + "_" + etype;
-	console.log("Warning: No index specified. Missing config file? Applying '", + index + "'");
-    }
-    
-    var hour=0;
-    var period=$("#period").val();
-    var now=new Date();
-
-    if ( refresh_active){
-	$("#datepicker").datepicker('setDate', now);
-	if ( period < 24 ){
-	    var startd= new Date(now - 3600*1000);
-	    $("#period_input").val( hhmm(startd ) );
-	}
-    }
-    start = $("#datepicker").val();
-    var dstart=new Date(start);
-    var msstart=dstart.getTime();
-    var tz= dstart.getTimezoneOffset() / 60;
+    var index=parms.net; var etype= parms.event; var sum_etype=""; var sum_index="";
+    if ( ! jQuery.isEmptyObject(event_index)) { index = event_index[parms.event]; sum_etype = event_sum_type[parms.event]; }
+    else { index = index + "_" + etype; console.log("Warning: No index specified. Missing config file? Applying '", + index + "'"); }
+    var hour=0; var period=$("#period").val(); var now=new Date();
+    if ( refresh_active){ $("#datepicker").datepicker('setDate', now); if ( period < 24 ){ var startd= new Date(now - 3600*1000); $("#period_input").val( hhmm(startd ) ); } }
+    start = $("#datepicker").val(); var dstart=new Date(start); var msstart=dstart.getTime(); var tz= dstart.getTimezoneOffset() / 60;
     let tloss;
     if ( period < 24 ){
-	var period_input= $("#period_input").val();
-	hour=parse_hhmm( period_input ) + tz;
-	period=1;
-	dstart= new Date( msstart + hour * 3600*1000 );
-	start = dstart.toISOString();
-	end = new Date(dstart.getTime() + 3600*1000).toISOString();
-	tloss=0;
+	var period_input= $("#period_input").val(); hour=parse_hhmm( period_input ) + tz; period=1;
+	dstart= new Date( msstart + hour * 3600*1000 ); start = dstart.toISOString(); end = new Date(dstart.getTime() + 3600*1000).toISOString(); tloss=0;
     } else {
-	var msperiod=period * 3600*1000;
-	var msend= msstart + msperiod;
-	if ( (msend - now) > (msperiod/2) ){
-	    if ( period > 24 ){
-		dstart=new Date(msstart);
-		var cd = dstart.getDate() - dstart.getDay();
-		var sow = new Date(dstart.setDate(cd + 1));
-		msstart=sow.getTime();
-		$("#datepicker").datepicker('setDate', new Date(msstart));
-	    } 
-	}
-	
-	if ( etype === "gapsum" )
-	    msend += 5 * 60 * 1000; // add 5 min to get yesterdays summary records past midnight
-	
-	start= new Date(msstart).toISOString();	
-	end= new Date(msend).toISOString();
-
-	if ( period < 2*24 ){ // uke
-	    tloss=1000; // ms
-	} else if ( period <= 7*24 ){ // uke
-	    tloss=5000; // ms
-	} else {
-	    tloss=60000;
-	}
-    }	  
-    
-    // Clear current dataset (details and summary)
-    last_hits=[];
-    summary=[];
-
-    var now = new Date();
-    
-//    if ( etype === 'jitter' || start.substr(0,10) === now.toISOString().substr(0,10) ){ // read todays details
+	var msperiod=period * 3600*1000; var msend= msstart + msperiod;
+	if ( (msend - now) > (msperiod/2) ){ if ( period > 24 ){ dstart=new Date(msstart); var cd = dstart.getDate() - dstart.getDay(); var sow = new Date(dstart.setDate(cd + 1)); msstart=sow.getTime(); $("#datepicker").datepicker('setDate', new Date(msstart)); } }
+	if ( etype === "gapsum" ) msend += 5 * 60 * 1000;
+	start= new Date(msstart).toISOString(); end= new Date(msend).toISOString();
+	if ( period < 2*24 ){ tloss=1000; } else if ( period <= 7*24 ){ tloss=5000; } else { tloss=60000; }
+    }
+    last_hits=[]; summary=[]; var now = new Date();
     if ( ! sum_etype || typeof sum_etype == 'undefined' || start.substr(0,10) === now.toISOString().substr(0,10) || period < 24){
-	// No summary events are available and/or it's todays date and/or time scale on hourly basis is set. Fetch and summarize "normal" event details.
 	var url="elastic-get-date-type.pl?index=" + index + "&event_type=" + etype + "&start=" + start + "&end=" + end ;
-	if (net_ip_version[parms.net]) {
-	    // Add filtering on ip version
-	    url += "&ip_version=" + net_ip_version[parms.net];
-	}
-	if ( tloss > 0 && etype === "gap" )
-	    url += "&tloss=" + tloss;
-
+	if (net_ip_version[parms.net]) { url += "&ip_version=" + net_ip_version[parms.net]; }
+	if ( tloss > 0 && etype === "gap" ) url += "&tloss=" + tloss;
 	if (parms.debug) console.log(url);
-
-	$.getJSON( url,
-		   function(resp){
-		       if (resp.hits && resp.hits.total.value > 0){
-			   var nrecs=resp.hits.total.value.toString();
-			   
-			   if ( etype === "gapsum" || etype === "routesum" ){
-			       console.log("Warning: Unexpected summary events found (in legacy code). Using anyway.")
-			       summary=resp.hits.hits;
-			   } else if ( resp.aggregations){
-			       aggregates=resp.aggregations;
-			       summary=digest_aggregates(aggregates, $("#stats_type").val());
-			       nrecs = count_aggregates( aggregates );
-			   } else { // gap records
-			       if (! sum_etype || start.substr(0,10) === now.toISOString().substr(0,10)) {
-				   // No event type for summaries given or it's today's date
-				   summary=digest_es_data(etype, resp.hits.hits);
-			       }
-			       last_hits=resp.hits.hits;
-			   }
-			   harvest_ip_name(summary);
-			   
-			   var msg = hhmmss(new Date()) + " Found " + nrecs + " " + etype + " records for " + $("#datepicker").val() + " " + $("#period_input").val()  + " ;;";
-			   $("#status").html( msg );
-
-			   if (! jQuery.isEmptyObject(conffile) && conffile[parms.net].event_type[parms.event].asn_source ) {
-			       // Extract and add relevant as-numbers to each connection
-			       for (const h in last_hits) {
-				   var ab = last_hits[h]._source.from + ',' + last_hits[h]._source.to;
-				   if (linkByName[ab] && last_hits[h]._source.routechange_asn ) {
-				       linkByName[ab].asn_search += last_hits[h]._source[conffile[parms.net].event_type[parms.event].asn_source] + " ";
-				   }
-			       }
-			   }
-			   // Refresh all links 
-			   if ( ! parms.connections)
-			       taint_links(summary, $("#prop_select").val() );
-			   else
-			       draw_links(summary, $("#prop_select").val() );
-		       } else {
-			   taint_links([], "empty");
-			   $("#error").html(hhmmss(new Date()) + " : No " + $("#event_type").val() + " data for " + $("#datepicker").val() + " " + $("#period_input").val() + ";;");
-		       }
-
-
-		   })
-	    .fail( function(e, textStatus, error ) {
-		//remove_links(links);
-		console.log("### Failed to get data from server :" + textStatus + ", " + error + " url: " + url);
-	    });
-
-    } else if ( sum_etype) { // get the summary records
-	// if ( sum_etype && start.substr(0,10) != now.toISOString().substr(0,10)) {
-	// Event type for summary info is set and it's not todays date...
-
-	// BEGIN: LEGACY CODE
-	if ( etype === 'jitter'){
-	    console.log("Warning: jitter data do no have sum records. This should not happen.");	    
-	    index = parms.net; // conffile in error
-	    sum_etype = 'gapsum';
-	}
-	// END: LEGACY CODE
-	
-	// Prepare to fetch summary info
+	$.getJSON( url, function(resp){
+	    if (resp.hits && resp.hits.total.value > 0){
+		var nrecs=resp.hits.total.value.toString();
+		if ( etype === "gapsum" || etype === "routesum" ){ summary=resp.hits.hits; }
+		else if ( resp.aggregations){ aggregates=resp.aggregations; summary=digest_aggregates(aggregates, $("#stats_type").val()); nrecs = count_aggregates( aggregates ); }
+		else { if (! sum_etype || start.substr(0,10) === now.toISOString().substr(0,10)) { summary=digest_es_data(etype, resp.hits.hits); } last_hits=resp.hits.hits; }
+		harvest_ip_name(summary);
+		var msg = hhmmss(new Date()) + " Found " + nrecs + " " + etype + " records for " + $("#datepicker").val() + " " + $("#period_input").val() + " ;;";
+		$("#status").html( msg );
+		if (! jQuery.isEmptyObject(conffile) && conffile[parms.net].event_type[parms.event].asn_source ) {
+		    for (const h in last_hits) { var ab = last_hits[h]._source.from + ',' + last_hits[h]._source.to; if (linkByName[ab] && last_hits[h]._source.routechange_asn ) { linkByName[ab].asn_search += last_hits[h]._source[conffile[parms.net].event_type[parms.event].asn_source] + " "; } }
+		}
+		if ( ! parms.connections) taint_links(summary, $("#prop_select").val() ); else draw_links(summary, $("#prop_select").val() );
+	    } else { taint_links([], "empty"); $("#error").html(hhmmss(new Date()) + " : No " + $("#event_type").val() + " data for " + $("#datepicker").val() + " " + $("#period_input").val() + ";;"); }
+	}).fail( function(e, textStatus, error ) { console.log("### Failed to get data from server :" + textStatus + ", " + error + " url: " + url); });
+    } else if ( sum_etype) {
+	if ( etype === 'jitter'){ console.log("Warning: jitter data do no have sum records."); index = parms.net; sum_etype = 'gapsum'; }
 	var sum_url="elastic-get-date-type.pl?index=" + index + "&event_type=" + sum_etype + "&start=" + start + "&end=" + end;
-	if (net_ip_version[parms.net]) {
-	    // Add filtering on ip version
-	    sum_url += "&ip_version=" + net_ip_version[parms.net];
-	}
-
+	if (net_ip_version[parms.net]) { sum_url += "&ip_version=" + net_ip_version[parms.net]; }
 	if (parms.debug) console.log(sum_url);
-
-	$.getJSON( sum_url,
-		   function(resp){
-		       if (resp.hits && resp.hits.total.value > 0){
-			   var nrecs=resp.hits.total.value.toString();
-			   summary=resp.hits.hits;
-			   harvest_ip_name(summary);
-			   
-			   var msg = hhmmss(new Date()) + " Got " + nrecs + " " + sum_etype + " records for "  + $("#datepicker").val() + " " + $("#period_input").val()  + " ;;";
-			   $("#status").html( msg );
-			   
-			   // Refresh all links  
-			   if ( ! parms.connections)
-			       taint_links(summary, $("#prop_select").val() );
-			   else
-			       draw_links(summary, $("#prop_select").val() );
-		       } else {
-			   taint_links([], "empty");
-			   $("#error").html(hhmmss(new Date()) + " : No " + sum_etype + " data for " + $("#datepicker").val() + " " + $("#period_input").val() + ";;");
-		       }
-		       
-		   })
-	    .fail( function(e, textStatus, error ) {
-		//remove_links(links);
-		console.log("failed to get data from server :" + textStatus + ", " + error);
-	    });
+	$.getJSON( sum_url, function(resp){
+	    if (resp.hits && resp.hits.total.value > 0){
+		var nrecs=resp.hits.total.value.toString(); summary=resp.hits.hits; harvest_ip_name(summary);
+		var msg = hhmmss(new Date()) + " Got " + nrecs + " " + sum_etype + " records for " + $("#datepicker").val() + " " + $("#period_input").val() + " ;;";
+		$("#status").html( msg );
+		if ( ! parms.connections) taint_links(summary, $("#prop_select").val() ); else draw_links(summary, $("#prop_select").val() );
+	    } else { taint_links([], "empty"); $("#error").html(hhmmss(new Date()) + " : No " + sum_etype + " data for " + $("#datepicker").val() + " " + $("#period_input").val() + ";;"); }
+	}).fail( function(e, textStatus, error ) { console.log("failed to get data from server :" + textStatus + ", " + error); });
     }
-    
-    if (parms.report) {
-	// Prepare specified report (next to the map)
-	$("#check").val(parms.report).trigger('change');
-	delete parms.report;  // ... but only first time when page is loaded
-    }
-
+    if (parms.report) { $("#check").val(parms.report).trigger('change'); delete parms.report; }
     $("#tabs").tabs("option", "active", 0);
-
 };
 
-function pad(d){
-    return ("0"+d).slice(-2) ;
-}
-function hhmmss(d){
-    return( pad( d.getHours() ) + ":" + pad( d.getMinutes()) + ":" + pad( d.getSeconds() ) );
-}
+function pad(d){ return ("0"+d).slice(-2) ; }
+function hhmmss(d){ return( pad( d.getHours() ) + ":" + pad( d.getMinutes()) + ":" + pad( d.getSeconds() ) ); }
 
-/*
 function title_state(){
-    let state = $("#network").val() + ', ' + conffile[parms.net].event_type[$("#event_type").val()].title
-	+ ' from ' + $("#datepicker").val() + ' for ' + $("#period").val() + ' hours';
+    let state = event_desc[parms.event] + ' in ' + net_desc[parms.net] + ' from ' + $("#datepicker").val() + ' for ' + $("#period").val() + ' hours';
     return state;
 }
-*/
 
-function title_state(){
-      let state =  event_desc[parms.event] + ' in ' + net_desc[parms.net]  
-	  + ' from ' + $("#datepicker").val() + ' for ' + $("#period").val() + ' hours';
-      return state;
-  }
+function init_map(){
+    if ( parms.net){ $("#network").val(parms.net); } else { parms.net = $("#network").val(); }
+    update_props(); make_palette( parms.palette);
+    var busy_no=0;
+    $.ajaxSetup({ beforeSend:function(){ $("#busy").show(); busy_no++; }, complete:function(){ busy_no--; if ( busy_no <= 0) $("#busy").hide(); } });
+    $("#busy").height( $("#network").height() );
+    $("#tabs").tabs();
+    $( "#datepicker" ).datepicker({dateFormat: "yy-mm-dd", "defaultDate": -1, "firstDay": 1, "maxDate": 0 });
+    var dato; if ( parms.date) dato=parms.date; else dato="-1d";
+    $("#datepicker").datepicker('setDate', dato).on("change", function() {
+	$("#next").prop('dsabled', selected_hour_is_future() ); update_url(); show_network(parms.net);
+    });
+    $("#period").change( function(){ parms.period = $("#period").val(); update_props(); update_url(); get_topology(); $("#period_input").val('00:00'); });
+    $("#period_input").change( function(){ parms.period_input = $("#period").val(); $("#period").val(1); parms.period = $("#period").val(); update_url(); get_topology(); });
+    $("#prev").click( function(){ change_date(-1); $("#next").prop('disabled', selected_hour_is_future() ); } );
+    $("#next").click( function(){ change_date(+1); $("#next").prop('disabled', selected_hour_is_future() ); } );
+    $("#live").click( function(){
+	if ( refresh_active){ clearInterval(); refresh_active=false; $(this).css("background-color", active_color); }
+	else { refresh_active=true; $("#datepicker").datepicker('setDate', new Date()); get_topology(); active_color=$(this).css("background-color"); $(this).css("background-color", refresh_color); setInterval( function(){ get_topology(); }, refresh_period ); }
+    } );
+    $("#search_input").keyup( function(){ var str = $("#search_input").val(); focus_links( str, 'flip' ); } );
+    $("#network").change( async function(){ parms.net= $("#network").val(); update_props(); remove_links(links); load_name_to_address(); show_network(parms.net); update_url(); $("#tabs").tabs("option", "active", 0); });
+    $("#event_type").change( function(){ parms.event = $("#event_type").val(); update_props(); load_coords_from_all_sources(network); update_url(); $("#tabs").tabs("option", "active", 0); });
+    $("#prop_select").change( function(){ parms.property = $("#prop_select").val(); taint_links(summary, $("#prop_select").val() ); update_url(); $("#tabs").tabs("option", "active", 0); });
+    fill_select( "stats_type", stats_types );
+    $("#stats_type").change( function(){ summary=digest_aggregates(aggregates, $("#stats_type").val()); taint_links(summary, $("#prop_select").val() ); update_url(); $("#tabs").tabs("option", "active", 0); });
+    if ( parms.node){ focus_node=parms.node; get_topology(); links_on=true; }
+    $("#check").change( function(){
+	var report_type = $("#check").val(); var title = $("#check").find(":selected").text();
+	let num_tabs = $("main#tabs ul li").length ; let tab_id = 'tab' + num_tabs;
+	switch(report_type ){
+	case 'missing': add_tab( 'div', title, num_tabs, check_asymmetry(report_type, tab_id) ); break;
+	case 'asymmetry': add_tab( 'div', title, num_tabs, check_asymmetry(report_type, tab_id) ); break;
+	case 'summary': add_tab( 'div', title, num_tabs, report_summary(tab_id) ); break;
+	case 'heatmap':
+	    let template_url='curve-chart.html?net=' + parms.net + '&index=' + event_index[parms.event] + '&from={0}&to={1}&event=' + parms.event + '&property=h_ddelay&start=' + start + '&end=' + end + "&title=\"From {2} to {3}\"";
+	    add_tab( 'div', title, num_tabs, 'This will be graph soon'); heatmap(tab_id, summary, $("#prop_select").val(), get_color, threshes, title_state(), template_url ); break;
+	case 'curve': add_tab( 'div', title, num_tabs, 'This will be graph soon'); curve(tab_id, last_hits, $("#prop_select").val(), title_state() ); break;
+	}
+	$("#check").val('choose'); $("#tabs").tabs("option", "active", num_tabs);
+    });
+    document.getElementById("mapid").addEventListener("contextmenu", function (event) {
+	event.preventDefault(); alert(lat.toFixed(5) + ', ' + lng.toFixed(5)); return false;
+    });
+    $( "#missing" ).dialog({ autoOpen: false, minWidth: 800 });
+    $("#mapid").on('click', "a.trigger", function(e){ var node=e.target.id; focus_links( node, 'flip' ) });
+    $("#network").trigger("change");
+}
 
-  function init_map(){
-      if ( parms.net){
-	  $("#network").val(parms.net);
-      } else {
-	  parms.net =  $("#network").val();
-      }
-      // Update properties according to selected measurement network variant
-      update_props();	
-
-      make_palette( parms.palette);
-
-      var busy_no=0;	
-      $.ajaxSetup({
-	  beforeSend:function(){
-              // show image here
-              $("#busy").show();
-	      busy_no++;
-	  },
-	  complete:function(){
-              // hide image here
-	      busy_no--;
-              if ( busy_no <= 0)
-		  $("#busy").hide();
-	  }
-      });
-      $("#busy").height( $("#network").height() );
-
-      $("#tabs").tabs();
-      
-      // draw inital network
-      /* just just use trigger
-       show_network(parms.net);
-       get_connections();
-       links_on=true;
-      */
-
-      // establish date picker
-      $( "#datepicker" ).datepicker({dateFormat: "yy-mm-dd", "defaultDate": -1, "firstDay": 1, "maxDate": 0 });
-
-      var dato;
-      if ( parms.date)
-	  dato=parms.date;
-      else
-	  dato="-1d";
-      $("#datepicker").datepicker('setDate', dato)
-	  .on("change", function() {
-	      $("#next").prop('dsabled', selected_hour_is_future() ); // Make next-button available if relevant
-	      //ok update_props();
-	      update_url();
-	      show_network(parms.net); //... calls get_topology()
-	      //get_topology();  // ... calls get_connections()
-	      //get_connections();
-	  });
-
-      //$("#period").select2();	
-      $("#period").change( function(){
-	  parms.period = $("#period").val();
-	  update_props();
-	  update_url();
-	  get_topology(); // ... calls get_connections()
-	  //get_connections();
-	  $("#period_input").val('00:00');
-      });
-      
-      $("#period_input").change( function(){
-	  parms.period_input = $("#period").val();
-	  $("#period").val(1); // hour
-	  parms.period = $("#period").val();
-	  update_url();
-	  get_topology(); // ... calls get_connections()
-	  //get_connections();
-      });
-
-      /* does not work 
-       $("#period_input").on('mousewheel', function(e, delta){
-       console.log( "delta " + delta);
-       });
-      */
-      //$("#period_input").hide();
-      
-      // buttons to navigate days
-      $("#prev").click( function(){
-	  change_date(-1);
-	  //ok update_props();
-	  $("#next").prop('disabled', selected_hour_is_future() ); // Enable next-button if relevant
-      } );
-      $("#next").click( function(){
-	  change_date(+1);
-	  //ok update_props();
-	  $("#next").prop('disabled', selected_hour_is_future() ); // Disable next-button if relevant
-      } );
-      
-      $("#live").click( function(){
-	  if ( refresh_active){
-	      clearInterval();
-	      refresh_active=false;
-	      $(this).css("background-color", active_color);
-	  } else {
-	      refresh_active=true;
-	      $("#datepicker").datepicker('setDate', new Date());
-	      get_topology(); // .. calls  get_connections();
-	      //get_connections();
-	      
-	      active_color=$(this).css("background-color");
-	      $(this).css("background-color", refresh_color);
-	      
-	      setInterval( function(){
-		  get_topology(); // .. calls  get_connections();
-		  //get_connections();
-	      }, refresh_period );
-	  }
-      } );
-      $("#search_input").keyup( function(){
-	  var str =  $("#search_input").val();
-	  focus_links( str, 'flip' );
-      } );
-
-      // mechanism to flip network drawing
-//      $("#draw").click(  function () {
-//	  if ( links_on ){
-//	      remove_links(links);
-//	      links_on=false;
-//	  } else {
-//	      links_on=true;
-//	      focus_node="";
-//	      make_prop_select("prop_select", prop_names[event_sum_type[parms.event]], prop_desc[event_sum_type[parms.event]], prop_long_desc[event_sum_type[parms.event]]);
-//	      get_connections();
-//	      // document.location.href =
-//	      removeParam( 'node');
-//	  }
-//      });
-
-      // network change
-      $("#network").change( async function(){
-	  parms.net= $("#network").val();
-	  update_props();
-	  remove_links(links);
-	  load_name_to_address();
-	  show_network(parms.net); // ... calls get_topology()
-	  // await new Promise(r => setTimeout(r, 5000)); // Sleep 5 sec for loading of node-data to complete. WARNING! THIS DESPERATELY NEEDS REDESIGN.
-	  //get_topology();
-	  update_url();
-	  $("#tabs").tabs("option", "active", 0);
-      });
-      
-      // event_type parameter change
-      $("#event_type").change( function(){
-	  parms.event = $("#event_type").val()    
-	  update_props();
-	  //remove_links();
-	  load_coords_from_all_sources(network); // ... calls get_topology() which again call get_connetions()
-	  //get_topology();           // ... calls get_connetions()
-	  //get_connections();
-	  update_url();
-	  $("#tabs").tabs("option", "active", 0);
-      });
-
-      // select parameter change
-      $("#prop_select").change( function(){
-	  parms.property = $("#prop_select").val();
-	  // remove_links(links);
-	  // links=[];
-	  //draw_links(summary, $("#prop_select").val() );
-
-	  taint_links(summary, $("#prop_select").val() );
-	  update_url();
-	  $("#tabs").tabs("option", "active", 0);
-      });
-
-      // select parameter change
-      fill_select( "stats_type", stats_types );
-      $("#stats_type").change( function(){
-	  summary=digest_aggregates(aggregates, $("#stats_type").val());
-	  taint_links(summary, $("#prop_select").val() );
-	  update_url();
-	  $("#tabs").tabs("option", "active", 0);
-      });
-      
-
-      // draw network at startup if focus on node    
-      if ( parms.node){
-	  focus_node=parms.node;
-	  get_topology(); // .. calls  get_connections();
-	  //get_connections();
-	  // draw_links(summary, $("#prop_select").val() );
-	  links_on=true;
-      }
-
-      //$("#check").click( function(){check_asymmetry()} );
-      $("#check").change( function(){
-	  var report_type = $("#check").val();
-	  var title = $("#check").find(":selected").text();
-	  let num_tabs = $("main#tabs ul li").length ;
-	  let tab_id = 'tab' + num_tabs;
-	  switch(report_type ){
-	  case 'missing':
-	      add_tab( 'div', title, num_tabs, check_asymmetry(report_type, tab_id) );
-	      break;
-	  case 'asymmetry':
-	      add_tab( 'div', title, num_tabs, check_asymmetry(report_type, tab_id) );
-	      break;
-	  case 'summary':
-	      add_tab( 'div', title, num_tabs, report_summary(tab_id) );
-	      break;
-	  case 'heatmap':
-	      let template_url='curve-chart.html?net=' + parms.net + '&index=' + event_index[parms.event] + '&from={0}&to={1}&event=' + parms.event + '&property=h_ddelay&start=' + start + '&end=' + end + "&title=\"From {2} to {3}\"";
-	      add_tab( 'div', title, num_tabs, 'This will be graph soon');
-	      heatmap(tab_id, summary, $("#prop_select").val(), get_color, threshes, title_state(), template_url );
-	      break;
-	  case 'curve':
-	      add_tab( 'div', title, num_tabs, 'This will be graph soon');
-	      curve(tab_id, last_hits, $("#prop_select").val(), title_state() );
-	      break;
-	  }
-	  $("#check").val('choose');
-    	  $("#tabs").tabs("option", "active", num_tabs);
-
-      });
-
-      // read coordinates
-      document.getElementById("mapid").addEventListener("contextmenu", function (event) {
-	  // Prevent the browser's context menu from appearing
-	  event.preventDefault();
-	  
-	  // Add marker
-	  // L.marker([lat, lng], ....).addTo(map);
-	  alert(lat.toFixed(5) + ', ' + lng.toFixed(5));
-	  
-	  return false; // To disable default popup.
-      }); 
-
-      $( "#missing" ).dialog({ autoOpen: false,  minWidth: 800 });
-
-      // catch focus on
-      $("#mapid").on('click', "a.trigger", function(e){
-	  var node=e.target.id;
-	  focus_links( node, 'flip' )
-      });
-      
-
-      $("#network").trigger("change");  // draw the map
-  }
-  
-$(document).ready ( function(){
-
-    get_parms( );
-
-    get_config( parms.conffile, init_map );
-
-
-});
+$(document).ready ( function(){ get_parms( ); get_config( parms.conffile, init_map ); });
