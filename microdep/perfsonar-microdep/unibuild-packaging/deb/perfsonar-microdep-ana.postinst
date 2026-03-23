@@ -45,6 +45,16 @@ case "$1" in
 	if [ -f /sbin/restorecon ]; then
 	    /sbin/restorecon -irv /usr/lib/perfsonar/bin/microdep_commands/
 	fi
+
+	# Enable apache config
+        if [ -e /usr/share/apache2/apache2-maintscript-helper ]; then
+            . /usr/share/apache2/apache2-maintscript-helper
+
+            apache2_invoke enconf apache-microdep-ana
+        else
+	    a2enconf apache-microdep-ana
+	    systemctl reload apache2.service || true
+	fi
     ;;
 
     abort-upgrade|abort-remove|abort-deconfigure)

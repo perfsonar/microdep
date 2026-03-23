@@ -623,10 +623,9 @@ sub emit_json{
 		warn "Failed to send JSON document to ", $archive_spec->{'data'}->{'_url'},  " with return code ", $archive_resp->{'_rc'}; 
 	    } else {
 		# PUT/POST successfull
-		my $resp = decode_json $archive_resp->{'_content'};
-		if (! $resp->{'result'} eq 'Created') {
+		if ( ! $archive_resp->{'_content'} eq 'ok' ) {
 		    # Something went wrong...
-		    warn "Failed to send JSON document to" . $archive_spec->{'data'}->{'_url'} 
+		    warn "Failed to send JSON document to" . $archive_spec->{'data'}->{'_url'}; 
 		}
 		# Success!
 	    }
