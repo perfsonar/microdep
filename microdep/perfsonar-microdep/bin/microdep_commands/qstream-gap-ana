@@ -596,7 +596,8 @@ sub emit_json{
 	"ip_version" => ($opt_ipv6 ? 6 : 4),
 	"from"=> $from, "to"=> $to,
 	"from_adr" => $src_adr{$id},
-	"to_adr" => $dst_adr{$id}};
+	"to_adr" => $dst_adr{$id},
+        "ana_tool" => "gap-ana" };
     # $new{keys %$json} = values %$json;
     my $new={ %$head, %$json }; # a reference to hash
 
