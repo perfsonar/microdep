@@ -987,6 +987,9 @@ def translateState(code):
     elif code == STATE_PARTIAL:
         return "Partially failed"
 
+'''
+## BEGIN: NOT CURRENTLY IN  USE
+    
 #Writes out the length anomaly alerts
 
 def printLengthAlert(unique_pair, normal, cursor, anomaly, time):
@@ -1044,6 +1047,9 @@ def compareRoutes(normalRoute, abnormalRoute):
             dict[x] = abnormalRoute[x]
     
     return dict
+
+## END: NOT CURRENTLY IN USE
+'''
 
 #Prints route change alerts
 
