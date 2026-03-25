@@ -53,12 +53,30 @@ while getopts ":n:a:p:h" opt; do
 done
 shift $(($OPTIND - 1))  # (Shift away parsed arguments)
 
-# Run "mother" script and fix'n'filter output
-$PS_ARCH_CONF_SCRIPT -n "$ARCHIVE_HOSTNAME" -a "$AUTH" |
-    sed -e "s|/logstash\"|/$LOGSTASH_PATH\"|g" \
-	-e 's/"schema": 3/"schema": 1/' \
-	-e '/x-ps-observer/d' \
-	-e '/esmond_url/d' \
-	-e '/_meta/d' -e '/},/d'
-
+if [ -e $PS_ARCH_CONF_SCRIPT ]; then
+    # Run "mother" script and fix'n'filter output
+    $PS_ARCH_CONF_SCRIPT -n "$ARCHIVE_HOSTNAME" -a "$AUTH" |
+	sed -e "s|/logstash\"|/$LOGSTASH_PATH\"|g" \
+	    -e 's/"schema": 3/"schema": 1/' \
+	    -e '/x-ps-observer/d' \
+	    -e '/esmond_url/d' \
+	    -e '/_meta/d' -e '/},/d'
+else
+    # Output dummy configuration
+    cat <<EOF
+{
+    "archiver": "http",
+    "data": {
+        "schema": 1,
+        "_url": "https://my-archiver-host/logstash-ana",
+        "verify-ssl": false,
+        "op": "put",
+        "_headers": {
+            "content-type": "application/json",
+            "Authorization":"Basic some-valid-hash-value"
+        }
+    }
+}
+EOF
+fi
 

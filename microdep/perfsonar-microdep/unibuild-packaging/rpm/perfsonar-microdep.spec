@@ -280,6 +280,11 @@ fi
 # Add Microdep to Opensearch setup (including Logstash) 
 /usr/lib/perfsonar/bin/microdep_commands/opensearch_config_microdep.sh || true
 
+if [ ! -f /etc/perfsonar/microdep/microdep-ana-achive.json ]; then
+    # Prepare default logstash archive config for analytic results
+    /usr/lib/perfsonar/bin/microdep_commands/psconfig_archive_ana.sh > /etc/perfsonar/microdep/microdep-ana-achive.json || true
+fi
+
 # Enable executing of microdep ana scripts if SElinux is enabled
 if [ -f /sbin/semanage ]; then
     /sbin/semanage fcontext -a -t bin_t "/usr/lib/perfsonar/bin/microdep_commands/qstream-gap-ana"
