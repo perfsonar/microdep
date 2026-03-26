@@ -10,7 +10,7 @@ Group=perfsonar
 # Run analysis for both ipv4 and ipv6
 ExecStart=/bin/bash -c '\
   /usr/lib/perfsonar/bin/microdep_commands/trace_event_reader.py --config /etc/perfsonar/microdep/microdep-trace-ana.yml &\
-  /usr/lib/perfsonar/bin/microdep_commands/trace_event_reader.py --config /etc/perfsonar/microdep/microdep-trace-ana.yml --ipv6 -O /var/lib/logstash/microdep/trace-ana-6.json &\
+  /usr/lib/perfsonar/bin/microdep_commands/trace_event_reader.py --config /etc/perfsonar/microdep/microdep-trace-ana.yml --ipv6 &\
   wait \
 '
 Restart=on-failure

@@ -280,9 +280,9 @@ fi
 # Add Microdep to Opensearch setup (including Logstash) 
 /usr/lib/perfsonar/bin/microdep_commands/opensearch_config_microdep.sh || true
 
-if [ ! -f /etc/perfsonar/microdep/microdep-ana-achive.json ]; then
+if [ ! -f /etc/perfsonar/microdep/microdep-ana-archive.json ]; then
     # Prepare default logstash archive config for analytic results
-    /usr/lib/perfsonar/bin/microdep_commands/psconfig_archive_ana.sh > /etc/perfsonar/microdep/microdep-ana-achive.json || true
+    /usr/lib/perfsonar/bin/microdep_commands/psconfig_archive_ana.sh > /etc/perfsonar/microdep/microdep-ana-archive.json || true
 fi
 
 # Enable executing of microdep ana scripts if SElinux is enabled
@@ -293,12 +293,16 @@ if [ -f /sbin/semanage ]; then
 fi
     
 # Enable systemd services (ignore failures)
+systemctl daemon-reload || true
 systemctl enable perfsonar-microdep-gap-ana.service || true
 systemctl enable perfsonar-microdep-trace-ana.service || true
 systemctl enable perfsonar-microdep-restart.timer || true
 systemctl start perfsonar-microdep-gap-ana.service || true
 systemctl start perfsonar-microdep-trace-ana.service || true
 systemctl start perfsonar-microdep-restart.timer || true
+
+# Reload web server config
+systemctl reload httpd.service || true
 
 %preun map
 # Remove Microdep button from Grafana main dashboard (if present)
@@ -325,6 +329,12 @@ fi
 systemctl stop perfsonar-microdep-gap-ana.service || true
 systemctl stop perfsonar-microdep-trace-ana.service || true
 systemctl stop perfsonar-microdep-restart.timer || true
+
+%postun ana
+# Reload web server (since web configs have been uninstalled)
+systemctl reload httpd.service || true
+# Reload systemd since services have been removed
+systemctl daemon-reload || true
     
 %files 
 %defattr(0644,perfsonar,perfsonar,0755)
@@ -375,7 +385,8 @@ systemctl stop perfsonar-microdep-restart.timer || true
 /usr/local/bin/opensearch_config_microdep.sh
 /usr/local/bin/rabbitmq-consume.py
 /usr/local/bin/json2table.pl
-/etc/httpd/conf.d/apache-microdep-map.conf
+/usr/local/bin/psconfig_archive_ana.sh
+/etc/httpd/conf.d/apache-microdep-ana.conf
 %{install_base}/logstash/microdep_pipeline/*.conf
 %{microdep_config_base}/logstash/microdep-pipelines.yml
 %{microdep_config_base}/microdep_default_policy.json

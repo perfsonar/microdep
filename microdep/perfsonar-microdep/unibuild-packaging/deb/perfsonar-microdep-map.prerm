@@ -28,6 +28,16 @@ case "$1" in
 		mv $DASHBOARDFILE /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json
 	    fi
 	fi
+	
+	# Disable apache config
+        if [ -e /usr/share/apache2/apache2-maintscript-helper ]; then
+            . /usr/share/apache2/apache2-maintscript-helper
+	    
+            apache2_invoke disconf apache-microdep-map
+        else
+	    a2disconf apache-microdep-map
+	    systemctl reload apache2.service || true
+	fi
 	;;
 
 #    upgrade|failed-upgrade)

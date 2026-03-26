@@ -22,7 +22,7 @@
 #reportpath: '/var/lib/microdep/my-network/report/mp'   # Path to apply for output files when searching based on date               
 #reportpostpath: 'trace-ana'      # Finale path level to add below reportpath, source host and date, e.g. '/var/lib/microdep/report/mp/my-host/2026-01-01/trace-ana'
 #output: ''        # Output filename.
-#oneoutput: ''     # Output filename for single file output.
+#oneoutput: ''     # Output filename for single file output or to external host given in psConfig archiver spec.
 #samepath: false   # Flag to enable placement of outputfile in same folder as input file 
 #namemap: '/var/lib/microdep/my-network/etc/mp-address.txt'    # File path to name-to-ip mapping db
 #geodb: '/usr/share/GeoIP/GeoLite2-ASN.mmdb'                   # File path to ip-to-ASN mapping db
@@ -46,7 +46,7 @@
 
 ## perfSONAR Microdep settings
 samepath: True
-oneoutput: /var/lib/logstash/microdep/trace-ana.json
+oneoutput: /etc/perfsonar/microdep/microdep-ana-archive.json
 pssrc: https://localhost/opensearch
 dbtype: postgresql
 geodb: /etc/perfsonar/microdep/GeoLite2/GeoLite2-ASN.mmdb
