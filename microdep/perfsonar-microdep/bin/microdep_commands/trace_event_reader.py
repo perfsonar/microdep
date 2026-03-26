@@ -430,15 +430,19 @@ def parse_cmd(param):
             if (p in param):
                 # Update (default) parameter
                 param[p] = config[p]
-            else:
-                # Handle additional parameters
-                match p:
-                    case "f_reduction":  f_reduction = config[p]
-                    case "f_majority":  f_majority = config[p]
-                    case "f_max_state_counter":  f_max_state_counter = config[p]
-                    case "f_csensitivity":  f_csensitivity = config[p]
-                    case "ce_delta_limit":  CE_DELTA_LIMIT = config[p]
-                    case "hopdist_init_window": HOPDIST_INIT_WINDOW = config[p]
+            # Handle additional parameters
+            elif p == "f_reduction":
+                f_reduction = config[p]
+            elif p == "f_majority":
+                f_majority = config[p]
+            elif p == "f_max_state_counter":
+                f_max_state_counter = config[p]
+            elif p == "f_csensitivity":
+                f_csensitivity = config[p]
+            elif p == "ce_delta_limit":
+                CE_DELTA_LIMIT = config[p]
+            elif p == "hopdist_init_window":
+                HOPDIST_INIT_WINDOW = config[p]
 
     # Extract all commandline parameters 
     for p in args.__dict__:
