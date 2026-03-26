@@ -938,7 +938,7 @@ function get_topology(source = "archive"){
 	    query_index = conffile[parms.net].event_type[parms.event].topology_index ;
 	}	    
 
-	var url="elastic-get-date-type.pl?index=" + event_index[parms.event] + "&start=" + start_iso + "&end=" + end_iso;
+	var url="elastic-get-date-type.pl?index=" + query_index + "&start=" + start_iso + "&end=" + end_iso;
 	if (net_ip_version[parms.net]) {
 	    // Add filtering on ip version
 	    url += "&ip_version=" + net_ip_version[parms.net];
@@ -1270,16 +1270,16 @@ function load_coords(network, service, goal){
 	var start_iso = new Date($("#datepicker").val() + " 00:00:00").toISOString();
 	var end_iso = new Date($("#datepicker").val() + " 23:59:59").toISOString();
 	// Query for both source (from) nodes and destination (to) nodes
-	var query_index = JSON.stringify( { "index": event_index[parms.event] }); 
+	var query_index = event_index[parms.event] ; 
 	if ( conffile[parms.net].event_type.topology.index ) {
 	    // Override with index from config
-	    query_index = JSON.stringify( { "index": conffile[parms.net].event_type.topology.index }); 
+	    query_index = conffile[parms.net].event_type.topology.index ; 
 	} else if (conffile[parms.net].event_type[parms.event].topology_index) {
 	    // Override with index from config
-	    query_index = JSON.stringify( { "index": conffile[parms.net].event_type[parms.event].topology_index });
+	    query_index = conffile[parms.net].event_type[parms.event].topology_index;
 	}
 
-	var url="elastic-get-date-type.pl?index=" + event_index[parms.event] + "&start=" + start_iso + "&end=" + end_iso + "&event_type=topology";
+	var url="elastic-get-date-type.pl?index=" + query_index + "&start=" + start_iso + "&end=" + end_iso + "&event_type=topology";
 	if (net_ip_version[parms.net]) {
 	    // Add filtering on ip version
 	    url += "&ip_version=" + net_ip_version[parms.net];
