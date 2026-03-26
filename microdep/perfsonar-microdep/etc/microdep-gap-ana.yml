@@ -25,7 +25,7 @@
 #owamp: ""             # Url to source of json owamp data. Protocols supported: http, https, ampq, ampqs.
 #follow: false	       # Reread input source at intervals and analyse newly arrived packets. Applys only for owamp http* urls.
 #followinterval: 10     # Interval in seconds for rereading input source.
-#json: ""               # Output event data in JSON format to given file.
+#json: ""               # Output event data in JSON format to given file or to destination specified in file via perfsonar's JSON achive spec format.
 #jitter: 600            # Emit jitter statistics at at least given interval.
 #v: false               # Be verbose.
 #rtp: 5                 # RTP jitter algorithm with 1/n change of average.
@@ -43,5 +43,5 @@
 ## perfSONAR Microdep settings
 owamp: "https://localhost/opensearch"
 follow: true
-json: "/var/lib/logstash/microdep/gap-ana.json"
+json: "/etc/perfsonar/microdep/microdep-ana-archive.json"    # perfSONAR archive spec file
 topoevents: true  

@@ -124,7 +124,7 @@ $opt_outdir ||= ".";   # Output directory.
 $opt_title ||= 'Delay';   # Set title for graphs.
 $opt_addresses ||= ''; # Set source of ip-to-name mappings.
 $opt_names ||= '';     # Set source of ip-to-name mappings. 
-$opt_json ||= '';      # Enable events output in JSON format to given file. 
+$opt_json ||= '';      # Enable events output in JSON format to given file ro to destination specified in file via perfsonar's JSON achive spec format. 
 $opt_jitter ||= 600;   # Emit jitter statistics at intervals.
 $opt_threshold |= '10,10,0.5';  # Threshold values for reporting, in form of a vector.
 $opt_owamp ||= '';     # Get json owamp data from url
@@ -185,6 +185,8 @@ my $last_topoevent = time(); # Epoch time when last topology event was output
 my $pslookuphost;               # Ref to hash of perfSONAR Lookup Service hosts;
 my $config={};           # Config loaded from file
 
+my $archive_spec;    # psConfig-like spec for archiving.
+
 # Prepare help text
 my $usage="$0 '[options] [file]...
 Analyses for gaps in packet logs (crude logs or owamp data from pscheduler).  
@@ -212,7 +214,7 @@ Options
   -owamp url           Get json owamp data from pscheduler (http://) og from rabbit message queue (ampq://)
   -follow	       Reread input source at intervals and analyse newly arrived packets. Applys only for http* owamp url. (To follow files apply '| tail -f'.)   	       
   -followinterval n    Interval for rereading input source. Default is $opt_followinterval sec.       	       
-  -json file           Enable events output in JSON format to given file. 
+  -json file           Enable events output in JSON format to given file or to destination specified in file via perfsonar's JSON achive spec format. 
   -jitter secs         Emit jitter statistics at intervals. Default is $opt_jitter sec.
   -v		       Be verbose.
   -rtp n               RTP jitter algorithm with 1/n change of average, Default is $opt_rtp.
@@ -293,14 +295,36 @@ my $coder; # json coder
  
 if ( $opt_json){
     my $json=$opt_json;
-    open JSON, ">>$json" || die  "Could not open $json ; $!";
-    JSON->autoflush(1);
+    if ( -e $json ) {
+	# File exists. Load and check for archive spec.
+	open SPECFILE, '<', $json or die "Can't open file $!";
+	my $archive_spec_str; 
+	read SPECFILE, $archive_spec_str, -s SPECFILE;
+	eval{ $archive_spec = decode_json($archive_spec_str) };
+	if ($@) {
+	    # No valid json (or spec) found.
+	    undef $archive_spec;
+	} elsif ( ! $archive_spec->{'archiver'} eq "http" ) {
+	    print "No HTTP archiver archiver specified in JSON object:", Dumper($archive_spec) if $opt_debug > 3;
+	    # No valid spec found.
+	    undef $archive_spec;
+	} elsif ( ! $archive_spec->{'data'}->{'_url'} =~ /logstash-ana/ ) {
+	    print "No valid archiver url found in JSON object:", Dumper($archive_spec) if $opt_debug > 3;
+	    # No valid spec found.
+	    undef $archive_spec;
+	}
+	close SPECFILE;
+    }
+    if (! defined $archive_spec) {
+	# Open file as destination for output (append mode).
+	open JSON, ">>$json" || die  "Could not open $json ; $!";
+	JSON->autoflush(1);
+    }
     # $coder = JSON::XS->new->ascii->pretty->allow_nonref;
     # $coder = JSON::XS->new->ascii->allow_nonref;
     $coder = JSON::PP->new->ascii->allow_nonref;
     my $encoder=$coder->canonical([1]);  # use of this ?
 }
-
 
 if ($opt_graph){
     require Chart::Clicker;
@@ -572,12 +596,45 @@ sub emit_json{
 	"ip_version" => ($opt_ipv6 ? 6 : 4),
 	"from"=> $from, "to"=> $to,
 	"from_adr" => $src_adr{$id},
-	"to_adr" => $dst_adr{$id}};
+	"to_adr" => $dst_adr{$id},
+        "ana_tool" => "gap-ana" };
     # $new{keys %$json} = values %$json;
     my $new={ %$head, %$json }; # a reference to hash
 
-    print JSON $coder->encode($new ) ."\n" || warn "JSON print failed : $!";
-
+    if (defined $archive_spec ) {
+	# Prepare to deliver json object via http
+	my $json_data = $coder->encode($new );
+	my $deliver_agent = LWP::UserAgent->new;
+	my $archive_resp;
+	# Prepare header (incl. auth type and content type)
+	$deliver_agent->default_header( %{$archive_spec->{'data'}->{'_headers'}} );
+	if ( ! $archive_spec->{'data'}->{'verfify-ssl'}) {
+	     # Accept any SSl cert
+	    $deliver_agent->ssl_opts( verify_hostname => 0, SSL_verify_mode => IO::Socket::SSL::SSL_VERIFY_NONE); 
+	}
+	# Put or post json data
+	if ($archive_spec->{'data'}->{'op'} eq 'put' ) {
+	    $archive_resp = $deliver_agent->put($archive_spec->{'data'}->{'_url'}, Content => $json_data );
+	} elsif ($archive_spec->{'data'}->{'op'} eq 'post' ) {
+	    $archive_resp = $deliver_agent->post($archive_spec->{'data'}->{'_url'}, Content => $json_data );
+	}
+	if (defined $archive_resp) {
+	    print "Response when sending JSON: ", Dumper($archive_resp) if $opt_debug > 3;
+	    if ($archive_resp->{'_rc'} != 200) {
+		warn "Failed to send JSON document to ", $archive_spec->{'data'}->{'_url'},  " with return code ", $archive_resp->{'_rc'}; 
+	    } else {
+		# PUT/POST successfull
+		if ( ! $archive_resp->{'_content'} eq 'ok' ) {
+		    # Something went wrong...
+		    warn "Failed to send JSON document to" . $archive_spec->{'data'}->{'_url'}; 
+		}
+		# Success!
+	    }
+	}
+    } else {
+	# Output to filehandle
+	print JSON $coder->encode($new ) ."\n" || warn "JSON print failed : $!";
+    }
 }
 
 ################################################################################

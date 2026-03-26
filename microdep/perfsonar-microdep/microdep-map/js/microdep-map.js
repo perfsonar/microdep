@@ -409,10 +409,16 @@ function link_popup(link){
     if (Object.keys(link).length > 2) {
 	// Link object has more than just "from" and "to" properties. Add buttons for routes and graphs. 
 	var to_adr=link.to; // aggregations don't have *_adr.
+	var from_adr=link.from; // aggregations don't have *_adr.
 	if (link.to_adr)
 	    to_adr=link.to_adr;
 	else if ( name_to_ip[link.to] )
 	    to_adr = name_to_ip[link.to];
+	if (link.from_adr)
+	    from_adr=link.from_adr;
+	else if ( name_to_ip[link.from] )
+	    from_adr = name_to_ip[link.from];
+	
 	
 	//    var url = 'tracetree.html?topo=/' + parms.net + '/mp/' + link.from + '/' +  dato
 	//	+ '/trace/' + to_adr + '1.json' + '&to=' + link.to;
@@ -420,7 +426,12 @@ function link_popup(link){
 	//	// Add traceroute type prefix
 	//	url += "&prefix=" + conffile[parms.net].event_type[parms.event].popup.see_routes;
 	//    }
-	var url = '/pstracetree/ls.html?mahost=localhost:443&verify_SSL=0&api=opensearch&from=' + link.from + '&to=' + link.to +'&time-start=' + dato;
+	var url = '/pstracetree/ls.html?mahost=localhost:443&verify_SSL=0&api=opensearch&from=' + link.from + '&from_adr=' + from_adr + '&to=' + link.to +'&to_adr=' + to_adr +'&time-start=' + dato;
+	if (net_ip_version[parms.net]) {
+	    // Add filtering on ip version
+	    url += "&ip-version=" + net_ip_version[parms.net];
+	}
+
 	html +='\nSee ';
 	html += '\n<button class=knapp onclick="window.open(\'' + url +'\');" title="See the routes graph and stats in this period">Routes'  + '</button>' + "\n";
     }
@@ -927,7 +938,7 @@ function get_topology(source = "archive"){
 	    query_index = conffile[parms.net].event_type[parms.event].topology_index ;
 	}	    
 
-	var url="elastic-get-date-type.pl?index=" + event_index[parms.event] + "&start=" + start_iso + "&end=" + end_iso;
+	var url="elastic-get-date-type.pl?index=" + query_index + "&start=" + start_iso + "&end=" + end_iso;
 	if (net_ip_version[parms.net]) {
 	    // Add filtering on ip version
 	    url += "&ip_version=" + net_ip_version[parms.net];
@@ -1259,16 +1270,16 @@ function load_coords(network, service, goal){
 	var start_iso = new Date($("#datepicker").val() + " 00:00:00").toISOString();
 	var end_iso = new Date($("#datepicker").val() + " 23:59:59").toISOString();
 	// Query for both source (from) nodes and destination (to) nodes
-	var query_index = JSON.stringify( { "index": event_index[parms.event] }); 
+	var query_index = event_index[parms.event] ; 
 	if ( conffile[parms.net].event_type.topology.index ) {
 	    // Override with index from config
-	    query_index = JSON.stringify( { "index": conffile[parms.net].event_type.topology.index }); 
+	    query_index = conffile[parms.net].event_type.topology.index ; 
 	} else if (conffile[parms.net].event_type[parms.event].topology_index) {
 	    // Override with index from config
-	    query_index = JSON.stringify( { "index": conffile[parms.net].event_type[parms.event].topology_index });
+	    query_index = conffile[parms.net].event_type[parms.event].topology_index;
 	}
 
-	var url="elastic-get-date-type.pl?index=" + event_index[parms.event] + "&start=" + start_iso + "&end=" + end_iso + "&event_type=topology";
+	var url="elastic-get-date-type.pl?index=" + query_index + "&start=" + start_iso + "&end=" + end_iso + "&event_type=topology";
 	if (net_ip_version[parms.net]) {
 	    // Add filtering on ip version
 	    url += "&ip_version=" + net_ip_version[parms.net];

@@ -105,7 +105,7 @@ param = {
     'reportpath': '/var/lib/microdep/my-network/report/mp',  # Path to apply for output files when searching based on date               
     'reportpostpath': 'trace-ana',                             # Finale path level to add below reportpath,  source host and date               
     'output':'',                  # Output filename.
-    'oneoutput':'',               # Output filename for single file output.
+    'oneoutput':'',               # Output filename for single file output or to external host given in psConfig archiver spec.
     'samepath': 0,                # Flag to enable placement of outputfile in same folder as input file 
     'namemap': '/var/lib/microdep/my-network/etc/mp-address.txt',    # File path to name-to-ip mapping db
     'geodb': '/usr/share/GeoIP/GeoLite2-ASN.mmdb',                     # File path to ip-to-ASN mapping db
@@ -128,7 +128,8 @@ param = {
     'config': ''                  # Path to configuration file. Note that commandline options override config file.               
 }
 
-config = {} # Config structure loaded from configuration file (if any)
+config = {}         # Config structure loaded from configuration file (if any)
+archive_spec = {}   # psConfig archive definition specifying a json output destination   
 
 # State constants
 STATE_SUCCESS = 1
@@ -393,7 +394,7 @@ def parse_cmd(param):
     cmdparser.add_argument('--reportpath', '-r', help='Base path to apply when storing output for date based input. Default is ' + param['reportpath'] + '.')
     cmdparser.add_argument('--reportpostpath', '-R', help='Finale path level to add below reportpath, source host and date. Default is ' + param['reportpostpath'] + '.')
     cmdparser.add_argument('--output', '-o', help='Filename for output. Default is timestamp+"R"+hash')
-    cmdparser.add_argument('--oneoutput', '-O', help='All output to single file.')
+    cmdparser.add_argument('--oneoutput', '-O', help='All output to single file or to external host given in psConfig archiver spec.')
     cmdparser.add_argument('--samepath', '-s', action='count', help='Place output file in same path as input file.')
     cmdparser.add_argument('--namemap', '-n', help='Name and path for name-to-ip mapping-file. Default is ' + param['namemap'] + '.')
     cmdparser.add_argument('--geodb', '-g', help='Name and path for ip-to-asn mapping-database (MaxMind). Default is ' + param['geodb'] + '.')
@@ -429,15 +430,19 @@ def parse_cmd(param):
             if (p in param):
                 # Update (default) parameter
                 param[p] = config[p]
-            else:
-                # Handle additional parameters
-                match p:
-                    case "f_reduction":  f_reduction = config[p]
-                    case "f_majority":  f_majority = config[p]
-                    case "f_max_state_counter":  f_max_state_counter = config[p]
-                    case "f_csensitivity":  f_csensitivity = config[p]
-                    case "ce_delta_limit":  CE_DELTA_LIMIT = config[p]
-                    case "hopdist_init_window": HOPDIST_INIT_WINDOW = config[p]
+            # Handle additional parameters
+            elif p == "f_reduction":
+                f_reduction = config[p]
+            elif p == "f_majority":
+                f_majority = config[p]
+            elif p == "f_max_state_counter":
+                f_max_state_counter = config[p]
+            elif p == "f_csensitivity":
+                f_csensitivity = config[p]
+            elif p == "ce_delta_limit":
+                CE_DELTA_LIMIT = config[p]
+            elif p == "hopdist_init_window":
+                HOPDIST_INIT_WINDOW = config[p]
 
     # Extract all commandline parameters 
     for p in args.__dict__:
@@ -615,40 +620,41 @@ class Resolver:
         # Geopos info
         self.geopos = {}
         self.pslookuphost = {}
-        
-        try:
-            file = open(mapfile, "r")
-            
-            psconfig_data={}
+
+        if mapfile:
             try:
-                # Attempt to load file as if it has PSconfig JSON structure
-                psconfig_data = json.load(file);
-                if 'addresses' in psconfig_data:
-                    # Addresses found. Init map.
-                    for name in psconfig_data['addresses']:
-                        ip = self.validate_ip(psconfig_data['addresses'][name]['address']);
+                file = open(mapfile, "r")
+            
+                psconfig_data={}
+                try:
+                    # Attempt to load file as if it has PSconfig JSON structure
+                    psconfig_data = json.load(file);
+                    if 'addresses' in psconfig_data:
+                        # Addresses found. Init map.
+                        for name in psconfig_data['addresses']:
+                            ip = self.validate_ip(psconfig_data['addresses'][name]['address']);
+                            # Add mappings 
+                            self.ip[name] = ip
+                            self.name[ip] = name
+                except:
+                    pass
+
+                if not 'addresses' in psconfig_data:
+                    # Reread file assuming host-file like format ("<name> <ip>")
+                    file.seek(0)
+                    Lines = file.readlines()
+                    for line in Lines:
+                        (name,ip) = line.split()
+                        ip = self.validate_ip(ip);
                         # Add mappings 
                         self.ip[name] = ip
                         self.name[ip] = name
+
+                        if param["verbose"] > 1:
+                            if len(ip) == 0 or len(name) == 0:
+                                print("Warning: No entries found in resolution file " + mapfile)
             except:
-                pass
-
-            if not 'addresses' in psconfig_data:
-                # Reread file assuming host-file like format ("<name> <ip>")
-                file.seek(0)
-                Lines = file.readlines()
-                for line in Lines:
-                    (name,ip) = line.split()
-                    ip = self.validate_ip(ip);
-                    # Add mappings 
-                    self.ip[name] = ip
-                    self.name[ip] = name
-
-                    if param["verbose"] > 1:
-                        if len(ip) == 0 or len(name) == 0:
-                            print("Warning: No entries found in resolution file " + mapfile)
-        except:
-            print("Warning: Could not open resolution file " + mapfile)
+                print("Warning: Could not open resolution file " + mapfile)
                             
         if param["verbose"] > 3:
             print("Initial resolver cache:")
@@ -933,6 +939,8 @@ def classifyOutage(errors):
 
 def createJSON(alert):
 
+    global archive_spec
+
     # Prepare filename
 
     # Generate default unique filename
@@ -955,26 +963,75 @@ def createJSON(alert):
     elif param['oneoutput']:
         # Output all to single (given) file
         filename = param['oneoutput']
-
-    # Add path to filename      
-
-    if filename.find("/") != -1 and param["verbose"] > 2:
-        print ("Warning: Output filename contains path. Adjust '-r' and 's' to avoid additional output path to be added.")
-    
-    if param['samepath'] > 0:
-        # Place outputfile in same folder as inputfile
-        path = input_dir[alert["thread"]] + "/" + filename
-    else:
-        # Place outputfile in report folder
-        os.makedirs(report_dir[alert["thread"]], exist_ok=True)  # Create folders if required
-        path = report_dir[alert["thread"]] + "/" + filename
-    
-    with open(path, "a") as outfile:
-        if param['verbose'] > 2:
-            print(json.dumps(alert) + "\n")
-        outfile.write(json.dumps(alert) + "\n")
-        outfile.close()
         
+    if not archive_spec and not archive_spec is None and os.path.isfile(filename):
+        # No archive spec yet and outputfile already exists. Check for psConfig archive spec in file.
+        specfile = open(filename, "r")
+        archive_spec_str = specfile.read(1000)   # Set max no of bytes in case file is large with no relevant spec
+        try:
+            archive_spec = json.loads(archive_spec_str)
+        except ValueError:
+            # No valid json (or spec) found.
+            archive_spec = None
+        if archive_spec and archive_spec['archiver']:
+            if archive_spec['archiver'] != "http":
+                if param["verbose"] > 2:
+                    print ("No HTTP archiver specified in JSON object: " + json.dumps(archive_spec))
+                # No valid spec found.
+                archive_spec = None
+            elif not ( archive_spec['data'] and archive_spec['data']['_url'] and re.match(".*/logstash-ana", archive_spec['data']['_url']) ):
+                if param["verbose"] > 2:
+                    print ("No valid archiver url found in JSON object: " + json.dumps(archive_spec))
+                # No valid spec found.
+                archive_spec = None
+        specfile.close()
+
+    if not archive_spec:
+        # Prepare for output to regular file
+        # Add path to filename      
+        if filename.find("/") != -1 and param["verbose"] > 2:
+            print ("Warning: Output filename contains path. Adjust '-r' and 's' to avoid additional output path to be added.")
+    
+        if param['samepath'] > 0:
+            # Place outputfile in same folder as inputfile
+            path = input_dir[alert["thread"]] + "/" + filename
+        else:
+            # Place outputfile in report folder
+            os.makedirs(report_dir[alert["thread"]], exist_ok=True)  # Create folders if required
+            path = report_dir[alert["thread"]] + "/" + filename
+
+        with open(path, "a") as outfile:
+            if param['verbose'] > 2:
+                print(json.dumps(alert) + "\n")
+            outfile.write(json.dumps(alert) + "\n")
+            outfile.close()
+
+    else:
+        # Prepare to deliver json object via http
+        delivery_req = urllib.request.Request(archive_spec['data']['_url'],
+                                              data=bytes(json.dumps(alert), encoding='utf-8'),
+                                              headers=archive_spec['data']['_headers'],
+                                              method=archive_spec['data']['op'].upper())
+        ssl_context = ssl.create_default_context()
+        if not archive_spec['data']['verify-ssl']:
+            # Accept any SSl cert, i.e. ignore SSL cert errors 
+            ssl_context = ssl._create_unverified_context()
+        # Run deliver request
+        try:
+            archive_resp = urllib.request.urlopen(delivery_req, context=ssl_context)
+            result_str = archive_resp.read()
+            if param['verbose'] > 3:
+                print("Reponse when archiving to " + archive_spec['data']['_url'] + ":\n" )
+                print(result_str)
+            if result_str.decode('utf8') != "ok":
+                # Something went wrong
+                if param['verbose'] > 0:
+                    printf ("Warning: Failed to deliver event data via url '" + url + "'. Got return value '" + result_str + "'.") 
+            # Success!    
+        except urllib.error.HTTPError(url, code, msg, hdrs, fp):
+            # Something went wrong
+            if param['verbose'] > 0:
+                printf ("Warning: Failed to deliver event data via url '" + url + "'. Got return code " + str(code) + ".") 
 
 #Translates from encoding of end states
 
@@ -987,6 +1044,9 @@ def translateState(code):
     elif code == STATE_PARTIAL:
         return "Partially failed"
 
+'''
+## BEGIN: NOT CURRENTLY IN  USE
+    
 #Writes out the length anomaly alerts
 
 def printLengthAlert(unique_pair, normal, cursor, anomaly, time):
@@ -1044,6 +1104,9 @@ def compareRoutes(normalRoute, abnormalRoute):
             dict[x] = abnormalRoute[x]
     
     return dict
+
+## END: NOT CURRENTLY IN USE
+'''
 
 #Prints route change alerts
 
@@ -1122,6 +1185,7 @@ def printRouteAlert(threadid, tr_type, unique_pair, normalRoute, n, abnormalrout
         "to_adr": resolver.get_ip(n[0].split("/")[1]),
         "from": resolver.get_name(n[0].split("/")[0]),
         "to": resolver.get_name(n[0].split("/")[1]),
+        "ana_tool": "trace-ana",
         "@date": datetime.fromtimestamp(time, tz_utc).isoformat(),
         "datetime": datetime.fromtimestamp(time, tz_local).isoformat(),
         "timestamp": str(time),
@@ -1221,6 +1285,7 @@ def printAlert(threadid, tr_type, n, time, mode, normal=None, new=None):
         "to_adr": resolver.get_ip(n[0].split("/")[1]),
         "from": resolver.get_name(n[0].split("/")[0]),
         "to": resolver.get_name(n[0].split("/")[1]),
+        "ana_tool": "trace-ana",
        # "@timestamp": datetime.fromtimestamp(time, tz_utc).isoformat(),
         "@date": datetime.fromtimestamp(time, tz_utc).isoformat(),
         "datetime": datetime.fromtimestamp(time, tz_local).isoformat(),
