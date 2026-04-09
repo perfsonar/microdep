@@ -1,117 +1,44 @@
 #
-# Makefile for Any Package
+# Makefile for unibuild top-level directory
 #
 
-include $(wildcard unibuild/unibuild.make)
-
-# Check if docker-compose exists, otherwise use "docker compose"
-COMPOSECMD := $(shell command -v docker-compose 2>/dev/null || echo "docker compose")
-
-BUILDCMD= unibuild build     # May be replace by running e.g. "make -e BUILDCMD=bash deb" to enable manual building 
-DEBDIST= u22
-RPMDIST= el9
-ARCH= amd64
-
-default:
-	@echo "*** Building packages for Microdep ***"
-	@echo "Run 'make rpm' or 'make deb' to clean and build packages for a distribution (applying 'unibuild' in containers)."
-	@echo "Run 'make clean-rpm-build' or 'make clean-deb-build' to only clean away build files."
-	@echo "Run 'make rpm-build' or 'make deb-build' to only build packages."
-	@echo "Run 'bin/refresh-remote-repos.sh <hostname>' to install distribution on a remote perfsonar toolkit host (ssh access to root@<hostname> required)."
-	@echo
-	@echo "*** Running Microdep in container test environment ***"
-	@echo "NOTE: CURRENTLY UNSTABLE/NOT WORKING 100%"
-	@echo "Run 'make rpm-test' or 'make deb-test' to initiate container based test environment."
-	@echo "Run 'make clean-test' to bring down running system test environment."
-
-unibuild-compose.yml:
-	@echo "Fetching unibuild docker compose file..."
-	@wget -O unibuild-compose.yml https://raw.githubusercontent.com/perfsonar/unibuild/main/docker-envs/docker-compose.yml
-
-pstracetree:
-	@echo "Cloning pstracetree..."
-	git clone https://github.com/perfsonar/pstracetree.git
-	grep -q 'pstracetree/' .gitignore || echo "pstracetree/" >> .gitignore
-
-pstracetree/unibuild-repo/RPMS: pstracetree unibuild-compose.yml
-	@echo "Build pstracetree rpms for ${RPMDIST}..."
-	cp unibuild-compose.yml pstracetree/
-	${COMPOSECMD} -f pstracetree/unibuild-compose.yml run ${RPMDIST} bash -c "unibuild build"
-
-pstracetree/unibuild-repo/Packages: pstracetree unibuild-compose.yml
-	@echo "Build pstracetree deb packages for ${DEBDIST} ..."
-	cp unibuild-compose.yml pstracetree/
-	${COMPOSECMD} -f pstracetree/unibuild-compose.yml run ${DEBDIST}_${ARCH} bash -c "apt -y update && unibuild build"
-
-#submodules/pstracetree/Makefile:
-#	@echo "Fetching submodules..."
-#	git submodule init
-#	git submodule update
-
-#unibuild-repo/RPMS: unibuild-compose.yml submodules/pstracetree/Makefile
-unibuild-repo/RPMS: unibuild-compose.yml
-	@echo "Build Microdep rpms for ${RPMDIST}..."
-# 	Add pstracetree repo before building
-	${COMPOSECMD} -f unibuild-compose.yml run ${RPMDIST} bash -c "dnf -y install yum-utils && yum-config-manager --add-repo file:/app/pstracetree/unibuild-repo; echo gpgcheck=0 >> /etc/yum.repos.d/app_pstracetree_unibuild-repo.repo; dnf clean all && dnf -y update --nogpgcheck && ${BUILDCMD}"
-
-deb-systemd-services: 
-	rsync  -t microdep/perfsonar-microdep/scripts/perfsonar-microdep-gap-ana.service microdep/perfsonar-microdep/unibuild-packaging/deb/perfsonar-microdep-ana.perfsonar-microdep-gap-ana.service
-	rsync  -t microdep/perfsonar-microdep/scripts/perfsonar-microdep-trace-ana.service microdep/perfsonar-microdep/unibuild-packaging/deb/perfsonar-microdep-ana.perfsonar-microdep-trace-ana.service
-	rsync  -t microdep/perfsonar-microdep/scripts/perfsonar-microdep-restart.service microdep/perfsonar-microdep/unibuild-packaging/deb/perfsonar-microdep-ana.perfsonar-microdep-restart.service
-	rsync  -t microdep/perfsonar-microdep/scripts/perfsonar-microdep-restart.timer microdep/perfsonar-microdep/unibuild-packaging/deb/perfsonar-microdep-ana.perfsonar-microdep-restart.timer
-
-#unibuild-repo/Packages: deb-systemd-services unibuild-compose.yml submodules/pstracetree/Makefile
-unibuild-repo/Packages: deb-systemd-services unibuild-compose.yml pstracetree/unibuild-repo/Packages
-	@echo "Build Microdep deb packages for ${DEBDIST}..."
-#	${COMPOSECMD} -f unibuild-compose.yml run ${DEBDIST}_${ARCH} bash -c "apt -y update && ${BUILDCMD}"
-	${COMPOSECMD} -f unibuild-compose.yml run ${DEBDIST}_${ARCH} bash -c "echo 'deb [trusted=yes] file:/app/pstracetree/unibuild-repo ./' > /etc/apt/sources.list.d/local-pstracetree-repo.list && apt -y update && ${BUILDCMD}"
-
-#rpm-build: unibuild-repo/RPMS 
-rpm-build: pstracetree/unibuild-repo/RPMS unibuild-repo/RPMS
-
-rpm-test-build: 
-	@echo "Building rpm system test environment (containers) for PS Microdep..."
-	DISTRO=${RPMDIST} ${COMPOSECMD} -f microdep/tests/system-test.yml --project-directory . build 
-
-rpm-test-run:
-	@echo "Starting rpm system test environment (containers) for PS Microdep..."
-	DISTRO=${RPMDIST} ${COMPOSECMD} -f microdep/tests/system-test.yml --project-directory . up
-
-rpm-test:  clean-rpm-test rpm-build rpm-test-build rpm-test-run
+default: build
 
 
-deb-build: unibuild-repo/Packages 
+BUILD_LOG=unibuild-log
+UNIBUILD_REPO=unibuild-repo
 
-deb-test-build: 
-	@echo "Building deb system test environment (containers) for PS Microdep..."
-	DISTRO=${DEBDIST} ${COMPOSECMD} -f microdep/tests/system-test.yml --project-directory . build 
+ifdef START
+UNIBUILD_OPTS += --start $(START)
+endif
+ifdef STOP
+UNIBUILD_OPTS += --stop $(STOP)
+endif
+ifdef RELEASE
+UNIBUILD_OPTS += --release
+endif
 
-deb-test-run:  
-	@echo "Starting deb system test environment (containers) for PS Microdep..."
-	DISTRO=${DEBDIST} ${COMPOSECMD} -f microdep/tests/system-test.yml --project-directory . up
+# The shell command below does the equivalent of BASH's pipefail
+# within the confines of POSIX.
+# Source: https://unix.stackexchange.com/a/70675/15184
+build:
+	rm -rf $(BUILD_LOG) $(UNIBUILD_REPO)
+	((( \
+	(unibuild build $(UNIBUILD_OPTS); echo $$? >&3) \
+	| tee $(BUILD_LOG) >&4) 3>&1) \
+	| (read XS; exit $$XS) \
+	) 4>&1
+TO_CLEAN += $(BUILD_LOG)
 
-deb-test:  clean-deb-test deb-build deb-test-build deb-test-run
 
-clean-rpm-test:  
-	@echo "Clean up rpm tests of PS Microdep..."
-	-DISTRO=${RPMDIST} ${COMPOSECMD} -f microdep/tests/system-test.yml --project-directory . down 	
+uninstall:
+	unibuild make --reverse $@
 
-clean-deb-test:  
-	@echo "Clean up deb tests of PS Microdep..."
-	-DISTRO=${DEBDIST} ${COMPOSECMD} -f microdep/tests/system-test.yml --project-directory . down 	
+fresh: uninstall build
 
-clean-rpm-build: unibuild-compose.yml
-	@echo "Removing locally built rpm repos..."
-	-cp unibuild-compose.yml pstracetree/
-	-${COMPOSECMD} -f pstracetree/unibuild-compose.yml run ${RPMDIST} unibuild clean
-	-${COMPOSECMD} -f unibuild-compose.yml run ${RPMDIST} unibuild clean
-
-clean-deb-build: unibuild-compose.yml
-	@echo "Removing locally built deb repos..."
-	-cp unibuild-compose.yml pstracetree/
-	-${COMPOSECMD} -f pstracetree/unibuild-compose.yml run ${DEBDIST}_${ARCH} unibuild clean
-	-${COMPOSECMD} -f unibuild-compose.yml run ${DEBDIST}_${ARCH} unibuild clean
-
-deb: clean-deb-build deb-build
-
-rpm: clean-rpm-build rpm-build
+clean:
+	unibuild make $(UNIBUILD_OPTS) clean
+	unibuild clean
+	$(MAKE) -C docs $@
+	rm -rf $(TO_CLEAN)
+	find . -name '*~' | xargs rm -f
