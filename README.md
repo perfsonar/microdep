@@ -16,15 +16,16 @@ The folder structure follows perfsonar standards to enable building with *unibui
 A *microdep-dev* folder exists with some legacy version of misc files. Please ignore this one (or have a look if you suspect some old ideas can be re-introduced.)
 
 ## Building
+Microdep is configured to build according to standard procedures for perfSONAR packages via the avaiable `Makefile`.
 
-A Makefile is available to support building and testing on a debian based host
+A additional makefile, `Makefile-bl`, is available for building packages locally and testing on a debian based host
   * Ensure *docker* is installed: `sudo apt install docker-ce-cli docker-compose-plugin`
-  * To cleanup'n'build rpm-packages: `make rpm`
-  * To cleanup'n'build deb-packages: `make deb`
-  * To specify which distro to build for (defaults are *el9* and *u22*) run e.g. `make -e DEBDIST=u20 deb`
+  * To cleanup'n'build rpm-packages: `make -f Makefile-bl rpm`
+  * To cleanup'n'build deb-packages: `make -f Makefile-bl deb`
+  * To specify which distro to build for (defaults are *el9* and *u22*) run e.g. `make -e DEBDIST=u20 -f Makefile-bl deb`
   
-  * To clean out builds apply `make clean-rpm-build` or `make clean-deb-build`
-  * To build only apply `make rpm-build` or `make deb-build`
+  * To clean out builds apply `make -f Makefile-bl clean-rpm-build` or `make -f Makefile-bl clean-deb-build`
+  * To build only apply `make -f Makefile-bl rpm-build` or `make -f Makefile-bl deb-build`
 
 ## Testing
 
@@ -43,8 +44,8 @@ On a test host microdep packages may now be installed applying the instructions 
   
 A docker container based system test enviroment is available. As a minimum the environment consists of three containers, a toolkit node with the perfsonar-microdep add-on installed, a testpoint node and a network emulator node. The network emulator interconnects the toolkit and testpoint nodes, and introduces packet drops and delays as well as a traceroute hop.
 
-To initiate an rpm test environment run: `make rpm-test`
-To initiate a deb test environment run: `make deb-test` 
+To initiate an rpm test environment run: `make -f Makefile-bl rpm-test`
+To initiate a deb test environment run: `make -f Makefile-bl deb-test` 
 
 When all containers are running the toolkit GUI should be accessable via https://localhost:4436/grafana and the Microdep add-ond via https://localhost:4436/microdep
 
@@ -70,7 +71,7 @@ To install from source **NOT YET AVAILABLE**
   * `tar zxvf perfsonar-microdep-xxx.yyy.zz.tar.gz`
   * `cd perfsonar-microdep`
   * `./configure`
-  * `sudo make install`
+  * `sudo make -f Makefile-bl install`
 
   
 ## Configuring
