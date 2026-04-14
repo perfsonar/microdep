@@ -16,7 +16,7 @@ jobs:
 
   oneshot-build:
     needs: prepare-build
-    uses: perfsonar/project/.github/workflows/oneshot-builder.yml@master
+    uses: perfsonar/project/.github/workflows/oneshot-scripted-builder.yml@master
     with:
       BUILD_OS: ${{ needs.prepare-build.outputs.BUILD_OS }}
       BUILD_TYPE: ${{ needs.prepare-build.outputs.BUILD_TYPE }}
