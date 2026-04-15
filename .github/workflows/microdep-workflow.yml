@@ -17,6 +17,8 @@ jobs:
   oneshot-scripted-build:
     needs: prepare-build
     uses: perfsonar/project/.github/workflows/oneshot-scripted-build.yml@master
+    secrets:
+      GIT_ACTIONS: ${{ secrets.GIT_ACTIONS }}
     with:
       BUILD_OS: ${{ needs.prepare-build.outputs.BUILD_OS }}
       BUILD_TYPE: ${{ needs.prepare-build.outputs.BUILD_TYPE }}
