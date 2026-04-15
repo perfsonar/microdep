@@ -14,7 +14,7 @@ jobs:
     with:
       BUILD_VARS_JSON: ${{ inputs.BUILD_VARS_JSON }}
 
-  oneshot-build:
+  oneshot-scripted-build:
     needs: prepare-build
     uses: perfsonar/project/.github/workflows/oneshot-scripted-builder.yml@master
     with:
@@ -26,7 +26,7 @@ jobs:
   post-build:
     needs:
       - prepare-build
-      - oneshot-build
+      - oneshot-scripted-build
     uses: perfsonar/project/.github/workflows/post-build.yml@master
     secrets:
       GIT_ACTIONS: ${{ secrets.GIT_ACTIONS }}
