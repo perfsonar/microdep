@@ -17,7 +17,12 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: 5.3.0
-
+      - name: Debug chartjs contents
+        run: |
+         echo "=== chartjs dir ==="
+         ls -al chartjs
+         echo "=== tarballs ==="
+         ls -al chartjs/*.tgz chartjs/*.tar.gz || true
       # Fetch workflow script from projects
       - name: Fetch workflow script from projects
         env:
@@ -57,16 +62,17 @@ jobs:
         run: |
           case "${{ env.BUILD_OS }}" in
             'ol8'|'el9')
-              curl -s https://raw.githubusercontent.com/perfsonar/docker-oneshot-builder/main/build | sh -s - --run github-el-workflow.sh . '${{ env.BUILD_OS }}'
+             echo "build"
+             # curl -s https://raw.githubusercontent.com/perfsonar/docker-oneshot-builder/main/build | sh -s - --run github-el-workflow.sh . '${{ env.BUILD_OS }}'
               ;;
             'd11'|'d12'|'u20'|'u22'|'u24')
               curl -s https://raw.githubusercontent.com/perfsonar/docker-oneshot-builder/main/build | sh -s - --run github-db-workflow.sh . '${{ env.BUILD_OS }}'
               ;;
           esac
       # Upload artifact
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ github.event.repository.name }}-${{ env.BUILD_OS }}
-          path: unibuild-repo
-          retention-days: 5
+      ##- name: Upload artifact
+      #  uses: actions/upload-artifact@v4
+      #  with:
+      #    name: ${{ github.event.repository.name }}-${{ env.BUILD_OS }}
+      #    path: unibuild-repo
+      #    retention-days: 5
