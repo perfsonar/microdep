@@ -17,7 +17,7 @@ changecom()dnl
 
 # Order-list
 #ifelse(DISTRO/MAJOR,el/9,chartjs)
-#chartjs
+chartjs
 chartjs-adapter-moment
 chartjs-plugin-zoom
 # Ensure d3.js version >= 4
