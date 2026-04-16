@@ -37,12 +37,6 @@ Requires:               chartjs
 A zoom and pan plugin for Chart.js
 
 %prep
-echo "=== DEBUG entering %prep ==="
-pwd
-ls -al
-ls -al ../
-ls -al %{_sourcedir}
-
 %setup -c -n chartjs-%{version}
 %setup -T -D -b 1 -n chartjs-adapter-moment-0.1.1
 %setup -T -D -a 2 -c -n chartjs-plugin-zoom-1.2.1
