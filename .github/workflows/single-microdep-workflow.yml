@@ -5,7 +5,7 @@ on:
     branches: 
       - master
 env:  
-  BUILD_OS: el9
+  BUILD_OS: ol8
 
 jobs:
   microdep-daemon:
@@ -39,8 +39,8 @@ jobs:
           mkdir -p artifacts/deb
           ls -al artifacts
           echo "Downloading artifact for pstracetree"
-          echo "Run ID: 24496000325"
-          gh run download 24496000325 --repo perfsonar/pstracetree -D artifacts/pstracetree --name "pstracetree-${{ env.BUILD_OS }}"  
+          echo "Run ID: 24512198566"
+          gh run download 24512198566 --repo perfsonar/pstracetree -D artifacts/pstracetree --name "pstracetree-${{ env.BUILD_OS }}"  
           artifact_path="artifacts/pstracetree"
           echo "copy to the artifacts deb dir"
           ls -al artifacts
