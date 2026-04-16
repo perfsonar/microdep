@@ -8,7 +8,7 @@ env:
   BUILD_OS: el9
 
 jobs:
-  owamp-daemon:
+  microdep-daemon:
     runs-on: ubuntu-latest
 
     steps:
@@ -45,6 +45,10 @@ jobs:
           echo "copy to the artifacts deb dir"
           ls -al artifacts
           ls -al artifacts/pstracetree
+          mkdir -p artifacts/RPMS
+          echo "Copying RPMs to artifacts/RPMS"
+          cp "$artifact_path"/RPMS/*.rpm artifacts/RPMS
+          ls -al artifacts/pstracetree/RPMS/*.rpm
         env:
           GITHUB_TOKEN: ${{ secrets.GIT_ACTIONS }}
 
