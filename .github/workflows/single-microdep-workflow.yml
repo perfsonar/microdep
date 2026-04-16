@@ -2,7 +2,7 @@ name: single-microdep-workflow
 
 on:
   push:
-    branches: 
+    branches:
       - master
 env:  
   BUILD_OS: ol8
