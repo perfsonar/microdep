@@ -14,15 +14,15 @@ ARCH= amd64
 
 default:
 	@echo "*** Building packages for Microdep ***"
-	@echo "Run 'make rpm' or 'make deb' to clean and build packages for a distribution (applying 'unibuild' in containers)."
-	@echo "Run 'make clean-rpm-build' or 'make clean-deb-build' to only clean away build files."
-	@echo "Run 'make rpm-build' or 'make deb-build' to only build packages."
+	@echo "Run 'make -f Makefile-bl rpm' or 'make -f Makefile-bl deb' to clean and build packages for a distribution (applying 'unibuild' in containers)."
+	@echo "Run 'make -f Makefile-bl clean-rpm-build' or 'make -f Makefile-bl clean-deb-build' to only clean away build files."
+	@echo "Run 'make -f Makefile-bl rpm-build' or 'make -f Makefile-bl deb-build' to only build packages."
 	@echo "Run 'bin/refresh-remote-repos.sh <hostname>' to install distribution on a remote perfsonar toolkit host (ssh access to root@<hostname> required)."
 	@echo
 	@echo "*** Running Microdep in container test environment ***"
 	@echo "NOTE: CURRENTLY UNSTABLE/NOT WORKING 100%"
-	@echo "Run 'make rpm-test' or 'make deb-test' to initiate container based test environment."
-	@echo "Run 'make clean-test' to bring down running system test environment."
+	@echo "Run 'make -f Makefile-bl rpm-test' or 'make -f Makefile-bl deb-test' to initiate container based test environment."
+	@echo "Run 'make -f Makefile-bl clean-test' to bring down running system test environment."
 
 unibuild-compose.yml:
 	@echo "Fetching unibuild docker compose file..."

@@ -42,3 +42,4 @@ clean:
 	$(MAKE) -C docs $@
 	rm -rf $(TO_CLEAN)
 	find . -name '*~' | xargs rm -f
+
