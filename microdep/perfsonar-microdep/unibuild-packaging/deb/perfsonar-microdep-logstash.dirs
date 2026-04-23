@@ -1,0 +1,6 @@
+/usr/lib/perfsonar/logstash/microdep_pipeline
+/usr/lib/perfsonar/bin/microdep_commands
+/etc/perfsonar/microdep
+/etc/perfsonar/microdep/logstash
+/var/lib/logstash/microdep
+
