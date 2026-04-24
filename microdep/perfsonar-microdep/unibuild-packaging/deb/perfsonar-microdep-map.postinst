@@ -20,13 +20,6 @@ set -e
 
 case "$1" in
     configure)
-	# Fix credentials to ensure access to Opensearch
-	if [ -e /etc/perfsonar/opensearch/opensearch_login ]; then
-    	   USER=`awk -F " " '{print $1}' /etc/perfsonar/opensearch/opensearch_login`
-    	   PASSWD=`awk -F " " '{print $2}' /etc/perfsonar/opensearch/opensearch_login`
-    	   sed -i "s|http://admin:no+nz+br|https://$USER:$PASSWD|g" /etc/perfsonar/microdep/microdep-config.yml
-	fi
-
 	# Add Microdep button on main grafana dashboard (if not already present)  REMARK: TEMPORARY REMOVED 
 	if [ -e /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json-temporary-removed ]; then
 	    if grep -q  "Microdep map" /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json; then
