@@ -1,6 +1,5 @@
 {
     "index_patterns": [
-	"dragonlab_routemon*",
 	"microdep_trace_ana*"
     ],
     "template": {

@@ -43,7 +43,7 @@ if ( $q->param("debug")){
     $debug = parm("debug");
 }
 # my 
-my $index= parm('index') || "dragonlab";
+my $index= parm('index') || "microdep";
 if ( $debug > 0 ){
     print $q->header('text/html');
 } else {

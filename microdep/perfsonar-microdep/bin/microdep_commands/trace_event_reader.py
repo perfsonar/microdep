@@ -107,7 +107,7 @@ param = {
     'output':'',                  # Output filename.
     'oneoutput':'',               # Output filename for single file output or to external host given in psConfig archiver spec.
     'samepath': 0,                # Flag to enable placement of outputfile in same folder as input file 
-    'namemap': '/var/lib/microdep/my-network/etc/mp-address.txt',    # File path to name-to-ip mapping db
+    'namemap': '/etc/perfsonar/microdep/mp-address.txt',    # File path to name-to-ip mapping db
     'geodb': '/usr/share/GeoIP/GeoLite2-ASN.mmdb',                     # File path to ip-to-ASN mapping db
     'dbtype': 'mysql',            # Database type. 'mysql' and 'postgresql' supported.
     'dbname': 'routingmonitor',   # Name of database for anomality parameters

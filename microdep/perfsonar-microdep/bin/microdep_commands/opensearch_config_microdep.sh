@@ -9,7 +9,8 @@ OPENSEARCH_CONFIG_DIR=/etc/opensearch
 OPENSEARCH_SECURITY_PLUGIN=/usr/share/opensearch/plugins/opensearch-security
 OPENSEARCH_SECURITY_CONFIG=${OPENSEARCH_CONFIG_DIR}/opensearch-security
 PASSWORD_FILE=/etc/perfsonar/opensearch/auth_setup.out
-MICRODEP_INDICES="dragonlab dragonlab_jitter dragonlab_routemon dragonlab_correvents microdep_gap_ana microdep_trace_ana microdep_corr_ana"
+LEGACY_INDICES="dragonlab dragonlab_jitter dragonlab_routemon dragonlab_correvents"
+MICRODEP_INDICES="microdep_gap_ana microdep_trace_ana microdep_corr_ana"
 
 usage () {
     echo "Usage: `basename $0` [options] [opensearch-host-url]"
@@ -166,7 +167,7 @@ if [ "$REMOVE" ]; then
 	fi
 	# Remove all
 	msg "Removing Opensearch templates, policies and datastreams/indices for Microdep ..."
-	for i in $MICRODEP_INDICES; do
+	for i in $MICRODEP_INDICES $LEGACY_INDICES; do
 	    curl -k -u admin:${ADMIN_PASS} -s -XDELETE "$OPENSEARCH_URL/_data_stream/$i" 2>/dev/null ; echo
 	done
 	curl -k -u admin:${ADMIN_PASS} -s -XDELETE "$OPENSEARCH_URL/_plugins/_ism/policies/microdep_default_policy" 2>/dev/null ; echo
@@ -219,7 +220,6 @@ if [ $(curl -s -o /dev/null -w "%{http_code}" -u admin:${ADMIN_PASS} -k "$OPENSE
     curl -k -u admin:${ADMIN_PASS} -H 'Content-Type: application/json' -X PUT "$OPENSEARCH_URL/_plugins/_ism/policies/microdep_default_policy" -d "@/etc/perfsonar/microdep/microdep_default_policy.json" 2>/dev/null ; echo
     # Apply policy to index
     msg "Applying Microdep index policy to indices..."
-    curl -k -u admin:${ADMIN_PASS} -H 'Content-Type: application/json' -X POST "$OPENSEARCH_URL/_plugins/_ism/add/dragonlab*" -d '{ "policy_id": "microdep_default_policy" }' 2>/dev/null ; echo
     curl -k -u admin:${ADMIN_PASS} -H 'Content-Type: application/json' -X POST "$OPENSEARCH_URL/_plugins/_ism/add/microdep*" -d '{ "policy_id": "microdep_default_policy" }' 2>/dev/null ; echo
 else
     # Get policy identifiers

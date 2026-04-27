@@ -1,0 +1,30 @@
+#
+# Map config for default ipv4 network
+#
+#  (see mapconfig.yaml for more comments)
+#
+
+microdep_ipv4:
+  # Measuremet network/variant parameters
+  title: "Net-4"
+  descr: "Measurement network applying ipv4 test traffic"
+  database_secret: "virre-virre-vapp"
+  ip_version: "4"
+  event_type:
+    # Event types for variant
+    gap:
+      index: "microdep_gap_ana"
+    jitter:
+      index: "microdep_gap_ana" 
+    routeerr:
+      index: "microdep_trace_ana" 
+    routechange:
+      index: "microdep_trace_ana" 
+    tcprouteerr:
+      index: "microdep_trace_ana" 
+    tcproutechange:
+      index: "microdep_trace_ana" 
+    correlation:
+      index: "microdep_corr_ana"
+      topology_index: "microdep_gap_ana" 
+

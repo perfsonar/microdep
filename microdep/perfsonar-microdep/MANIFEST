@@ -13,10 +13,10 @@ bin/microdep_commands/yaml-to-json.cgi
 bin/microdep_commands/get-mapconfig.cgi
 bin/microdep_commands/microdep-config.cgi
 etc/mapconfig.yml
-etc/mapconfig.d/dragonlab.yml
+etc/mapconfig.d/microdep_ipv4.yml
+etc/mapconfig.d/microdep_ipv6.yml
 etc/microdep-config.yml
-microdep-map/dragonlab/dragonlab-base-geo.json
-etc/dragonlab-base-geo.json.example
+etc/microdep_ipv4-base-geo.json.example
 microdep-map/css/microdep-map.css
 microdep-map/css/curve-chart.css
 etc/microdep-tests-packet-subcount.json.example

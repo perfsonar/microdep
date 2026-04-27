@@ -206,7 +206,6 @@ install -D -m 0644 -t %{buildroot}/%{_unitdir} %{buildroot}/%{install_base}/scri
 install -D -m 0644 -t %{buildroot}/%{_unitdir} %{buildroot}/%{install_base}/scripts/*.timer
 systemctl daemon-reload || true
 # Copy microdep map, httpd and logstash configs into correct folders
-install -D -m 0644 -t %{buildroot}/%{microdep_config_base}/mp-dragonlab/etc/ %{buildroot}/%{microdep_config_base}/microdep.db
 install -D -m 0644 -t %{buildroot}/etc/httpd/conf.d/ %{buildroot}/%{microdep_config_base}/apache-microdep-map.conf
 install -D -m 0644 -t %{buildroot}/etc/httpd/conf.d/ %{buildroot}/%{microdep_config_base}/apache-microdep-ana.conf
 install -D -m 0644 -t %{buildroot}/%{install_base}/logstash/microdep_pipeline/ %{buildroot}/%{microdep_config_base}/logstash/microdep/*
@@ -232,7 +231,6 @@ rm -f %{buildroot}/%{install_base}/LICENSE
 rm -rf %{buildroot}/%{microdep_config_base}/apache-microdep-map.conf
 rm -rf %{buildroot}/%{microdep_config_base}/apache-microdep-ana.conf
 rm -rf %{buildroot}/%{microdep_config_base}/logstash/microdep
-rm -rf %{buildroot}/%{microdep_config_base}/microdep.db
 rm -rf %{buildroot}/%{microdep_config_base}/psconfig
 rm -rf %{buildroot}/%{microdep_config_base}/logrotate.d
 
@@ -447,14 +445,13 @@ systemctl reload httpd.service || true
 %attr(0755,perfsonar,perfsonar) %{command_base}/microdep-config.cgi
 %attr(0755,perfsonar,perfsonar) %{command_base}/yaml-to-json.cgi
 %attr(0755,perfsonar,perfsonar) %{command_base}/get-mapconfig.cgi
+%config %{microdep_config_base}/microdep.db
 %config %{microdep_config_base}/microdep-config.yml
 %config %{microdep_config_base}/mapconfig.yml
 %config %{microdep_config_base}/mapconfig.d/
-%{microdep_config_base}/dragonlab-base-geo.json.example
-%config %{microdep_config_base}/mp-dragonlab/etc/microdep.db
+%{microdep_config_base}/microdep_ipv4-base-geo.json.example
 %{microdep_config_base}/grafana_dashboard_patch
 /etc/httpd/conf.d/apache-microdep-map.conf
-%config %{microdep_web_dir}/dragonlab/dragonlab-base-geo.json
 
 %files toolkit
 %license %{doc_base}/LICENSE-toolkit

@@ -80,7 +80,6 @@
       ],
       "ism_template": {
           "index_patterns": [
-	      "dragonlab*",
               "microdep*"
           ],
           "priority": 100
