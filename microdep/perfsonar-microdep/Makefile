@@ -10,57 +10,6 @@ FORCE=no
 
 default: dist
 
-check-dev-prod:
-# Check if files in current dev env are in sync with files in legacy dev env
-	@awk '\
-	BEGIN{ R=0 } \
-	{ \
-		if ( substr($$1,1,1) != "#" && NF == 2 ) { \
-			D= system("diff -q "$$1" "$$2); \
-			R=R + D; \
-			if ( D > 0 && system("test "$$1" -ot "$$2) == 0 ) {\
-				print("File  "$$1" is older than "$$2"\n") \
-			}\
-		} \
-	} \
-	END{ if ( R > 0) { \
-                print "Files in root environment are out-of-sync with /dev. run \"make resync\"." ;\
-             } else { \
-                print "No need to build the package. Just run \"make install\"."; \
-	     } \
-        }'  DEV-PROD.map
-
-resync:
-# Sync files in (legacy) dev folder with root environment
-	@awk -v f=$(FORCE) '\
-	BEGIN{ R=0 } \
-	{ \
-		if ( substr($$1,1,1) != "#" && NF == 2 ) { \
-			D=system("diff -q "$$1" "$$2); \
-			if (  D > 0 || f == "yes" ) {\
-				if ( D == 2 || system("test "$$1" -nt "$$2) == 0 || f == "yes" ) {\
-					R=R + system("install -v -m 644 -TD "$$1" "$$2); \
-				} else {\
-					print("File  "$$1" is older than "$$2". Skipping update.\n") \
-				}\
-			}\
-		} \
-	} \
-	END{ if ( R > 0) { \
-                print "Error: Resync failed." ;\
-		exit 1;\
-             } else { \
-                print "Ready for \"make install\" or \"make dist\" ( or rerun \"make -e FORCE=yes resync\" to sync older files too.)"; \
-	     } \
-        }'  DEV-PROD.map
-# Update MANIFEST file
-	@awk '{ if ( substr($$1,1,1) != "#") { print $$NF; } }'  DEV-PROD.map > MANIFEST
-
-MANIFEST: DEV-PROD.map 
-# Update MANIFEST file
-	@read -p "DEV-PROD.map is newer than MANIFEST. Update MANIFEST? Enter to continue or Ctrl-C to cancel." dummy
-	awk '{ if ( substr($$1,1,1) != "#") { print $$NF; } }'  DEV-PROD.map > MANIFEST
-
 dist: MANIFEST
 	@echo "Creating tar-package of project..."
 	mkdir /tmp/$(PACKAGE)-$(VERSION)
