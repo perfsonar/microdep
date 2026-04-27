@@ -59,4 +59,3 @@ perl_anyevent_rabbitmq
 raw-data
 ifelse(FAMILY/eval(MAJOR < 9),RedHat/1,python3-tzlocal)
 microdep
-

@@ -212,12 +212,23 @@ install -D -m 0644 -t %{buildroot}/etc/httpd/conf.d/ %{buildroot}/%{microdep_con
 install -D -m 0644 -t %{buildroot}/%{install_base}/logstash/microdep_pipeline/ %{buildroot}/%{microdep_config_base}/logstash/microdep/*
 install -D -m 0644 -t %{buildroot}/etc/logrotate.d/ %{buildroot}/%{microdep_config_base}/logrotate.d/microdep
 
+# Copy license file
+mkdir -p %{buildroot}/%{doc_base}
+#install -D -m 0644 -t %{buildroot}/%{doc_base} %{buildroot}/%{install_base}/LICENSE
+install -D -m 0644 %{buildroot}/%{install_base}/LICENSE %{buildroot}/%{doc_base}/LICENSE-ana
+install -D -m 0644 %{buildroot}/%{install_base}/LICENSE %{buildroot}/%{doc_base}/LICENSE-archive
+install -D -m 0644 %{buildroot}/%{install_base}/LICENSE %{buildroot}/%{doc_base}/LICENSE-logstash
+install -D -m 0644 %{buildroot}/%{install_base}/LICENSE %{buildroot}/%{doc_base}/LICENSE-map
+install -D -m 0644 %{buildroot}/%{install_base}/LICENSE %{buildroot}/%{doc_base}/LICENSE-toolkit
+install -D -m 0644 %{buildroot}/%{install_base}/LICENSE %{buildroot}/%{doc_base}/LICENSE-utils
+
 # Prepare folder for json output from analytics scripts read by logstash
 mkdir -p %{buildroot}/var/lib/logstash/microdep 
 
 # Clean up copied/unrequired files
 rm -rf %{buildroot}/%{install_base}/scripts
 rm -f %{buildroot}/%{install_base}/Makefile
+rm -f %{buildroot}/%{install_base}/LICENSE
 rm -rf %{buildroot}/%{microdep_config_base}/apache-microdep-map.conf
 rm -rf %{buildroot}/%{microdep_config_base}/apache-microdep-ana.conf
 rm -rf %{buildroot}/%{microdep_config_base}/logstash/microdep
@@ -378,13 +389,13 @@ systemctl reload httpd.service || true
 
 ###  F i l e s
 
-%files 
-%defattr(0644,perfsonar,perfsonar,0755)
-%license %{install_base}/LICENSE
+#%files 
+#%defattr(0644,perfsonar,perfsonar,0755)
+#%license %{doc_base}/LICENSE
 
 %files ana
 %defattr(0644,perfsonar,perfsonar,0755)
-%license %{install_base}/LICENSE
+%license %{doc_base}/LICENSE-ana
 %{_unitdir}/perfsonar-microdep-gap-ana.service
 %{_unitdir}/perfsonar-microdep-trace-ana.service
 %{_unitdir}/perfsonar-microdep-restart.service
@@ -398,6 +409,9 @@ systemctl reload httpd.service || true
 %config %{microdep_config_base}/microdep-gap-ana.yml
 %config %{microdep_config_base}/microdep-trace-ana.yml
 
+%files archive
+%license %{doc_base}/LICENSE-archive
+
 %files geolite2
 %defattr(0644,perfsonar,perfsonar,0755)
 %license %{microdep_config_base}/GeoLite2/LICENSE.txt
@@ -406,6 +420,7 @@ systemctl reload httpd.service || true
 
 %files logstash
 %defattr(0644,perfsonar,perfsonar,0755)
+%license %{doc_base}/LICENSE-logstash
 %attr(0755,perfsonar,perfsonar) %{command_base}/opensearch_config_microdep.sh
 %attr(0755,perfsonar,perfsonar) %{command_base}/psconfig_archive_ana.sh
 /usr/local/bin/psconfig_archive_ana.sh
@@ -422,7 +437,7 @@ systemctl reload httpd.service || true
 
 %files map
 %defattr(0644,perfsonar,perfsonar,0755)
-%license %{install_base}/LICENSE
+%license %{doc_base}/LICENSE-map
 %{microdep_web_dir}/*.html
 %{microdep_web_dir}/img
 %{microdep_web_dir}/js
@@ -441,7 +456,11 @@ systemctl reload httpd.service || true
 /etc/httpd/conf.d/apache-microdep-map.conf
 %config %{microdep_web_dir}/dragonlab/dragonlab-base-geo.json
 
+%files toolkit
+%license %{doc_base}/LICENSE-toolkit
+
 %files utils
+%license %{doc_base}/LICENSE-utils
 %defattr(0644,perfsonar,perfsonar,0755)
 %attr(0755,perfsonar,perfsonar) %{command_base}/json2table.pl
 %attr(0755,perfsonar,perfsonar) %{command_base}/rabbitmq-consume.py
