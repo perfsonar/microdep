@@ -20,13 +20,19 @@ case "$1" in
 #    remove|deconfigure)
     remove|deconfigure|upgrade|failed-upgrade)
 
-	# Clean up db access
-	if [ -f /var/lib/pgsql/data/pg_hba.conf ]; then
-	    /usr/lib/perfsonar/bin/microdep_commands/fix-pgsql-access.sh -ri /var/lib/pgsql/data/pg_hba.conf
-	    systemctl reload postgresql.service
+	# Remove Microdep from Opensearch setup (including Logstash) 
+	/usr/lib/perfsonar/bin/microdep_commands/opensearch_config_microdep.sh -r config || true
+	
+	# Disable apache config
+        if [ -e /usr/share/apache2/apache2-maintscript-helper ]; then
+            . /usr/share/apache2/apache2-maintscript-helper
+
+            apache2_invoke disconf apache-microdep-ana
+        else
+	    a2disconf apache-microdep-ana
+	    systemctl reload apache2.service || true
 	fi
 	;;
-    
 #    upgrade|failed-upgrade)
 #        ;;
     

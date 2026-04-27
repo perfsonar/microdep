@@ -8,6 +8,8 @@ License:		MIT Licence
 Group:			Development/Libraries
 URL:			https://www.chartjs.org
 Source0:                chart.js-%{version}.tgz
+Source1:                chartjs-adapter-moment-0.1.1.tar.gz
+Source2:                chartjs-plugin-zoom-1.2.1.tgz
 BuildRoot:		%{_tmppath}/%{name}-%{version}-root-%(%{__id_u} -n)
 BuildArch:		noarch
 
@@ -19,7 +21,6 @@ Summary:		Chartjs adaptor for Momentsjs
 Release:		0.1.1%{?dist}
 License:                MIT Licence
 Group:			Development/Libraries
-Source1:                chartjs-adapter-moment-0.1.1.tar.gz
 Requires:               chartjs
 
 %description adapter-moment
@@ -30,7 +31,6 @@ Summary:		Zoom and pan plugin for Chart.js
 Release:		1.1.2%{?dist}
 License:                MIT Licence
 Group:			Development/Libraries
-Source2:                chartjs-plugin-zoom-1.2.1.tgz
 Requires:               chartjs
 
 %description plugin-zoom

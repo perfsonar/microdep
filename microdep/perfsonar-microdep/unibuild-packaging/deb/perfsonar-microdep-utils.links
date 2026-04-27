@@ -1,0 +1,2 @@
+/lib/perfsonar/bin/microdep_commands/rabbitmq-consume.py /usr/local/bin/rabbitmq-consume.py
+/lib/perfsonar/bin/microdep_commands/json2table.pl /usr/local/bin/json2table.pl

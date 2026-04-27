@@ -1,0 +1,10 @@
+etc/logstash/microdep/* usr/lib/perfsonar/logstash/microdep_pipeline/
+bin/microdep_commands/opensearch_config_microdep.sh usr/lib/perfsonar/bin/microdep_commands/
+bin/microdep_commands/psconfig_archive_ana.sh usr/lib/perfsonar/bin/microdep_commands/
+etc/logrotate.d/microdep etc/logrotate.d/
+etc/apache-microdep-ana.conf etc/apache2/conf-available/
+etc/logstash/microdep-pipelines.yml etc/perfsonar/microdep/logstash/
+etc/microdep_default_policy.json etc/perfsonar/microdep/
+etc/roles_yml_patch etc/perfsonar/microdep/
+etc/os-template-gap-ana.json etc/perfsonar/microdep/
+etc/os-template-trace-ana.json etc/perfsonar/microdep/
