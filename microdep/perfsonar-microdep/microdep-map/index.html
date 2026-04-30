@@ -27,9 +27,10 @@
   <script src="js/stats.js"></script>
   <script src="js/sorttable.js"></script>
 
-  <!-- DataTables (optional) -->
-  <link rel="stylesheet" type="text/css" href="js/datatables.min.css"/>
-  <script type="text/javascript" src="js/datatables.min.js"></script>
+  <!-- vis.js (for tracetree topology and timeline) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/vis/4.21.0/vis.min.js"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/vis/4.21.0/vis.min.css" rel="stylesheet" type="text/css">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/vis/4.21.0/vis-timeline-graph2d.min.css" rel="stylesheet" type="text/css">
 
   <!-- Our modern CSS -->
   <link rel="stylesheet" href="css/microdep-map.css">
@@ -541,15 +542,22 @@
       $(document).ajaxComplete(function(){ setTimeout(updatePercentileVisibility, 100); });
       setTimeout(updatePercentileVisibility, 500);
 
-      // --- Hide map-container when switching to non-map tabs ---
+      // --- Hide map-container and legend when switching to non-map tabs ---
       $('main#tabs').on('tabsactivate', function(event, ui) {
         var mapContainer = document.querySelector('.map-container');
+        var legend = document.getElementById('legend');
+        var isMap = ui.newPanel.attr('id') === 'mapid';
         if (mapContainer) {
-          if (ui.newPanel.attr('id') === 'mapid') {
-            mapContainer.style.display = '';
-          } else {
-            mapContainer.style.display = 'none';
-          }
+          mapContainer.style.display = isMap ? '' : 'none';
+        }
+        if (legend) {
+          legend.style.display = isMap ? '' : 'none';
+        }
+        // Leaflet internally caches the container size at init and can render
+        // an empty/grey grid if the container was hidden when last sized.
+        // Whenever we make the map visible again, ask Leaflet to recompute.
+        if (isMap && window.mymap && typeof window.mymap.invalidateSize === 'function') {
+          setTimeout(function () { window.mymap.invalidateSize(); }, 60);
         }
       });
     });

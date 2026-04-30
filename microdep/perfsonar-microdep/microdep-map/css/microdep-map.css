@@ -710,12 +710,29 @@ main#tabs {
     min-height: 44px;
 }
 
+/* Visual styling lives on the <li> so the close-icon <span> (sibling of <a>
+   inside the same <li>) shares the tab's background and rounded corners
+   instead of leaking outside it. */
 .ui-tabs .ui-tabs-nav li {
+    display: inline-flex !important;
+    align-items: center;
     margin: 0 !important;
     border: none !important;
+    border-bottom: 2px solid transparent !important;
     background: none !important;
-    border-radius: 0 !important;
+    border-radius: var(--r) var(--r) 0 0 !important;
     float: none !important;
+    padding: 0 4px 0 0 !important;
+    transition: background .15s, border-color .15s;
+}
+
+.ui-tabs .ui-tabs-nav li:hover {
+    background: var(--c-accent-mute) !important;
+}
+
+.ui-tabs .ui-tabs-nav li.ui-tabs-active {
+    background: var(--c-elevated) !important;
+    border-bottom-color: var(--c-accent) !important;
 }
 
 .ui-tabs .ui-tabs-nav li a {
@@ -725,24 +742,18 @@ main#tabs {
     color: var(--c-text-3) !important;
     padding: 10px 18px !important;
     border: none !important;
-    border-radius: var(--r) var(--r) 0 0 !important;
-    background: none !important;
-    transition: color .15s, background .15s;
+    border-radius: 0 !important;
+    background: transparent !important;
+    transition: color .15s;
     outline: none !important;
 }
 
-.ui-tabs .ui-tabs-nav li a:hover {
+.ui-tabs .ui-tabs-nav li:hover a {
     color: var(--c-text-2) !important;
-    background: var(--c-accent-mute) !important;
 }
 
 .ui-tabs .ui-tabs-nav li.ui-tabs-active a {
     color: var(--c-text) !important;
-    background: var(--c-elevated) !important;
-}
-
-.ui-tabs .ui-tabs-nav li.ui-tabs-active {
-    border-bottom: 2px solid var(--c-accent) !important;
 }
 
 .ui-tabs .ui-tabs-panel {
@@ -914,18 +925,52 @@ div.graph table.sortable th.sorttable_sorted_reverse::after {
     color: var(--c-accent);
 }
 
-/* Hide map-container when map tab is not active */
-.map-container:has(#mapid[style*="display: none"]),
-.map-container:has(#mapid.ui-tabs-hide) {
-    display: none !important;
-}
+/* (map-container visibility handled by the tabsactivate handler in
+   index.html; the previous CSS-only :has() rule kept the container hidden
+   even after the Map tab was reactivated, because jQuery UI's panel
+   show/hide leaves residual inline styles on #mapid.) */
 
+/* Replace the jQuery UI sprite icon with a themed × glyph so it stays
+   visible in both light and dark modes — sprite is hidden, span gets
+   explicit dimensions and a centred ::before glyph. */
 .ui-tabs .ui-tabs-nav li span.ui-icon-close {
+    background: none !important;
+    background-image: none !important;
+    text-indent: 0 !important;
+    width: 20px !important;
+    height: 20px !important;
+    margin: 0 0 0 4px !important;
+    padding: 0 !important;
+    overflow: visible !important;
     cursor: pointer;
-    opacity: 0.4;
-    transition: opacity .15s;
+    font-size: 0;                          /* hide the "Remove Tab" text */
+    line-height: 1;
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    vertical-align: middle;
+    border-radius: var(--r);
+    color: var(--c-text-3);
+    transition: background .15s, color .15s;
+    position: relative;
+    z-index: 2;
 }
-.ui-tabs .ui-tabs-nav li span.ui-icon-close:hover { opacity: 1; }
+.ui-tabs .ui-tabs-nav li span.ui-icon-close::before {
+    content: '×';
+    display: block;
+    font-size: 18px;
+    line-height: 18px;
+    font-weight: 600;
+    color: inherit;
+    text-indent: 0;
+}
+.ui-tabs .ui-tabs-nav li.ui-tabs-active span.ui-icon-close {
+    color: var(--c-text);
+}
+.ui-tabs .ui-tabs-nav li span.ui-icon-close:hover {
+    background: var(--c-accent-mute);
+    color: var(--c-accent);
+}
 
 .sidebar-open-btn {
     display: inline-flex;
@@ -1620,6 +1665,878 @@ table.sortable th:not(.sorttable_sorted):not(.sorttable_sorted_reverse):not(.sor
     border: none !important;
     box-shadow: none !important;
     pointer-events: none !important;
+}
+
+/* ==========================================================
+   TRACETREE TAB — topology, timeline, stats inside a tab
+   ========================================================== */
+
+.tracetree-topo {
+    grid-template-columns: 1fr auto;
+    gap: 24px;
+    background: var(--c-surface);
+    padding: 24px clamp(24px, 5%, 60px);
+    min-height: 500px;
+}
+
+/* Apply grid only when this tab panel is visible (not hidden by jQuery UI).
+   jQuery UI 1.13 marks inactive panels with aria-hidden="true" AND inline
+   display:none. The display:none alone would suffice, but we set display:grid
+   with !important to win over the active panel's inline display:block; that
+   would also defeat display:none on inactive panels — hence the aria-hidden
+   negation to scope the rule to the visible panel only. */
+.tracetree-topo:not([aria-hidden="true"]) {
+    display: grid !important;
+}
+
+.tracetree-graph {
+    position: relative;          /* anchor for the absolutely-positioned popup */
+    width: 100%;
+    min-width: 0;
+    min-height: 450px;
+    border: 1px solid var(--c-border);
+    border-radius: var(--r);
+    /* Allow popup overlay to slightly escape if needed; vis-network is
+       already self-clipped. */
+    overflow: visible;
+}
+
+/* The vis.network canvas should still be clipped to the graph box so it
+   doesn't paint outside the rounded border. */
+.tracetree-graph div.vis-network {
+    border-radius: var(--r);
+}
+
+.tracetree-graph div.vis-network {
+    background: var(--c-surface) !important;
+}
+
+.tracetree-sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100px;
+}
+
+.topo-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.topo-btn {
+    width: 100% !important;
+    font-size: .72rem !important;
+    padding: 5px 6px !important;
+    text-align: center;
+}
+
+.tracetree-nav {
+    display: flex;
+    gap: 8px;
+    padding: 8px 12px;
+    justify-content: center;
+}
+
+/* vis.js timeline overrides for dark theme */
+.vis-timeline {
+    border: 1px solid var(--c-border) !important;
+    background: var(--c-surface) !important;
+    font-family: var(--font-ui) !important;
+}
+
+.vis-time-axis .vis-text {
+    color: var(--c-text-2) !important;
+    font-size: .72rem !important;
+}
+
+.vis-time-axis .vis-grid.vis-minor { border-color: var(--c-border) !important; }
+.vis-time-axis .vis-grid.vis-major { border-color: var(--c-border-h) !important; }
+.vis-panel.vis-background { background: var(--c-bg) !important; }
+.vis-panel.vis-center { background: var(--c-surface) !important; }
+.vis-custom-time { background-color: var(--c-accent) !important; }
+
+.vis-item.vis-point .vis-item-content {
+    background: var(--c-accent) !important;
+    border-color: var(--c-accent) !important;
+}
+
+.vis-item.vis-dot {
+    border-color: var(--c-accent) !important;
+}
+
+/* Tracetree inner tabs (nested jQuery UI tabs) */
+.graph .ui-tabs {
+    background: none !important;
+}
+
+.graph .ui-tabs .ui-tabs-nav {
+    background: var(--c-elevated) !important;
+    padding: 0 8px !important;
+    min-height: 36px;
+}
+
+.graph .ui-tabs .ui-tabs-nav li a {
+    font-size: .8rem;
+    padding: 6px 14px !important;
+}
+
+/* Tracetree popup overlay — positioned next to the clicked node by JS */
+/* Router-info panel inside the topology view — anchored top-right of the
+   graph container, styled like the main map's "Link Details" panel. */
+.tracetree-popup {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 360px;
+    max-height: calc(100% - 20px);
+    z-index: 100;
+    background: var(--c-surface);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-lg);
+    display: none;             /* JS toggles to display:flex */
+    flex-direction: column;
+    overflow: hidden;
+    color: var(--c-text);
+    font-size: .82rem;
+}
+
+.tracetree-popup-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--c-border);
+    background: var(--c-elevated);
+    flex-shrink: 0;
+}
+
+.tracetree-popup-title {
+    font-size: .85rem;
+    font-weight: 600;
+    color: var(--c-accent);
+}
+
+.tracetree-popup-body {
+    overflow-y: auto;
+    padding: 12px 14px;
+    font-size: .82rem;
+    color: var(--c-text);
+    scrollbar-width: thin;
+    scrollbar-color: var(--c-control-h) transparent;
+}
+
+.tracetree-popup-body::-webkit-scrollbar { width: 5px; }
+.tracetree-popup-body::-webkit-scrollbar-track { background: transparent; }
+.tracetree-popup-body::-webkit-scrollbar-thumb { background: var(--c-control-h); border-radius: 3px; }
+
+/* Color legend inside the topology sidebar — center the values and keep them
+   readable on every cell colour. mix-blend-mode: difference automatically
+   inverts the text against whatever colour is behind it. */
+.tracetree-legend {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0 4px;
+    font-size: .78rem;
+    font-family: var(--font-mono);
+}
+.tracetree-legend td {
+    text-align: center;
+    padding: 6px 8px;
+    border-radius: var(--r);
+    color: #ffffff;
+    mix-blend-mode: normal;
+    text-shadow:
+        0 0 2px rgba(0, 0, 0, .85),
+        0 1px 0 rgba(0, 0, 0, .4);
+    letter-spacing: .02em;
+}
+
+.tracetree-popup-body table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.tracetree-popup-body table td {
+    padding: 5px 8px !important;
+    border-bottom: 1px solid var(--c-border) !important;
+    font-size: .82rem !important;
+}
+
+.tracetree-popup-body table td:first-child {
+    color: var(--c-text-3);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    font-size: .72rem !important;
+    width: 35%;
+}
+
+.tracetree-popup-body table td:last-child {
+    text-align: right !important;
+    font-family: var(--font-mono) !important;
+    font-size: .82rem !important;
+    color: var(--c-text);
+    word-break: break-all;
+}
+
+.tracetree-popup-close {
+    background: none;
+    border: none;
+    color: var(--c-text-3);
+    font-size: 1.4rem;
+    cursor: pointer;
+    padding: 0 4px;
+    line-height: 1;
+    border-radius: var(--r);
+    transition: color .15s, background .15s;
+}
+
+.tracetree-popup-close:hover {
+    color: var(--c-text);
+    background: var(--c-accent-mute);
+}
+
+/* Tracetree time info display */
+.tracetree-time-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 4px 12px;
+    font-size: .75rem;
+    font-family: var(--font-mono);
+    color: var(--c-text-3);
+}
+
+/* Tracetree fullscreen mode */
+.tracetree-fullscreen {
+    position: fixed !important;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 9999;
+    background: var(--c-bg);
+}
+
+/* Curve-chart embedded as an integrated tab (Plot → Queues / Unavailability /
+   property-specific). We strip the .graph tab padding for tabs that contain
+   a curve iframe and make them a flex column so the iframe fills height —
+   but ONLY when the tab is the active one, otherwise display:flex would
+   override jQuery UI's display:none on inactive panels and the curve panel
+   would stay visible everywhere. */
+div.graph:has(> .curve-iframe-wrap):not([aria-hidden="true"]) {
+    padding: 0 !important;
+    display: flex !important;
+    flex-direction: column;
+}
+
+.curve-iframe-wrap {
+    flex: 1 1 auto;
+    min-height: 0;
+    width: 100%;
+    display: flex;
+    background: var(--c-bg);
+}
+
+.curve-iframe {
+    flex: 1 1 auto;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    display: block;
+    background: var(--c-bg);
+}
+
+/* Traceroute variants — responsive grid; cards flow side-by-side */
+.trace-variants-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+    gap: 14px;
+    padding: 18px;
+}
+
+.trace-variant-block {
+    position: relative;
+    padding: 36px 14px 14px;       /* top reserved for checkbox label */
+    background: var(--c-surface);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r);
+    transition: border-color .15s, box-shadow .15s;
+}
+
+.trace-variant-block.selected {
+    border-color: var(--c-accent);
+    box-shadow: 0 0 0 2px var(--c-accent-mute);
+}
+
+/* Compare-checkbox label, top-right corner of each card */
+.trace-variant-select {
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: .7rem;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--c-text-3);
+    cursor: pointer;
+    user-select: none;
+}
+.trace-variant-select input {
+    accent-color: var(--c-accent);
+    cursor: pointer;
+}
+.trace-variant-block.selected .trace-variant-select {
+    color: var(--c-accent);
+}
+
+.trace-variant {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .82rem;
+}
+
+.trace-variant caption {
+    text-align: left;
+    padding: 0 0 10px 0;
+    color: var(--c-text-2);
+    font-size: .85rem;
+}
+
+.trace-variant caption .variant-no {
+    display: inline-block;
+    min-width: 22px;
+    padding: 1px 7px;
+    margin-right: 8px;
+    border-radius: 999px;
+    background: var(--c-accent);
+    color: #fff;
+    font-weight: 700;
+    text-align: center;
+    font-size: .78rem;
+}
+
+.trace-variant caption .variant-count {
+    color: var(--c-text-3);
+    font-family: var(--font-mono);
+    font-size: .78rem;
+    margin-left: 6px;
+}
+
+.trace-variant thead th {
+    text-align: left;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--c-border);
+    color: var(--c-text-3);
+    text-transform: uppercase;
+    font-size: .7rem;
+    letter-spacing: .04em;
+    font-weight: 600;
+}
+
+.trace-variant tbody td {
+    padding: 5px 10px;
+    border-bottom: 1px solid var(--c-border);
+    font-family: var(--font-mono);
+    font-size: .8rem;
+}
+
+.trace-variant tbody td:first-child {
+    width: 40px;
+    color: var(--c-text-3);
+    text-align: right;
+}
+
+.trace-variant tbody td.num {
+    text-align: right;
+    width: 110px;
+    color: var(--c-text-2);
+}
+
+.trace-variant tbody tr:last-child td {
+    border-bottom: none;
+}
+
+/* Collapsible "N more samples" badge under each variant table */
+.trace-repeats {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed var(--c-border);
+}
+
+.trace-repeats-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    background: var(--c-elevated);
+    border: 1px solid var(--c-border);
+    border-radius: 999px;
+    color: var(--c-text-2);
+    font-size: .78rem;
+    cursor: pointer;
+    transition: background .15s, color .15s, border-color .15s;
+}
+
+.trace-repeats-toggle:hover {
+    background: var(--c-accent-mute);
+    border-color: var(--c-accent);
+    color: var(--c-text);
+}
+
+.trace-repeats-toggle.expanded {
+    background: var(--c-accent-mute);
+    border-color: var(--c-accent);
+    color: var(--c-text);
+}
+
+.trace-repeats-chevron {
+    display: inline-block;
+    width: 10px;
+    color: var(--c-accent);
+    font-size: .7rem;
+}
+
+.trace-repeats-list {
+    margin: 8px 0 0;
+    padding: 8px 14px;
+    list-style: none;
+    background: var(--c-bg);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r);
+    max-height: 220px;
+    overflow-y: auto;
+}
+
+.trace-repeats-list li {
+    padding: 3px 0;
+    font-family: var(--font-mono);
+    font-size: .76rem;
+    color: var(--c-text-3);
+    border-bottom: 1px dashed var(--c-border);
+}
+
+.trace-repeats-list li:last-child {
+    border-bottom: none;
+}
+
+.trace-empty {
+    text-align: center;
+    color: var(--c-text-3);
+    padding: 30px 0;
+    font-size: .85rem;
+}
+
+/* Floating compare bar — sticky to bottom of the trace pane */
+.trace-compare-bar {
+    position: sticky;
+    bottom: 14px;
+    margin: 14px 18px;
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--c-elevated);
+    border: 1px solid var(--c-accent);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-lg);
+    z-index: 10;
+}
+.trace-compare-bar[hidden] { display: none; }
+.trace-compare-count {
+    font-size: .8rem;
+    color: var(--c-text);
+    flex: 1;
+}
+.trace-compare-btn { background: var(--c-accent) !important; color: #fff !important; }
+.trace-compare-btn:disabled {
+    opacity: .45;
+    cursor: not-allowed;
+}
+.trace-clear-btn { background: transparent !important; }
+
+/* Comparison modal */
+.trace-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, .55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    padding: 30px;
+}
+.trace-modal-overlay[hidden] { display: none; }
+
+.trace-modal {
+    width: min(900px, 100%);
+    max-height: 90vh;
+    background: var(--c-surface);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-lg);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.trace-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--c-border);
+    background: var(--c-elevated);
+    flex-shrink: 0;
+}
+.trace-modal-title {
+    font-size: .95rem;
+    font-weight: 600;
+    color: var(--c-accent);
+}
+.trace-modal-close {
+    background: none;
+    border: none;
+    color: var(--c-text-3);
+    font-size: 1.6rem;
+    cursor: pointer;
+    padding: 0 6px;
+    line-height: 1;
+    border-radius: var(--r);
+    transition: color .15s, background .15s;
+}
+.trace-modal-close:hover {
+    color: var(--c-text);
+    background: var(--c-accent-mute);
+}
+.trace-modal-body {
+    overflow: auto;
+    padding: 18px;
+}
+
+/* Side-by-side comparison table */
+.trace-compare-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .8rem;
+    font-family: var(--font-mono);
+}
+.trace-compare-table thead th {
+    text-align: left;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--c-border);
+    color: var(--c-text-3);
+    text-transform: uppercase;
+    font-size: .7rem;
+    letter-spacing: .04em;
+    font-weight: 600;
+    background: var(--c-elevated);
+}
+.trace-compare-table thead th.trace-compare-vno {
+    text-align: center;
+    border-bottom: 1px solid var(--c-border);
+    background: var(--c-bg);
+}
+.trace-compare-table thead th.trace-compare-vno .variant-no {
+    display: inline-block;
+    min-width: 22px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--c-accent);
+    color: #fff;
+    font-weight: 700;
+}
+.trace-compare-table tbody td {
+    padding: 5px 10px;
+    border-bottom: 1px solid var(--c-border);
+    font-size: .78rem;
+}
+.trace-compare-table tbody td.hop {
+    text-align: right;
+    color: var(--c-text-3);
+    width: 40px;
+}
+.trace-compare-table tbody td.addr {
+    color: var(--c-text);
+}
+.trace-compare-table tbody td.num {
+    text-align: right;
+    color: var(--c-text-2);
+    width: 70px;
+}
+/* Highlight rows where IPs diverge between selected variants */
+.trace-compare-table tbody tr.diff td.addr {
+    background: rgba(255, 170, 0, .08);
+    color: #f59e0b;
+    font-weight: 600;
+}
+.trace-compare-table tbody tr.diff td.hop {
+    background: rgba(255, 170, 0, .15);
+    color: #f59e0b;
+}
+
+/* === Sticky timeline layout =================================================
+ * The whole chain from the Routes tab pane down to .tracetree-inner is set up
+ * as a vertical flex container so the timeline can be docked at the bottom
+ * while the inner tabs section scrolls.
+ *
+ *   .graph (Routes pane)              ← flex column, overflow hidden
+ *     .ls-tab-inner                    ← flex column, fill height
+ *       .ls-tabs (ul + panels)         ← flex column, fill height
+ *         .ls-pane (active panel)      ← flex: 1, scroll context
+ *           #tab3-trace-inner          ← flex: 1
+ *             .tracetree-inner         ← flex column, fill height
+ *               .tracetree-header      ← fixed top
+ *               .tracetree-tabs-wrap   ← flex 1, scrollable
+ *               .tracetree-timeline-wrap ← fixed bottom
+ * ========================================================================== */
+
+/* Force the LS pane (and its wrappers) into a flex column so children stretch */
+.ls-tab-inner {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+.ls-tabs {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+.ls-tabs > ul {
+    flex: 0 0 auto;
+}
+.ls-pane {
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+/* Wrapper div my code creates around tracetree_tab() also fills */
+.ls-pane > div[id$="-trace-inner"] {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.tracetree-inner {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.tracetree-inner > .tracetree-header {
+    flex: 0 0 auto;
+}
+
+/* Inner tabs (Topology / Hop stats / Traceroute / Docs) get the remaining
+   space and scroll internally; the timeline below stays docked. */
+.tracetree-tabs-wrap {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+}
+
+.tracetree-timeline-wrap {
+    flex: 0 0 auto;
+    background: var(--c-surface);
+    border-top: 1px solid var(--c-border);
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, .15);
+    padding: 8px 14px 10px;
+}
+
+.tracetree-timeline-wrap .tracetree-nav {
+    margin-top: 6px;
+    padding: 0;
+}
+
+/* Header showing which traceroute pair is being viewed */
+.tracetree-header {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 10px 16px;
+    background: var(--c-elevated);
+    border-bottom: 1px solid var(--c-border);
+}
+.tracetree-title {
+    font-size: .9rem;
+    font-weight: 600;
+    color: var(--c-text);
+    letter-spacing: .02em;
+}
+.tracetree-peers {
+    font-size: .82rem;
+    color: var(--c-text-2);
+    font-family: var(--font-mono);
+}
+.tracetree-peers strong {
+    color: var(--c-text);
+    font-weight: 600;
+}
+
+/* Docs sub-tab — readable copy with structure */
+.tracetree-docs {
+    padding: 18px 22px;
+    color: var(--c-text);
+    line-height: 1.55;
+    max-width: 860px;
+}
+.tracetree-docs h2 {
+    font-size: 1.15rem;
+    margin: 0 0 10px;
+    color: var(--c-text);
+}
+.tracetree-docs h3 {
+    font-size: .95rem;
+    margin: 18px 0 6px;
+    color: var(--c-text);
+}
+.tracetree-docs p,
+.tracetree-docs dl {
+    font-size: .85rem;
+    color: var(--c-text-2);
+    margin: 6px 0;
+}
+.tracetree-docs dt {
+    font-weight: 600;
+    color: var(--c-text);
+    margin-top: 6px;
+}
+.tracetree-docs dd {
+    margin-left: 18px;
+}
+
+/* ==========================================================
+   LS TAB — Measurement Archives / Peers / Traceroute browser
+   ========================================================== */
+
+.ls-tab-inner {
+    height: 100%;
+}
+
+.ls-tabs {
+    background: none !important;
+    border: none !important;
+}
+
+.ls-pane {
+    padding: 12px 14px;
+    min-height: 400px;
+}
+
+.ls-pane:not([hidden]) {
+    /* jQuery UI sets inline display:block; we keep block as default */
+}
+
+.ls-pane h2.center-text,
+.ls-pane h4.center-text,
+.ls-pane p.center-text {
+    text-align: center;
+    color: var(--c-text-2);
+    margin: 30px 0;
+}
+
+.ls-empty {
+    text-align: center;
+    padding: 30px 12px;
+    color: var(--c-text-2);
+}
+.ls-empty p {
+    margin: 0 0 14px;
+    font-size: .9rem;
+}
+
+.ls-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+    padding: 8px 10px;
+    background: var(--c-elevated);
+    border-radius: var(--r);
+}
+
+.ls-toolbar label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: .8rem;
+    color: var(--c-text-2);
+}
+
+.ls-search-input,
+.ls-date-input {
+    padding: 6px 10px;
+    border: 1px solid var(--c-border);
+    border-radius: var(--r);
+    background: var(--c-surface);
+    color: var(--c-text);
+    font-size: .82rem;
+    font-family: var(--font-ui);
+}
+
+.ls-search-input {
+    flex: 1 1 220px;
+    max-width: 320px;
+}
+
+.ls-search-input:focus,
+.ls-date-input:focus {
+    outline: none;
+    border-color: var(--c-accent);
+    box-shadow: 0 0 0 2px rgba(0, 119, 204, .15);
+}
+
+.ls-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .82rem;
+    background: var(--c-surface);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r);
+    overflow: hidden;
+}
+
+.ls-table thead {
+    background: var(--c-elevated);
+}
+
+.ls-table th {
+    text-align: left;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--c-border);
+    color: var(--c-text);
+    font-weight: 600;
+    cursor: pointer;
+    user-select: none;
+}
+
+.ls-table td {
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--c-border);
+    color: var(--c-text-2);
+    vertical-align: top;
+}
+
+.ls-table tbody tr:hover {
+    background: var(--c-elevated);
+}
+
+.ls-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.ls-pair-btn,
+.ls-table .knapp {
+    padding: 4px 10px !important;
+    font-size: .78rem !important;
+    margin-right: 4px;
 }
 
 /* ==========================================================

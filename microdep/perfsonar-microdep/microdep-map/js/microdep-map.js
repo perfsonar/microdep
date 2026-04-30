@@ -10,9 +10,174 @@ import {parms, conffile, prop_sum, update_url, stats_on, net_names, net_desc, ne
 	round_number, zero_fill, selected_date_is_today_or_future, selected_hour_is_future }
 from "./map-lib.js" ;
 import { heatmap } from "./graph.js";
+import { ls_tab } from "./ls-tab.js";
 
   var start, end;  // startend time for current period
- 
+
+// =============================================================================
+// Tab persistence — remembers which tabs (Routes, Queues, Heatmap, ...) were
+// open across page reloads. Specs are stored in localStorage; on init we wait
+// for the network/parms to settle, then recreate each tab by replaying the
+// same code paths the user would trigger by clicking.
+// =============================================================================
+const TAB_STORE_KEY = 'microdep-open-tabs';
+const tabSpecs = new Map();        // divid -> spec (in-memory mirror of storage)
+let restoringTabs = false;         // suppress persistence while we replay specs
+
+function persistTab(divid, spec) {
+    if (restoringTabs) return;     // avoid feedback loops during restore
+    tabSpecs.set(divid, spec);
+    syncTabsToStorage();
+}
+function unpersistTab(divid) {
+    if (!tabSpecs.has(divid)) return;
+    tabSpecs.delete(divid);
+    syncTabsToStorage();
+}
+function syncTabsToStorage() {
+    try { localStorage.setItem(TAB_STORE_KEY, JSON.stringify(Array.from(tabSpecs.values()))); }
+    catch (_) { /* private mode, quota etc. */ }
+}
+function loadStoredTabSpecs() {
+    try { return JSON.parse(localStorage.getItem(TAB_STORE_KEY) || '[]'); }
+    catch (_) { return []; }
+}
+document.addEventListener('microdep-tab-closed', function (e) {
+    unpersistTab(e.detail.divid);
+});
+
+// =============================================================================
+// Active-tab persistence — remembers which tab was visible before reload.
+// We store a *spec identity* rather than the divid, since divids change
+// session-to-session as add_tab assigns sequential numbers. `null` means the
+// Map tab (which has no spec, just the static <a href="#mapid">).
+// =============================================================================
+const ACTIVE_TAB_KEY = 'microdep-active-tab';
+
+function specIdentity(spec) {
+    if (!spec) return null;
+    if (spec.kind === 'routes')  return 'routes|' + spec.from + '|' + spec.to;
+    if (spec.kind === 'curve')   return 'curve|' + spec.url;
+    if (spec.kind === 'check')   return 'check|' + spec.report_type;
+    return null;
+}
+
+function saveActiveTab() {
+    try {
+        const idx = $('main#tabs').tabs('option', 'active');
+        const $a = $('main#tabs > ul > li > a').eq(idx);
+        const panelId = $a.attr('href') ? $a.attr('href').replace('#', '') : 'mapid';
+        if (panelId === 'mapid') {
+            localStorage.setItem(ACTIVE_TAB_KEY, 'map');
+        } else {
+            const spec = tabSpecs.get(panelId);
+            const ident = specIdentity(spec);
+            if (ident) localStorage.setItem(ACTIVE_TAB_KEY, ident);
+        }
+    } catch (_) { /* ignore */ }
+}
+
+function loadActiveTabIdent() {
+    try { return localStorage.getItem(ACTIVE_TAB_KEY) || 'map'; }
+    catch (_) { return 'map'; }
+}
+
+function applyActiveAfterRestore() {
+    const target = loadActiveTabIdent();
+    let activeIdx = 0;
+    if (target !== 'map') {
+        for (const [divid, spec] of tabSpecs.entries()) {
+            if (specIdentity(spec) === target) {
+                const allTabs = $('main#tabs > ul > li > a').toArray();
+                const a = document.querySelector('a[href="#' + divid + '"]');
+                const idx = a ? allTabs.indexOf(a) : -1;
+                if (idx >= 0) { activeIdx = idx; break; }
+            }
+        }
+    }
+    $('main#tabs').tabs('option', 'active', activeIdx);
+
+    // Force correct map-container/legend visibility regardless of whether
+    // tabsactivate fires reliably after the programmatic activation above
+    // (jQuery UI sometimes skips the event when the new active index equals
+    // the just-set value, which is what we observed in restore flow).
+    const isMap = activeIdx === 0;
+    const mapContainer = document.querySelector('.map-container');
+    const legend = document.getElementById('legend');
+    if (mapContainer) mapContainer.style.display = isMap ? '' : 'none';
+    if (legend)       legend.style.display       = isMap ? '' : 'none';
+
+    // Leaflet may have been hidden during restoration; if the map is the
+    // active panel, ask Leaflet to recompute its size so the tiles redraw.
+    if (isMap && window.mymap && typeof window.mymap.invalidateSize === 'function') {
+        setTimeout(function () { window.mymap.invalidateSize(); }, 80);
+    }
+}
+
+// Replays stored specs to recreate the tabs after a page reload. Called once
+// from the init flow (see end of get_config().then or similar). Wrapped in
+// `restoringTabs` so the persistence hooks inside the tab openers don't
+// double-write while we're rebuilding state.
+function restoreSavedTabs() {
+    const specs = loadStoredTabSpecs();
+    if (!specs.length) return;
+
+    // Pre-flight sanity: if microdep-map didn't finish wiring up the
+    // primary handlers we'd just create broken tabs, so skip and try later.
+    if (typeof event_index === 'undefined' || jQuery.isEmptyObject(event_index)) {
+        console.log('Tab restore deferred — config not ready yet, retrying in 2s');
+        setTimeout(restoreSavedTabs, 2000);
+        return;
+    }
+
+    restoringTabs = true;
+    try {
+        for (const spec of specs) {
+            try { restoreOneTab(spec); }
+            catch (err) { console.warn('Tab restore skipped:', spec, err); }
+        }
+    } finally {
+        restoringTabs = false;
+        syncTabsToStorage();   // write back with the new (this session's) divids
+        // Restore which tab was visible before the reload. The handlers
+        // inside add_tab activated each new tab as it was created (so the
+        // last restored is currently active and the map-container is
+        // hidden); applyActiveAfterRestore() flips that back to the right
+        // panel and the tabsactivate listener (in index.html) re-shows the
+        // map-container if needed.
+        applyActiveAfterRestore();
+    }
+}
+
+function restoreOneTab(spec) {
+    const before = $("main#tabs > ul > li").length;
+    if (spec.kind === 'routes') {
+        add_tab('div', spec.title, before,
+            '<div class="center-text" style="padding:40px">' +
+              '<div class="spinner"></div><p>Restoring routes…</p>' +
+            '</div>');
+        const tab_id = 'tab' + before;
+        ls_tab(tab_id, spec.from, spec.to, spec.startEpoch, spec.endEpoch, spec.options || {});
+        tabSpecs.set(tab_id, spec);
+    } else if (spec.kind === 'curve') {
+        const sep = spec.url.indexOf('?') >= 0 ? '&' : '?';
+        const bustedUrl = spec.url + sep + '_t=' + Date.now();
+        const iframe_html =
+            '<div class="curve-iframe-wrap">' +
+                '<iframe class="curve-iframe" src="' + bustedUrl + '" frameborder="0"></iframe>' +
+            '</div>';
+        add_tab('div', spec.title, before, iframe_html);
+        tabSpecs.set('tab' + before, spec);
+    } else if (spec.kind === 'check') {
+        // Simulate user picking the option from the #check dropdown — the
+        // existing change-handler does all the work; we just need to
+        // remember the divid afterwards.
+        $('#check').val(spec.report_type).trigger('change');
+        const after = $("main#tabs > ul > li").length;
+        if (after > before) tabSpecs.set('tab' + before, spec);
+    }
+}
+
 var point_distance_min = 50;  // meters between
 var point_distance_stretch = 0.001;  // delta degrees
 var period_length = 86400; // a day - to be replaced by dynamic length
@@ -281,6 +446,7 @@ function show_map (network) {
     console.log ("Showing map");
     if ( ! mymap ){
 	mymap = L.map('mapid');
+	window.mymap = mymap;     // expose for invalidateSize() from index.html
 	myRenderer = L.canvas({ padding: 0.5, tolerance: 20 });
 	var osmUrl='https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
 	var osmAttrib='Map data © <a href="http://openstreetmap.org">OpenStreetMap</a> contributors';
@@ -615,12 +781,42 @@ function link_popup(link){
 	var seeBtns = document.createElement("div");
 	seeBtns.className = "panel-card-buttons";
 
-	var routesUrl = '/pstracetree/ls.html?mahost=localhost:443&verify_SSL=0&api=opensearch&from=' + link.from + '&to=' + link.to +'&time-start=' + dato;
 	var routesBtn = document.createElement("button");
 	routesBtn.className = "knapp";
 	routesBtn.title = "See the routes graph and stats in this period";
 	routesBtn.innerHTML = 'Routes';
-	routesBtn.onclick = function(){ window.open(routesUrl); };
+	routesBtn.onclick = function(){
+	    let num_tabs = $("main#tabs > ul > li").length;
+	    let fromShort = link.from.split('.').slice(0,2).join('.');
+	    let toShort = link.to.split('.').slice(0,2).join('.');
+	    let title = 'Routes: ' + fromShort + ' \u2192 ' + toShort;
+	    add_tab('div', title, num_tabs, '<div class="center-text" style="padding:40px"><div class="spinner"></div><p>Loading traceroute data\u2026</p></div>');
+	    let tab_id = 'tab' + num_tabs;
+	    let start_epoch = new Date(dato).getTime() / 1000;
+	    let end_epoch = start_epoch + parms.period * 3600;
+	    var routesOpts = {
+		mahost: 'https://localhost:443',
+		verify_SSL: 0,
+		api: 'opensearch'
+	    };
+	    ls_tab(tab_id, link.from, link.to, start_epoch, end_epoch, routesOpts);
+	    persistTab(tab_id, {
+		kind: 'routes',
+		title: title,
+		from: link.from,
+		to: link.to,
+		startEpoch: start_epoch,
+		endEpoch: end_epoch,
+		options: routesOpts
+	    });
+	    // Ensure the newly added Routes tab is actually the active one
+	    // (add_tab() counts ALL <li> children including non-tab ones, so
+	    // its active-index can be off-by-one for our header layout).
+	    const tab_count = $('main#tabs > ul > li > a').length;
+	    if (tab_count > 0) {
+		$('main#tabs').tabs('option', 'active', tab_count - 1);
+	    }
+	};
 	seeBtns.appendChild(routesBtn);
 
 	seeCard.appendChild(seeBtns);
@@ -640,18 +836,70 @@ function link_popup(link){
 	var plotBtns = document.createElement("div");
 	plotBtns.className = "panel-card-buttons";
 
+	// Helper — open a curve-chart URL as an integrated tab (iframe-embedded)
+	// instead of a new browser window, mirroring the Routes flow.
+	var fromShortPlot = link.from.split('.').slice(0, 2).join('.');
+	var toShortPlot   = link.to.split('.').slice(0, 2).join('.');
+	function open_curve_tab(label, url) {
+	    var num_tabs = $("main#tabs > ul > li").length;
+	    var title = label + ': ' + fromShortPlot + ' → ' + toShortPlot;
+	    // Cache-buster — iframes get cached aggressively and the Queues view
+	    // is small/static, so fresh load each click is cheap and avoids
+	    // showing stale HTML/CSS after deploys.
+	    var sep = url.indexOf('?') >= 0 ? '&' : '?';
+	    var bustedUrl = url + sep + '_t=' + Date.now();
+	    var iframe_html =
+		'<div class="curve-iframe-wrap">' +
+		    '<iframe class="curve-iframe" src="' + bustedUrl + '" frameborder="0"></iframe>' +
+		'</div>';
+	    add_tab('div', title, num_tabs, iframe_html);
+	    var divid = 'tab' + num_tabs;
+	    persistTab(divid, {
+		kind: 'curve',
+		title: title,
+		label: label,
+		url: url    // store the *uncached* URL — restore will re-add a fresh _t
+	    });
+	    var tab_count = $('main#tabs > ul > li > a').length;
+	    if (tab_count > 0) {
+		$('main#tabs').tabs('option', 'active', tab_count - 1);
+	    }
+	}
+
+	// --- Queues (jitter / h_ddelay) ---
 	var queuesUrl = 'curve-chart.html?net=' + parms.net + '&index=' + parms.net + '_jitter&from=' + link.from + '&to=' + link.to + '&event=jitter&property=h_ddelay&start=' + start + '&end=' + end + "&title=From " + link.from + " to " + link.to;
 	var queuesBtn = document.createElement("button");
 	queuesBtn.className = "knapp";
-	queuesBtn.innerHTML = '<a title="Curve over queues in this period" target="_blank" href="' + queuesUrl + '">Queues</a>';
+	queuesBtn.title = "Curve over queues in this period";
+	queuesBtn.textContent = 'Queues';
+	queuesBtn.onclick = function () { open_curve_tab('Queues', queuesUrl); };
 	plotBtns.appendChild(queuesBtn);
 
-	var propUrl = 'curve-chart.html?net=' + parms.net + '&index=' + event_index[parms.event] + '&from=' + link.from + '&to=' + link.to + '&event=' + parms.event + '&property=' + parms.property + '&start=' + start + '&end=' + end + '&title="From ' + link.from + ' to ' + link.to + ' for ' + parms.property + '"';
-	var propBtn = document.createElement("button");
-	propBtn.className = "knapp";
-	var propLabel = (prop_desc[parms.event] && prop_desc[parms.event][parms.property]) ? prop_desc[parms.event][parms.property] : (prop_desc[event_sum_type[parms.event]] && prop_desc[event_sum_type[parms.event]][parms.property]) ? prop_desc[event_sum_type[parms.event]][parms.property] : parms.property;
-	propBtn.innerHTML = '<a title="Detailed report" target="_blank" href="' + propUrl + '">' + propLabel + '</a>';
-	plotBtns.appendChild(propBtn);
+	// --- Unavailability (gap / down_ppm) ---
+	var unavailIndex = (event_index && event_index['gap']) ? event_index['gap'] : (parms.net + '_gap');
+	var unavailUrl = 'curve-chart.html?net=' + parms.net + '&index=' + unavailIndex + '&from=' + link.from + '&to=' + link.to + '&event=gap&property=down_ppm&start=' + start + '&end=' + end + '&title=Unavailability ' + link.from + ' to ' + link.to;
+	var unavailBtn = document.createElement("button");
+	unavailBtn.className = "knapp";
+	unavailBtn.title = "Unavailability over this period";
+	unavailBtn.textContent = 'Unavailability';
+	unavailBtn.onclick = function () { open_curve_tab('Unavailability', unavailUrl); };
+	plotBtns.appendChild(unavailBtn);
+
+	// --- Current property (dynamic, depends on currently-selected event/property) ---
+	// Skip this button when it would duplicate Queues or Unavailability — the
+	// dynamic prop selection happens to match those fixed buttons sometimes.
+	var isQueuesDup     = (parms.event === 'jitter' && parms.property === 'h_ddelay');
+	var isUnavailDup    = (parms.event === 'gap'    && parms.property === 'down_ppm');
+	if (!isQueuesDup && !isUnavailDup) {
+	    var propUrl = 'curve-chart.html?net=' + parms.net + '&index=' + event_index[parms.event] + '&from=' + link.from + '&to=' + link.to + '&event=' + parms.event + '&property=' + parms.property + '&start=' + start + '&end=' + end + '&title="From ' + link.from + ' to ' + link.to + ' for ' + parms.property + '"';
+	    var propBtn = document.createElement("button");
+	    propBtn.className = "knapp";
+	    propBtn.title = "Detailed report for the currently selected metric";
+	    var propLabel = (prop_desc[parms.event] && prop_desc[parms.event][parms.property]) ? prop_desc[parms.event][parms.property] : (prop_desc[event_sum_type[parms.event]] && prop_desc[event_sum_type[parms.event]][parms.property]) ? prop_desc[event_sum_type[parms.event]][parms.property] : parms.property;
+	    propBtn.textContent = propLabel;
+	    propBtn.onclick = function () { open_curve_tab(propLabel, propUrl); };
+	    plotBtns.appendChild(propBtn);
+	}
 
 	plotCard.appendChild(plotBtns);
 	div.appendChild(plotCard);
@@ -1519,7 +1767,7 @@ function init_map(){
     if ( parms.node){ focus_node=parms.node; get_topology(); links_on=true; }
     $("#check").change( function(){
 	var report_type = $("#check").val(); var title = $("#check").find(":selected").text();
-	let num_tabs = $("main#tabs ul li").length ; let tab_id = 'tab' + num_tabs;
+	let num_tabs = $("main#tabs > ul > li").length ; let tab_id = 'tab' + num_tabs;
 	switch(report_type ){
 	case 'missing': add_tab( 'div', title, num_tabs, check_asymmetry(report_type, tab_id) ); break;
 	case 'asymmetry': add_tab( 'div', title, num_tabs, check_asymmetry(report_type, tab_id) ); break;
@@ -1529,6 +1777,9 @@ function init_map(){
 	    add_tab( 'div', title, num_tabs, 'This will be graph soon'); heatmap(tab_id, summary, $("#prop_select").val(), get_color, threshes, title_state(), template_url ); break;
 	case 'curve': add_tab( 'div', title, num_tabs, 'This will be graph soon'); curve(tab_id, last_hits, $("#prop_select").val(), title_state() ); break;
 	}
+	if (report_type !== 'choose') {
+	    persistTab(tab_id, { kind: 'check', report_type: report_type, title: title });
+	}
 	$("#check").val('choose'); $("#tabs").tabs("option", "active", num_tabs);
     });
     document.getElementById("mapid").addEventListener("contextmenu", function (event) {
@@ -1537,6 +1788,19 @@ function init_map(){
     $( "#missing" ).dialog({ autoOpen: false, minWidth: 800 });
     $("#mapid").on('click', "a.trigger", function(e){ var node=e.target.id; focus_links( node, 'flip' ) });
     $("#network").trigger("change");
+
+    // Whenever the user switches tabs, remember the active one so we can
+    // restore it after a page reload. (Skipped while restoring, since we'd
+    // otherwise overwrite the saved value with the temporarily-active
+    // last-restored tab.)
+    $('main#tabs').on('tabsactivate', function () {
+        if (!restoringTabs) saveActiveTab();
+    });
+
+    // After the initial network/topology load settles, replay any persisted
+    // tabs from the previous session. 1.5s is enough for the AJAX chain
+    // triggered by the network change above (config + topology + summary).
+    setTimeout(restoreSavedTabs, 1500);
 }
 
 $(document).ready ( function(){ get_parms( ); get_config( parms.conffile, init_map ); });

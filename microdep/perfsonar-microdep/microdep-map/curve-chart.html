@@ -1,68 +1,119 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <link rel="shortcut icon" href="img/favicon.ico"/>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="shortcut icon" href="img/favicon.ico"/>
+  <link rel="author" href="mailto:microdep@sikt.no">
+  <title>Micro Dep — Curves</title>
 
-    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-    <link rel="author" href="mailto:microdep@sikt.no">
+  <!-- jQuery + jQuery UI -->
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://code.jquery.com/ui/1.13.2/jquery-ui.min.js"></script>
+  <link rel="stylesheet" href="https://code.jquery.com/ui/1.13.2/themes/base/jquery-ui.css">
 
-    <title>Micro dependability curves</title>
+  <!-- Chart.js + plugins -->
+  <script src="js/hammer.min.js"></script>
+  <script src="js/chart.umd.js"></script>
+  <script src="js/chartjs-plugin-zoom.js"></script>
+  <script src="js/moment.js"></script>
+  <script src="js/chartjs-adapter-moment.js"></script>
 
-    <script type="text/javascript" src="js/jquery.min.js"></script> 
-    <link rel="stylesheet" href="css/jquery-ui.css">
-    <script src="js/jquery-ui.js"></script>
-    <link rel="stylesheet" type="text/css" href="css/datatables.min.css"/>
-    <script type="text/javascript" language="javascript" src="js/datatables.min.js"></script>
-    
-    <script src="js/hammer.min.js"></script>	
-    <script src="js/chart.umd.js"></script>
-    
-    <script src="js/chartjs-plugin-zoom.js"></script>
+  <!-- Utilities -->
+  <script src="js/stats.js"></script>
+  <script src="js/sorttable.js"></script>
 
-    <script src="js/moment.js"></script>
-    <script src="js/chartjs-adapter-moment.js"></script>
+  <!-- Modernised curve-chart styles -->
+  <link rel="stylesheet" href="css/curve-chart.css">
 
-    <script src="js/stats.js"></script>
-    <script src="js/sorttable.js"></script>
+  <script>
+    // Apply the same theme the user has chosen on the main microdep page.
+    // Both pages run on the same origin, so they share localStorage.
+    (function() {
+      try {
+        var saved = localStorage.getItem('microdep-theme') || 'auto';
+        document.documentElement.setAttribute('data-theme', saved);
+      } catch (_) { /* private browsing etc. */ }
+      // Re-apply when the parent storage changes.
+      window.addEventListener('storage', function (e) {
+        if (e.key === 'microdep-theme' && e.newValue) {
+          document.documentElement.setAttribute('data-theme', e.newValue);
+        }
+      });
+    })();
+  </script>
+</head>
 
-    <link rel="stylesheet" href="css/curve-chart.css">
+<body>
 
-  </head>
+  <!-- ============== HEADER ============== -->
+  <header class="cc-header">
+    <div class="cc-header-left">
+      <h2 id="tittel" class="cc-title">Curves</h2>
+      <span id="range" class="cc-range"></span>
+    </div>
+    <img id="busy" class="cc-busy" src="img/ajax-loader.gif" alt="Loading…">
+  </header>
 
-  <body style="height:50%; width:90%; margin:auto">
-
-    <img id=busy src="img/ajax-loader.gif">
-
-    <h2 id=tittel></h2>
-    <main id=tabs>
-      <ul>
-	<li>
-	  <select class=knapp id=check title='Choose parameter for curve'>
-	    <option value=choose>Choose+</option>
-	    <!-- <option value=curve title='Table of alle variables'>Line curve</option> -->
-	  </select>
-	</li>
-      </ul>
-    <select class=knapp id=period title='Measurement period'>
-    </select>
-    <input class=knapp type="text" id="datepicker" size=12em title='Measurement start'>
-    <button class=knapp id=prev title='Previous period'>Prev</button>
-    <button class=knapp id=next title='Next period'>Next</button>
-    <button class=knapp id=reset_zoom title='Reset Zoom'>Unzoom</button>
-    <span id=range class=knapp></span>
-    </main>
-    
-    <div id=legend></div>
-    <div>
-      <b>Last status:</b><span  id=status>none</span>
-      <b>Last error:</b><span  id=error>none</span>
+  <!-- ============== CONTROL BAR ============== -->
+  <div class="cc-toolbar">
+    <div class="cc-toolbar-group">
+      <label class="cc-label" for="check">Add curve</label>
+      <select class="knapp cc-select" id="check" title="Choose parameter for curve">
+        <option value="choose">+</option>
+      </select>
     </div>
 
-    <div id=missing></div>
+    <div class="cc-toolbar-group">
+      <label class="cc-label" for="period">Period</label>
+      <select class="knapp cc-select" id="period" title="Measurement period"></select>
+    </div>
 
+    <div class="cc-toolbar-group">
+      <label class="cc-label" for="datepicker">Date</label>
+      <input class="knapp cc-input" type="text" id="datepicker" size="12em" title="Measurement start">
+    </div>
 
-    <script type=module src="js/curve-chart.js"> </script>
+    <div class="cc-toolbar-group cc-nav-group">
+      <button class="knapp cc-nav-btn" id="prev" title="Previous period" type="button">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg>
+        Prev
+      </button>
+      <button class="knapp cc-nav-btn" id="next" title="Next period" type="button">
+        Next
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
+      </button>
+    </div>
 
+    <div class="cc-toolbar-group cc-toolbar-spacer">
+      <button class="knapp cc-nav-btn" id="reset_zoom" title="Reset Zoom" type="button">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 21l-6-6M11 19a8 8 0 1 1 0-16 8 8 0 0 1 0 16zM8 11h6M11 8v6"/></svg>
+        Unzoom
+      </button>
+    </div>
+  </div>
 
-  </body>
+  <!-- ============== TABS / CHART AREA ============== -->
+  <main id="tabs" class="cc-tabs ui-tabs ui-widget ui-widget-content ui-corner-all">
+    <ul class="cc-tabs-nav ui-tabs-nav ui-helper-reset ui-helper-clearfix ui-widget-header ui-corner-all"></ul>
+  </main>
+
+  <!-- ============== LEGEND / STATUS ============== -->
+  <div id="legend" class="cc-legend"></div>
+
+  <div class="cc-status-bar">
+    <div class="cc-status-item">
+      <span class="cc-status-label">Status:</span>
+      <span id="status">none</span>
+    </div>
+    <div class="cc-status-item">
+      <span class="cc-status-label">Error:</span>
+      <span id="error">none</span>
+    </div>
+  </div>
+
+  <div id="missing" class="cc-missing"></div>
+
+  <script type="module" src="js/curve-chart.js"></script>
+</body>
 </html>

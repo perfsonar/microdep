@@ -83,21 +83,39 @@ function make_curve(tab_id, property, start, end){
     $.getJSON( url,
 	       function(resp){
 
+		   var label = (prop_desc[parms.event] && prop_desc[parms.event][property]) || property;
+
 		   if (resp.hits && resp.hits.total.value > 0){
 		       var nrecs=resp.hits.total.value.toString();
-		       add_tab( "canvas", prop_desc[parms.event][property], $("main#tabs ul li").length , '');
-
-		       chart_curve( tab_id, resp.hits.hits, property, title, xunit);			     
+		       add_tab( "canvas", label, $("main#tabs ul li").length , '');
+		       chart_curve( tab_id, resp.hits.hits, property, title, xunit);
 		   } else {
+		       // Empty result — still open a placeholder tab so the user
+		       // sees the action took effect and gets a clear "no data"
+		       // explanation, instead of just a tiny error in the status bar.
+		       const empty_html =
+			   '<div class="cc-empty-graph">' +
+			     '<h3>No ' + parms.event + ' data</h3>' +
+			     '<p>No measurements were found for this peer pair in the selected time range.</p>' +
+			     '<p class="cc-empty-period"><strong>From:</strong> ' + parms.start + '<br>' +
+			       '<strong>To:</strong> ' + parms.end + '</p>' +
+			   '</div>';
+		       add_tab('div', label, $("main#tabs ul li").length, empty_html);
 		       $("#error").html(hhmmss(new Date()) + " : No " + parms.event
 					+ " data for " + parms.start + " "
 					+ parms.end + ";;");
 		   }
+
+		   // Activate the just-added tab in either branch (the modernized
+		   // curve-chart.html no longer has the placeholder #check li
+		   // inside main#tabs that the original add_tab indexing assumed).
+		   const _count = $("main#tabs > ul > li > a").length;
+		   if (_count > 0) $("#tabs").tabs("option", "active", _count - 1);
 	       })
 	.fail( function(e, textStatus, error ) {
 	    console.log("failed to get data from server :" + textStatus + ", " + error);
+	    $("#error").html(hhmmss(new Date()) + " : Request failed: " + textStatus + ", " + error + ";;");
 	});
-    $("#tabs").tabs("option", "active", 0);
 
 };
 

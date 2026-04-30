@@ -174,7 +174,7 @@ export function max( max, val){
 export function round_number(num){
     var digits=Math.floor(Math.log10(num));
     var round=Math.round( num / 10**digits) * 10**digits;
-    return parseFloat(round.toPrecision(4));
+    return round;
 }
 
 export function zero_fill(n){
@@ -199,7 +199,11 @@ export function add_tab(type, title, num_tabs, html){
 
     let divid='tab' + num_tabs;
 
-    let new_tab=$("main#tabs ul").append(
+    // IMPORTANT: use a direct-child selector (`> ul`) so we only target the
+    // top-level tab-nav. Without it, jQuery would append the new <li> to
+    // every nested <ul> inside main#tabs (the LS-tab nav, the tracetree-tab
+    // nav etc.), producing phantom duplicates of the new tab.
+    let new_tab=$("main#tabs > ul").append(
         "<li><a href='#" + divid + "' title='" + title + "'>#" + num_tabs + ' ' + title + "</a>"
 	    + '<span class="ui-icon ui-icon-close" role="presentation">Remove Tab</span>'
 	    +"</li>"
@@ -221,7 +225,11 @@ export function add_tab(type, title, num_tabs, html){
     new_tab.delegate( "span.ui-icon-close", "click", function() {
 	var panelId = $( this ).closest( "li" ).remove().attr( "aria-controls" );
 	$( "#" + panelId ).remove();
-	tabs.tabs( "refresh" );
+	$( "main#tabs" ).tabs( "refresh" );
+	// Notify any listeners (used by tab persistence) that this tab closed.
+	document.dispatchEvent(new CustomEvent('microdep-tab-closed', {
+	    detail: { divid: panelId }
+	}));
     });
 
 
