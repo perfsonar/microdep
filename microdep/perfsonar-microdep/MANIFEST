@@ -11,11 +11,9 @@ microdep-map/js/curve-chart.js
 bin/microdep_commands/elastic-get-date-type.pl
 bin/microdep_commands/yaml-to-json.cgi
 bin/microdep_commands/get-mapconfig.cgi
-bin/microdep_commands/microdep-config.cgi
 etc/mapconfig.yml
 etc/mapconfig.d/microdep_ipv4.yml
 etc/mapconfig.d/microdep_ipv6.yml
-etc/microdep-config.yml
 etc/microdep_ipv4-base-geo.json.example
 microdep-map/css/microdep-map.css
 microdep-map/css/curve-chart.css

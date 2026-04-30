@@ -8,7 +8,7 @@ microdep_ipv6:
   # Measuremet network/variant parameters
   title: "Net-6"
   descr: "Measurement network applying ipv6 test traffic"
-  database_secret: "virre-virre-vapp"
+  #archive: "https://localhost/opensearch"  # Url to relevant Opensearch DB holding indices
   ip_version: "6"
   event_type:
     # Event types for variant

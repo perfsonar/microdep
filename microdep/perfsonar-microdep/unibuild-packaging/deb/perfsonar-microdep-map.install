@@ -1,13 +1,11 @@
 LICENSE usr/lib/perfsonar/microdep-map/
 microdep-map/* usr/lib/perfsonar/microdep-map/ 
 bin/microdep_commands/elastic-get-date-type.pl usr/lib/perfsonar/bin/microdep_commands/
-bin/microdep_commands/microdep-config.cgi usr/lib/perfsonar/bin/microdep_commands/
 bin/microdep_commands/yaml-to-json.cgi usr/lib/perfsonar/bin/microdep_commands/
 bin/microdep_commands/get-mapconfig.cgi usr/lib/perfsonar/bin/microdep_commands/
 bin/microdep_commands/microdep-psconfig-load.pl usr/lib/perfsonar/bin/microdep_commands/
 etc/mapconfig.yml etc/perfsonar/microdep/
 etc/mapconfig.d/* etc/perfsonar/microdep/mapconfig.d/
-etc/microdep-config.yml etc/perfsonar/microdep/
 etc/microdep.db etc/perfsonar/microdep/
 etc/apache-microdep-map.conf etc/apache2/conf-available/
 etc/grafana_dashboard_patch etc/perfsonar/

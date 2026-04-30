@@ -6,20 +6,26 @@
 # - Created by Olav Kvittem
 # - 2024-04-17 Otto J Wittner: Added credentials from config file
 # - 2026-02-27 Otto J Wittner: Added fetching of list of flows (for topology plotting)
+# - 2026-04-30 Otto J Wittner: Replaced source of config with mapconfig.yml and mapconfig.d/*
 
 use CGI;
 #use CGI qw/:standard -debug/;
 #use WWW::Curl::Easy
-#use JSON;
+use JSON::PP;
 use YAML;
 
-# Fetch config file
-$config = YAML::LoadFile("/etc/perfsonar/microdep/microdep-config.yml");
-
-my $esurl='http://localhost:9200';
-$esurl = $config->{opensearch_url} if $config->{opensearch_url};
-    
 my $q = CGI->new;
+
+# Fetch config file
+my $config = YAML::LoadFile("/etc/perfsonar/microdep/microdep-config.yml");
+# Fetch config from mapconfig.yml and mapconfig.d/*
+my $mapconfig_str = `/usr/lib/perfsonar/bin/microdep_commands/get-mapconfig.cgi  | tail +2`;
+my $mapconfig = decode_json($mapconfig_str);
+
+my $esurl='http://localhost:9200';   # Default archive source 
+$esurl = $config->{opensearch_url} if $config->{opensearch_url}; # General (legacy) config file
+$esurl = $mapconfig->{'config'}->{parm('net')}->{'archive'} if $mapconfig->{'config'}->{parm('net')}->{'archive'}; # Map config source
+
 my $yesterday= `date --date yesterday "+%Y-%m-%d"`;
 chomp($yesterday);
 my $start = parm('start') || $yesterday;

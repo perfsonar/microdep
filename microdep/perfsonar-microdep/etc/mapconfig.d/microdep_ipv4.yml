@@ -8,7 +8,7 @@ microdep_ipv4:
   # Measuremet network/variant parameters
   title: "Net-4"
   descr: "Measurement network applying ipv4 test traffic"
-  database_secret: "virre-virre-vapp"
+  #archive: "https://localhost/opensearch"  # Url to relevant Opensearch DB holding indices
   ip_version: "4"
   event_type:
     # Event types for variant

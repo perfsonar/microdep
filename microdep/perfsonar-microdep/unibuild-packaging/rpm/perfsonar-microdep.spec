@@ -442,11 +442,9 @@ systemctl reload httpd.service || true
 %{microdep_web_dir}/css
 %{microdep_web_dir}/*.yml
 %attr(0755,perfsonar,perfsonar) %{command_base}/elastic-get-date-type.pl
-%attr(0755,perfsonar,perfsonar) %{command_base}/microdep-config.cgi
 %attr(0755,perfsonar,perfsonar) %{command_base}/yaml-to-json.cgi
 %attr(0755,perfsonar,perfsonar) %{command_base}/get-mapconfig.cgi
 %config %{microdep_config_base}/microdep.db
-%config %{microdep_config_base}/microdep-config.yml
 %config %{microdep_config_base}/mapconfig.yml
 %config %{microdep_config_base}/mapconfig.d/
 %{microdep_config_base}/microdep_ipv4-base-geo.json.example
