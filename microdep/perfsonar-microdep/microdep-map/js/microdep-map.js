@@ -201,7 +201,8 @@ var aggregates=[]; // last aggregate data (jitter)
 var focus_node="";
 var middle_point=[],
     line_bearing=[],
-    line_utslag=[];
+    line_utslag=[],
+    line_offset=[];   // bearing_offset shared between A→B / B→A halves so tangents at cp1 align
 var n_excluded=0;
 
 var current_parm="down_ppm";
@@ -282,8 +283,11 @@ function addArrowsToLine(lineName, p0, p1, p2, color) {
 
         var dx = 2 * mt * (px1.x - px0.x) + 2 * t * (px2.x - px1.x);
         var dy = 2 * mt * (px1.y - px0.y) + 2 * t * (px2.y - px1.y);
-        var angle = Math.atan2(dx, -dy) * 180 / Math.PI;
-        if (angle < 0) angle += 360;
+        // Flip 180° so the arrow tip points from "to" → "from" along the curve
+        // direction, matching how the tooltip ("from X to Y") reads the link.
+        var angle = Math.atan2(dx, -dy) * 180 / Math.PI + 180;
+        if (angle >= 360) angle -= 360;
+        if (angle < 0)    angle += 360;
 
         var m = createArrowMarker([latlng.lat, latlng.lng], angle, color);
         m.addTo(mymap);
@@ -1380,9 +1384,21 @@ function draw_link( ends, color, tooltip, popup){
 	    console.log( "No bearing for ends " + ends + " : latlon1: "+latlon1,", latlon2: ",latlon2);
             return(0);
         }
-	let sign=1;
-	if (! duplines[line_name] ) { duplines[line_name]=0; } else { if (duplines[line_name] % 2 ){ sign=1; } }
-	let bearing_offset = sign * ( 5 * ( 1+ ++duplines[line_name]) + ( 5 * Math.random())*10 );
+	// Bearing offset controls how far the bezier control point cp2 sits off
+	// the direct line — randomised to spread out duplicate links visually.
+	// For the SECOND direction of an already-drawn pair we reuse the same
+	// offset so cp2_AB and cp2_BA are antiparallel through cp1; that makes
+	// the two half-curves share a tangent there and visually appear as one
+	// continuous link (no zig-zag at the meeting point on short links).
+	let bearing_offset;
+	if (line_offset[inverse_line] !== undefined) {
+	    bearing_offset = line_offset[inverse_line];
+	} else {
+	    let sign=1;
+	    if (! duplines[line_name] ) { duplines[line_name]=0; } else { if (duplines[line_name] % 2 ){ sign=1; } }
+	    bearing_offset = sign * ( 5 * ( 1+ ++duplines[line_name]) + ( 5 * Math.random())*10 );
+	}
+	line_offset[line_name] = bearing_offset;
 	if ( middle_point[inverse_line]){
 	    cp1 = middle_point[inverse_line]; utslag = line_utslag[inverse_line];
 	} else {
