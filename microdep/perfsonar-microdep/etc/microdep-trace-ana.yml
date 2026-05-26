@@ -49,5 +49,5 @@ samepath: True
 oneoutput: /etc/perfsonar/microdep/microdep-ana-archive.json
 pssrc: https://localhost/opensearch
 dbtype: postgresql
-geodb: /etc/perfsonar/microdep/GeoLite2/GeoLite2-ASN.mmdb
+geodb: /usr/share/perfsonar/microdep/GeoLite2/GeoLite2-ASN.mmdb
 topoevents: True

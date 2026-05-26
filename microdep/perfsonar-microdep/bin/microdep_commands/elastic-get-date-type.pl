@@ -44,7 +44,7 @@ if ( $q->param("debug")){
     $debug = parm("debug");
 }
 # my 
-my $index= parm('index') || "dragonlab";
+my $index= parm('index') || $config->{'config'}->{parm('net')}->{'event_type'}->{parm('event_type')}->{'index'} || "dragonlab";
 if ( $debug > 0 ){
     print $q->header('text/html');
 } else {

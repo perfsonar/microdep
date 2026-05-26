@@ -35,6 +35,14 @@ case "$1" in
 		mv $DASHBOARDFILE /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json
 	    fi
 	fi
+
+	# Prepare default local topology DBs
+	if [ ! -e /var/lib/perfsonar/microdep/dragonlab.db ]; then
+	    cp /etc/perfsonar/microdep/microdep-map_sqlite3_template.db /var/lib/perfsonar/microdep/dragonlab.db
+	fi
+	if [ ! -e /var/lib/perfsonar/microdep/dragonlab_6.db ]; then
+	    cp /etc/perfsonar/microdep/microdep-map_sqlite3_template.db /var/lib/perfsonar/microdep/dragonlab_6.db
+	fi
 	
 	# Enable apache config
         if [ -e /usr/share/apache2/apache2-maintscript-helper ]; then

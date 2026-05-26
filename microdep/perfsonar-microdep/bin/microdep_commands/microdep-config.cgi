@@ -21,42 +21,43 @@ my $debug=parm('debug');
 if ( $debug > 0 ){
     print $q->header('text/html');
 }
-my $r_ip= parm("ip");  $r_ip =  $q->remote_addr() if !$r_ip;
-my $local_ip =  parm("local_ip") || "unknown";
+#my $r_ip= parm("ip");  $r_ip =  $q->remote_addr() if !$r_ip;
+#my $local_ip =  parm("local_ip") || "unknown";
 #my $r_host= parm("node_name");  # no no: $r_host = $q->remote_host() if !$r_host;
 #my $variant=parm('variant');
-my $net=parm('net');
-my $file=parm('file');
+my $net=parm('net') || "dragonlab";
+#my $file=parm('file');
 
 #printf "remote_host: %s\n",  $q->remote_host();
 #printf " $r_ip $r_host $variant %s %s\n", $q->remote_addr(), $q->remote_host() if $debug;
 
-my $basedir="/var/lib/microdep";
-my $conf;      # Settings from config file
+#my $basedir="/var/lib/perfsonar/microdep";
+#my $conf;      # Settings from config file
 
 # Read config file (if exists)
 #my $conffile="/etc/perfsonar/microdep/microdep-config.yml";
 
 # Fetch config data (and remove html header)
-$config = decode_json(`/usr/lib/perfsonar/bin/microdep_commands/get-mapconfig.cgi | tail -n +2`);
+my $config = decode_json(`/usr/lib/perfsonar/bin/microdep_commands/get-mapconfig.cgi | tail -n +2`);
     
 my $esurl=  $config->{'config'}->{parm('net')}->{'archive'} || 'http://localhost:9200';
 #if (parm('conffile')) {
 #    $conffile=parm('conffile');
 #}
-if (-e $conffile) {
-    $conf = YAML::LoadFile($conffile);
-    $basedir = $conf->{basedir} if $conf->{basedir};
-}
+#if (-e $conffile) {
+#    $conf = YAML::LoadFile($conffile);
+#    $basedir = $conf->{basedir} if $conf->{basedir};
+#}
 
-my $config_dir="$basedir/$variant";
+#my $config_dir="$basedir/$variant";
 #my $mp_list="$config_dir/etc/mp-address.txt";
-my $database="$config_dir/etc/microdep.db";
+#my $database="$config_dir/etc/microdep.db";
+my $database= $config->{'config'}->{parm('net')}->{'database_path'} || "/var/lib/perfsonar/microdep/" . $net . ".db";
 
 # Override with settings from config-file (if any)
-$config_dir=$conf->{config_dir} if $conf && $conf->{config_dir};
+#$config_dir=$conf->{config_dir} if $conf && $conf->{config_dir};
 #$mp_list=$conf->{mp_list} if $conf && $conf->{mp_list};
-$database=$conf->{database} if $conf && $conf->{database};
+#$database=$conf->{database} if $conf && $conf->{database};
 
 #print "<p>$config_dir $mp_list\n" if $debug;
 
@@ -65,9 +66,9 @@ $database=$conf->{database} if $conf && $conf->{database};
 #}
 
 my $dbh;
-my @names=();
-my @ips=();
-my $found=0;
+#my @names=();
+#my @ips=();
+#my $found=0;
 my %result=();
 
 sub connect_db{
@@ -136,9 +137,11 @@ sub parm{
 }
 
 sub table_exist{
+    # Report if a table exists in current database
+    # NOTE: Function is not currently in use.
     my $table=shift;
     my @svar=do_select( 'SELECT count(*) FROM sqlite_master WHERE name="' . $table . '";' );
-    print "table exist : $table : " . @svar ."\n" if $debug;
+    print "Microdep-config: Table $table exists (" . @svar .")\n" if $debug;
     return $svar[0][0];
 }
 
@@ -164,7 +167,9 @@ sub do_select{
     return @svar;
 }
 
-sub update_record{  # mark old record and add new record with new address
+sub update_record{
+    # Mark old record and add new record with new address
+    # NOTE: Function is not currently in use.
     my $new_ip=shift;
     my $row=shift; # name
 
