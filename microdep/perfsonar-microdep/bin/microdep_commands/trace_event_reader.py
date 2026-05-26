@@ -1028,10 +1028,10 @@ def createJSON(alert):
                 if param['verbose'] > 0:
                     printf ("Warning: Failed to deliver event data via url '" + url + "'. Got return value '" + result_str + "'.") 
             # Success!    
-        except urllib.error.HTTPError(url, code, msg, hdrs, fp):
+        except urllib.error.HTTPError as e:
             # Something went wrong
             if param['verbose'] > 0:
-                printf ("Warning: Failed to deliver event data via url '" + url + "'. Got return code " + str(code) + ".") 
+                printf ("Warning: Failed to deliver event data via url '" + e.url + "'. Got return code " + str(e.code) + ".") 
 
 #Translates from encoding of end states
 
@@ -2742,8 +2742,13 @@ def opensearch_read(opensearch_api, mode, thread):
             # Prepare to ignore SSL cert errors
             ssl_context = ssl._create_unverified_context()
             # Run query
-            response = urllib.request.urlopen(query_req, context=ssl_context)
-            result_str = response.read()
+            result_str="{}"
+            try:
+                response = urllib.request.urlopen(query_req, context=ssl_context)
+                result_str = response.read()
+            except urllib.error.HTTPError as e:
+                if param['verbose'] > 0:
+                    print("Warning: Request for Opensearch url " + e.url + " failed, will retry (" + str(e) + ").")
             if param['verbose'] > 3:
                 print("Data from Opensearch API:")
                 print(result_str)
@@ -3026,6 +3031,8 @@ if __name__ == "__main__":
                 if pssrc_url.path[-10:] == "opensearch" or pssrc_url.path[-11:] == "opensearch/":
                     # Url seems valid
                     opensearch_read(param['pssrc'], mode, 0)
+                else:
+                   print("Error: Did not find expected path 'opensearch/' in url.")
             else:    
                 amqp_read(param['pssrc'], mode, 0) 
             sys.exit()
