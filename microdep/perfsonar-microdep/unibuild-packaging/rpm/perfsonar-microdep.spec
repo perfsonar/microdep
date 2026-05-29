@@ -458,6 +458,7 @@ systemctl reload httpd.service || true
 %{microdep_config_base}/dragonlab-base-geo.json.example
 %config %{microdep_runtime_base}/dragonlab.db
 %config %{microdep_runtime_base}/dragonlab_6.db
+%{microdep_config_base}/microdep-map_sqlite3_template.db
 %{microdep_config_base}/grafana_dashboard_patch
 /etc/httpd/conf.d/apache-microdep-map.conf
 %config %{microdep_web_dir}/dragonlab/dragonlab-base-geo.json
