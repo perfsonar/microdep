@@ -14,7 +14,6 @@ bin/microdep_commands/get-mapconfig.cgi
 bin/microdep_commands/microdep-config.cgi
 etc/mapconfig.yml
 etc/mapconfig.d/dragonlab.yml
-etc/microdep-config.yml
 microdep-map/dragonlab/dragonlab-base-geo.json
 etc/dragonlab-base-geo.json.example
 microdep-map/css/microdep-map.css
@@ -22,7 +21,7 @@ microdep-map/css/curve-chart.css
 etc/microdep-tests-packet-subcount.json.example
 etc/microdep-tests.json.example
 etc/apache-microdep-map.conf
-etc/microdep.db
+etc/microdep-map_sqlite3_template.db
 etc/roles_yml_patch
 etc/grafana_dashboard_patch
 etc/microdep_default_policy.json
@@ -55,4 +54,3 @@ etc/GeoLite2/COPYRIGHT.txt
 etc/GeoLite2/GeoLite2-ASN.mmdb
 etc/GeoLite2/GeoLite2-Country.mmdb
 etc/GeoLite2/LICENSE.txt
-

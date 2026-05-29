@@ -6,25 +6,26 @@
 # - Created by Olav Kvittem
 # - 2024-04-17 Otto J Wittner: Added credentials from config file
 # - 2026-02-27 Otto J Wittner: Added fetching of list of flows (for topology plotting)
+# - 2026-05-20 Otto J Wittner: Added mapconfig.yml as config source
 
 use CGI;
 #use CGI qw/:standard -debug/;
 #use WWW::Curl::Easy
-#use JSON;
+use JSON;
 use YAML;
 
-# Fetch config file
-$config = YAML::LoadFile("/etc/perfsonar/microdep/microdep-config.yml");
-
-my $esurl='http://localhost:9200';
-$esurl = $config->{opensearch_url} if $config->{opensearch_url};
-    
+# Prepare CGI agent
 my $q = CGI->new;
+
+# Fetch config data (and remove html header)
+$config = decode_json(`/usr/lib/perfsonar/bin/microdep_commands/get-mapconfig.cgi | tail -n +2`);
+    
+my $esurl=  $config->{'config'}->{parm('net')}->{'archive'} || 'http://localhost:9200';
+    
 my $yesterday= `date --date yesterday "+%Y-%m-%d"`;
 chomp($yesterday);
 my $start = parm('start') || $yesterday;
-my $ip_version = parm('ip_version');
-#my $type = parm('event_type') || "gapsum";
+my $ip_version = parm('ip_version') || $config->{'config'}->{parm('net')}->{'ip_version'};
 my $type = parm('event_type');          # No event_type results in list of unique flows for time period
 my $end = parm('end') || $start;
 my $from = parm('from');
@@ -43,7 +44,7 @@ if ( $q->param("debug")){
     $debug = parm("debug");
 }
 # my 
-my $index= parm('index') || "dragonlab";
+my $index= parm('index') || $config->{'config'}->{parm('net')}->{'event_type'}->{parm('event_type')}->{'index'} || "dragonlab";
 if ( $debug > 0 ){
     print $q->header('text/html');
 } else {

@@ -903,7 +903,8 @@ function get_topology(source = "archive"){
 	
     case "sqlite-db":
 	// Ask for topology-info from (legacy) sqllite db 
-	var url="microdep-config.cgi?secret=\"" + conffile[parms.net].database_secret + "\"&variant=mp-" + network + "&start=" + start + "&end=" + end;
+//	var url="microdep-config.cgi?secret=\"" + conffile[parms.net].database_secret + "\"&variant=mp-" + network + "&start=" + start + "&end=" + end;
+	var url="microdep-config.cgi?net=" + network + "&start=" + start + "&end=" + end;
 	$.getJSON( url,
 		   function(topology){
 		       if (topology.length == 0) {
@@ -938,7 +939,7 @@ function get_topology(source = "archive"){
 	    query_index = conffile[parms.net].event_type[parms.event].topology_index ;
 	}	    
 
-	var url="elastic-get-date-type.pl?index=" + query_index + "&start=" + start_iso + "&end=" + end_iso;
+	var url="elastic-get-date-type.pl?net=" + parms.net + "&index=" + query_index + "&start=" + start_iso + "&end=" + end_iso;
 	if (net_ip_version[parms.net]) {
 	    // Add filtering on ip version
 	    url += "&ip_version=" + net_ip_version[parms.net];
@@ -1279,7 +1280,7 @@ function load_coords(network, service, goal){
 	    query_index = conffile[parms.net].event_type[parms.event].topology_index;
 	}
 
-	var url="elastic-get-date-type.pl?index=" + query_index + "&start=" + start_iso + "&end=" + end_iso + "&event_type=topology";
+	var url="elastic-get-date-type.pl?net=" + parms.net + "&index=" + query_index + "&start=" + start_iso + "&end=" + end_iso + "&event_type=topology";
 	if (net_ip_version[parms.net]) {
 	    // Add filtering on ip version
 	    url += "&ip_version=" + net_ip_version[parms.net];
@@ -1347,7 +1348,8 @@ function load_coords(network, service, goal){
 	start = new Date($("#datepicker").val() + " 00:00:00").getTime()/1000;
 	end= new Date($("#datepicker").val() + " 23:59:59").getTime()/1000;
 	var network=parms.net;
-	var url="microdep-config.cgi?mode=nodes&secret=virre-virre-vapp&variant=mp-" + network + "&start=" + start + "&end=" + end;
+//	var url="microdep-config.cgi?mode=nodes&secret=virre-virre-vapp&variant=mp-" + network + "&start=" + start + "&end=" + end;
+	var url="microdep-config.cgi?mode=nodes&net=" + network + "&start=" + start + "&end=" + end;
 	$.getJSON( url,
 		   function(nodes){
 		       for ( var n=0; n < nodes.length; n++) {
@@ -1762,7 +1764,7 @@ function get_peer_data(from, to, div){
     let tz_start = adjust_to_timezone(start);
     let tz_end = adjust_to_timezone(end);
 
-    var url="elastic-get-date-type.pl?index=" + event_index[parms.event] + "&event_type=" + parms.event
+    var url="elastic-get-date-type.pl?net=" + parms.net + "&index=" + event_index[parms.event] + "&event_type=" + parms.event
 	+ "&start=" + tz_start + "&end=" + tz_end
 	+ "&from=" + from + "&to=" + to;
     if (net_ip_version[parms.net]) {
@@ -1879,7 +1881,7 @@ function get_connections(){
 //    if ( etype === 'jitter' || start.substr(0,10) === now.toISOString().substr(0,10) ){ // read todays details
     if ( ! sum_etype || typeof sum_etype == 'undefined' || start.substr(0,10) === now.toISOString().substr(0,10) || period < 24){
 	// No summary events are available and/or it's todays date and/or time scale on hourly basis is set. Fetch and summarize "normal" event details.
-	var url="elastic-get-date-type.pl?index=" + index + "&event_type=" + etype + "&start=" + start + "&end=" + end ;
+	var url="elastic-get-date-type.pl?net=" + parms.net + "&index=" + index + "&event_type=" + etype + "&start=" + start + "&end=" + end ;
 	if (net_ip_version[parms.net]) {
 	    // Add filtering on ip version
 	    url += "&ip_version=" + net_ip_version[parms.net];
@@ -1952,7 +1954,7 @@ function get_connections(){
 	// END: LEGACY CODE
 	
 	// Prepare to fetch summary info
-	var sum_url="elastic-get-date-type.pl?index=" + index + "&event_type=" + sum_etype + "&start=" + start + "&end=" + end;
+	var sum_url="elastic-get-date-type.pl?net=" + parms.net + "&index=" + index + "&event_type=" + sum_etype + "&start=" + start + "&end=" + end;
 	if (net_ip_version[parms.net]) {
 	    // Add filtering on ip version
 	    sum_url += "&ip_version=" + net_ip_version[parms.net];
@@ -2155,7 +2157,7 @@ function title_state(){
 	  parms.net= $("#network").val();
 	  update_props();
 	  remove_links(links);
-	  load_name_to_address();
+	  //load_name_to_address();
 	  show_network(parms.net); // ... calls get_topology()
 	  // await new Promise(r => setTimeout(r, 5000)); // Sleep 5 sec for loading of node-data to complete. WARNING! THIS DESPERATELY NEEDS REDESIGN.
 	  //get_topology();

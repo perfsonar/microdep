@@ -4,5 +4,5 @@
 /usr/lib/perfsonar/bin/microdep_commands/
 /etc/perfsonar/microdep/
 /etc/perfsonar/microdep/mapconfig.d/
-
+/var/lib/perfsonar/microdep/
 
