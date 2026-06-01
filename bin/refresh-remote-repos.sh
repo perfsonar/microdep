@@ -113,7 +113,7 @@ if [ "$DISTRO" = "rpm" ]; then
     
     echo "Enabling remote repo ..."
     $RSH $HOST sudo yum-config-manager --add-repo file:///var/lib/unibuild-repo
-    $RSH $HOST sudo bash -c "echo gpgcheck=0 >> /etc/yum.repos.d/var_lib_unibuild-repo.repo"
+    $RSH $HOST sudo bash -c "'echo gpgcheck=0 >> /etc/yum.repos.d/var_lib_unibuild-repo.repo'"
     
     echo "Refreshing repo list ..."
     $RSH $HOST sudo dnf clean all
