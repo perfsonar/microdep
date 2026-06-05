@@ -924,7 +924,7 @@ function get_topology(source = "archive"){
 		       }
 		   }).fail( function( jqxhr, textStatus, error ) {
 		       var err = textStatus + ", " + error;
-		       console.log( "Request" + url + " Failed: " + err );
+		       console.log( "Request "  + url + " Failed: " + err );
 		   });
 	break;
 	
@@ -947,24 +947,34 @@ function get_topology(source = "archive"){
     
 	$.getJSON( url,
 		   function(result){
-		     var topology = [];
-		     if (! result.aggregations.peer.buckets.length) {
-			 console.log("No topology data returned from archive for time period " + start + " to " + end + ". Trying sqlite db ...");
-			 // No topology data returned. Try sqlite-db instead.
-			 get_topology("sqlite-db");
-		     } else {
-			 for (var p=0; p < result.aggregations.peer.buckets.length; p++) {
-			     topology.push(result.aggregations.peer.buckets[p].key.split("_"));
-			 }
-			 draw_topology( topology );
-			 get_connections();
-			 // draw_topology( duplex_topology( topology) );
-		     }
+		       if (jQuery.isEmptyObject(result.aggregations)) {
+			   // Something went wrong. Log failure.
+			   console.log("Warning: Failed to fetch data from archive. Check archive url inn mapconfig.yml.");
+			   if (!jQuery.isEmptyObject(result.error)) {
+			       console.log("        (\"" + result.error.msg  + "\")");
+			   }
+			   // No topology data returned. Try sqlite-db instead.
+			   get_topology("sqlite-db");
+			   return;
+		       }
+		       var topology = [];
+		       if (! result.aggregations.peer.buckets.length) {
+			   console.log("No topology data returned from archive for time period " + start + " to " + end + ". Trying sqlite db ...");
+			   // No topology data returned. Try sqlite-db instead.
+			   get_topology("sqlite-db");
+		       } else {
+			   for (var p=0; p < result.aggregations.peer.buckets.length; p++) {
+			       topology.push(result.aggregations.peer.buckets[p].key.split("_"));
+			   }
+			   draw_topology( topology );
+			   get_connections();
+			   // draw_topology( duplex_topology( topology) );
+		       }
 		   }).fail( function(e, textStatus, error ) {
 		       //remove_links(links);
 		       console.log("failed to get data from server :" + textStatus + ", " + error);
 		   });
-
+	
 	break;
     }
 }
@@ -1287,42 +1297,49 @@ function load_coords(network, service, goal){
 	}
     
 	$.getJSON( url,
-
-	function(result){
-		       for (var r = 0; r < result.responses.length; r++) {
-			   if (typeof result.responses[r].aggregations != "undefined" ) {
-			       // Aggregated results are available
-			       for (var n=0; n < result.responses[r].aggregations.nodes.buckets.length; n++) {
-				   // Add node info to points structure
-				   var p={ id: "", name: "Unknown", lat: 0, lon: 0, ip: "n/a"};
-				   p.id = result.responses[r].aggregations.nodes.buckets[n].key;
-				   if (typeof result.responses[r].aggregations.nodes.buckets[n].city.buckets[0] != "undefined" ) {
-				       p.name = result.responses[r].aggregations.nodes.buckets[n].city.buckets.at(-1).key;  // Grab last city in list
-				   } else {
-				       p.name = p.id;
-				   }			       
-				   if (typeof result.responses[r].aggregations.nodes.buckets[n].lat.buckets[0] != "undefined")
-				       p.lat = result.responses[r].aggregations.nodes.buckets[n].lat.buckets.at(-1).key ?? 0 ; // Get last value seen
-				   if (typeof result.responses[r].aggregations.nodes.buckets[n].lon.buckets[0] != "undefined") 
-				       p.lon = result.responses[r].aggregations.nodes.buckets[n].lon.buckets.at(-1).key ?? 0 ; // Get last value seen
-				   if (typeof result.responses[r].aggregations.nodes.buckets[n].ip.buckets[0] != "undefined") { 
-				       reg_ip_adr(p.id, result.responses[r].aggregations.nodes.buckets[n].ip.buckets.at(-1).key );  // Register last ip in list
-				       p.ip = result.responses[r].aggregations.nodes.buckets[n].ip.buckets.at(-1).key;
-				   }
-				   let point_already_loaded = points.find(o => o.id === p.id);
-				   if (! point_already_loaded) {
-				       points.push( p);
-				   } else {
-				       console.log( "Duplicate node info for node " + p.id );
-				   }
-			       }
-			   } else if (typeof result.responses[r].error.reason != "undefined" ) {
-			       // Something is "suboptimal"
-			       console.log("Failed to access data from Opensearch: " + result.responses[r].error.reason + ".");
+		   function(result){
+		       if (jQuery.isEmptyObject(result.responses)) {
+			   // Something went wrong. Log failure.
+			   console.log("Warning: Failed to fetch data from archive. Check archive url inn mapconfig.yml.");
+			   if (!jQuery.isEmptyObject(result.error)) {
+			       console.log("        (\"" + result.error.msg  + "\")");
 			   }
-		       }
-		       if ( ! result.responses.length ) {
-			   console.log("No node data returned from archive for time period " + start_iso + " to " + end_iso + ".");
+		       } else {
+			   for (var r = 0; r < result.responses.length; r++) {
+			       if (typeof result.responses[r].aggregations != "undefined" ) {
+				   // Aggregated results are available
+				   for (var n=0; n < result.responses[r].aggregations.nodes.buckets.length; n++) {
+				       // Add node info to points structure
+				       var p={ id: "", name: "Unknown", lat: 0, lon: 0, ip: "n/a"};
+				       p.id = result.responses[r].aggregations.nodes.buckets[n].key;
+				       if (typeof result.responses[r].aggregations.nodes.buckets[n].city.buckets[0] != "undefined" ) {
+					   p.name = result.responses[r].aggregations.nodes.buckets[n].city.buckets.at(-1).key;  // Grab last city in list
+				       } else {
+					   p.name = p.id;
+				       }			       
+				       if (typeof result.responses[r].aggregations.nodes.buckets[n].lat.buckets[0] != "undefined")
+					   p.lat = result.responses[r].aggregations.nodes.buckets[n].lat.buckets.at(-1).key ?? 0 ; // Get last value seen
+				       if (typeof result.responses[r].aggregations.nodes.buckets[n].lon.buckets[0] != "undefined") 
+					   p.lon = result.responses[r].aggregations.nodes.buckets[n].lon.buckets.at(-1).key ?? 0 ; // Get last value seen
+				       if (typeof result.responses[r].aggregations.nodes.buckets[n].ip.buckets[0] != "undefined") { 
+					   reg_ip_adr(p.id, result.responses[r].aggregations.nodes.buckets[n].ip.buckets.at(-1).key );  // Register last ip in list
+					   p.ip = result.responses[r].aggregations.nodes.buckets[n].ip.buckets.at(-1).key;
+				       }
+				       let point_already_loaded = points.find(o => o.id === p.id);
+				       if (! point_already_loaded) {
+					   points.push( p);
+				       //} else {
+					//   console.log( "Duplicate node info for node " + p.id );
+				       }
+				   }
+			       } else if (typeof result.responses[r].error.reason != "undefined" ) {
+				   // Something is "suboptimal"
+				   console.log("Failed to access data from Opensearch: " + result.responses[r].error.reason + ". Check if Microdep analytics is operational.");
+			       }
+			   }
+			   if ( ! result.responses.length ) {
+			       console.log("No node data returned from archive for time period " + start_iso + " to " + end_iso + ".");
+			   }
 		       }
 		       loads++;
 		       if (loads >= goal) {
@@ -1336,7 +1353,7 @@ function load_coords(network, service, goal){
 
 	}).fail( function(e, textStatus, error ) {
 	    var err = textStatus + ", " + error;
-	    console.log( "Request" + url + " Failed: " + err );
+	    console.log( "Request " + url + " Failed: " + err );
 	    loads++;
 	    });
 
@@ -1377,7 +1394,7 @@ function load_coords(network, service, goal){
 		       }  
 		   }).fail( function( jqxhr, textStatus, error ) {
 		       var err = textStatus + ", " + error;
-		       console.log( "Request" + url + " Failed: " + err );
+		       console.log( "Request " + url + " Failed: " + err );
 		       loads++;
 		   });
 	return;
@@ -1424,7 +1441,7 @@ function load_coords(network, service, goal){
 
 	}).fail( function( jqxhr, textStatus, error ) {
 	    var err = textStatus + ", " + error;
-	    console.log( "Request" + url + " Failed: " + err );
+	    console.log( "Request " + url + " Failed: " + err );
 	    loads++;
 	});
 
@@ -1734,7 +1751,7 @@ function load_name_to_address(){
 	    name_loaded[network]=true;
 	}).fail( function( jqxhr, textStatus, error ) {
 	    var err = textStatus + ", " + error;
-	    console.log( "Request" + url + " Failed: " + err );
+	    console.log( "Request " + url + " Failed: " + err );
 	});
     }
 
@@ -1774,6 +1791,17 @@ function get_peer_data(from, to, div){
     
     $.getJSON( url,
                function(resp){
+		   if (jQuery.isEmptyObject(resp.hits)) {
+		       // Something went wrong. Log failure.
+		       console.log("Warning: Failed to fetch data from archive. Check archive url inn mapconfig.yml.");
+		       if (!jQuery.isEmptyObject(resp.error)) {
+			   console.log("        (\"" + resp.error.msg  + "\")");
+		       }
+		       // No topology data returned. Try sqlite-db instead.
+		       get_topology("sqlite-db");
+		       return;
+		   }
+
                    if (resp.hits && resp.hits.total.value > 0){
                        // present_table( parameters, div, resp.hits.hits);
                        let html=gap_list( from, to, resp.hits.hits, 10, 'num_desc');
@@ -1893,7 +1921,13 @@ function get_connections(){
 
 	$.getJSON( url,
 		   function(resp){
-		       if (resp.hits && resp.hits.total.value > 0){
+		       if (jQuery.isEmptyObject(resp.hits)) {
+			   // Something went wrong. Log failure.
+			   console.log("Warning: Failed to fetch data from archive. Check archive url inn mapconfig.yml.");
+			   if (!jQuery.isEmptyObject(resp.error)) {
+			       console.log("        (\"" + resp.error.msg  + "\")");
+			   }
+		       } else if (resp.hits && resp.hits.total.value > 0){
 			   var nrecs=resp.hits.total.value.toString();
 			   
 			   if ( etype === "gapsum" || etype === "routesum" ){
@@ -1929,12 +1963,12 @@ function get_connections(){
 			       taint_links(summary, $("#prop_select").val() );
 			   else
 			       draw_links(summary, $("#prop_select").val() );
-		       } else {
-			   taint_links([], "empty");
-			   $("#error").html(hhmmss(new Date()) + " : No " + $("#event_type").val() + " data for " + $("#datepicker").val() + " " + $("#period_input").val() + ";;");
+			   // Success!
+			   return;
 		       }
-
-
+		       // Data access problems. Log error.
+		       taint_links([], "empty");
+		       $("#error").html(hhmmss(new Date()) + " : No " + $("#event_type").val() + " data for " + $("#datepicker").val() + " " + $("#period_input").val() + ";;");
 		   })
 	    .fail( function(e, textStatus, error ) {
 		//remove_links(links);
@@ -1964,6 +1998,17 @@ function get_connections(){
 
 	$.getJSON( sum_url,
 		   function(resp){
+		       if (jQuery.isEmptyObject(resp.hits)) {
+			   // Something went wrong. Log failure.
+			   console.log("Warning: Failed to fetch data from archive. Check archive url inn mapconfig.yml.");
+			   if (!jQuery.isEmptyObject(resp.error)) {
+			       console.log("        (\"" + resp.error.msg  + "\")");
+			   }
+			   // No topology data returned. Try sqlite-db instead.
+			   get_topology("sqlite-db");
+			   return;
+		       }
+		       
 		       if (resp.hits && resp.hits.total.value > 0){
 			   var nrecs=resp.hits.total.value.toString();
 			   summary=resp.hits.hits;
