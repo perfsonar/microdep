@@ -48,10 +48,16 @@ case "$1" in
         if [ -e /usr/share/apache2/apache2-maintscript-helper ]; then
             . /usr/share/apache2/apache2-maintscript-helper
 
+            apache2_invoke enmod rewrite
+            apache2_invoke enmod headers
+            apache2_invoke enmod cgi
             apache2_invoke enconf apache-microdep-map
         else
+	    a2enmod rewrite
+	    a2enmod headers
+	    a2enmod cgi
 	    a2enconf apache-microdep-map
-	    systemctl reload apache2.service || true
+	    systemctl restart apache2.service || true
 	fi
 	;;
 
