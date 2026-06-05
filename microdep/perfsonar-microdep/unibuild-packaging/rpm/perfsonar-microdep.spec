@@ -113,6 +113,7 @@ Requires:		perl >= 5.32
 Requires:               perl(CGI) 
 Requires:		perl(Data::Dumper)
 Requires:               perl(DBI) 
+Requires:               perl(DBD::SQLite)
 Requires:		perl(Getopt::Long)
 Requires:		perl(JSON)
 Requires:		perl(LWP::Simple)

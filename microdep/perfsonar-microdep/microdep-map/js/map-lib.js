@@ -294,7 +294,7 @@ export function get_period( start, end){
 
 // in a module update the global readonly parms
 export function get_parms() {
-    console.log('location: ' + location);
+    //console.log('location: ' + location);
     // var new_parms= {};
     var    tmp = [];
     location.search

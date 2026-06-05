@@ -86,12 +86,18 @@ if [  "$YESNO" != "y" -a  "$YESNO" != "Y" ]; then exit 0; fi
 # Check if sudo is avaiable on remote host
 echo "Checking remote sudo status..."
 if ! ssh $HOST which sudo > /dev/null; then
-    echo "Error: sudo not avaiable for $HOST"
+    echo "Error: sudo not available for $HOST"
     exit 1
 fi
 # Check if sudo requires password
 if ! ssh $HOST sudo true 2> /dev/null; then
     echo "Error: Passwordless sudo required on remote host, e.i. 'your_username ALL=(ALL) NOPASSWD: ALL' in /etc/sudoers.d/refresh-repo"
+    exit 1
+fi
+# Check if rsync is avaiable on remote host
+echo "Checking for rsync on remote host..."
+if ! ssh $HOST which rsync > /dev/null; then
+    echo "Error: rsync not available on $HOST"
     exit 1
 fi
 
@@ -113,7 +119,7 @@ if [ "$DISTRO" = "rpm" ]; then
     
     echo "Enabling remote repo ..."
     $RSH $HOST sudo yum-config-manager --add-repo file:///var/lib/unibuild-repo
-    $RSH $HOST sudo bash -c "echo gpgcheck=0 >> /etc/yum.repos.d/var_lib_unibuild-repo.repo"
+    $RSH $HOST sudo bash -c "'echo gpgcheck=0 >> /etc/yum.repos.d/var_lib_unibuild-repo.repo'"
     
     echo "Refreshing repo list ..."
     $RSH $HOST sudo dnf clean all
