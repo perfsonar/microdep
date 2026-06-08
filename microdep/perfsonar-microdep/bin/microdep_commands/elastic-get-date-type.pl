@@ -289,10 +289,20 @@ if ($type eq "topology") {
 #    print("An error happened: $retcode ".$curl->strerror($retcode)." ".$curl->errbuf."\n");
 #}
 
-my $cmd='curl -X POST --insecure -H "Content-Type: application/json" "' . $url . '"  -d \'' . $search . '\' 2>/dev/null';
+#my $cmd='curl -f -X POST --insecure -H "Content-Type: application/json" "' . $url . '"  -d \'' . $search . '\' 2>/dev/null';
+#print `$cmd`;
+my $cmd='curl -f -X POST --insecure --no-progress-meter -H "Content-Type: application/json" "' . $url . '"  -d \'' . $search . '\' 2>&1 ';
 print "<p>$cmd</p>\n" if $debug > 0;
-print `$cmd`;
-
+my $results = `$cmd`;
+my $curl_status = $? >> 8;
+if ( $curl_status > 0 ) {
+    # Something went wrong running curl command. Output error in json structure
+    chomp($results);
+    print "{ \"error\": { \"curl-code\" : $curl_status, \"msg\" : \"$results\" } }\n";
+} else {
+    # Return results
+    print $results;
+}
 
 # weed out special shell chars
 sub parm{ 

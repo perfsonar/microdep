@@ -43,7 +43,7 @@ Depends: ${misc:Depends}, ${perl:Depends},
  python3-tzlocal,
  perfsonar-microdep-geolite2,
  perfsonar-microdep-utils
-Recommends: rabbitmq-server
+#Recommends: rabbitmq-server
 Description: Microdep analytic toolset to analize perfSONAR datasets
  Analytic scripts to process perfSONAR data sets and generate events. Events may be viualized by Microdep map.
 
@@ -79,6 +79,7 @@ Depends: ${misc:Depends}, ${perl:Depends},
  perl,
  libcgi-pm-perl, 
  libdbi-perl,
+ libdbd-sqlite3-perl,
  libjson-perl,
  libwww-perl,
  libsocket-perl,

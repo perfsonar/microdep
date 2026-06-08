@@ -23,13 +23,15 @@
 /usr/share/javascript/geodesy/latlon-spherical.js /usr/lib/perfsonar/microdep-map/js/latlon-spherical.js
 /usr/share/javascript/geodesy/dms.js /usr/lib/perfsonar/microdep-map/js/dms.js
 /usr/share/javascript/leaflet/leaflet.css /usr/lib/perfsonar/microdep-map/css/leaflet.css
-/usr/share/javascript/leaflet/leaflet.js /usr/lib/perfsonar/microdep-map/js/leaflet.js
+/usr/share/javascript/leaflet/leaflet.min.js /usr/lib/perfsonar/microdep-map/js/leaflet.js
+/usr/share/javascript/leaflet/leaflet.min.js.map /usr/lib/perfsonar/microdep-map/js/leaflet.min.js.map
 /usr/share/javascript/leaflet/images /usr/lib/perfsonar/microdep-map/css/images
 /usr/share/javascript/leaflet-contextmenu/leaflet.contextmenu.min.css /usr/lib/perfsonar/microdep-map/css/leaflet.contextmenu.min.css
 /usr/share/javascript/leaflet-contextmenu/leaflet.contextmenu.min.js /usr/lib/perfsonar/microdep-map/js/leaflet.contextmenu.min.js
 /usr/share/javascript/leaflet/MarkerCluster.Default.css /usr/lib/perfsonar/microdep-map/css/MarkerCluster.Default.css
 /usr/share/javascript/leaflet/MarkerCluster.css /usr/lib/perfsonar/microdep-map/css/MarkerCluster.css
-/usr/share/javascript/leaflet/leaflet.markercluster.js /usr/lib/perfsonar/microdep-map/js/leaflet.markercluster-src.js
+/usr/share/javascript/leaflet/leaflet.markercluster.min.js /usr/lib/perfsonar/microdep-map/js/leaflet.markercluster-src.js
+/usr/share/javascript/leaflet/leaflet.markercluster.min.js.map /usr/lib/perfsonar/microdep-map/js/leaflet.markercluster.min.js.map
 /usr/share/javascript/leaflet-curve/leaflet.curve.js /usr/lib/perfsonar/microdep-map/js/leaflet.curve.js
 /usr/share/javascript/leaflet-utm/L.LatLng.UTM.js /usr/lib/perfsonar/microdep-map/js/L.LatLng.UTM.js
 /usr/share/javascript/moment/moment.js /usr/lib/perfsonar/microdep-map/js/moment.js
