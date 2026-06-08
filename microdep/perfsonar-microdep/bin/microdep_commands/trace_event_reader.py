@@ -614,8 +614,8 @@ class Resolver:
             print("Initiating resolver cache...")
             
         # Resolver DBs
-        self.ip = {}
-        self.name = {}
+        self.ip = {"4":{}, "6":{}}  # Mapping from name to ip
+        self.name = {}              # Mapping from ip to name  
 
         # Geopos info
         self.geopos = {}
@@ -633,8 +633,13 @@ class Resolver:
                         # Addresses found. Init map.
                         for name in psconfig_data['addresses']:
                             ip = self.validate_ip(psconfig_data['addresses'][name]['address']);
-                            # Add mappings 
-                            self.ip[name] = ip
+                            # Add mappings
+                            if re.search(IP6_RE, ip):
+                                # IPv6 found
+                                self.ip['6'][name] = ip
+                            else:
+                                # Assuming IPv4
+                                self.ip['4'][name] = ip
                             self.name[ip] = name
                 except:
                     pass
@@ -647,7 +652,12 @@ class Resolver:
                         (name,ip) = line.split()
                         ip = self.validate_ip(ip);
                         # Add mappings 
-                        self.ip[name] = ip
+                        if re.search(IP6_RE, ip):
+                            # IPv6 found
+                            self.ip['6'][name] = ip
+                        else:
+                            # Assuming IPv4
+                            self.ip['4'][name] = ip
                         self.name[ip] = name
 
                         if param["verbose"] > 1:
@@ -816,9 +826,12 @@ class Resolver:
     def get_ip(self, name):
         """ Translates from name to ip
         """
-        if name in self.ip.keys():
-            return self.ip[name]
-        elif name in self.ip:
+        ver='4'
+        if param['ipv6']:
+          ver='6'
+        if name in self.ip[ver].keys():
+            return self.ip[ver][name]
+        elif name in self.ip[ver]:
             # Name is not a name but already an registered ip-address
             return name
         else:
@@ -828,7 +841,7 @@ class Resolver:
                 else:
                     ip = socket.gethostbyname(name)
                 # Add mapping
-                self.ip[name] = ip
+                self.ip[ver][name] = ip
                 if (ip == name):
                     # gethostbyname resolved ip to ip. Fix it.
                     name = self.get_name(ip)
@@ -839,15 +852,18 @@ class Resolver:
                 if param["verbose"] > 2:
                     print("Warning: Cannot resolve name " + name + ". Returning " + name + " as ip.")
                 # Add "emergency" mapping
-#                self.ip[name] = name
                 return name
             
     def add(self, name, ip=''):
         """ Add name-ip entry
         """
+        ver='4'
+        if param['ipv6']:
+            ver='6'
+            
         if not ip:
-            if name in self.ip.keys():
-                ip = self.ip[name]
+            if name in self.ip[ver].keys():
+                ip = self.ip[ver][name]
             else:
                 # Missing ip for name. Attempt lookup.
                 try:
@@ -868,7 +884,7 @@ class Resolver:
                             pass
         if ip:
             # Add mapping
-            self.ip[name] = ip
+            self.ip[ver][name] = ip
             self.name[ip] = name
         else:
             if param["verbose"] > 2:
@@ -2512,6 +2528,10 @@ def read(path, srchost, srcdate, mode="batch", thread=0, starttime=0):
                 word.pop(1)
                 word.pop(0)
                 
+            if len(word) >= 3 and word[2].split('/')[-1] == "traceroute-safe":
+                # Traceroute wrapper applied for rpm-linux detected. Clean away for line
+                word.pop(2)
+                
             if len(word) >= 6 and word[1] == "sudo" and word[2] == "traceroute" and word[6] =="-T":
                 # TCP traceroute from perfsonar found. 
                 traceroute_type = "tcp"
@@ -2551,8 +2571,6 @@ def read(path, srchost, srcdate, mode="batch", thread=0, starttime=0):
                     traceroutes[time]["dst"] = resolver.get_ip(dsthost)
                     tracesummary.set_current_pair(traceroutes[time]["src"] + "/" + traceroutes[time]["dst"], time, thread)
                 elif PERFSONARLOG:
-                    traceroutes[time]["src"] = resolver.get_ip(word[6])
-                    traceroutes[time]["dst"] = resolver.get_ip(word[10])
                     traceroutes[time]["ipversion"] = int(word[4][-1])
                     if traceroutes[time]["ipversion"] == 6 and not param["ipv6"] or traceroutes[time]["ipversion"] == 4 and param["ipv6"]:
                         # Do not parse traceroutes with wrong ip version
@@ -2560,6 +2578,8 @@ def read(path, srchost, srcdate, mode="batch", thread=0, starttime=0):
                             print("Unsupported ip-version in traceroute. Skipping.")
                         parser_state = PS_INIT
                         continue
+                    traceroutes[time]["src"] = resolver.get_ip(word[6])
+                    traceroutes[time]["dst"] = resolver.get_ip(word[10])
                     tracesummary.set_current_pair(traceroutes[time]["src"] + "/" + traceroutes[time]["dst"], time, thread)
                     tracesummary.set_pstestid(ps_testid)
                 else:
