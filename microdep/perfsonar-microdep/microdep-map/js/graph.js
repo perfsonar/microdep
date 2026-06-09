@@ -356,6 +356,25 @@ export function vis_curve( div, hits, property, title ){
 
 }
 
+// Read a CSS custom property from :root, with a fallback if undefined.
+function _theme_var(name, fallback) {
+    try {
+        const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+        return v || fallback;
+    } catch (_) { return fallback; }
+}
+
+// Convert "#rrggbb" to "rgba(r, g, b, a)" for translucent fills.
+function _alpha(hex, alpha) {
+    if (!hex || hex[0] !== '#') return hex;
+    const h = hex.replace('#', '');
+    const full = h.length === 3 ? h.split('').map(c => c + c).join('') : h;
+    const r = parseInt(full.substring(0, 2), 16);
+    const g = parseInt(full.substring(2, 4), 16);
+    const b = parseInt(full.substring(4, 6), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 export function chart_curve( div, hits, property, title, unit ){
     var container = document.getElementById(div); // .getContext('2d');
     var h= window.innerHeight * 0.6;
@@ -371,103 +390,143 @@ export function chart_curve( div, hits, property, title, unit ){
 	data.push( {"x": rec.timestamp * 1000, "y": rec[property] });
     }
 
+    // Resolve theme tokens from :root (works for both light and dark themes
+    // via curve-chart.html's localStorage-driven data-theme on <html>).
+    const accent   = _theme_var('--c-accent',   '#2f81f7');
+    const border   = _theme_var('--c-border',   '#2a313a');
+    const borderH  = _theme_var('--c-border-h', '#3a4350');
+    const text     = _theme_var('--c-text',     '#e6e9ee');
+    const text2    = _theme_var('--c-text-2',   '#b1b8c2');
+    const text3    = _theme_var('--c-text-3',   '#7e8794');
+    const elevated = _theme_var('--c-elevated', '#1c2229');
+
+    const fontFamily = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+
+    if (typeof Chart !== 'undefined') {
+        Chart.defaults.font.family = fontFamily;
+        Chart.defaults.font.size = 12;
+        Chart.defaults.color = text2;
+    }
+
     const data_desc = {
-        // labels: obs[0],
         datasets: [{
             label: prop_long_desc[parms.event][property],
-            backgroundColor: 'yellow',
-            borderColor: 'red',
-            borderWidth:1,
-            pointStyle: 'circle',
             data: data,
+            backgroundColor: _alpha(accent, 0.55),
+            borderColor: accent,
+            borderWidth: 1,
+            pointBackgroundColor: _alpha(accent, 0.55),
+            pointBorderColor: accent,
+            pointBorderWidth: 1,
+            pointRadius: 3.5,
+            pointHoverRadius: 7,
+            pointHoverBackgroundColor: accent,
+            pointHoverBorderColor: '#fff',
+            pointHoverBorderWidth: 2,
+            pointStyle: 'circle'
         }]
     };
     
     const config = {
         type: 'scatter',
         data: data_desc,
-	defaults:{ font:{ size: 18} },
 
         options: {
-            responsive:false,
+            responsive: false,
             maintainAspectRatio: false,
-	    title:{ text: title, display: true, position:'left' },
-            
-            scales: {
- 		x: {
-                   type: 'time',
-                    time: {
-                        // Luxon format string
-                        tooltipFormat: 'DD HH:mm',
-			round:true,
-			//unit:unit,
-			//displayFormats: {hour: 'HH:mm'}
-			displayFormats: {
-			    millisecond: 'HH:mm:ss.SSS',
-			    second: 'HH:mm:ss',
-			    minute: 'HH:mm',
-			    hour: 'DD HH:mm',
-			    day: 'DD HH',
-			    week:'DD HH',
-			    month: 'MM DD'
-			}
+            animation: { duration: 500, easing: 'easeOutQuart' },
+            interaction: { mode: 'nearest', intersect: false, axis: 'x' },
+            layout: { padding: { top: 8, right: 18, bottom: 8, left: 8 } },
 
+            scales: {
+                x: {
+                    type: 'time',
+                    time: {
+                        tooltipFormat: 'DD HH:mm',
+                        round: true,
+                        displayFormats: {
+                            millisecond: 'HH:mm:ss.SSS',
+                            second:      'HH:mm:ss',
+                            minute:      'HH:mm',
+                            hour:        'DD HH:mm',
+                            day:         'DD HH',
+                            week:        'DD HH',
+                            month:       'MM DD'
+                        }
                     },
-		    ticks: { //source: 'auto'},
-			font:{ size: 18}
-		    },
-                    title: {
-                        display: true,
-                        text: 'Time',
-  			font:{ size: 22}
+                    grid:   { color: _alpha(border, 0.5), drawTicks: true, tickColor: borderH, drawBorder: false },
+                    border: { display: false },
+                    ticks:  { color: text3, font: { size: 11 }, maxRotation: 0, autoSkipPadding: 18 },
+                    title:  { display: true, text: 'Time', color: text3,
+                              font: { size: 11, weight: '600' },
+                              padding: { top: 8, bottom: 0 } }
+                },
+                y: {
+                    grid:   { color: _alpha(border, 0.5), drawTicks: true, tickColor: borderH, drawBorder: false },
+                    border: { display: false },
+                    ticks:  { color: text3, font: { size: 11 }, padding: 6 },
+                    title:  { display: true, text: prop_desc[parms.event][property], color: text3,
+                              font: { size: 11, weight: '600' } }
+                }
+            },
+
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'top',
+                    align: 'end',
+                    labels: {
+                        color: text2,
+                        font: { size: 12 },
+                        boxWidth: 12,
+                        boxHeight: 12,
+                        padding: 14,
+                        usePointStyle: true,
+                        pointStyle: 'circle'
                     }
                 },
-		y: {
-		    ticks: { //source: 'auto'},
-			font:{ size: 18}
-		    },
-                    title: {
-                        display: true,
-                        text: prop_desc[parms.event][property],
-			font:{ size: 22}
-                    }
-		}
-            },
-            elements: {
-                point:{
-                    radius: 5
-                }
-            },
-            plugins:{
-		tooltip: {
-		    bodyFont: { size: 22 }
-		},
+                title: {
+                    display: !!title,
+                    text: title,
+                    align: 'start',
+                    color: text,
+                    padding: { top: 4, bottom: 14 },
+                    font: { size: 14, weight: '600' }
+                },
+                tooltip: {
+                    backgroundColor: elevated,
+                    titleColor: text,
+                    bodyColor: text2,
+                    borderColor: border,
+                    borderWidth: 1,
+                    padding: 10,
+                    cornerRadius: 8,
+                    boxPadding: 6,
+                    titleFont: { size: 12, weight: '600' },
+                    bodyFont:  { size: 12 },
+                    displayColors: true,
+                    usePointStyle: true
+                },
                 zoom: {
-		    pan: {
-			enabled: true,
-			mode: 'xy',
-			modifierKey: 'ctrl'
-			//onPanComplete: startFetch
+                    pan: {
+                        enabled: true,
+                        mode: 'xy',
+                        modifierKey: 'ctrl'
                     },
-		    zoom:{
-			wheel: {
-                            enabled: true,
-			},
-			drag: {
-                            enabled: true,
-			},
-			pinch: {
-                            enabled: true
-			}
-		    },
-                    mode: 'xy'
-                    //onZoomComplete: startFetch
+                    zoom: {
+                        wheel: { enabled: true },
+                        drag:  { enabled: true,
+                                 backgroundColor: _alpha(accent, 0.12),
+                                 borderColor: accent,
+                                 borderWidth: 1 },
+                        pinch: { enabled: true },
+                        mode:  'xy'
+                    }
                 }
-            } // of plugins
-        } // of options
-    }; // of config
+            }
+        }
+    };
 
+    chart = new Chart(container, config);
 
-    chart= new Chart( container, config);
-    
 } // of chart_curve
