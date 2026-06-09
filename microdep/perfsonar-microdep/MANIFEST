@@ -42,10 +42,11 @@ scripts/perfsonar-microdep-trace-ana.service
 scripts/perfsonar-microdep-restart.service
 scripts/perfsonar-microdep-restart.timer
 etc/apache-microdep-ana.conf
-etc/logstash/microdep/10-microdep-json.conf
-etc/logstash/microdep/29-microdep-misc-fix.conf
 etc/logstash/microdep/05-microdep-inputs.conf
+etc/logstash/microdep/10-microdep-json.conf
 etc/logstash/microdep/15-microdep-tags.conf
+etc/logstash/microdep/25-microdep-geoip.conf
+etc/logstash/microdep/29-microdep-misc-fix.conf
 etc/logstash/microdep/35-microdep-outputs.conf
 etc/logstash/microdep-pipelines.yml
 etc/logrotate.d/microdep
