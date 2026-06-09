@@ -1707,18 +1707,6 @@ function harvest_ip_name(summary){
     for (var link_obj of summary){ var link=link_obj._source; reg_ip_adr( link.from, link.from_adr); reg_ip_adr( link.to, link.to_adr); }
 }
 
-function load_name_to_address(){
-    var network=$("#network").val();
-    if ( ! name_loaded[network] ){
-	var config_url='microdep-config.cgi';
-	var url= config_url + "?secret=virre-virre-vapp&variant=mp-" + network + "&file=mp-address.txt";
-	$.get( url, function( lines ){
-	    for ( var line of lines.split(/\n/) ){ var l=line.split(/\s+/); if ( ! name_to_ip[ l[0] ] ) name_to_ip[ l[0] ] = l[1]; }
-	    name_loaded[network]=true;
-	}).fail( function( jqxhr, textStatus, error ) { console.log( "Request" + url + " Failed: " + textStatus + ", " + error ); });
-    }
-}
-
 function log_summary(summary){ for (let i=0; i<summary.length; i++){ console.log( summary[i]._source.from + "-" + summary[i]._source.to ); } }
 function present_table( parameters, div, data){}
 
@@ -1841,7 +1829,7 @@ function init_map(){
 	else { refresh_active=true; $("#datepicker").datepicker('setDate', new Date()); get_topology(); active_color=$(this).css("background-color"); $(this).css("background-color", refresh_color); setInterval( function(){ get_topology(); }, refresh_period ); }
     } );
     $("#search_input").keyup( function(){ var str = $("#search_input").val(); focus_links( str, 'flip' ); } );
-    $("#network").change( async function(){ parms.net= $("#network").val(); update_props(); remove_links(links); load_name_to_address(); show_network(parms.net); update_url(); $("#tabs").tabs("option", "active", 0); });
+    $("#network").change( async function(){ parms.net= $("#network").val(); update_props(); remove_links(links); show_network(parms.net); update_url(); $("#tabs").tabs("option", "active", 0); });
     $("#event_type").change( function(){ parms.event = $("#event_type").val(); update_props(); load_coords_from_all_sources(network); update_url(); $("#tabs").tabs("option", "active", 0); });
     $("#prop_select").change( function(){ parms.property = $("#prop_select").val(); taint_links(summary, $("#prop_select").val() ); update_url(); $("#tabs").tabs("option", "active", 0); });
     fill_select( "stats_type", stats_types );
