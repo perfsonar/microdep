@@ -1,4 +1,4 @@
-d3 (4.13.0) perfsonar-5.3; urgency=low
+d3 (4.13.0-1) perfsonar-5.3; urgency=low
 
   * Required support older Debian releases.
 

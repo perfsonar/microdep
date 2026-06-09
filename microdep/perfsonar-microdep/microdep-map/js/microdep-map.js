@@ -903,7 +903,8 @@ function get_topology(source = "archive"){
 	
     case "sqlite-db":
 	// Ask for topology-info from (legacy) sqllite db 
-	var url="microdep-config.cgi?secret=\"" + conffile[parms.net].database_secret + "\"&variant=mp-" + network + "&start=" + start + "&end=" + end;
+//	var url="microdep-config.cgi?secret=\"" + conffile[parms.net].database_secret + "\"&variant=mp-" + network + "&start=" + start + "&end=" + end;
+	var url="microdep-config.cgi?net=" + network + "&start=" + start + "&end=" + end;
 	$.getJSON( url,
 		   function(topology){
 		       if (topology.length == 0) {
@@ -923,7 +924,7 @@ function get_topology(source = "archive"){
 		       }
 		   }).fail( function( jqxhr, textStatus, error ) {
 		       var err = textStatus + ", " + error;
-		       console.log( "Request" + url + " Failed: " + err );
+		       console.log( "Request "  + url + " Failed: " + err );
 		   });
 	break;
 	
@@ -938,7 +939,7 @@ function get_topology(source = "archive"){
 	    query_index = conffile[parms.net].event_type[parms.event].topology_index ;
 	}	    
 
-	var url="elastic-get-date-type.pl?index=" + query_index + "&start=" + start_iso + "&end=" + end_iso;
+	var url="elastic-get-date-type.pl?net=" + parms.net + "&index=" + query_index + "&start=" + start_iso + "&end=" + end_iso;
 	if (net_ip_version[parms.net]) {
 	    // Add filtering on ip version
 	    url += "&ip_version=" + net_ip_version[parms.net];
@@ -946,24 +947,34 @@ function get_topology(source = "archive"){
     
 	$.getJSON( url,
 		   function(result){
-		     var topology = [];
-		     if (! result.aggregations.peer.buckets.length) {
-			 console.log("No topology data returned from archive for time period " + start + " to " + end + ". Trying sqlite db ...");
-			 // No topology data returned. Try sqlite-db instead.
-			 get_topology("sqlite-db");
-		     } else {
-			 for (var p=0; p < result.aggregations.peer.buckets.length; p++) {
-			     topology.push(result.aggregations.peer.buckets[p].key.split("_"));
-			 }
-			 draw_topology( topology );
-			 get_connections();
-			 // draw_topology( duplex_topology( topology) );
-		     }
+		       if (jQuery.isEmptyObject(result.aggregations)) {
+			   // Something went wrong. Log failure.
+			   console.log("Warning: Failed to fetch data from archive. Check archive url inn mapconfig.yml.");
+			   if (!jQuery.isEmptyObject(result.error)) {
+			       console.log("        (\"" + result.error.msg  + "\")");
+			   }
+			   // No topology data returned. Try sqlite-db instead.
+			   get_topology("sqlite-db");
+			   return;
+		       }
+		       var topology = [];
+		       if (! result.aggregations.peer.buckets.length) {
+			   console.log("No topology data returned from archive for time period " + start + " to " + end + ". Trying sqlite db ...");
+			   // No topology data returned. Try sqlite-db instead.
+			   get_topology("sqlite-db");
+		       } else {
+			   for (var p=0; p < result.aggregations.peer.buckets.length; p++) {
+			       topology.push(result.aggregations.peer.buckets[p].key.split("_"));
+			   }
+			   draw_topology( topology );
+			   get_connections();
+			   // draw_topology( duplex_topology( topology) );
+		       }
 		   }).fail( function(e, textStatus, error ) {
 		       //remove_links(links);
 		       console.log("failed to get data from server :" + textStatus + ", " + error);
 		   });
-
+	
 	break;
     }
 }
@@ -1279,49 +1290,56 @@ function load_coords(network, service, goal){
 	    query_index = conffile[parms.net].event_type[parms.event].topology_index;
 	}
 
-	var url="elastic-get-date-type.pl?index=" + query_index + "&start=" + start_iso + "&end=" + end_iso + "&event_type=topology";
+	var url="elastic-get-date-type.pl?net=" + parms.net + "&index=" + query_index + "&start=" + start_iso + "&end=" + end_iso + "&event_type=topology";
 	if (net_ip_version[parms.net]) {
 	    // Add filtering on ip version
 	    url += "&ip_version=" + net_ip_version[parms.net];
 	}
     
 	$.getJSON( url,
-
-	function(result){
-		       for (var r = 0; r < result.responses.length; r++) {
-			   if (typeof result.responses[r].aggregations != "undefined" ) {
-			       // Aggregated results are available
-			       for (var n=0; n < result.responses[r].aggregations.nodes.buckets.length; n++) {
-				   // Add node info to points structure
-				   var p={ id: "", name: "Unknown", lat: 0, lon: 0, ip: "n/a"};
-				   p.id = result.responses[r].aggregations.nodes.buckets[n].key;
-				   if (typeof result.responses[r].aggregations.nodes.buckets[n].city.buckets[0] != "undefined" ) {
-				       p.name = result.responses[r].aggregations.nodes.buckets[n].city.buckets.at(-1).key;  // Grab last city in list
-				   } else {
-				       p.name = p.id;
-				   }			       
-				   if (typeof result.responses[r].aggregations.nodes.buckets[n].lat.buckets[0] != "undefined")
-				       p.lat = result.responses[r].aggregations.nodes.buckets[n].lat.buckets.at(-1).key ?? 0 ; // Get last value seen
-				   if (typeof result.responses[r].aggregations.nodes.buckets[n].lon.buckets[0] != "undefined") 
-				       p.lon = result.responses[r].aggregations.nodes.buckets[n].lon.buckets.at(-1).key ?? 0 ; // Get last value seen
-				   if (typeof result.responses[r].aggregations.nodes.buckets[n].ip.buckets[0] != "undefined") { 
-				       reg_ip_adr(p.id, result.responses[r].aggregations.nodes.buckets[n].ip.buckets.at(-1).key );  // Register last ip in list
-				       p.ip = result.responses[r].aggregations.nodes.buckets[n].ip.buckets.at(-1).key;
-				   }
-				   let point_already_loaded = points.find(o => o.id === p.id);
-				   if (! point_already_loaded) {
-				       points.push( p);
-				   } else {
-				       console.log( "Duplicate node info for node " + p.id );
-				   }
-			       }
-			   } else if (typeof result.responses[r].error.reason != "undefined" ) {
-			       // Something is "suboptimal"
-			       console.log("Failed to access data from Opensearch: " + result.responses[r].error.reason + ".");
+		   function(result){
+		       if (jQuery.isEmptyObject(result.responses)) {
+			   // Something went wrong. Log failure.
+			   console.log("Warning: Failed to fetch data from archive. Check archive url inn mapconfig.yml.");
+			   if (!jQuery.isEmptyObject(result.error)) {
+			       console.log("        (\"" + result.error.msg  + "\")");
 			   }
-		       }
-		       if ( ! result.responses.length ) {
-			   console.log("No node data returned from archive for time period " + start_iso + " to " + end_iso + ".");
+		       } else {
+			   for (var r = 0; r < result.responses.length; r++) {
+			       if (typeof result.responses[r].aggregations != "undefined" ) {
+				   // Aggregated results are available
+				   for (var n=0; n < result.responses[r].aggregations.nodes.buckets.length; n++) {
+				       // Add node info to points structure
+				       var p={ id: "", name: "Unknown", lat: 0, lon: 0, ip: "n/a"};
+				       p.id = result.responses[r].aggregations.nodes.buckets[n].key;
+				       if (typeof result.responses[r].aggregations.nodes.buckets[n].city.buckets[0] != "undefined" ) {
+					   p.name = result.responses[r].aggregations.nodes.buckets[n].city.buckets.at(-1).key;  // Grab last city in list
+				       } else {
+					   p.name = p.id;
+				       }			       
+				       if (typeof result.responses[r].aggregations.nodes.buckets[n].lat.buckets[0] != "undefined")
+					   p.lat = result.responses[r].aggregations.nodes.buckets[n].lat.buckets.at(-1).key ?? 0 ; // Get last value seen
+				       if (typeof result.responses[r].aggregations.nodes.buckets[n].lon.buckets[0] != "undefined") 
+					   p.lon = result.responses[r].aggregations.nodes.buckets[n].lon.buckets.at(-1).key ?? 0 ; // Get last value seen
+				       if (typeof result.responses[r].aggregations.nodes.buckets[n].ip.buckets[0] != "undefined") { 
+					   reg_ip_adr(p.id, result.responses[r].aggregations.nodes.buckets[n].ip.buckets.at(-1).key );  // Register last ip in list
+					   p.ip = result.responses[r].aggregations.nodes.buckets[n].ip.buckets.at(-1).key;
+				       }
+				       let point_already_loaded = points.find(o => o.id === p.id);
+				       if (! point_already_loaded) {
+					   points.push( p);
+				       //} else {
+					//   console.log( "Duplicate node info for node " + p.id );
+				       }
+				   }
+			       } else if (typeof result.responses[r].error.reason != "undefined" ) {
+				   // Something is "suboptimal"
+				   console.log("Failed to access data from Opensearch: " + result.responses[r].error.reason + ". Check if Microdep analytics is operational.");
+			       }
+			   }
+			   if ( ! result.responses.length ) {
+			       console.log("No node data returned from archive for time period " + start_iso + " to " + end_iso + ".");
+			   }
 		       }
 		       loads++;
 		       if (loads >= goal) {
@@ -1335,7 +1353,7 @@ function load_coords(network, service, goal){
 
 	}).fail( function(e, textStatus, error ) {
 	    var err = textStatus + ", " + error;
-	    console.log( "Request" + url + " Failed: " + err );
+	    console.log( "Request " + url + " Failed: " + err );
 	    loads++;
 	    });
 
@@ -1347,7 +1365,8 @@ function load_coords(network, service, goal){
 	start = new Date($("#datepicker").val() + " 00:00:00").getTime()/1000;
 	end= new Date($("#datepicker").val() + " 23:59:59").getTime()/1000;
 	var network=parms.net;
-	var url="microdep-config.cgi?mode=nodes&secret=virre-virre-vapp&variant=mp-" + network + "&start=" + start + "&end=" + end;
+//	var url="microdep-config.cgi?mode=nodes&secret=virre-virre-vapp&variant=mp-" + network + "&start=" + start + "&end=" + end;
+	var url="microdep-config.cgi?mode=nodes&net=" + network + "&start=" + start + "&end=" + end;
 	$.getJSON( url,
 		   function(nodes){
 		       for ( var n=0; n < nodes.length; n++) {
@@ -1375,7 +1394,7 @@ function load_coords(network, service, goal){
 		       }  
 		   }).fail( function( jqxhr, textStatus, error ) {
 		       var err = textStatus + ", " + error;
-		       console.log( "Request" + url + " Failed: " + err );
+		       console.log( "Request " + url + " Failed: " + err );
 		       loads++;
 		   });
 	return;
@@ -1422,7 +1441,7 @@ function load_coords(network, service, goal){
 
 	}).fail( function( jqxhr, textStatus, error ) {
 	    var err = textStatus + ", " + error;
-	    console.log( "Request" + url + " Failed: " + err );
+	    console.log( "Request " + url + " Failed: " + err );
 	    loads++;
 	});
 
@@ -1732,7 +1751,7 @@ function load_name_to_address(){
 	    name_loaded[network]=true;
 	}).fail( function( jqxhr, textStatus, error ) {
 	    var err = textStatus + ", " + error;
-	    console.log( "Request" + url + " Failed: " + err );
+	    console.log( "Request " + url + " Failed: " + err );
 	});
     }
 
@@ -1762,7 +1781,7 @@ function get_peer_data(from, to, div){
     let tz_start = adjust_to_timezone(start);
     let tz_end = adjust_to_timezone(end);
 
-    var url="elastic-get-date-type.pl?index=" + event_index[parms.event] + "&event_type=" + parms.event
+    var url="elastic-get-date-type.pl?net=" + parms.net + "&index=" + event_index[parms.event] + "&event_type=" + parms.event
 	+ "&start=" + tz_start + "&end=" + tz_end
 	+ "&from=" + from + "&to=" + to;
     if (net_ip_version[parms.net]) {
@@ -1772,6 +1791,17 @@ function get_peer_data(from, to, div){
     
     $.getJSON( url,
                function(resp){
+		   if (jQuery.isEmptyObject(resp.hits)) {
+		       // Something went wrong. Log failure.
+		       console.log("Warning: Failed to fetch data from archive. Check archive url inn mapconfig.yml.");
+		       if (!jQuery.isEmptyObject(resp.error)) {
+			   console.log("        (\"" + resp.error.msg  + "\")");
+		       }
+		       // No topology data returned. Try sqlite-db instead.
+		       get_topology("sqlite-db");
+		       return;
+		   }
+
                    if (resp.hits && resp.hits.total.value > 0){
                        // present_table( parameters, div, resp.hits.hits);
                        let html=gap_list( from, to, resp.hits.hits, 10, 'num_desc');
@@ -1879,7 +1909,7 @@ function get_connections(){
 //    if ( etype === 'jitter' || start.substr(0,10) === now.toISOString().substr(0,10) ){ // read todays details
     if ( ! sum_etype || typeof sum_etype == 'undefined' || start.substr(0,10) === now.toISOString().substr(0,10) || period < 24){
 	// No summary events are available and/or it's todays date and/or time scale on hourly basis is set. Fetch and summarize "normal" event details.
-	var url="elastic-get-date-type.pl?index=" + index + "&event_type=" + etype + "&start=" + start + "&end=" + end ;
+	var url="elastic-get-date-type.pl?net=" + parms.net + "&index=" + index + "&event_type=" + etype + "&start=" + start + "&end=" + end ;
 	if (net_ip_version[parms.net]) {
 	    // Add filtering on ip version
 	    url += "&ip_version=" + net_ip_version[parms.net];
@@ -1891,7 +1921,13 @@ function get_connections(){
 
 	$.getJSON( url,
 		   function(resp){
-		       if (resp.hits && resp.hits.total.value > 0){
+		       if (jQuery.isEmptyObject(resp.hits)) {
+			   // Something went wrong. Log failure.
+			   console.log("Warning: Failed to fetch data from archive. Check archive url inn mapconfig.yml.");
+			   if (!jQuery.isEmptyObject(resp.error)) {
+			       console.log("        (\"" + resp.error.msg  + "\")");
+			   }
+		       } else if (resp.hits && resp.hits.total.value > 0){
 			   var nrecs=resp.hits.total.value.toString();
 			   
 			   if ( etype === "gapsum" || etype === "routesum" ){
@@ -1927,12 +1963,12 @@ function get_connections(){
 			       taint_links(summary, $("#prop_select").val() );
 			   else
 			       draw_links(summary, $("#prop_select").val() );
-		       } else {
-			   taint_links([], "empty");
-			   $("#error").html(hhmmss(new Date()) + " : No " + $("#event_type").val() + " data for " + $("#datepicker").val() + " " + $("#period_input").val() + ";;");
+			   // Success!
+			   return;
 		       }
-
-
+		       // Data access problems. Log error.
+		       taint_links([], "empty");
+		       $("#error").html(hhmmss(new Date()) + " : No " + $("#event_type").val() + " data for " + $("#datepicker").val() + " " + $("#period_input").val() + ";;");
 		   })
 	    .fail( function(e, textStatus, error ) {
 		//remove_links(links);
@@ -1952,7 +1988,7 @@ function get_connections(){
 	// END: LEGACY CODE
 	
 	// Prepare to fetch summary info
-	var sum_url="elastic-get-date-type.pl?index=" + index + "&event_type=" + sum_etype + "&start=" + start + "&end=" + end;
+	var sum_url="elastic-get-date-type.pl?net=" + parms.net + "&index=" + index + "&event_type=" + sum_etype + "&start=" + start + "&end=" + end;
 	if (net_ip_version[parms.net]) {
 	    // Add filtering on ip version
 	    sum_url += "&ip_version=" + net_ip_version[parms.net];
@@ -1962,6 +1998,17 @@ function get_connections(){
 
 	$.getJSON( sum_url,
 		   function(resp){
+		       if (jQuery.isEmptyObject(resp.hits)) {
+			   // Something went wrong. Log failure.
+			   console.log("Warning: Failed to fetch data from archive. Check archive url inn mapconfig.yml.");
+			   if (!jQuery.isEmptyObject(resp.error)) {
+			       console.log("        (\"" + resp.error.msg  + "\")");
+			   }
+			   // No topology data returned. Try sqlite-db instead.
+			   get_topology("sqlite-db");
+			   return;
+		       }
+		       
 		       if (resp.hits && resp.hits.total.value > 0){
 			   var nrecs=resp.hits.total.value.toString();
 			   summary=resp.hits.hits;
@@ -2155,7 +2202,7 @@ function title_state(){
 	  parms.net= $("#network").val();
 	  update_props();
 	  remove_links(links);
-	  load_name_to_address();
+	  //load_name_to_address();
 	  show_network(parms.net); // ... calls get_topology()
 	  // await new Promise(r => setTimeout(r, 5000)); // Sleep 5 sec for loading of node-data to complete. WARNING! THIS DESPERATELY NEEDS REDESIGN.
 	  //get_topology();

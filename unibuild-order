@@ -16,7 +16,6 @@ changecom()dnl
 #ifelse(PACKAGING,rpm,hello-rpm)
 
 # Order-list
-#ifelse(DISTRO/MAJOR,el/9,chartjs)
 chartjs
 chartjs-adapter-moment
 chartjs-plugin-zoom
@@ -33,7 +32,6 @@ leafletjs-utm
 momentjs
 ifelse(PACKAGING,rpm,select2js)
 ifelse(DISTRO/MAJOR,Ubuntu/20,select2js)
-#select2js
 sorttablejs
 perl_color_library
 perl_moosex_aliases
@@ -59,7 +57,5 @@ perl_statistics_linefit
 perl_net_amqp
 perl_anyevent_rabbitmq
 raw-data
-#submodules/pstracetree/visjs
-#submodules/pstracetree/pstracetree
+ifelse(FAMILY/eval(MAJOR < 9),RedHat/1,python3-tzlocal)
 microdep
-

@@ -20,13 +20,6 @@ set -e
 
 case "$1" in
     configure)
-	# Fix credentials to ensure access to Opensearch
-	if [ -e /etc/perfsonar/opensearch/opensearch_login ]; then
-    	   USER=`awk -F " " '{print $1}' /etc/perfsonar/opensearch/opensearch_login`
-    	   PASSWD=`awk -F " " '{print $2}' /etc/perfsonar/opensearch/opensearch_login`
-    	   sed -i "s|http://admin:no+nz+br|https://$USER:$PASSWD|g" /etc/perfsonar/microdep/microdep-config.yml
-	fi
-
 	# Add Microdep button on main grafana dashboard (if not already present)  REMARK: TEMPORARY REMOVED 
 	if [ -e /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json-temporary-removed ]; then
 	    if grep -q  "Microdep map" /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json; then
@@ -42,15 +35,29 @@ case "$1" in
 		mv $DASHBOARDFILE /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json
 	    fi
 	fi
+
+	# Prepare default local topology DBs
+	if [ ! -e /var/lib/perfsonar/microdep/dragonlab.db ]; then
+	    cp /etc/perfsonar/microdep/microdep-map_sqlite3_template.db /var/lib/perfsonar/microdep/dragonlab.db
+	fi
+	if [ ! -e /var/lib/perfsonar/microdep/dragonlab_6.db ]; then
+	    cp /etc/perfsonar/microdep/microdep-map_sqlite3_template.db /var/lib/perfsonar/microdep/dragonlab_6.db
+	fi
 	
 	# Enable apache config
         if [ -e /usr/share/apache2/apache2-maintscript-helper ]; then
             . /usr/share/apache2/apache2-maintscript-helper
 
+            apache2_invoke enmod rewrite
+            apache2_invoke enmod headers
+            apache2_invoke enmod cgi
             apache2_invoke enconf apache-microdep-map
         else
+	    a2enmod rewrite
+	    a2enmod headers
+	    a2enmod cgi
 	    a2enconf apache-microdep-map
-	    systemctl reload apache2.service || true
+	    systemctl restart apache2.service || true
 	fi
 	;;
 

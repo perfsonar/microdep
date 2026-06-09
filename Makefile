@@ -42,3 +42,7 @@ clean:
 	$(MAKE) -C docs $@
 	rm -rf $(TO_CLEAN)
 	find . -name '*~' | xargs rm -f
+
+deb clean-deb-build deb-build rpm clean-rpm-build rpm-build:
+# Run build local repo
+	make -f Makefile-bl $@

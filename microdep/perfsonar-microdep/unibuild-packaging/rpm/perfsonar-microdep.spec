@@ -3,12 +3,17 @@
 %define command_base        %{microdep_bin_base}/microdep_commands
 %define config_base         /etc/perfsonar
 %define microdep_config_base         %{config_base}/microdep
+%define microdep_runtime_base        /var/lib/perfsonar/microdep
+%define microdep_share_base          /usr/share/perfsonar/microdep
 %define doc_base            /usr/share/doc/perfsonar/microdep
 %define microdep_web_dir    %{install_base}/microdep-map
 
 #Version variables set by automated scripts
 %define perfsonar_auto_version 5.3.0
 %define perfsonar_auto_relnum 1
+
+
+###  D e s c r i p t i o n s   a n d   d e p e n d e n c i e s
 
 Name:			perfsonar-microdep
 Version:		%{perfsonar_auto_version}
@@ -20,70 +25,9 @@ URL:			http://www.perfsonar.net
 Source0:		perfsonar-microdep-%{version}.tar.gz
 BuildRoot:		%{_tmppath}/%{name}-%{version}-root-%(%{__id_u} -n)
 BuildArch:		noarch
-Requires:               perfsonar-microdep-map
-Requires:               perfsonar-microdep-ana
 
 %description
-Meta-package pulling in packaged required for Microdep Analytics in perfSONAR
-
-%package geolite2
-Summary:		MaxMind's Geolite2 geoip databases
-Group:			Applications/Communications
-
-%description geolite2
-Geopositioning information from Maxmind to enrich datasets with AS numbers, city and country.
-
-%package map
-Summary:		Microdep map web GUI presenting analytic results
-Group:			Applications/Communications
-BuildRequires:          perl >= 5.32
-BuildRequires:          perl(LWP::Simple)
-BuildRequires:          perl(JSON)
-BuildRequires:          perl(DBI)
-BuildRequires:          perl(DBD::SQLite)
-#Requires:               perfsonar-toolkit >= 5.0.7
-Requires:		httpd
-Requires:               mod_ssl
-Requires:		perl >= 5.32
-Requires:               perl(CGI) 
-Requires:		perl(Data::Dumper)
-Requires:               perl(DBI) 
-Requires:		perl(Getopt::Long)
-Requires:		perl(JSON)
-Requires:		perl(LWP::Simple)
-Requires:               perl(LWP::UserAgent)
-Requires:               perl(LWP::Protocol::https)
-Requires:               perl(IO::Socket::SSL)
-Requires:		perl(Socket)
-Requires:		perl(strict)
-Requires:		perl(URI)
-Requires:		perl(warnings)
-Requires:		perl(YAML)
-Requires:               perl(Hash::Merge::Simple)
-Requires:               js-jquery
-Requires:               js-jquery-ui
-Requires:               datatablesjs 
-Requires:               chartjs = 4.4.2
-Requires:               chartjs-adapter-moment
-Requires:               chartjs-plugin-zoom
-Requires:               d3js = 4.13.0
-Requires:               hammerjs = 2.0.8
-Requires:               leafletjs = 1.0.3
-Requires:               leafletjs-contextmenu
-Requires:               leafletjs-markercluster
-Requires:               leafletjs-curve
-Requires:               leafletjs-L.LatLng.UTM
-Requires:               latlon-sphericaljs
-Requires:               momentjs = 2.30.1
-Requires:               select2js = 4.0.13
-Requires:               sorttablejs = 2.0
-Requires:               perfsonar-tracetree
-BuildRequires:          systemd
-BuildRequires:          systemd-rpm-macros       
-# ... but macros are not yet utilized below
-
-%description map
-Web GUI presenting Microdep analytic results in a map view
+Dummy package for perfSONAR Microdep, and analytic add-on to perfSONAR. Look for perfsonar-microdep-* packages.
 
 %package ana
 Summary:		Microdep analytic toolset to analize perfSONAR datasets
@@ -121,8 +65,6 @@ Requires:               python3-pytz
 Requires:               python3-tzlocal
 Requires:               python3-pyyaml
 Requires:               perfsonar-microdep-geolite2
-Requires:               logrotate
-Requires:               perfsonar-raw-data
 BuildRequires:          systemd
 BuildRequires:          systemd-rpm-macros    
 # ... but macros are not yet utilized below
@@ -130,13 +72,106 @@ BuildRequires:          systemd-rpm-macros
 %description ana
 Analytic scripts to process perfSONAR data sets and generate events. Events may be viualized by Microdep map.
 
-%pre geolite2
-/usr/sbin/groupadd -r perfsonar 2> /dev/null || :
-/usr/sbin/useradd -g perfsonar -r -s /sbin/nologin -c "perfSONAR User" -d /tmp perfsonar 2> /dev/null || :
+%package archive
+Summary:                Microdep Analysis for perfSONAR archive
+Group:			Applications/Communications
+Requires:               perfsonar-raw-data,
+Requires:               perfsonar-microdep-logstash,
+Requires:               perfsonar-microdep-utils
 
-%pre map
-/usr/sbin/groupadd -r perfsonar 2> /dev/null || :
-/usr/sbin/useradd -g perfsonar -r -s /sbin/nologin -c "perfSONAR User" -d /tmp perfsonar 2> /dev/null || :
+%description archive
+A package collection required to prepare for archiving of Microdep Analytics on a perfSONAR archive installation.
+
+%package geolite2
+Summary:		MaxMind's Geolite2 geoip databases
+Group:			Applications/Communications
+
+%description geolite2
+Geopositioning information from Maxmind to enrich datasets with AS numbers, city and country.
+
+%package logstash
+Summary:		Logstash pipeline for archiving Microdep analytic events
+Group:			Applications/Communications
+Requires:               curl,
+Requires:               logrotate
+
+%description logstash
+Logstash pipeline for archiving events generated by analytic tools in perfSONAR add-on Microdep.
+ 
+%package map
+Summary:		Microdep map web GUI presenting analytic results
+Group:			Applications/Communications
+BuildRequires:          perl >= 5.32
+BuildRequires:          perl(LWP::Simple)
+BuildRequires:          perl(JSON)
+BuildRequires:          perl(DBI)
+BuildRequires:          perl(DBD::SQLite)
+#Requires:               perfsonar-toolkit >= 5.0.7
+Requires:		httpd
+Requires:               mod_ssl
+Requires:		perl >= 5.32
+Requires:               perl(CGI) 
+Requires:		perl(Data::Dumper)
+Requires:               perl(DBI) 
+Requires:               perl(DBD::SQLite)
+Requires:		perl(Getopt::Long)
+Requires:		perl(JSON)
+Requires:		perl(LWP::Simple)
+Requires:               perl(LWP::UserAgent)
+Requires:               perl(LWP::Protocol::https)
+Requires:               perl(IO::Socket::SSL)
+Requires:		perl(Socket)
+Requires:		perl(strict)
+Requires:		perl(URI)
+Requires:		perl(warnings)
+Requires:		perl(YAML)
+Requires:               perl(Hash::Merge::Simple)
+Requires:               js-jquery
+Requires:               js-jquery-ui
+Requires:               datatablesjs 
+Requires:               chartjs = 4.4.2
+Requires:               chartjs-adapter-moment
+Requires:               chartjs-plugin-zoom
+Requires:               d3js = 4.13.0
+Requires:               hammerjs = 2.0.8
+Requires:               leafletjs = 1.0.3
+Requires:               leafletjs-contextmenu
+Requires:               leafletjs-markercluster
+Requires:               leafletjs-curve
+Requires:               leafletjs-L.LatLng.UTM
+Requires:               latlon-sphericaljs
+Requires:               momentjs = 2.30.1
+Requires:               select2js = 4.0.13
+Requires:               sorttablejs = 2.0
+Requires:               perfsonar-tracetree
+BuildRequires:          systemd
+BuildRequires:          systemd-rpm-macros       
+# ... but macros are not yet utilized below
+
+%description map
+Web GUI presenting Microdep analytic results in a map view
+
+%package toolkit
+Summary:                Microdep Analysis for perfSONAR toolkit
+Group:			Applications/Communications
+Requires:               perfsonar-microdep-map,
+Requires:               perfsonar-microdep-ana,
+Requires:               perfsonar-microdep-archive
+
+%description toolkit
+Package collection required for Microdep Analytics to be operatinal on a perfSONAR toolkit installation
+
+%package utils
+Summary:                Utilities for Microdep analytic work
+Group:			Applications/Communications
+Requires:		perl >= 5.32
+Requires:		perl(JSON)
+Requires:               python3-pika
+
+%description utils
+A collection of handy utilities to apply when working with Microdep analytic data-sets.
+
+###  P r e   i n s t a l l   a c t i o n s
 
 %pre ana
 /usr/sbin/groupadd -r perfsonar 2> /dev/null || :
@@ -145,6 +180,20 @@ Analytic scripts to process perfSONAR data sets and generate events. Events may 
 systemctl stop perfsonar-microdep-gap-ana.service || true
 systemctl stop perfsonar-microdep-trace-ana.service || true
 systemctl stop perfsonar-microdep-restart.timer || true
+
+%pre geolite2
+/usr/sbin/groupadd -r perfsonar 2> /dev/null || :
+/usr/sbin/useradd -g perfsonar -r -s /sbin/nologin -c "perfSONAR User" -d /tmp perfsonar 2> /dev/null || :
+
+%pre logstash
+/usr/sbin/groupadd -r perfsonar 2> /dev/null || :
+/usr/sbin/useradd -g perfsonar -r -s /sbin/nologin -c "perfSONAR User" -d /tmp perfsonar 2> /dev/null || :
+
+%pre map
+/usr/sbin/groupadd -r perfsonar 2> /dev/null || :
+/usr/sbin/useradd -g perfsonar -r -s /sbin/nologin -c "perfSONAR User" -d /tmp perfsonar 2> /dev/null || :
+
+###  I n s t a l l   a c t i o n s 
 
 %prep
 %setup -q
@@ -160,11 +209,34 @@ install -D -m 0644 -t %{buildroot}/%{_unitdir} %{buildroot}/%{install_base}/scri
 install -D -m 0644 -t %{buildroot}/%{_unitdir} %{buildroot}/%{install_base}/scripts/*.timer
 systemctl daemon-reload || true
 # Copy microdep map, httpd and logstash configs into correct folders
-install -D -m 0644 -t %{buildroot}/%{microdep_config_base}/mp-dragonlab/etc/ %{buildroot}/%{microdep_config_base}/microdep.db
+install -D -m 0644 %{buildroot}/%{microdep_config_base}/microdep-map_sqlite3_template.db %{buildroot}/%{microdep_runtime_base}/dragonlab.db
+install -D -m 0644 %{buildroot}/%{microdep_config_base}/microdep-map_sqlite3_template.db %{buildroot}/%{microdep_runtime_base}/dragonlab_6.db
 install -D -m 0644 -t %{buildroot}/etc/httpd/conf.d/ %{buildroot}/%{microdep_config_base}/apache-microdep-map.conf
 install -D -m 0644 -t %{buildroot}/etc/httpd/conf.d/ %{buildroot}/%{microdep_config_base}/apache-microdep-ana.conf
 install -D -m 0644 -t %{buildroot}/%{install_base}/logstash/microdep_pipeline/ %{buildroot}/%{microdep_config_base}/logstash/microdep/*
 install -D -m 0644 -t %{buildroot}/etc/logrotate.d/ %{buildroot}/%{microdep_config_base}/logrotate.d/microdep
+# Copy Geodb to correct folder
+install -D -m 0644 -t %{buildroot}/%{microdep_share_base}/GeoLite2/ %{buildroot}/%{microdep_config_base}/GeoLite2/*
+
+# Copy license file
+mkdir -p %{buildroot}/%{doc_base}
+#install -D -m 0644 -t %{buildroot}/%{doc_base} %{buildroot}/%{install_base}/LICENSE
+install -D -m 0644 %{buildroot}/%{install_base}/LICENSE %{buildroot}/%{doc_base}/LICENSE-ana
+install -D -m 0644 %{buildroot}/%{install_base}/LICENSE %{buildroot}/%{doc_base}/LICENSE-archive
+install -D -m 0644 %{buildroot}/%{install_base}/LICENSE %{buildroot}/%{doc_base}/LICENSE-logstash
+install -D -m 0644 %{buildroot}/%{install_base}/LICENSE %{buildroot}/%{doc_base}/LICENSE-map
+install -D -m 0644 %{buildroot}/%{install_base}/LICENSE %{buildroot}/%{doc_base}/LICENSE-toolkit
+install -D -m 0644 %{buildroot}/%{install_base}/LICENSE %{buildroot}/%{doc_base}/LICENSE-utils
+
+# Copy license file
+mkdir -p %{buildroot}/%{doc_base}
+#install -D -m 0644 -t %{buildroot}/%{doc_base} %{buildroot}/%{install_base}/LICENSE
+install -D -m 0644 %{buildroot}/%{install_base}/LICENSE %{buildroot}/%{doc_base}/LICENSE-ana
+install -D -m 0644 %{buildroot}/%{install_base}/LICENSE %{buildroot}/%{doc_base}/LICENSE-archive
+install -D -m 0644 %{buildroot}/%{install_base}/LICENSE %{buildroot}/%{doc_base}/LICENSE-logstash
+install -D -m 0644 %{buildroot}/%{install_base}/LICENSE %{buildroot}/%{doc_base}/LICENSE-map
+install -D -m 0644 %{buildroot}/%{install_base}/LICENSE %{buildroot}/%{doc_base}/LICENSE-toolkit
+install -D -m 0644 %{buildroot}/%{install_base}/LICENSE %{buildroot}/%{doc_base}/LICENSE-utils
 
 # Prepare folder for json output from analytics scripts read by logstash
 mkdir -p %{buildroot}/var/lib/logstash/microdep 
@@ -172,12 +244,14 @@ mkdir -p %{buildroot}/var/lib/logstash/microdep
 # Clean up copied/unrequired files
 rm -rf %{buildroot}/%{install_base}/scripts
 rm -f %{buildroot}/%{install_base}/Makefile
+rm -f %{buildroot}/%{install_base}/LICENSE
 rm -rf %{buildroot}/%{microdep_config_base}/apache-microdep-map.conf
 rm -rf %{buildroot}/%{microdep_config_base}/apache-microdep-ana.conf
 rm -rf %{buildroot}/%{microdep_config_base}/logstash/microdep
 rm -rf %{buildroot}/%{microdep_config_base}/microdep.db
 rm -rf %{buildroot}/%{microdep_config_base}/psconfig
 rm -rf %{buildroot}/%{microdep_config_base}/logrotate.d
+rm -rf %{buildroot}/%{microdep_config_base}/GeoLite2/*
 
 # Make js and css libs available in web folder (-r for relative paths ... to make rpmbuild happy)
 ln -sr /usr/share/javascript/chartjs/4.4.2/chart.umd.js %{buildroot}/%{microdep_web_dir}/js
@@ -229,25 +303,49 @@ ln -sr %{command_base}/psconfig_archive_ana.sh  %{buildroot}/usr/local/bin/pscon
 ln -sr %{command_base}/rabbitmq-consume.py  %{buildroot}/usr/local/bin/rabbitmq-consume.py
 ln -sr %{command_base}/json2table.pl  %{buildroot}/usr/local/bin/json2table.pl
 
-
 %clean
 rm -rf %{buildroot}
 
+###   P o s t  i n s t a l l   a c t i o n s 
+
+%post ana
+# Create db
+%{command_base}/create_new_db.sh -s -t postgres -d routingmonitor
+# Fix access to db
+if [ -f /var/lib/pgsql/data/pg_hba.conf ]; then
+    %{command_base}/fix-pgsql-access.sh -i /var/lib/pgsql/data/pg_hba.conf
+    systemctl reload postgresql.service || true
+fi
+
+# Enable executing of microdep ana scripts if SElinux is enabled
+if [ -f /sbin/semanage ]; then
+    /sbin/semanage fcontext -a -t bin_t "/usr/lib/perfsonar/bin/microdep_commands/qstream-gap-ana"
+    /sbin/semanage fcontext -a -t bin_t "/usr/lib/perfsonar/bin/microdep_commands/trace_event_reader.py"
+    /sbin/restorecon -irv /usr/lib/perfsonar/bin/microdep_commands/
+fi
+    
+# Enable systemd services (ignore failures)
+systemctl daemon-reload || true
+systemctl enable perfsonar-microdep-gap-ana.service || true
+systemctl enable perfsonar-microdep-trace-ana.service || true
+systemctl enable perfsonar-microdep-restart.timer || true
+systemctl start perfsonar-microdep-gap-ana.service || true
+systemctl start perfsonar-microdep-trace-ana.service || true
+systemctl start perfsonar-microdep-restart.timer || true
+
+%post logstash
+# Add Microdep to Opensearch setup (including Logstash) 
+/usr/lib/perfsonar/bin/microdep_commands/opensearch_config_microdep.sh || true
+
+if [ ! -f /etc/perfsonar/microdep/microdep-ana-archive.json ]; then
+    # Prepare default logstash archive config for analytic results
+    /usr/lib/perfsonar/bin/microdep_commands/psconfig_archive_ana.sh > /etc/perfsonar/microdep/microdep-ana-archive.json || true
+fi
+
+# Reload web server config
+systemctl reload httpd.service || true
+
 %post map
-# Fix credentials to ensure access to Opensearch *** NEEDS TO MADE OBSOLETE ***
-if [ -f /etc/perfsonar/opensearch/opensearch_login ]; then
-    USER=`awk -F " " '{print $1}' /etc/perfsonar/opensearch/opensearch_login`
-    PASSWD=`awk -F " " '{print $2}' /etc/perfsonar/opensearch/opensearch_login`
-    sed -i "s|http://admin:no+nz+br|https://$USER:$PASSWD|g" %{microdep_config_base}/microdep-config.yml
-fi
-
-# Init Microdep config db. *** Obsolete since topology events now produce topology info ****
-if [ -f %{config_base}/psconfig/pscheduler.d/toolkit-webui.json ]; then
-    # Read psconfig-data and set start time set to beginnig of yesterday local time (later repeated by perfsonar-microdep-watchconfig.service)
-    %{command_base}/microdep-psconfig-load.pl -c --db %{microdep_config_base}/mp-dragonlab/etc/microdep.db --start-time $(date --date "today 00:00:00" +%s) %{config_base}/psconfig/pscheduler.d/toolkit-webui.json
-    # (Perhaps "systemctl start perfsonar-microdep-watchconfig.service" could be run instead...)
-fi
-
 # Add Microdep button on main grafana dashboard (if not already present)  REMARK: TEMPORARY BE REMOVED 
 if [ -e /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json-temporary-removed ]; then
     if grep -q  "Microdep map" /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json; then
@@ -267,59 +365,9 @@ fi
 # Reload web server config
 systemctl reload httpd.service || true
 
-%post ana
-# Create db
-%{command_base}/create_new_db.sh -s -t postgres -d routingmonitor
-# Fix access to db
-if [ -f /var/lib/pgsql/data/pg_hba.conf ]; then
-    %{command_base}/fix-pgsql-access.sh -i /var/lib/pgsql/data/pg_hba.conf
-    systemctl reload postgresql.service || true
-fi
-
-
-# Add Microdep to Opensearch setup (including Logstash) 
-/usr/lib/perfsonar/bin/microdep_commands/opensearch_config_microdep.sh || true
-
-if [ ! -f /etc/perfsonar/microdep/microdep-ana-archive.json ]; then
-    # Prepare default logstash archive config for analytic results
-    /usr/lib/perfsonar/bin/microdep_commands/psconfig_archive_ana.sh > /etc/perfsonar/microdep/microdep-ana-archive.json || true
-fi
-
-# Enable executing of microdep ana scripts if SElinux is enabled
-if [ -f /sbin/semanage ]; then
-    /sbin/semanage fcontext -a -t bin_t "/usr/lib/perfsonar/bin/microdep_commands/qstream-gap-ana"
-    /sbin/semanage fcontext -a -t bin_t "/usr/lib/perfsonar/bin/microdep_commands/trace_event_reader.py"
-    /sbin/restorecon -irv /usr/lib/perfsonar/bin/microdep_commands/
-fi
-    
-# Enable systemd services (ignore failures)
-systemctl daemon-reload || true
-systemctl enable perfsonar-microdep-gap-ana.service || true
-systemctl enable perfsonar-microdep-trace-ana.service || true
-systemctl enable perfsonar-microdep-restart.timer || true
-systemctl start perfsonar-microdep-gap-ana.service || true
-systemctl start perfsonar-microdep-trace-ana.service || true
-systemctl start perfsonar-microdep-restart.timer || true
-
-# Reload web server config
-systemctl reload httpd.service || true
-
-%preun map
-# Remove Microdep button from Grafana main dashboard (if present)
-if grep -q  "Microdep map" /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json; then
-    DASHBOARDFILE=$(mktemp)
-    jq  'del( .panels[] | select(.options.content != null ) | select (.options.content | contains("Microdep map")))' /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json > $DASHBOARDFILE
-    mv $DASHBOARDFILE /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json
-fi
-
-%postun map
-# Reload web server (since web configs have been uninstalled)
-systemctl reload httpd.service || true
+###   P r e   u n i n s t a l l   a c t i o n s 
 
 %preun ana
-# Remove Microdep from Opensearch setup (including Logstash) 
-/usr/lib/perfsonar/bin/microdep_commands/opensearch_config_microdep.sh -r config || true
-
 # Clean up db access
 if [ -f /var/lib/pgsql/data/pg_hba.conf ]; then
     %{command_base}/fix-pgsql-access.sh -ri /var/lib/pgsql/data/pg_hba.conf
@@ -330,25 +378,100 @@ systemctl stop perfsonar-microdep-gap-ana.service || true
 systemctl stop perfsonar-microdep-trace-ana.service || true
 systemctl stop perfsonar-microdep-restart.timer || true
 
+%preun logstash
+# Remove Microdep from Opensearch setup (including Logstash) 
+/usr/lib/perfsonar/bin/microdep_commands/opensearch_config_microdep.sh -r config || true
+
+%preun map
+# Remove Microdep button from Grafana main dashboard (if present)
+if grep -q  "Microdep map" /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json; then
+    DASHBOARDFILE=$(mktemp)
+    jq  'del( .panels[] | select(.options.content != null ) | select (.options.content | contains("Microdep map")))' /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json > $DASHBOARDFILE
+    mv $DASHBOARDFILE /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json
+fi
+
+###   P o s t   u n i n s t a l l   a c t i o n s 
+
 %postun ana
-# Reload web server (since web configs have been uninstalled)
-systemctl reload httpd.service || true
 # Reload systemd since services have been removed
 systemctl daemon-reload || true
-    
-%files 
+
+%postun logstash
+# Reload web server (since web configs have been uninstalled)
+systemctl reload httpd.service || true
+
+%postun map
+# Reload web server (since web configs have been uninstalled)
+systemctl reload httpd.service || true
+
+###  F i l e s
+
+#%files 
+#%defattr(0644,perfsonar,perfsonar,0755)
+#%license %{doc_base}/LICENSE
+
+%files ana
 %defattr(0644,perfsonar,perfsonar,0755)
-%license %{install_base}/LICENSE
+%license %{doc_base}/LICENSE-ana
+%{_unitdir}/perfsonar-microdep-gap-ana.service
+%{_unitdir}/perfsonar-microdep-trace-ana.service
+%{_unitdir}/perfsonar-microdep-restart.service
+%{_unitdir}/perfsonar-microdep-restart.timer
+%attr(0755,perfsonar,perfsonar) %{command_base}/qstream-gap-ana
+%attr(0755,perfsonar,perfsonar) %{command_base}/trace_event_reader.py
+%attr(0755,perfsonar,perfsonar) %{command_base}/create_new_db.sh
+%attr(0755,perfsonar,perfsonar) %{command_base}/fix-pgsql-access.sh
+%{microdep_config_base}/microdep-tests.json.example
+%{microdep_config_base}/microdep-tests-packet-subcount.json.example
+%config %{microdep_config_base}/microdep-gap-ana.yml
+%config %{microdep_config_base}/microdep-trace-ana.yml
+
+%files archive
+%license %{doc_base}/LICENSE-archive
 
 %files geolite2
 %defattr(0644,perfsonar,perfsonar,0755)
-%license %{microdep_config_base}/GeoLite2/LICENSE.txt
-%{microdep_config_base}/GeoLite2/COPYRIGHT.txt
-%{microdep_config_base}/GeoLite2/*.mmdb
+%license %{microdep_share_base}/GeoLite2/LICENSE.txt
+%{microdep_share_base}/GeoLite2/COPYRIGHT.txt
+%{microdep_share_base}/GeoLite2/*.mmdb
+
+%files logstash
+%defattr(0644,perfsonar,perfsonar,0755)
+%license %{doc_base}/LICENSE-logstash
+%attr(0755,perfsonar,perfsonar) %{command_base}/opensearch_config_microdep.sh
+%attr(0755,perfsonar,perfsonar) %{command_base}/psconfig_archive_ana.sh
+/usr/local/bin/psconfig_archive_ana.sh
+/usr/local/bin/opensearch_config_microdep.sh
+/etc/httpd/conf.d/apache-microdep-ana.conf
+%{install_base}/logstash/microdep_pipeline/*.conf
+%{microdep_config_base}/logstash/microdep-pipelines.yml
+%{microdep_config_base}/microdep_default_policy.json
+%config /var/lib/logstash/microdep 
+%{microdep_config_base}/os-template-gap-ana.json
+%{microdep_config_base}/os-template-trace-ana.json
+%{microdep_config_base}/roles_yml_patch
+%config /etc/logrotate.d/microdep
+
+%files logstash
+%defattr(0644,perfsonar,perfsonar,0755)
+%license %{doc_base}/LICENSE-logstash
+%attr(0755,perfsonar,perfsonar) %{command_base}/opensearch_config_microdep.sh
+%attr(0755,perfsonar,perfsonar) %{command_base}/psconfig_archive_ana.sh
+/usr/local/bin/psconfig_archive_ana.sh
+/usr/local/bin/opensearch_config_microdep.sh
+/etc/httpd/conf.d/apache-microdep-ana.conf
+%{install_base}/logstash/microdep_pipeline/*.conf
+%{microdep_config_base}/logstash/microdep-pipelines.yml
+%{microdep_config_base}/microdep_default_policy.json
+%config /var/lib/logstash/microdep 
+%{microdep_config_base}/os-template-gap-ana.json
+%{microdep_config_base}/os-template-trace-ana.json
+%{microdep_config_base}/roles_yml_patch
+%config /etc/logrotate.d/microdep
 
 %files map
 %defattr(0644,perfsonar,perfsonar,0755)
-%license %{install_base}/LICENSE
+%license %{doc_base}/LICENSE-map
 %{microdep_web_dir}/*.html
 %{microdep_web_dir}/img
 %{microdep_web_dir}/js
@@ -358,49 +481,33 @@ systemctl daemon-reload || true
 %attr(0755,perfsonar,perfsonar) %{command_base}/microdep-config.cgi
 %attr(0755,perfsonar,perfsonar) %{command_base}/yaml-to-json.cgi
 %attr(0755,perfsonar,perfsonar) %{command_base}/get-mapconfig.cgi
-%config %{microdep_config_base}/microdep-config.yml
 %config %{microdep_config_base}/mapconfig.yml
 %config %{microdep_config_base}/mapconfig.d/
 %{microdep_config_base}/dragonlab-base-geo.json.example
-%config %{microdep_config_base}/mp-dragonlab/etc/microdep.db
+%config %{microdep_runtime_base}/dragonlab.db
+%config %{microdep_runtime_base}/dragonlab_6.db
+%{microdep_config_base}/microdep-map_sqlite3_template.db
 %{microdep_config_base}/grafana_dashboard_patch
 /etc/httpd/conf.d/apache-microdep-map.conf
 %config %{microdep_web_dir}/dragonlab/dragonlab-base-geo.json
 
-%files ana
+%files toolkit
+%license %{doc_base}/LICENSE-toolkit
+
+%files utils
+%license %{doc_base}/LICENSE-utils
 %defattr(0644,perfsonar,perfsonar,0755)
-%license %{install_base}/LICENSE
-%{_unitdir}/perfsonar-microdep-gap-ana.service
-%{_unitdir}/perfsonar-microdep-trace-ana.service
-%{_unitdir}/perfsonar-microdep-restart.service
-%{_unitdir}/perfsonar-microdep-restart.timer
-%attr(0755,perfsonar,perfsonar) %{command_base}/qstream-gap-ana
-%attr(0755,perfsonar,perfsonar) %{command_base}/trace_event_reader.py
-%attr(0755,perfsonar,perfsonar) %{command_base}/create_new_db.sh
-%attr(0755,perfsonar,perfsonar) %{command_base}/fix-pgsql-access.sh
-%attr(0755,perfsonar,perfsonar) %{command_base}/opensearch_config_microdep.sh
-%attr(0755,perfsonar,perfsonar) %{command_base}/psconfig_archive_ana.sh
 %attr(0755,perfsonar,perfsonar) %{command_base}/json2table.pl
 %attr(0755,perfsonar,perfsonar) %{command_base}/rabbitmq-consume.py
-/usr/local/bin/opensearch_config_microdep.sh
 /usr/local/bin/rabbitmq-consume.py
 /usr/local/bin/json2table.pl
-/usr/local/bin/psconfig_archive_ana.sh
-/etc/httpd/conf.d/apache-microdep-ana.conf
-%{install_base}/logstash/microdep_pipeline/*.conf
-%{microdep_config_base}/logstash/microdep-pipelines.yml
-%{microdep_config_base}/microdep_default_policy.json
-%config /var/lib/logstash/microdep 
-%{microdep_config_base}/os-template-gap-ana.json
-%{microdep_config_base}/os-template-trace-ana.json
-%{microdep_config_base}/roles_yml_patch
-%{microdep_config_base}/microdep-tests.json.example
-%{microdep_config_base}/microdep-tests-packet-subcount.json.example
-%config %{microdep_config_base}/microdep-gap-ana.yml
-%config %{microdep_config_base}/microdep-trace-ana.yml
-%config /etc/logrotate.d/microdep
+
+###  C h a n g e   l o g 
+
 %changelog
-* Thu Oct 24 2025 Otto J Wittner <otto.wittner@sikt.no>
+* Fri Apr 24 2026 Otto J Wittner <otto.wittner@sikt.no>
+- Packaging and spec-file reorganized. 5.3 beta coming up.
+* Fri Oct 24 2025 Otto J Wittner <otto.wittner@sikt.no>
 - Prepareing for release 5.3
 * Thu Jan 04 2024 Otto J Wittner <otto.wittner@sikt.no>
 - Initial spec file created

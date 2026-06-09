@@ -1,0 +1,2 @@
+/usr/lib/perfsonar/bin/microdep_commands/opensearch_config_microdep.sh /usr/local/bin/opensearch_config_microdep.sh
+/usr/lib/perfsonar/bin/microdep_commands/psconfig_archive_ana.sh /usr/local/bin/psconfig_archive_ana.sh

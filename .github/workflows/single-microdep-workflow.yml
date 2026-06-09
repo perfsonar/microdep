@@ -1,0 +1,78 @@
+name: single-microdep-workflow
+
+on:
+  push:
+    branches:
+      - master
+env:  
+  BUILD_OS: ol8
+
+jobs:
+  microdep-daemon:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checkout the repository
+      - name: Check out Repo
+        uses: actions/checkout@v4
+        with:
+          ref: 5.3.0
+      - name: Debug chartjs contents
+        run: |
+         echo "=== chartjs dir ==="
+         ls -al chartjs
+         echo "=== tarballs ==="
+         ls -al chartjs/*.tgz chartjs/*.tar.gz || true
+      # Fetch workflow script from projects
+      - name: Fetch workflow script from projects
+        env:
+          github-token: ${{ secrets.GIT_ACTIONS }}
+        run: |
+          git clone https://github.com/perfsonar/project.git project
+          case "${{ env.BUILD_OS }}" in
+            'ol8'|'el9')
+              cp project/toolbox/workflows/github-el-workflow.sh .
+              ;;
+            'd11'|'d12'|'u20'|'u22'|'u24')
+              cp project/toolbox/workflows/github-db-workflow.sh .
+              ;;
+          esac
+      # Download artifacts
+      - name: Download artifacts
+        run: |
+          mkdir -p artifacts
+          mkdir -p artifacts/deb
+          ls -al artifacts
+          echo "Downloading artifact for pstracetree"
+          echo "Run ID: 24512198566"
+          gh run download 24512198566 --repo perfsonar/pstracetree -D artifacts/pstracetree --name "pstracetree-${{ env.BUILD_OS }}"  
+          artifact_path="artifacts/pstracetree"
+          echo "copy to the artifacts deb dir"
+          ls -al artifacts
+          ls -al artifacts/pstracetree
+          mkdir -p artifacts/RPMS
+          echo "Copying RPMs to artifacts/RPMS"
+          cp "$artifact_path"/RPMS/*.rpm artifacts/RPMS
+          ls -al artifacts/pstracetree/RPMS/*.rpm
+        env:
+          GITHUB_TOKEN: ${{ secrets.GIT_ACTIONS }}
+
+      # Run docker oneshot builder and workflow script
+      - name: Run Docker oneshot builder
+        run: |
+          case "${{ env.BUILD_OS }}" in
+            'ol8'|'el9')
+              ls -al chartjs/*.tgz chartjs/*.tar.gz
+              curl -s https://raw.githubusercontent.com/perfsonar/docker-oneshot-builder/main/build | sh -s - --run github-el-workflow.sh . '${{ env.BUILD_OS }}'
+              ;;
+            'd11'|'d12'|'u20'|'u22'|'u24')
+              curl -s https://raw.githubusercontent.com/perfsonar/docker-oneshot-builder/main/build | sh -s - --run github-db-workflow.sh . '${{ env.BUILD_OS }}'
+              ;;
+          esac
+      # Upload artifact
+      ##- name: Upload artifact
+      #  uses: actions/upload-artifact@v4
+      #  with:
+      #    name: ${{ github.event.repository.name }}-${{ env.BUILD_OS }}
+      #    path: unibuild-repo
+      #    retention-days: 5
