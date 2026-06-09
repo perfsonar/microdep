@@ -10,6 +10,10 @@ FORCE=no
 
 default: dist
 
+missing-from-manifest:
+# List files not listed in MANIFEST.
+	@find . -type f | while read f; do grep -q $${f#*/} MANIFEST || echo $${f#*/} | grep -v -e unibuild -e MANIFEST; done
+
 check-dev-prod:
 # Check if files in current dev env are in sync with files in legacy dev env
 	@awk '\
