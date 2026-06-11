@@ -103,7 +103,7 @@ Depends: ${misc:Depends}, ${perl:Depends},
  libjs-moment, 
  libjs-select2.js,
  libjs-sorttable,
- perfsonar-tracetree
+ libjs-vis
 Description: Microdep map web GUI presenting analytic results
  Web GUI presenting Microdep analytic results in a map view
 

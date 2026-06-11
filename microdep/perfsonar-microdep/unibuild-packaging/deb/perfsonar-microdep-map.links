@@ -31,12 +31,17 @@
 /usr/share/javascript/leaflet/MarkerCluster.Default.css /usr/lib/perfsonar/microdep-map/css/MarkerCluster.Default.css
 /usr/share/javascript/leaflet/MarkerCluster.css /usr/lib/perfsonar/microdep-map/css/MarkerCluster.css
 /usr/share/javascript/leaflet/leaflet.markercluster.min.js /usr/lib/perfsonar/microdep-map/js/leaflet.markercluster-src.js
+/usr/share/javascript/leaflet/leaflet.markercluster.min.js /usr/lib/perfsonar/microdep-map/js/leaflet.markercluster.min.js
 /usr/share/javascript/leaflet/leaflet.markercluster.min.js.map /usr/lib/perfsonar/microdep-map/js/leaflet.markercluster.min.js.map
 /usr/share/javascript/leaflet-curve/leaflet.curve.js /usr/lib/perfsonar/microdep-map/js/leaflet.curve.js
 /usr/share/javascript/leaflet-utm/L.LatLng.UTM.js /usr/lib/perfsonar/microdep-map/js/L.LatLng.UTM.js
 /usr/share/javascript/moment/moment.js /usr/lib/perfsonar/microdep-map/js/moment.js
 /usr/share/javascript/select2.js/select2.min.css /usr/lib/perfsonar/microdep-map/css/select2.min.css
 /usr/share/javascript/select2.js/select2.min.js /usr/lib/perfsonar/microdep-map/js/select2.min.js
+/usr/share/javascript/vis/vis.min.js /usr/lib/perfsonar/microdep-map/js/vis.min.js
+/usr/share/javascript/vis/vis.min.css /usr/lib/perfsonar/microdep-map/css/vis.min.css
+/usr/share/javascript/vis/img /usr/lib/perfsonar/microdep-map/css/img 
+/usr/share/javascript/vis/vis-timeline-graph2d.min.css /usr/lib/perfsonar/microdep-map/css/vis-timeline-graph2d.min.css
 /usr/share/javascript/sorttable/sorttable.js /usr/lib/perfsonar/microdep-map/js/sorttable.js
 /etc/perfsonar/microdep/mapconfig.yml /usr/lib/perfsonar/microdep-map/mapconfig.yml
 /etc/perfsonar/microdep/mapconfig.yml.d /usr/lib/perfsonar/microdep-map/mapconfig.yml.d

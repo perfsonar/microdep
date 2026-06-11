@@ -75,7 +75,7 @@ systemctl restart logstash.service || true
 %{config_base}/ilm/install/pscheduler_raw_data_policy.json
 
 %changelog
-* Thu Oct 24 2025 Otto J Wittner <otto.wittner@sikt.no>
+* Fri Oct 24 2025 Otto J Wittner <otto.wittner@sikt.no>
 - Ready for release 5.3
 
 
