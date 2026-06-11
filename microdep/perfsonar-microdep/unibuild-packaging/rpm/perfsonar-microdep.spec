@@ -290,9 +290,6 @@ ln -rs /usr/share/javascript/visjs/4.21.0/img   %{buildroot}/%{microdep_web_dir}
 ln -rs /usr/share/javascript/visjs/4.21.0/vis-timeline-graph2d.min.css   %{buildroot}/%{microdep_web_dir}/css/vis-timeline-graph2d.min.css
 ln -sr /usr/share/javascript/sorttable/2.0/sorttable.js %{buildroot}/%{microdep_web_dir}/js/
 
-# Link mapconfig
-#ln -sr %{microdep_config_base}/mapconfig.yml %{buildroot}/%{microdep_web_dir}
-
 # Link up some handy tools
 mkdir -p %{buildroot}/usr/local/bin/ || true
 ln -sr %{command_base}/opensearch_config_microdep.sh  %{buildroot}/usr/local/bin/opensearch_config_microdep.sh
@@ -456,7 +453,6 @@ systemctl reload httpd.service || true
 %{microdep_web_dir}/img
 %{microdep_web_dir}/js
 %{microdep_web_dir}/css
-#%{microdep_web_dir}/*.yml
 %attr(0755,perfsonar,perfsonar) %{command_base}/elastic-get-date-type.pl
 %attr(0755,perfsonar,perfsonar) %{command_base}/microdep-config.cgi
 %attr(0755,perfsonar,perfsonar) %{command_base}/yaml-to-json.cgi

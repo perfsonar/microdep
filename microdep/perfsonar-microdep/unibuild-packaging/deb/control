@@ -64,7 +64,7 @@ Description: MaxMind's Geolite2 geoip databases
 
 Package: perfsonar-microdep-logstash
 Architecture: all
-Depends: ${misc:Depends}, ${perl:Depends},
+Depends: ${misc:Depends},
  curl,
  logrotate
 #Recommends: perfsonar-archive
