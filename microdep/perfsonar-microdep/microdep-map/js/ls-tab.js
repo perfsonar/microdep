@@ -45,6 +45,7 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
     const params = {
         from:        from,
         to:          to,
+        net:         options.net        || '',
         mahost:      options.mahost     || '',
         verify_SSL:  options.verify_SSL,
         api:         options.api        || '',
@@ -338,7 +339,8 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
         const end_iso   = new Date(t_end   * 1000).toISOString();
 
         const server = mahost.split('/').slice(0, 3).join('/');
-        const fetch_url = '/pstracetree/get-tracetests.pl?' + verify_SSL_qs('') +
+//        const fetch_url = '/pstracetree/get-tracetests.pl?' + verify_SSL_qs('') +
+        const fetch_url = 'get-tracetests.pl?' + verify_SSL_qs('') +
                           (params.verify_SSL !== undefined ? '&' : '') +
                           'mahost=' + encodeURIComponent(mahost) +
                           '&start=' + encodeURIComponent(start_iso) +
@@ -394,7 +396,7 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
             if (params.from && params.to && pair_list.length) {
                 const match = find_matching_pair(pair_list, params.from, params.to);
                 if (match) {
-                    open_tracetree_os(server, match.from, match.to, t_start, t_end);
+                    open_tracetree_os(mahost, match.from, match.to, t_start, t_end);
                 } else {
                     el('trace').innerHTML =
                         '<div class="center-text" style="padding:40px">' +
@@ -536,6 +538,21 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
     </div>
   </div>
 </div>`;
+        container.innerHTML = `
+<div id="${id}-inner" class="ls-tab-inner">
+  <div id="${id}-tabs" class="ls-tabs">
+    <ul>
+      <li><a href="#${id}-peers">Peers</a></li>
+      <li><a href="#${id}-trace">Traceroute</a></li>
+    </ul>
+    <div id="${id}-peers" class="ls-pane">
+      <h2 class="center-text">Error: Failed to access measurement archive. Check mapconfig.yml.</h2>
+    </div>
+    <div id="${id}-trace" class="ls-pane">
+      <h2 class="center-text">Please choose a peer pair</h2>
+    </div>
+  </div>
+</div>`;
         return true;
     }
 
@@ -544,6 +561,7 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
     $('#' + id + '-tabs').tabs();
     init_pair_delegation();
 
+    /*
     if (params.mahost) {
         // We already know the MA — populate Peers from it.
         const base = params.mahost.startsWith('http')
@@ -558,7 +576,9 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
             if (u.hostname === 'localhost' || u.hostname === '127.0.0.1') {
                 display_host = 'Local archive (' + window.location.hostname + ')';
             }
-        } catch (_) { /* ignore parse errors */ }
+            } catch (_) {
+	    // ignore parse errors
+            }
 
         el('ma').innerHTML =
             '<div class="ls-empty">' +
@@ -570,7 +590,7 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
                 el('ma').innerHTML = '<h2 class="center-text">Loading MA list…</h2>';
                 fetch_ls(DEFAULT_LS);
             });
-
+*/
         // If from/to are known (typical case when launched from the microdep
         // map), preselect the Traceroute sub-tab and show a spinner. The actual
         // topology load is deferred until the Peers fetch returns, so we can
@@ -587,12 +607,13 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
                 '</div>';
         }
 
-        if (params.api === 'opensearch') {
-            fetch_base_os(base, start_time, end_time);
-        } else {
-            fetch_base(base + '/esmond/perfsonar/archive/', start_time, end_time);
-        }
-    } else {
-        fetch_ls(DEFAULT_LS);
-    }
+//        if (params.api === 'opensearch') {
+//            fetch_base_os(base, start_time, end_time);
+            fetch_base_os(params.mahost, start_time, end_time);
+//        } else {
+//            fetch_base(base + '/esmond/perfsonar/archive/', start_time, end_time);
+//        }
+//    } else {
+//        fetch_ls(DEFAULT_LS);
+//    }
 }

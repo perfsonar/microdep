@@ -807,10 +807,14 @@ function link_popup(link){
 	    let start_epoch = new Date(dato).getTime() / 1000;
 	    let end_epoch = start_epoch + parms.period * 3600;
 	    var routesOpts = {
-		mahost: 'https://localhost:443',
+		net: parms.net,
+		mahost: 'https://localhost:9200/',
 		verify_SSL: 0,
 		api: 'opensearch'
 	    };
+	    if(! jQuery.isEmptyObject(conffile[parms.net].archive) ) {
+		routesOpts.mahost = conffile[parms.net].archive;
+	    }
 	    ls_tab(tab_id, link.from, link.to, start_epoch, end_epoch, routesOpts);
 	    persistTab(tab_id, {
 		kind: 'routes',

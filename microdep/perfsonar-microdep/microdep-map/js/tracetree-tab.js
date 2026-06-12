@@ -561,19 +561,13 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
 
         let url;
 
-        if (params.api === 'opensearch') {
-            url = '/pstracetree/get-tracetests.pl?mahost=' + encodeURIComponent(base)
-                + '&from=' + encodeURIComponent(params.from)
-                + '&to=' + encodeURIComponent(params.to)
-                + '&start=' + encodeURIComponent(params.start)
-                + '&end=' + encodeURIComponent(params.end);
-        } else {
-            let tpath = base + '?';
-            if (slice.start) tpath += '&time-start=' + Math.floor(slice.start);
-            if (slice.range) tpath += '&time-range=' + Math.floor(slice.range);
-            url = '/pstracetree/cors.pl?method=GET&url=' + encodeURI(tpath);
-        }
-
+//        url = '/pstracetree/get-tracetests.pl?mahost=' + encodeURIComponent(base)
+        url = 'get-tracetests.pl?mahost=' + encodeURIComponent(base)
+            + '&from=' + encodeURIComponent(params.from)
+            + '&to=' + encodeURIComponent(params.to)
+            + '&start=' + encodeURIComponent(params.start)
+            + '&end=' + encodeURIComponent(params.end);
+	
         if (params.verify_SSL !== undefined) {
             url += '&verify_SSL=' + params.verify_SSL;
         }

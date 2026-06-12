@@ -457,6 +457,7 @@ systemctl reload httpd.service || true
 %attr(0755,perfsonar,perfsonar) %{command_base}/microdep-config.cgi
 %attr(0755,perfsonar,perfsonar) %{command_base}/yaml-to-json.cgi
 %attr(0755,perfsonar,perfsonar) %{command_base}/get-mapconfig.cgi
+%attr(0755,perfsonar,perfsonar) %{command_base}/get-tracetests.pl
 %config %{microdep_config_base}/mapconfig.yml
 %config %{microdep_config_base}/mapconfig.d/
 %{microdep_config_base}/dragonlab-base-geo.json.example
