@@ -16,7 +16,7 @@ An open-source JavaScript library for mobile-friendly interactive maps. Develope
 %package contextmenu
 Summary:		A context menu for Leaflet
 #Version:                1.4.0
-#Release:                1.4.0%{?dist}
+Release:                1%{?dist}
 License:                MIT Licence
 Group:			Development/Libraries
 Requires:               leafletjs
@@ -27,7 +27,7 @@ A context menu for Leaflet
 %package markercluster
 Summary:		Animated Marker Clustering
 #Version:                1.0.3
-#Release:                1.0.3%{?dist}
+Release:                1%{?dist}
 License:                MIT Licence
 Group:			Development/Libraries
 Requires:               leafletjs
@@ -37,8 +37,8 @@ Provides Beautiful Animated Marker Clustering functionality for Leaflet.
 
 %package curve
 Summary:		Bézier curves for Leaflet
-#Version:                1.0.0%{?dist}
-#Release:                1.0.0%{?dist}
+#Version:                1.0.0
+Release:                1%{?dist}
 License:                MIT Licence
 Group:			Development/Libraries
 Requires:               leafletjs
@@ -48,8 +48,8 @@ A Leaflet plugin for drawing Bézier curves and other complex shapes.
 
 %package UTM
 Summary:	        UTM methods for L.LatLng
-#Version:                1.0%{?dist}
-#Release:                1.0%{?dist}
+#Version:                1.0
+Release:                1%{?dist}
 License:                BSD 3-Clause License
 Group:			Development/Libraries
 Requires:               leafletjs
@@ -66,6 +66,7 @@ ls -l
 rm -rf %{buildroot}
 # Fetch leafletjs 
 curl --create-dirs -Lo %{buildroot}/%{install_base}/leafletjs/1.9.4/leaflet.js https://unpkg.com/leaflet@1.9.4/dist/leaflet.js 
+curl --create-dirs -Lo %{buildroot}/%{install_base}/leafletjs/1.9.4/leaflet.js.map https://unpkg.com/leaflet@1.9.4/dist/leaflet.js.map 
 curl --create-dirs -Lo %{buildroot}/%{install_base}/leafletjs/1.9.4/leaflet.css https://unpkg.com/leaflet@1.9.4/dist/leaflet.css
 curl --create-dirs -Lo %{buildroot}/%{install_base}/leafletjs/1.9.4/LICENSE https://unpkg.com/leaflet@1.9.4/LICENSE
 curl --create-dirs -Lo %{buildroot}/%{install_base}/leafletjs/1.9.4/images/layers-2x.png https://unpkg.com/leaflet@1.9.4/dist/images/layers-2x.png
@@ -101,6 +102,7 @@ rm -rf %{buildroot}
 %defattr(0644,root,root,0755)
 %license %{install_base}/leafletjs/1.9.4/LICENSE
 %{install_base}/leafletjs/1.9.4/leaflet.js
+%{install_base}/leafletjs/1.9.4/leaflet.js.map
 %{install_base}/leafletjs/1.9.4/leaflet.css
 %{install_base}/leafletjs/1.9.4/images/*.png
 

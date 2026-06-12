@@ -270,6 +270,7 @@ ln -sr /usr/share/javascript/latlon-sphericaljs/2.3.0/latlon-spherical.js %{buil
 ln -sr /usr/share/javascript/latlon-sphericaljs/2.3.0/dms.js %{buildroot}/%{microdep_web_dir}/js/
 ln -sr /usr/share/javascript/leafletjs/1.9.4/leaflet.css %{buildroot}/%{microdep_web_dir}/css/
 ln -sr /usr/share/javascript/leafletjs/1.9.4/leaflet.js %{buildroot}/%{microdep_web_dir}/js/
+ln -sr /usr/share/javascript/leafletjs/1.9.4/leaflet.js.map %{buildroot}/%{microdep_web_dir}/js/
 ln -sr /usr/share/javascript/leafletjs/1.9.4/images %{buildroot}/%{microdep_web_dir}/css/
 ln -sr /usr/share/javascript/leaflet-contextmenu/1.4.0/leaflet.contextmenu.min.css %{buildroot}/%{microdep_web_dir}/css/
 ln -sr /usr/share/javascript/leaflet-contextmenu/1.4.0/leaflet.contextmenu.min.js %{buildroot}/%{microdep_web_dir}/js/
@@ -283,6 +284,7 @@ ln -sr /usr/share/javascript/momentjs/2.30.1/moment.js %{buildroot}/%{microdep_w
 ln -sr /usr/share/javascript/select2/4.0.13/css/select2.min.css %{buildroot}/%{microdep_web_dir}/css/
 ln -sr /usr/share/javascript/select2/4.0.13/js/select2.min.js %{buildroot}/%{microdep_web_dir}/js/
 ln -rs /usr/share/javascript/visjs/4.21.0/vis.js   %{buildroot}/%{microdep_web_dir}/js/vis.js
+ln -rs /usr/share/javascript/visjs/4.21.0/vis.map   %{buildroot}/%{microdep_web_dir}/js/vis.map
 ln -rs /usr/share/javascript/visjs/4.21.0/vis.css   %{buildroot}/%{microdep_web_dir}/css/vis.css
 ln -rs /usr/share/javascript/visjs/4.21.0/vis.min.js   %{buildroot}/%{microdep_web_dir}/js/vis.min.js
 ln -rs /usr/share/javascript/visjs/4.21.0/vis.min.css   %{buildroot}/%{microdep_web_dir}/css/vis.min.css

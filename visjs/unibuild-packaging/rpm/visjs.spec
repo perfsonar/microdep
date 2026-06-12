@@ -19,6 +19,7 @@ A dynamic, browser based javascript visualization library. Developed by Almende 
 rm -rf %{buildroot}
 # Fetch visjs 4.21.0 (https://visjs.org)
 curl --create-dirs -Lo %{buildroot}/%{install_base}/visjs/4.21.0/vis.js https://cdnjs.cloudflare.com/ajax/libs/vis/4.21.0/vis.js 
+curl --create-dirs -Lo %{buildroot}/%{install_base}/visjs/4.21.0/vis.map https://cdnjs.cloudflare.com/ajax/libs/vis/4.21.0/vis.map 
 curl --create-dirs -Lo %{buildroot}/%{install_base}/visjs/4.21.0/vis.min.js https://cdnjs.cloudflare.com/ajax/libs/vis/4.21.0/vis.min.js 
 curl --create-dirs -Lo %{buildroot}/%{install_base}/visjs/4.21.0/vis.css https://cdnjs.cloudflare.com/ajax/libs/vis/4.21.0/vis.css
 curl --create-dirs -Lo %{buildroot}/%{install_base}/visjs/4.21.0/vis.min.css https://cdnjs.cloudflare.com/ajax/libs/vis/4.21.0/vis.min.css
@@ -49,6 +50,7 @@ rm -rf %{buildroot}
 %attr(0644,perfsonar,perfsonar) %{install_base}/visjs/4.21.0/vis.css
 %attr(0644,perfsonar,perfsonar) %{install_base}/visjs/4.21.0/vis.min.css
 %attr(0644,perfsonar,perfsonar) %{install_base}/visjs/4.21.0/vis.js
+%attr(0644,perfsonar,perfsonar) %{install_base}/visjs/4.21.0/vis.map
 %attr(0644,perfsonar,perfsonar) %{install_base}/visjs/4.21.0/vis.min.js
 
 %changelog
