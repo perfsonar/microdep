@@ -12,7 +12,7 @@ use CGI;
 #use CGI qw/:standard -debug/;
 #use WWW::Curl::Easy
 use JSON;
-use YAML;
+#use YAML;
 
 # Prepare CGI agent
 my $q = CGI->new;

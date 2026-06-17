@@ -4,7 +4,7 @@ bin/microdep_commands/elastic-get-date-type.pl usr/lib/perfsonar/bin/microdep_co
 bin/microdep_commands/microdep-config.cgi usr/lib/perfsonar/bin/microdep_commands/
 bin/microdep_commands/yaml-to-json.cgi usr/lib/perfsonar/bin/microdep_commands/
 bin/microdep_commands/get-mapconfig.cgi usr/lib/perfsonar/bin/microdep_commands/
-bin/microdep_commands/microdep-psconfig-load.pl usr/lib/perfsonar/bin/microdep_commands/
+bin/microdep_commands/get-tracetests.pl usr/lib/perfsonar/bin/microdep_commands/
 etc/mapconfig.yml etc/perfsonar/microdep/
 etc/mapconfig.d/* etc/perfsonar/microdep/mapconfig.d/
 etc/microdep-map_sqlite3_template.db etc/perfsonar/microdep/

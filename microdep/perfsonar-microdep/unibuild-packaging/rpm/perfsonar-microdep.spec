@@ -134,16 +134,16 @@ Requires:               chartjs-adapter-moment
 Requires:               chartjs-plugin-zoom
 Requires:               d3js = 4.13.0
 Requires:               hammerjs = 2.0.8
-Requires:               leafletjs = 1.0.3
+Requires:               leafletjs = 1.9.4
 Requires:               leafletjs-contextmenu
 Requires:               leafletjs-markercluster
 Requires:               leafletjs-curve
-Requires:               leafletjs-L.LatLng.UTM
+Requires:               leafletjs-UTM
 Requires:               latlon-sphericaljs
 Requires:               momentjs = 2.30.1
 Requires:               select2js = 4.0.13
 Requires:               sorttablejs = 2.0
-Requires:               perfsonar-tracetree
+Requires:               visjs
 BuildRequires:          systemd
 BuildRequires:          systemd-rpm-macros       
 # ... but macros are not yet utilized below
@@ -268,23 +268,29 @@ ln -sr /usr/share/javascript/jquery-ui/jquery-ui.css %{buildroot}/%{microdep_web
 ln -sr /usr/share/javascript/jquery-ui/jquery-ui.min.css %{buildroot}/%{microdep_web_dir}/css/
 ln -sr /usr/share/javascript/latlon-sphericaljs/2.3.0/latlon-spherical.js %{buildroot}/%{microdep_web_dir}/js/
 ln -sr /usr/share/javascript/latlon-sphericaljs/2.3.0/dms.js %{buildroot}/%{microdep_web_dir}/js/
-ln -sr /usr/share/javascript/leafletjs/1.0.3/leaflet.css %{buildroot}/%{microdep_web_dir}/css/
-ln -sr /usr/share/javascript/leafletjs/1.0.3/leaflet.js %{buildroot}/%{microdep_web_dir}/js/
-ln -sr /usr/share/javascript/leafletjs/1.0.3/images %{buildroot}/%{microdep_web_dir}/css/
-ln -sr /usr/share/javascript/leaflet-contextmenu/1.2.1/leaflet.contextmenu.min.css %{buildroot}/%{microdep_web_dir}/css/
-ln -sr /usr/share/javascript/leaflet-contextmenu/1.2.1/leaflet.contextmenu.min.js %{buildroot}/%{microdep_web_dir}/js/
-ln -sr /usr/share/javascript/leaflet-markercluster/1.0.3/MarkerCluster.Default.css %{buildroot}/%{microdep_web_dir}/css/
-ln -sr /usr/share/javascript/leaflet-markercluster/1.0.3/MarkerCluster.css %{buildroot}/%{microdep_web_dir}/css/
-ln -sr /usr/share/javascript/leaflet-markercluster/1.0.3/leaflet.markercluster-src.js %{buildroot}/%{microdep_web_dir}/js/
-ln -sr /usr/share/javascript/leaflet-curve/0.9.2/leaflet.curve.js %{buildroot}/%{microdep_web_dir}/js/
-ln -sr /usr/share/javascript/leaflet-L.LatLng.UTM/1.0/L.LatLng.UTM.js %{buildroot}/%{microdep_web_dir}/js/
+ln -sr /usr/share/javascript/leafletjs/1.9.4/leaflet.css %{buildroot}/%{microdep_web_dir}/css/
+ln -sr /usr/share/javascript/leafletjs/1.9.4/leaflet.js %{buildroot}/%{microdep_web_dir}/js/
+ln -sr /usr/share/javascript/leafletjs/1.9.4/leaflet.js.map %{buildroot}/%{microdep_web_dir}/js/
+ln -sr /usr/share/javascript/leafletjs/1.9.4/images %{buildroot}/%{microdep_web_dir}/css/
+ln -sr /usr/share/javascript/leaflet-contextmenu/1.4.0/leaflet.contextmenu.min.css %{buildroot}/%{microdep_web_dir}/css/
+ln -sr /usr/share/javascript/leaflet-contextmenu/1.4.0/leaflet.contextmenu.min.js %{buildroot}/%{microdep_web_dir}/js/
+ln -sr /usr/share/javascript/leaflet-markercluster/1.5.3/MarkerCluster.Default.css %{buildroot}/%{microdep_web_dir}/css/
+ln -sr /usr/share/javascript/leaflet-markercluster/1.5.3/MarkerCluster.css %{buildroot}/%{microdep_web_dir}/css/
+ln -sr /usr/share/javascript/leaflet-markercluster/1.5.3/leaflet.markercluster.js %{buildroot}/%{microdep_web_dir}/js/
+ln -sr /usr/share/javascript/leaflet-markercluster/1.5.3/leaflet.markercluster.js.map %{buildroot}/%{microdep_web_dir}/js/
+ln -sr /usr/share/javascript/leaflet-curve/1.0.0/leaflet.curve.js %{buildroot}/%{microdep_web_dir}/js/
+ln -sr /usr/share/javascript/leaflet-UTM/1.0/L.LatLng.UTM.js %{buildroot}/%{microdep_web_dir}/js/
 ln -sr /usr/share/javascript/momentjs/2.30.1/moment.js %{buildroot}/%{microdep_web_dir}/js/
 ln -sr /usr/share/javascript/select2/4.0.13/css/select2.min.css %{buildroot}/%{microdep_web_dir}/css/
 ln -sr /usr/share/javascript/select2/4.0.13/js/select2.min.js %{buildroot}/%{microdep_web_dir}/js/
+ln -rs /usr/share/javascript/visjs/4.21.0/vis.js   %{buildroot}/%{microdep_web_dir}/js/vis.js
+ln -rs /usr/share/javascript/visjs/4.21.0/vis.map   %{buildroot}/%{microdep_web_dir}/js/vis.map
+ln -rs /usr/share/javascript/visjs/4.21.0/vis.css   %{buildroot}/%{microdep_web_dir}/css/vis.css
+ln -rs /usr/share/javascript/visjs/4.21.0/vis.min.js   %{buildroot}/%{microdep_web_dir}/js/vis.min.js
+ln -rs /usr/share/javascript/visjs/4.21.0/vis.min.css   %{buildroot}/%{microdep_web_dir}/css/vis.min.css
+ln -rs /usr/share/javascript/visjs/4.21.0/img   %{buildroot}/%{microdep_web_dir}/css/img 
+ln -rs /usr/share/javascript/visjs/4.21.0/vis-timeline-graph2d.min.css   %{buildroot}/%{microdep_web_dir}/css/vis-timeline-graph2d.min.css
 ln -sr /usr/share/javascript/sorttable/2.0/sorttable.js %{buildroot}/%{microdep_web_dir}/js/
-
-# Link mapconfig
-ln -sr %{microdep_config_base}/mapconfig.yml %{buildroot}/%{microdep_web_dir}
 
 # Link up some handy tools
 mkdir -p %{buildroot}/usr/local/bin/ || true
@@ -449,11 +455,11 @@ systemctl reload httpd.service || true
 %{microdep_web_dir}/img
 %{microdep_web_dir}/js
 %{microdep_web_dir}/css
-%{microdep_web_dir}/*.yml
 %attr(0755,perfsonar,perfsonar) %{command_base}/elastic-get-date-type.pl
 %attr(0755,perfsonar,perfsonar) %{command_base}/microdep-config.cgi
 %attr(0755,perfsonar,perfsonar) %{command_base}/yaml-to-json.cgi
 %attr(0755,perfsonar,perfsonar) %{command_base}/get-mapconfig.cgi
+%attr(0755,perfsonar,perfsonar) %{command_base}/get-tracetests.pl
 %config %{microdep_config_base}/mapconfig.yml
 %config %{microdep_config_base}/mapconfig.d/
 %{microdep_config_base}/dragonlab-base-geo.json.example
