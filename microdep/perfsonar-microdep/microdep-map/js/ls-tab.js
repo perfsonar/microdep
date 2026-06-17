@@ -9,10 +9,8 @@
  * All state is local to the closure so multiple instances may coexist.
  *
  * Top-level sub-tabs created:
- *   1. Measurement Archives — public MA list (lazy, behind a button when an
- *                             explicit mahost is supplied).
- *   2. Peers                 — peer pairs found in the active MA.
- *   3. Traceroute            — hosts the topology / hop stats / traceroute /
+ *   1. Peers                 — peer pairs found in the active MA.
+ *   2. Traceroute            — hosts the topology / hop stats / traceroute /
  *                              docs UI by delegating to `tracetree_tab()`.
  *
  * If `from`/`to` are supplied, the Traceroute tab auto-loads and is the first
@@ -25,6 +23,10 @@
  *     event delegation using data-* attributes.
  *   - Outer document.ready bootstrapper (now an explicit init at end).
  *   - iframe-based loading of tracetree.html — replaced by `tracetree_tab()`.
+ *
+ *
+ * Changelog:
+ * 2026-06-17 otto.wittner@sikt.no - The Measurement archive tab has been removed, but there are still obsolete code all over the place.
  */
 
 import { tracetree_tab } from "./tracetree-tab.js";
@@ -523,27 +525,8 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
 <div id="${id}-inner" class="ls-tab-inner">
   <div id="${id}-tabs" class="ls-tabs">
     <ul>
-      <li><a href="#${id}-ma">Measurement Archives</a></li>
-      <li><a href="#${id}-peers">Peers</a></li>
       <li><a href="#${id}-trace">Traceroute</a></li>
-    </ul>
-    <div id="${id}-ma" class="ls-pane">
-      <h2 class="center-text">Loading measurement archives…</h2>
-    </div>
-    <div id="${id}-peers" class="ls-pane">
-      <h2 class="center-text">Please select a measurement archive!</h2>
-    </div>
-    <div id="${id}-trace" class="ls-pane">
-      <h2 class="center-text">Please choose a peer pair</h2>
-    </div>
-  </div>
-</div>`;
-        container.innerHTML = `
-<div id="${id}-inner" class="ls-tab-inner">
-  <div id="${id}-tabs" class="ls-tabs">
-    <ul>
       <li><a href="#${id}-peers">Peers</a></li>
-      <li><a href="#${id}-trace">Traceroute</a></li>
     </ul>
     <div id="${id}-peers" class="ls-pane">
       <h2 class="center-text">Error: Failed to access measurement archive. Check mapconfig.yml.</h2>
