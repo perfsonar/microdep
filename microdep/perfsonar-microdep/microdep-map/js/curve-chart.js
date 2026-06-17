@@ -73,7 +73,7 @@ function make_curve(tab_id, property, start, end){
     var xunit= get_period(parms.start, parms.end);
     $("#period").val(xunit);
 
-    var url="elastic-get-date-type.pl?index=" + parms.index + "&event_type=" + parms.event
+    var url="elastic-get-date-type.pl?net=" + parms.net + "&index=" + parms.index + "&event_type=" + parms.event
 	+ "&start=" + adjust_to_timezone(start) + "&end=" + adjust_to_timezone(end)
 	+ "&from=" + parms.from + "&to=" + parms.to;
 
