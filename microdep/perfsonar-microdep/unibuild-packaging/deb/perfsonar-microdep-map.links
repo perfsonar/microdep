@@ -45,5 +45,3 @@
 /usr/share/javascript/vis/img /usr/lib/perfsonar/microdep-map/css/img 
 /usr/share/javascript/vis/vis-timeline-graph2d.min.css /usr/lib/perfsonar/microdep-map/css/vis-timeline-graph2d.min.css
 /usr/share/javascript/sorttable/sorttable.js /usr/lib/perfsonar/microdep-map/js/sorttable.js
-/etc/perfsonar/microdep/mapconfig.yml /usr/lib/perfsonar/microdep-map/mapconfig.yml
-/etc/perfsonar/microdep/mapconfig.yml.d /usr/lib/perfsonar/microdep-map/mapconfig.yml.d
