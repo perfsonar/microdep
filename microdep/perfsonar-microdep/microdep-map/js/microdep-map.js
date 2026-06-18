@@ -475,7 +475,19 @@ function show_map (network) {
 	myRenderer = L.canvas({ padding: 0.5, tolerance: 20 });
 	var osmUrl='https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
 	var osmAttrib='Map data © <a href="http://openstreetmap.org">OpenStreetMap</a> contributors';
-	var osm = new L.TileLayer(osmUrl, {minZoom: 1, maxZoom: 20, attribution: osmAttrib});
+	// noWrap: don't repeat the world tiles east-west — otherwise NZ at
+	// lon=175 also shows at -185/+535 etc. as the map repeats in adjacent
+	// world copies (the "two New Zealands" effect, very visible with
+	// trans-Pacific routes). bounds: cap tile requests to the real world
+	// so fitBounds across the antimeridian doesn't request out-of-range
+	// tiles (which OSM 400s on).
+	var osm = new L.TileLayer(osmUrl, {
+	    minZoom: 1,
+	    maxZoom: 20,
+	    attribution: osmAttrib,
+	    noWrap: true,
+	    bounds: [[-90, -180], [90, 180]]
+	});
 	mymap.addLayer(osm);
 
 	mymap.addEventListener('mousemove', function(ev) {
