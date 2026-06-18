@@ -39,10 +39,13 @@ bin/microdep_commands/create_new_db.sh
 bin/microdep_commands/fix-pgsql-access.sh
 bin/microdep_commands/opensearch_config_microdep.sh
 bin/microdep_commands/psconfig_archive_ana.sh
+bin/microdep_commands/microdep-hourly-aggregator.pl
 scripts/perfsonar-microdep-gap-ana.service
 scripts/perfsonar-microdep-trace-ana.service
 scripts/perfsonar-microdep-restart.service
 scripts/perfsonar-microdep-restart.timer
+scripts/perfsonar-microdep-hourly-aggregator.service
+scripts/perfsonar-microdep-hourly-aggregator.timer
 etc/apache-microdep-ana.conf
 etc/logstash/microdep/05-microdep-inputs.conf
 etc/logstash/microdep/10-microdep-json.conf

@@ -180,6 +180,7 @@ A collection of handy utilities to apply when working with Microdep analytic dat
 systemctl stop perfsonar-microdep-gap-ana.service || true
 systemctl stop perfsonar-microdep-trace-ana.service || true
 systemctl stop perfsonar-microdep-restart.timer || true
+systemctl stop perfsonar-microdep-hourly-aggregator.timer || true
 
 %pre geolite2
 /usr/sbin/groupadd -r perfsonar 2> /dev/null || :
@@ -325,9 +326,11 @@ systemctl daemon-reload || true
 systemctl enable perfsonar-microdep-gap-ana.service || true
 systemctl enable perfsonar-microdep-trace-ana.service || true
 systemctl enable perfsonar-microdep-restart.timer || true
+systemctl enable perfsonar-microdep-hourly-aggregator.timer || true
 systemctl start perfsonar-microdep-gap-ana.service || true
 systemctl start perfsonar-microdep-trace-ana.service || true
 systemctl start perfsonar-microdep-restart.timer || true
+systemctl start perfsonar-microdep-hourly-aggregator.timer || true
 
 %post logstash
 # Add Microdep to Opensearch setup (including Logstash) 
@@ -373,6 +376,7 @@ fi
 systemctl stop perfsonar-microdep-gap-ana.service || true
 systemctl stop perfsonar-microdep-trace-ana.service || true
 systemctl stop perfsonar-microdep-restart.timer || true
+systemctl stop perfsonar-microdep-hourly-aggregator.timer || true
 
 %preun logstash
 # Remove Microdep from Opensearch setup (including Logstash) 
@@ -413,10 +417,13 @@ systemctl reload httpd.service || true
 %{_unitdir}/perfsonar-microdep-trace-ana.service
 %{_unitdir}/perfsonar-microdep-restart.service
 %{_unitdir}/perfsonar-microdep-restart.timer
+%{_unitdir}/perfsonar-microdep-hourly-aggregator.service
+%{_unitdir}/perfsonar-microdep-hourly-aggregator.timer
 %attr(0755,perfsonar,perfsonar) %{command_base}/qstream-gap-ana
 %attr(0755,perfsonar,perfsonar) %{command_base}/trace_event_reader.py
 %attr(0755,perfsonar,perfsonar) %{command_base}/create_new_db.sh
 %attr(0755,perfsonar,perfsonar) %{command_base}/fix-pgsql-access.sh
+%attr(0755,perfsonar,perfsonar) %{command_base}/microdep-hourly-aggregator.pl
 %{microdep_config_base}/microdep-tests.json.example
 %{microdep_config_base}/microdep-tests-packet-subcount.json.example
 %config %{microdep_config_base}/microdep-gap-ana.yml

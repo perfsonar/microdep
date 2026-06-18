@@ -1,0 +1,14 @@
+[Unit]
+Description=Run perfSONAR Microdep hourly aggregator at the top of each hour
+
+[Timer]
+# Fire at HH:00:30 every hour — the small offset gives logstash a moment
+# to flush any straggler raw-gap events from the just-ended bucket before
+# we aggregate them.
+OnCalendar=*:00:30
+Persistent=true
+AccuracySec=1m
+Unit=perfsonar-microdep-hourly-aggregator.service
+
+[Install]
+WantedBy=timers.target
