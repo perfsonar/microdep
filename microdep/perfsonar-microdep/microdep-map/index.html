@@ -40,6 +40,10 @@
 
   <div class="app-layout">
 
+    <!-- Mobile (<=768px) sidebar-drawer backdrop. Tap to close; hidden
+         on desktop where the sidebar is part of the grid layout. -->
+    <div class="sidebar-backdrop" id="sidebarBackdrop" aria-hidden="true"></div>
+
     <!-- ========== SIDEBAR ========== -->
     <aside class="sidebar" id="sidebar">
       <header class="sidebar-header">
@@ -283,13 +287,24 @@
     var toggleBtn = document.getElementById('sidebarToggle');
     var openBtn = document.getElementById('openSidebarBtn');
     var openLi = document.getElementById('openSidebarLi');
+    var backdrop = document.getElementById('sidebarBackdrop');
+
+    // Mobile-first default: on small viewports start collapsed so the
+    // user lands on the map; the drawer opens over a backdrop on demand.
+    var mobileMql = window.matchMedia('(max-width: 768px)');
+    if (mobileMql.matches) {
+      sidebar.classList.add('collapsed');
+    }
 
     function updateOpenBtn() {
-      if (sidebar.classList.contains('collapsed')) {
+      var collapsed = sidebar.classList.contains('collapsed');
+      if (collapsed) {
         openLi.style.display = '';
       } else {
         openLi.style.display = 'none';
       }
+      // Mirror state onto <body> so the mobile backdrop CSS can react.
+      document.body.classList.toggle('sidebar-open', !collapsed);
     }
 
     toggleBtn.addEventListener('click', function(){
@@ -303,6 +318,16 @@
       updateOpenBtn();
       setTimeout(function(){ window.dispatchEvent(new Event('resize')); }, 350);
     });
+
+    // Tap the backdrop on mobile -> close the drawer (no-op on desktop
+    // where the backdrop is display:none).
+    if (backdrop) {
+      backdrop.addEventListener('click', function(){
+        sidebar.classList.add('collapsed');
+        updateOpenBtn();
+        setTimeout(function(){ window.dispatchEvent(new Event('resize')); }, 350);
+      });
+    }
 
     updateOpenBtn();
 

@@ -2543,10 +2543,236 @@ div.graph:has(> .curve-iframe-wrap):not([aria-hidden="true"]) {
    RESPONSIVE
    ========================================================== */
 
-@media (max-width: 800px) {
-    .app-layout { grid-template-columns: 1fr; }
-    .sidebar { position: fixed; top: 0; left: 0; bottom: 0; z-index: 100; box-shadow: var(--shadow-lg); transform: translateX(0); transition: transform .3s cubic-bezier(.4,0,.2,1); }
-    .sidebar.collapsed { transform: translateX(calc(-1 * var(--sidebar-w))); width: var(--sidebar-w); min-width: var(--sidebar-w); }
+
+/* ==========================================================
+   RESPONSIVE — mobile / tablet portrait (≤ 768px)
+   ==========================================================
+   Goal: every microdep-map feature reachable on a phone. Sidebar
+   becomes a slide-in drawer that overlays the map; link details
+   becomes a bottom sheet; tab strip scrolls horizontally; all
+   tappable elements are at least 44×44 (Apple HIG) / 48×48
+   (Material) high. Desktop layout untouched above the breakpoint.
+   ========================================================== */
+
+/* The backdrop element is always in the DOM but invisible on
+   desktop; mobile media query lights it up when body has the
+   .sidebar-open class. */
+.sidebar-backdrop { display: none; }
+
+@media (max-width: 768px) {
+
+    /* --- Layout: collapse the grid into a single column ------ */
+    .app-layout {
+        grid-template-columns: 1fr;
+    }
+
+    /* --- Sidebar drawer -------------------------------------- */
+    .sidebar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        height: 100vh;
+        width: 280px;
+        max-width: 88vw;
+        min-width: 0;
+        z-index: 1500;
+        box-shadow: 4px 0 24px rgba(0, 0, 0, .35);
+        transform: translateX(0);
+        transition: transform .25s cubic-bezier(.4, 0, .2, 1);
+    }
+    .sidebar.collapsed {
+        transform: translateX(-100%);
+        /* Override the desktop "width: 0" rule so the drawer can
+           slide back in at full width — translateX hides it instead. */
+        width: 280px !important;
+        min-width: 0 !important;
+        max-width: 88vw;
+        border-right: 1px solid var(--c-border) !important;
+    }
+
+    /* --- Backdrop -------------------------------------------- */
+    .sidebar-backdrop {
+        display: block;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, .5);
+        z-index: 1490;       /* below sidebar (1500), above everything else */
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity .25s;
+    }
+    body.sidebar-open .sidebar-backdrop {
+        opacity: 1;
+        pointer-events: auto;
+    }
+
+    /* --- Touch target sizing --------------------------------- */
+    /* Apple HIG → 44px min; we go 44 to keep visual density. */
+    .knapp,
+    button.knapp,
+    .sidebar button,
+    .sidebar .knapp,
+    select,
+    input[type="text"],
+    input[type="search"],
+    input[type="number"] {
+        min-height: 44px;
+        font-size: .92rem !important;
+    }
+    .sidebar-toggle-btn,
+    .link-panel-close {
+        min-width: 44px;
+        min-height: 44px;
+    }
+
+    /* --- Link Details panel as bottom sheet ------------------ */
+    .link-panel {
+        top: auto;
+        right: 0;
+        left: 0;
+        bottom: 0;
+        width: 100%;
+        max-width: 100%;
+        max-height: 75vh;
+        border-radius: var(--r-lg) var(--r-lg) 0 0;
+        border-bottom: none;
+        border-left: none;
+        border-right: none;
+        box-shadow: 0 -8px 24px rgba(0, 0, 0, .3);
+        /* slide up from bottom — mirrors the desktop right-edge slide */
+        animation: linkPanelSlideUp .25s cubic-bezier(.4, 0, .2, 1);
+    }
+    @keyframes linkPanelSlideUp {
+        from { transform: translateY(100%); }
+        to   { transform: translateY(0);    }
+    }
+    .link-panel-header {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        /* Drag-handle hint: a small grey pill above the title bar */
+    }
+    .link-panel-header::before {
+        content: '';
+        position: absolute;
+        top: 6px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 36px;
+        height: 4px;
+        border-radius: 2px;
+        background: var(--c-border-h);
+    }
+    .link-panel-header { padding-top: 16px; }
+
+    /* --- Tab strip horizontal scroll ------------------------- */
+    .ui-tabs-nav {
+        flex-wrap: nowrap !important;
+        overflow-x: auto;
+        overflow-y: hidden;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+    }
+    .ui-tabs-nav::-webkit-scrollbar { display: none; }
+    .ui-tabs-nav > li {
+        flex-shrink: 0;
+    }
+
+    /* --- Status bar: single line + ellipsis on overflow ------ */
+    .status-bar {
+        flex-wrap: nowrap;
+        overflow: hidden;
+    }
+    .status-bar > * {
+        flex-shrink: 0;
+        white-space: nowrap;
+    }
+    .status-message {
+        flex-shrink: 1 !important;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    /* --- Map controls: bigger zoom buttons for fingers ------- */
+    .leaflet-control-zoom a {
+        width: 36px !important;
+        height: 36px !important;
+        line-height: 36px !important;
+        font-size: 18px !important;
+    }
+
+    /* --- Heatmap title row stacks on narrow screens ---------- */
+    .tab-header-row {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .export-csv-btn {
+        align-self: flex-end;
+    }
+
+    /* --- Map legend: shrink fixed 280px width + button padding so
+           the legend doesn't dominate the map on small phones. The
+           desktop legend is fixed width because of equal-column flex
+           math for semaphore cells; we override it with a flexible
+           max-width and tighter typography. */
+    table#legend {
+        width: auto !important;
+        min-width: 0 !important;
+        max-width: 240px !important;
+        padding: 4px 6px !important;
+    }
+    /* The "N links" count chip docks below the legend table and has
+       its own hardcoded 280px width on desktop — match it to the
+       table width on mobile so it doesn't poke out. */
+    .legend-count {
+        width: auto !important;
+        max-width: 240px !important;
+        padding: 3px 8px 4px !important;
+        font-size: .65rem !important;
+    }
+    #legend table th button,
+    table#legend th button,
+    #legend #farge0,
+    table#legend #farge0 {
+        font-size: .72rem !important;
+        line-height: 1.15 !important;
+    }
+    #legend table td button,
+    table#legend td button {
+        font-size: .65rem !important;
+        padding: 3px 3px !important;
+        min-height: 0 !important;
+    }
+    #legend table tr,
+    table#legend tr {
+        gap: 2px !important;
+    }
+
+    /* --- Compare modal: full screen on mobile ---------------- */
+    .compare-modal-content {
+        width: 96vw;
+        max-width: 96vw;
+        max-height: 92vh;
+    }
+
+    /* --- Keyboard-shortcuts overlay: tighter padding --------- */
+    .kbd-help-content {
+        max-width: 92vw;
+        padding: 16px;
+    }
+}
+
+/* ----------------------------------------------------------
+   Very small phones (<= 380px) — squeeze sidebar tighter so
+   the backdrop is still visible behind it (helps users
+   discover that tapping outside dismisses).
+   ---------------------------------------------------------- */
+@media (max-width: 380px) {
+    .sidebar,
+    .sidebar.collapsed {
+        width: 260px !important;
+    }
 }
 
 
