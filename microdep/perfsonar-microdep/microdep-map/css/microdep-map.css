@@ -2973,3 +2973,15 @@ table#legend.compare-legend th button {
     min-height: 22px !important;
     box-sizing: border-box !important;
 }
+
+
+/* ===== Compare-modal RTT-per-hop chart (tracetree) ===== */
+.trace-compare-chart-wrap {
+    position: relative;
+    width: 100%;
+    height: 240px;
+    margin-bottom: 16px;
+}
+.trace-compare-chart {
+    display: block;
+}
