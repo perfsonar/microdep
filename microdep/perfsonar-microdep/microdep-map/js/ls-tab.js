@@ -80,25 +80,46 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
         return prefix + 'verify_SSL=' + params.verify_SSL;
     }
 
+    // Forgiving matcher for the search box. Each whitespace-separated term
+    // matches if it's either (a) a substring of the target, or (b) an
+    // anagram-style multiset match (all its characters are available in the
+    // target) — so minor transpositions / partial typing still hit. All
+    // terms must match (AND), which lets the user combine tokens that span
+    // columns (e.g. peer name + a bit of the timestamp).
+    function fuzzy_match(query, target) {
+        if (!query) return true;
+        target = target.toUpperCase();
+        const terms = query.toUpperCase().split(/\s+/).filter(Boolean);
+        outer: for (const term of terms) {
+            if (target.indexOf(term) !== -1) continue;          // (a) substring
+            const counts = {};                                   // (b) multiset
+            for (const ch of target) counts[ch] = (counts[ch] || 0) + 1;
+            for (const ch of term) {
+                if (!counts[ch] || counts[ch] <= 0) return false;
+                counts[ch]--;
+            }
+            continue outer;
+        }
+        return true;
+    }
+
     // ── Search / filter (ports of search_table_ma / search_table_peer) ──
     function search_table(input_id, table_id) {
         const input = document.getElementById(input_id);
         const table = document.getElementById(table_id);
         if (!input || !table) return;
-        const filter = input.value.toUpperCase();
+        const filter = input.value;
         const rows = table.getElementsByTagName('tr');
         for (let i = 0; i < rows.length; i++) {
-            let hit = false;
             const cells = rows[i].getElementsByTagName('td');
-            for (let j = 0; j < cells.length; j++) {
-                if (cells[j].innerHTML.toUpperCase().indexOf(filter) > -1) {
-                    hit = true;
-                    break;
-                }
-            }
             // Always show header rows (they have <th>, no <td>)
-            if (cells.length === 0) hit = true;
-            rows[i].style.display = hit ? '' : 'none';
+            if (cells.length === 0) { rows[i].style.display = ''; continue; }
+            // Concatenate the row's text once, then fuzzy-match the whole
+            // row rather than each cell individually so tokens can span
+            // columns.
+            let rowText = '';
+            for (let j = 0; j < cells.length; j++) rowText += ' ' + cells[j].textContent;
+            rows[i].style.display = fuzzy_match(filter, rowText) ? '' : 'none';
         }
     }
 
