@@ -24,8 +24,6 @@ use Hash::Merge::Simple qw/ merge /;
 
 my $configfile="/etc/perfsonar/microdep/mapconfig.yml";
 my $configdir="/etc/perfsonar/microdep/mapconfig.d";
-#my $configfile="../../etc/mapconfig2.yml";
-#my $configdir="../../etc/mapconfig.d";
 
 my %output = ( msg => "", config => {});  # Output hash.
 
