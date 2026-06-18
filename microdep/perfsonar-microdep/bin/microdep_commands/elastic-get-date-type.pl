@@ -31,6 +31,19 @@ my $end = parm('end') || $start;
 my $from = parm('from');
 my $to = parm('to');
 my $min_delay = parm('min_delay');
+
+# Sparkline support — when `interval` and `prop` arrive alongside `from`,
+# the script returns per-bucket averages via a date_histogram aggregation
+# rather than raw records. This gives the client sub-summary granularity
+# for long periods (e.g. 4 weeks with interval=1d → up to 28 daily buckets
+# instead of 4 weekly summary records). The histogram bins on @timestamp
+# (per-second resolution); @date is day-only so it would collapse all
+# sub-day intervals back to 1-day. Both parameters are regex-validated
+# against narrow whitelists to keep the inlined JSON injection-safe.
+my $interval = parm('interval');
+my $prop_field = parm('prop');
+$interval = undef unless ( $interval && $interval =~ /^\d+[smhd]$/ );
+$prop_field = undef unless ( $prop_field && $prop_field =~ /^\w+$/ );
 my ($stats_type, $stats_field ) = split( ",", parm('stats') );
 my $path_addr=parm('path_addr'); # list of ips 
 my $date_field='@date';
@@ -259,6 +272,26 @@ if (! $type) {
 } elsif ( $type eq "jitter" && ! $from ){ # no aggregation if pair
     # $search =  '{ "size":0, ' . $query_jit . ", " . $aggr . '}';
     $search =  '{ "size":0, ' . $query_head . $query_tail . ", " . $perc . '}';
+} elsif ( $from && $interval && $prop_field ) {
+    # Sparkline path: bucket the matching records into fixed-width time
+    # slots and compute the average of $prop_field per slot. Skips empty
+    # buckets via min_doc_count: 1.
+    my $hist_aggr = '
+      "aggs": {
+        "by_time": {
+          "date_histogram": {
+            "field": "@timestamp",
+            "fixed_interval": "' . $interval . '",
+            "min_doc_count": 1,
+            "time_zone": "Europe/Oslo"
+          },
+          "aggs": {
+            "value": { "avg": { "field": "' . $prop_field . '" } }
+          }
+        }
+      }
+    ';
+    $search = '{ "size":0, ' . $query_head . $query_tail . ', ' . $hist_aggr . '}';
 } elsif ( $from ){
     $search =  '{ "size":10000, ' . $query_head . $query_tail . ', ' . $sort_time . '}';
 } else {
