@@ -464,6 +464,7 @@ systemctl reload httpd.service || true
 %{microdep_web_dir}/img
 %{microdep_web_dir}/js
 %{microdep_web_dir}/css
+%{microdep_web_dir}/fonts
 %attr(0755,perfsonar,perfsonar) %{command_base}/elastic-get-date-type.pl
 %attr(0755,perfsonar,perfsonar) %{command_base}/microdep-config.cgi
 %attr(0755,perfsonar,perfsonar) %{command_base}/yaml-to-json.cgi
