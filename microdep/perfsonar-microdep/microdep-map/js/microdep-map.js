@@ -368,6 +368,23 @@ function openLinkPanel(content, linkSource) {
             body.appendChild(content);
         }
         panel.classList.remove('hidden');
+        // Sparkline render at CLICK time (not in link_popup, which runs at
+        // link-draw time against detached canvases). The render fn itself
+        // waits via rAF for the panel to settle to a non-zero size before
+        // instantiating Chart.js.
+        var sparkCanvas = body.querySelector('.link-sparkline');
+        if (sparkCanvas && currentPanelLink) {
+            var lk = currentPanelLink;
+            var go = function () {
+                _render_link_sparkline(sparkCanvas, lk, parms.event, parms.property,
+                                       $("#datepicker").val(), parms.period);
+            };
+            if (typeof requestAnimationFrame === 'function') {
+                requestAnimationFrame(function () { requestAnimationFrame(go); });
+            } else {
+                setTimeout(go, 32);
+            }
+        }
     }
 }
 
@@ -759,6 +776,490 @@ function gap_popup( containerDiv, link){
     containerDiv.appendChild(button);
 }
 
+// In-flight AJAX + Chart.js instance for the link-details sparkline,
+// tracked at module level so we can abort / destroy when the user
+// clicks a different link before the previous fetch returns.
+var _linkSparkXhr = null;
+var _linkSparkChart = null;
+var _linkSparkRAF  = null;  // rAF id for deferred-until-sized rendering
+function _render_link_sparkline(canvas, link, etype, prop, dato, period, forceEtype) {
+    if (!canvas || typeof Chart === 'undefined') return;
+    // Abort the previous fetch — we don't want a stale response to
+    // overwrite the freshly-clicked link's chart.
+    if (_linkSparkXhr && _linkSparkXhr.abort) try { _linkSparkXhr.abort(); } catch (_) {}
+    if (_linkSparkChart) try { _linkSparkChart.destroy(); } catch (_) {}
+    if (_linkSparkRAF) try { cancelAnimationFrame(_linkSparkRAF); } catch (_) {}
+    _linkSparkXhr = null;
+    _linkSparkChart = null;
+    _linkSparkRAF   = null;
+
+    if (!link || !link.from || !link.to || !etype || !prop) return;
+    if (!event_index || !event_index[etype]) return;
+
+    // Wait for the panel layout to settle before kicking off the fetch
+    // + Chart.js instantiation. On the very first link click the panel
+    // is going from display:none (the .hidden class) to display:flex,
+    // and a CSS transform transition runs for ~200ms — Chart.js often
+    // measures the canvas while it's still 0×0 (or mid-transition), so
+    // we get a chart with no visible drawing on the first open. We poll
+    // via rAF for up to ~16 frames looking for a stable, non-zero size
+    // for two consecutive frames before proceeding. The canvas.offsetWidth
+    // read inside the loop force-flushes any pending layout.
+    var attempt = 0, lastW = -1, lastH = -1;
+    function _waitForSize() {
+        var w = canvas.clientWidth;
+        var h = canvas.clientHeight;
+        var _ = canvas.offsetWidth; // force layout flush
+        attempt++;
+        if (w > 0 && h > 0 && w === lastW && h === lastH) {
+            console.log('sparkline: canvas settled at', w + 'x' + h, 'after', attempt, 'frame(s)');
+            _linkSparkRAF = null;
+            _render_link_sparkline_inner(canvas, link, etype, prop, dato, period, forceEtype);
+            return;
+        }
+        lastW = w; lastH = h;
+        if (attempt > 16) {
+            console.log('sparkline: gave up waiting at', w + 'x' + h, 'frame=', attempt, '— rendering anyway');
+            _linkSparkRAF = null;
+            _render_link_sparkline_inner(canvas, link, etype, prop, dato, period, forceEtype);
+            return;
+        }
+        _linkSparkRAF = requestAnimationFrame(_waitForSize);
+    }
+    _linkSparkRAF = requestAnimationFrame(_waitForSize);
+}
+
+// Body of the sparkline render — extracted so the public entry point can
+// defer until the canvas is properly sized (see _render_link_sparkline
+// for the rAF-based stable-size wait).
+function _render_link_sparkline_inner(canvas, link, etype, prop, dato, period, forceEtype) {
+
+    // Mirror get_connections() window logic so the sparkline asks for
+    // EXACTLY the same time range the rest of the map is painted from
+    // — including the sub-24h period_input offset.
+    var dstart = new Date(dato);
+    var msstart = dstart.getTime();
+    if (isNaN(msstart)) return;
+    var tz = dstart.getTimezoneOffset() / 60;
+    var per = parseInt($("#period").val(), 10);
+    if (isNaN(per)) per = (period || 24);
+    var start_iso, end_iso;
+    if (per < 24) {
+        var hour = parse_hhmm($("#period_input").val()) + tz;
+        var ds   = new Date(msstart + hour * 3600 * 1000);
+        start_iso = ds.toISOString();
+        end_iso   = new Date(ds.getTime() + 3600 * 1000).toISOString();
+    } else {
+        start_iso = new Date(msstart).toISOString();
+        end_iso   = new Date(msstart + per * 3600 * 1000).toISOString();
+    }
+
+    // Pick the event type. Strategy: try raw FIRST (one record per
+    // measurement → densest series). If the raw query returns 0 usable
+    // points (typical when the property only exists on summary records
+    // — e.g. gap.down_ppm — the config can claim it's on raw too but
+    // the actual elastic docs don't carry it), the .done callback below
+    // recurses with `forceEtype = sumEtype` to fall back. Data-driven,
+    // not config-driven, because prop_desc and reality disagree.
+    var sumEtype = (event_sum_type && event_sum_type[etype]) || '';
+    var queryEtype = forceEtype || etype;
+
+    // Match the existing call pattern in get_peer_data / get_connections:
+    // raw concatenation (no encodeURIComponent — colons in ISO stamps
+    // and the IPv6-style addresses are passed through literally), and
+    // include ip_version when the network requires it.
+    var url = 'elastic-get-date-type.pl?index=' + event_index[etype] +
+              '&event_type=' + queryEtype +
+              '&start=' + adjust_to_timezone(start_iso) +
+              '&end='   + adjust_to_timezone(end_iso) +
+              '&from='  + link.from +
+              '&to='    + link.to;
+    if (net_ip_version && net_ip_version[parms.net]) {
+        url += '&ip_version=' + net_ip_version[parms.net];
+    }
+
+    // Ask the server for time-bucketed averages via the date_histogram
+    // path (interval+prop in elastic-get-date-type.pl, ~line 274). The
+    // server runs the aggregation against the matching raw records —
+    // bypasses the hardcoded size:10000 limit for very long periods AND
+    // gives evenly-distributed buckets independent of raw measurement
+    // timing. Bucket width targets ~500 points across the period so the
+    // chart is dense without overwhelming Chart.js. The Perl-side regex
+    // accepts /^\d+[smhd]$/ so we pick the smallest unit that keeps the
+    // count integer.
+    function _spark_interval(perH) {
+        var totalMin = Math.max(1, Math.round(perH * 60));
+        var bMin = Math.max(1, Math.ceil(totalMin / 500));
+        if (bMin >= 1440) return Math.ceil(bMin / 1440) + 'd';
+        if (bMin >= 60)   return Math.ceil(bMin / 60)   + 'h';
+        return bMin + 'm';
+    }
+    var bucketInterval = _spark_interval(per);
+    url += '&interval=' + bucketInterval + '&prop=' + prop;
+    if (parms && parms.debug) console.log('sparkline url:', url);
+
+    _linkSparkXhr = $.getJSON(url).done(function (resp) {
+        var hits = (resp && resp.hits && resp.hits.hits) || [];
+        var buckets = (resp && resp.aggregations && resp.aggregations.by_time &&
+                       resp.aggregations.by_time.buckets) || [];
+        var totalVal = (resp && resp.hits && resp.hits.total && (resp.hits.total.value || resp.hits.total)) || 0;
+        console.log('sparkline: hits =', hits.length, 'buckets =', buckets.length,
+                    'total =', totalVal, 'prop =', prop, 'event =', etype, 'queried =', queryEtype,
+                    'interval =', bucketInterval || 'none');
+        if (!hits.length && !buckets.length) {
+            // Two-step auto-fallback: raw → "<sum>_h" (hourly aggregator's
+            // gapsum_h / routesum_h / ... — finer rezolution than the
+            // daily summary records qstream-gap-ana etc. emit on restart)
+            // → "<sum>" (the daily summary, last resort).
+            //
+            // This lets the sparkline pick up the densest available
+            // pre-aggregated data for properties that don't live on raw
+            // events (e.g. gap.down_ppm). If microdep-hourly-aggregator
+            // hasn't been deployed yet, the gapsum_h query simply returns
+            // 0 records and we transparently slide down to gapsum.
+            var nextFallback = null;
+            if (!forceEtype && sumEtype) {
+                nextFallback = sumEtype + '_h';   // try hourly first
+            } else if (forceEtype && /_h$/.test(forceEtype)) {
+                // We just tried hourly summary; drop the suffix and try
+                // the daily summary as a final fallback.
+                nextFallback = forceEtype.replace(/_h$/, '');
+            }
+            if (nextFallback && nextFallback !== queryEtype) {
+                console.log('sparkline: "' + queryEtype + '" returned 0 hits/buckets; falling back to "' + nextFallback + '"');
+                _render_link_sparkline(canvas, link, etype, prop, dato, period, nextFallback);
+                return;
+            }
+            _draw_sparkline_empty(canvas);
+            return;
+        }
+        // Build {t, y} pairs from either the date_histogram buckets
+        // (preferred when interval was requested) or raw record hits.
+        // For buckets: `key` is already epoch ms, `value.value` is the
+        // computed average for that interval (null when the slot has
+        // records but the property field is absent on all of them).
+        var pts = [];
+        var rawSample = null;
+        if (buckets.length) {
+            for (var bi = 0; bi < buckets.length; bi++) {
+                var b = buckets[bi];
+                if (!b) continue;
+                if (!rawSample) rawSample = { _bucket: true, key: b.key, value: b.value };
+                var bts = Number(b.key);
+                if (!bts || isNaN(bts)) continue;
+                var bv = b.value && (b.value.value !== null && b.value.value !== undefined ? b.value.value : null);
+                if (bv === null) continue;
+                bv = Number(bv);
+                if (isNaN(bv)) continue;
+                pts.push({ t: bts, y: bv });
+            }
+        } else {
+            // Mirror chart_curve's lenient parsing — server returns
+            // timestamp as epoch seconds (sometimes as a string) and
+            // property as a number-ish value. Coerce both via Number().
+            for (var i = 0; i < hits.length; i++) {
+                var s = hits[i] && hits[i]._source;
+                if (!s) continue;
+                if (!rawSample) rawSample = s;
+                var ts = Number(s.timestamp) * 1000;
+                if (!ts || isNaN(ts)) {
+                    if (s['@timestamp']) ts = Date.parse(s['@timestamp']);
+                }
+                if (!ts || isNaN(ts)) continue;
+                var v = s[prop];
+                if (v === null || v === undefined) continue;
+                v = Number(v);
+                if (isNaN(v)) continue;
+                pts.push({ t: ts, y: v });
+            }
+        }
+        if (!pts.length) {
+            // Same two-step fallback as the no-hits/no-buckets branch
+            // above: raw → "<sum>_h" (hourly aggregator) → "<sum>" (daily
+            // summary). Triggers when the response had records but none
+            // of them carried the property (e.g. raw `gap` records have
+            // tloss/jitter/delay-ish fields but no `down_ppm`).
+            var nextFallback2 = null;
+            if (!forceEtype && sumEtype) {
+                nextFallback2 = sumEtype + '_h';
+            } else if (forceEtype && /_h$/.test(forceEtype)) {
+                nextFallback2 = forceEtype.replace(/_h$/, '');
+            }
+            if (nextFallback2 && nextFallback2 !== queryEtype) {
+                console.log('sparkline: "' + queryEtype + '" had no usable points for "' + prop +
+                            '"; falling back to "' + nextFallback2 + '"');
+                _render_link_sparkline(canvas, link, etype, prop, dato, period, nextFallback2);
+                return;
+            }
+            // Help the user (and us) figure out why nothing rendered:
+            // dump the first record so we can see actual field names,
+            // plus the keys list as a plain string (objects don't survive
+            // a copy-paste from DevTools the way primitives do).
+            if (rawSample) {
+                console.log('sparkline: no usable points; sample _source =', rawSample,
+                            'looking for prop =', prop);
+                try {
+                    console.log('sparkline: sample keys =', Object.keys(rawSample).join(', '));
+                    console.log('sparkline: sample[' + prop + '] =', rawSample[prop],
+                                ' typeof =', typeof rawSample[prop]);
+                    console.log('sparkline: sample.timestamp =', rawSample.timestamp,
+                                ' typeof =', typeof rawSample.timestamp);
+                } catch (_) {}
+            }
+            _draw_sparkline_empty(canvas);
+            return;
+        }
+        pts.sort(function (a, b) { return a.t - b.t; });
+
+        // Downsample for display when raw events return a flood of points
+        // (e.g., 4 weeks × 5-min delay measurements ≈ 8000 records).
+        // Drawing 8k points on a ~270px-wide canvas is wasted work and
+        // slows the panel open noticeably; ~500 points is plenty for
+        // sparkline visual fidelity. Take every Nth — a simple even
+        // stride preserves the overall shape; we keep the LAST point
+        // explicitly so the highlighted endpoint always reflects the
+        // most-recent reading and not a stride artefact.
+        var MAX_PTS = 500;
+        var rawPtsLen = pts.length;
+        if (pts.length > MAX_PTS) {
+            var step = Math.ceil(pts.length / MAX_PTS);
+            var sampled = [];
+            for (var s = 0; s < pts.length; s += step) sampled.push(pts[s]);
+            if (sampled[sampled.length - 1] !== pts[pts.length - 1]) {
+                sampled.push(pts[pts.length - 1]);
+            }
+            pts = sampled;
+        }
+
+        console.log('sparkline: rendering', pts.length, 'points (raw =', rawPtsLen, ');',
+                    'first =', pts[0], 'last =', pts[pts.length - 1],
+                    'canvas size =', canvas.clientWidth + 'x' + canvas.clientHeight);
+
+        // Render — labels are date-strings rather than Date objects so
+        // we don't need a time-scale adapter (chart.umd.js alone, no
+        // moment dep). Label granularity tracks the period: HH:MM for
+        // <24h windows (date is implicit), "DD MMM" for multi-day
+        // periods where repeating "12:00" labels would be ambiguous.
+        var monthsShort = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        var labelMode = (per <= 24) ? 'time' : 'date';
+        var labels = pts.map(function (p) {
+            var d = new Date(p.t);
+            if (labelMode === 'time') {
+                return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+            }
+            return d.getDate() + ' ' + monthsShort[d.getMonth()];
+        });
+        var values = pts.map(function (p) { return p.y; });
+        var tsArr  = pts.map(function (p) { return p.t; });
+
+        // Full "DD MMM YYYY, HH:MM" formatter for the tooltip title —
+        // always shows the absolute moment regardless of x-axis scale.
+        function fmtFull(ms) {
+            var d = new Date(ms);
+            var hh = ('0' + d.getHours()).slice(-2);
+            var mm = ('0' + d.getMinutes()).slice(-2);
+            return d.getDate() + ' ' + monthsShort[d.getMonth()] + ' ' + d.getFullYear() +
+                   ', ' + hh + ':' + mm;
+        }
+
+        // Resolve theme tokens at render time so dark/light switch
+        // applies on the next-clicked link.
+        var cs = getComputedStyle(document.documentElement);
+        function tk(name, fb) { var v = cs.getPropertyValue(name).trim(); return v || fb; }
+        var accent = tk('--c-accent',  '#2f81f7');
+        var text   = tk('--c-text',    '#e6e9ee');
+        var text2  = tk('--c-text-2',  '#b1b8c2');
+        var text3  = tk('--c-text-3',  '#7e8794');
+        var border = tk('--c-border',  '#2a313a');
+        var elev   = tk('--c-elevated','#1c2229');
+
+        // Property description for tooltip body — same lookup precedence
+        // as the card label (sum-type takes priority since for past
+        // periods we're querying gapsum/routesum etc.).
+        var propDesc = (prop_desc[event_sum_type[etype]] && prop_desc[event_sum_type[etype]][prop])
+                    || (prop_desc[etype] && prop_desc[etype][prop])
+                    || prop
+                    || 'value';
+
+        // Min / avg / max — populate the badges sitting above the chart
+        // (built up-front in link_popup) so the user gets exact numbers
+        // alongside the visual trend. Without these the chart looks
+        // anemic when the data is sparse (e.g. 3 points for raw `gap`),
+        // because Chart.js interpolates a near-flat line and the human
+        // eye has nothing to anchor to.
+        var minV = values[0], maxV = values[0], sumV = 0;
+        for (var k = 0; k < values.length; k++) {
+            if (values[k] < minV) minV = values[k];
+            if (values[k] > maxV) maxV = values[k];
+            sumV += values[k];
+        }
+        var avgV  = sumV / values.length;
+        var lastV = values[values.length - 1];
+        var fmt = function (n) {
+            if (!isFinite(n)) return '–';
+            if (Math.abs(n) >= 100) return Math.round(n).toString();
+            if (Math.abs(n) >= 1)   return (Math.round(n * 10) / 10).toString();
+            return (Math.round(n * 100) / 100).toString();
+        };
+        var statsHost = canvas.parentNode && canvas.parentNode.parentNode &&
+                        canvas.parentNode.parentNode.querySelector('.link-sparkline-stats');
+        if (statsHost) {
+            statsHost.innerHTML =
+                '<span class="lss-item"><span class="lss-k">last</span> <span class="lss-v">' + fmt(lastV) + '</span></span>' +
+                '<span class="lss-item"><span class="lss-k">min</span> <span class="lss-v">'  + fmt(minV)  + '</span></span>' +
+                '<span class="lss-item"><span class="lss-k">avg</span> <span class="lss-v">'  + fmt(avgV)  + '</span></span>' +
+                '<span class="lss-item"><span class="lss-k">max</span> <span class="lss-v">'  + fmt(maxV)  + '</span></span>' +
+                '<span class="lss-item lss-n"><span class="lss-k">n</span> <span class="lss-v">' + values.length + '</span></span>';
+        }
+
+        // Sparse data → show points so the user sees something even when
+        // the line is short (Chart.js draws nothing visible for a single
+        // segment between two near-equal values when pointRadius=0).
+        var sparse = pts.length < 30;
+
+        // Threshold-based colour: tie the sparkline to the SAME palette
+        // logic that paints the link on the map. We use the LATEST value
+        // (most recent reading is what the link is "currently" showing)
+        // so the user sees green/yellow/red at-a-glance status.
+        var zoneColor = accent;
+        if (typeof get_color === 'function' && Array.isArray(threshes) && threshes.length) {
+            zoneColor = get_color(lastV, threshes) || accent;
+        }
+
+        // Build a vertical area-fill gradient so the chart reads as
+        // shape-with-volume rather than a hairline.
+        var ctx2 = canvas.getContext('2d');
+        var grad = ctx2.createLinearGradient(0, 0, 0, canvas.clientHeight || 110);
+        grad.addColorStop(0, zoneColor + '66');
+        grad.addColorStop(1, zoneColor + '0a');
+
+        // Per-point arrays — the LAST point is always rendered as a big
+        // highlighted dot (with a contrasting border) so the user's eye
+        // lands on the most recent value first.
+        var lastIx = values.length - 1;
+        var ptRadius     = values.map(function (_, i) { return i === lastIx ? 5 : (sparse ? 3 : 0); });
+        var ptBg         = values.map(function (_, i) { return i === lastIx ? zoneColor : zoneColor; });
+        var ptBorder     = values.map(function (_, i) { return i === lastIx ? '#fff'    : elev; });
+        var ptBorderW    = values.map(function (_, i) { return i === lastIx ? 2         : 1; });
+
+        // Belt-and-braces: force a re-measure on the next frame after
+        // instantiation. If the panel was mid-transition when Chart.js
+        // initially measured the canvas (and got a smaller box than the
+        // settled size), this catches up to the final layout.
+        function _kickResize(c) {
+            if (!c) return;
+            requestAnimationFrame(function () {
+                try { c.resize(); } catch (_) {}
+            });
+        }
+        _linkSparkChart = new Chart(canvas, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: values,
+                    borderColor: zoneColor,
+                    backgroundColor: grad,
+                    borderWidth: 2,
+                    pointRadius:        ptRadius,
+                    pointBackgroundColor: ptBg,
+                    pointBorderColor:   ptBorder,
+                    pointBorderWidth:   ptBorderW,
+                    pointHoverRadius: 6,
+                    pointHoverBackgroundColor: zoneColor,
+                    pointHoverBorderColor: '#fff',
+                    pointHoverBorderWidth: 2,
+                    fill: true,
+                    tension: 0.3
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'nearest', intersect: false, axis: 'x' },
+                animation: { duration: 200 },
+                // Right-pad layout so the highlighted last point isn't
+                // clipped at the canvas edge.
+                layout: { padding: { top: 4, right: 8, bottom: 0, left: 4 } },
+                // Pad y-axis 8% above/below so the line doesn't lick
+                // the chart edges; a flat-line dataset gets a synthetic
+                // band so it reads as "stable around X" not "vanished".
+                // Y-axis labels are HIDDEN — exact min/avg/max numbers
+                // already sit in the stats badge above, so the labels
+                // were just visual noise eating ~30px of chart width.
+                scales: {
+                    x: {
+                        ticks: { color: text3, font: { size: 10 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 6 },
+                        grid:  { display: false },
+                        border: { display: false }
+                    },
+                    y: (function () {
+                        var range = maxV - minV;
+                        var pad   = range > 0 ? range * 0.08 : Math.max(Math.abs(maxV) * 0.1, 1);
+                        return {
+                            min: minV - pad,
+                            max: maxV + pad,
+                            ticks: { display: false },
+                            grid:  { color: border, drawBorder: false, drawTicks: false },
+                            border: { display: false }
+                        };
+                    })()
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: elev,
+                        titleColor: text,
+                        bodyColor:  text2,
+                        borderColor: border,
+                        borderWidth: 1,
+                        padding: 8,
+                        cornerRadius: 6,
+                        displayColors: false,
+                        callbacks: {
+                            // Title: full "DD MMM YYYY, HH:MM" so the
+                            // tooltip stays unambiguous on multi-day
+                            // periods where the x-axis only shows dates.
+                            title: function (items) {
+                                if (!items || !items.length) return '';
+                                var i = items[0].dataIndex;
+                                return (typeof tsArr[i] === 'number') ? fmtFull(tsArr[i]) : items[0].label;
+                            },
+                            // Body: "<propDesc>: <value>" — gives the
+                            // tooltip more semantic weight than a bare
+                            // number floating next to a timestamp.
+                            label: function (ctx) {
+                                var v = ctx.parsed && ctx.parsed.y;
+                                return (typeof v === 'number') ? (propDesc + ': ' + fmt(v)) : propDesc;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        _kickResize(_linkSparkChart);
+    }).fail(function (xhr, textStatus, error) {
+        // Aborted requests (we explicitly abort when a new link is clicked)
+        // are not failures from the user's perspective — silence them.
+        if (textStatus === 'abort') return;
+        console.log('sparkline failed:', textStatus, error, 'url:', url);
+        _draw_sparkline_empty(canvas, 'Failed to load');
+    });
+}
+function _draw_sparkline_empty(canvas, msg) {
+    var ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    var w = canvas.width || canvas.clientWidth || 200;
+    var h = canvas.height || canvas.clientHeight || 80;
+    ctx.clearRect(0, 0, w, h);
+    var cs = getComputedStyle(document.documentElement);
+    ctx.fillStyle = cs.getPropertyValue('--c-text-3').trim() || '#7e8794';
+    ctx.font = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(msg || 'No data for this period', w / 2, h / 2);
+}
+
 function link_popup(link){
     var dato = $("#datepicker").val();
     var html = make_tooltip_v2(link.from, link.to, link);
@@ -782,6 +1283,47 @@ function link_popup(link){
 	    from_adr = name_to_ip[link.from];
 	*/
 	
+	// --- "Trend" sparkline card ---
+	// Compact Chart.js line graph showing the currently-selected
+	// property over the active period for THIS link, so the user can
+	// see at a glance whether the value is trending up / down /
+	// stable without opening a full Plot tab. Card is built up-front
+	// here (so it's in DOM by the time openLinkPanel attaches it),
+	// and then _render_link_sparkline kicks off the AJAX fetch +
+	// Chart.js instantiation on next tick.
+	var sparkCard = document.createElement('div');
+	sparkCard.className = 'panel-card link-sparkline-card';
+	var sparkLabel = document.createElement('label');
+	sparkLabel.className = 'panel-card-label';
+	var sparkPropDesc = (prop_desc[event_sum_type[parms.event]] && prop_desc[event_sum_type[parms.event]][parms.property])
+	    || (prop_desc[parms.event] && prop_desc[parms.event][parms.property])
+	    || parms.property
+	    || 'Trend';
+	sparkLabel.innerHTML =
+	    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+	      '<path d="M3 18 L9 12 L13 16 L21 6"/>' +
+	    '</svg> Trend — <span class="link-sparkline-prop">' + escapeHtml(String(sparkPropDesc)) + '</span>';
+	sparkCard.appendChild(sparkLabel);
+	var sparkStats = document.createElement('div');
+	sparkStats.className = 'link-sparkline-stats';
+	sparkCard.appendChild(sparkStats);
+	var sparkWrap = document.createElement('div');
+	sparkWrap.className = 'link-sparkline-wrap';
+	var sparkCanvas = document.createElement('canvas');
+	sparkCanvas.className = 'link-sparkline';
+	sparkWrap.appendChild(sparkCanvas);
+	sparkCard.appendChild(sparkWrap);
+	div.appendChild(sparkCard);
+
+	// NOTE: we do NOT kick off the sparkline render here. link_popup()
+	// is called at link-DRAW time (from get_connections / draw_links),
+	// not at click time — the resulting div is stashed on the bezier
+	// as _panelPopup and re-used. If we deferred the render here, it
+	// would fire for every link on the map (hundreds of times) against
+	// detached canvases, AND would capture stale parms.event/property/
+	// dato from draw time. Instead, openLinkPanel() finds the canvas
+	// and renders at CLICK time with fresh parms.
+
 	// --- "See" card ---
 	var seeCard = document.createElement("div");
 	seeCard.className = "panel-card";

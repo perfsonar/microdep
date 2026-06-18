@@ -2834,3 +2834,56 @@ div.graph:has(> .curve-iframe-wrap):not([aria-hidden="true"]) {
 .export-csv-btn.exported svg     { color: var(--c-success, #2ea043); }
 .export-csv-btn.exported .export-csv-label      { display: none; }
 .export-csv-btn.exported .export-csv-done-label { display: inline; }
+
+/* ----- Per-link RTT sparkline (Trend card) ----- */
+.link-sparkline-card .link-sparkline-prop {
+    color: var(--c-text-2);
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: 0;
+    font-family: inherit;
+}
+
+.link-sparkline-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 10px;
+    margin: 2px 0 6px;
+    font-family: var(--font-mono);
+    font-size: .72rem;
+}
+
+.link-sparkline-stats .lss-item {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+}
+
+.link-sparkline-stats .lss-k {
+    color: var(--c-text-3);
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    font-size: .62rem;
+}
+
+.link-sparkline-stats .lss-v {
+    color: var(--c-text);
+    font-weight: 600;
+}
+
+.link-sparkline-stats .lss-n .lss-v {
+    color: var(--c-text-2);
+    font-weight: 400;
+}
+
+.link-sparkline-wrap {
+    position: relative;
+    width: 100%;
+    height: 110px;
+}
+
+.link-sparkline {
+    display: block;
+}
+
+
