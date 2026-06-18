@@ -144,6 +144,7 @@ Requires:               momentjs = 2.30.1
 Requires:               select2js = 4.0.13
 Requires:               sorttablejs = 2.0
 Requires:               visjs
+Requires:               perfsonar-microdep-geolite2
 BuildRequires:          systemd
 BuildRequires:          systemd-rpm-macros       
 # ... but macros are not yet utilized below
@@ -301,6 +302,12 @@ ln -rs /usr/share/javascript/visjs/4.21.0/vis.min.css   %{buildroot}/%{microdep_
 ln -rs /usr/share/javascript/visjs/4.21.0/img   %{buildroot}/%{microdep_web_dir}/css/img 
 ln -rs /usr/share/javascript/visjs/4.21.0/vis-timeline-graph2d.min.css   %{buildroot}/%{microdep_web_dir}/css/vis-timeline-graph2d.min.css
 ln -sr /usr/share/javascript/sorttable/2.0/sorttable.js %{buildroot}/%{microdep_web_dir}/js/
+
+# Make GeoLite2 avaiable for js scripts
+mkdir -p %{buildroot}/%{microdep_web_dir}/geo/
+ln -sr %{microdep_share_base}/GeoLite2/GeoLite2-ASN.mmdb %{buildroot}/%{microdep_web_dir}/geo/
+ln -sr %{microdep_share_base}/GeoLite2/GeoLite2-City.mmdb %{buildroot}/%{microdep_web_dir}/geo/
+ln -sr %{microdep_share_base}/GeoLite2/GeoLite2-Country.mmdb %{buildroot}/%{microdep_web_dir}/geo/
 
 # Link up some handy tools
 mkdir -p %{buildroot}/usr/local/bin/ || true
@@ -482,6 +489,7 @@ systemctl reload httpd.service || true
 %{microdep_web_dir}/img
 %{microdep_web_dir}/js
 %{microdep_web_dir}/css
+%{microdep_web_dir}/geo
 %attr(0755,perfsonar,perfsonar) %{command_base}/elastic-get-date-type.pl
 %attr(0755,perfsonar,perfsonar) %{command_base}/microdep-config.cgi
 %attr(0755,perfsonar,perfsonar) %{command_base}/yaml-to-json.cgi
