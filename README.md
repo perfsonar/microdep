@@ -84,5 +84,3 @@ As the Microdep add-on relies on raw-data from tests to perform analysis, only s
 
 Analytic results from Microdep is available via https://my-host/microdep.
 
-
-

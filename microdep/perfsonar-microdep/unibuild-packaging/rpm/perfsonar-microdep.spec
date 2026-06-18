@@ -146,8 +146,9 @@ Requires:               momentjs = 2.30.1
 Requires:               select2js = 4.0.13
 Requires:               sorttablejs = 2.0
 Requires:               visjs
+Requires:               perfsonar-microdep-enrichdbs
 BuildRequires:          systemd
-BuildRequires:          systemd-rpm-macros       
+BuildRequires:          systemd-rpm-macros
 # ... but macros are not yet utilized below
 
 %description map
@@ -231,6 +232,16 @@ install -D -m 0644 %{buildroot}/%{install_base}/LICENSE %{buildroot}/%{doc_base}
 install -D -m 0644 %{buildroot}/%{install_base}/LICENSE %{buildroot}/%{doc_base}/LICENSE-toolkit
 install -D -m 0644 %{buildroot}/%{install_base}/LICENSE %{buildroot}/%{doc_base}/LICENSE-utils
 
+# Copy license file
+mkdir -p %{buildroot}/%{doc_base}
+#install -D -m 0644 -t %{buildroot}/%{doc_base} %{buildroot}/%{install_base}/LICENSE
+install -D -m 0644 %{buildroot}/%{install_base}/LICENSE %{buildroot}/%{doc_base}/LICENSE-ana
+install -D -m 0644 %{buildroot}/%{install_base}/LICENSE %{buildroot}/%{doc_base}/LICENSE-archive
+install -D -m 0644 %{buildroot}/%{install_base}/LICENSE %{buildroot}/%{doc_base}/LICENSE-logstash
+install -D -m 0644 %{buildroot}/%{install_base}/LICENSE %{buildroot}/%{doc_base}/LICENSE-map
+install -D -m 0644 %{buildroot}/%{install_base}/LICENSE %{buildroot}/%{doc_base}/LICENSE-toolkit
+install -D -m 0644 %{buildroot}/%{install_base}/LICENSE %{buildroot}/%{doc_base}/LICENSE-utils
+
 # Prepare folder for json output from analytics scripts read by logstash
 mkdir -p %{buildroot}/var/lib/logstash/microdep 
 
@@ -294,6 +305,12 @@ ln -rs /usr/share/javascript/visjs/4.21.0/vis.min.css   %{buildroot}/%{microdep_
 ln -rs /usr/share/javascript/visjs/4.21.0/img   %{buildroot}/%{microdep_web_dir}/css/img 
 ln -rs /usr/share/javascript/visjs/4.21.0/vis-timeline-graph2d.min.css   %{buildroot}/%{microdep_web_dir}/css/vis-timeline-graph2d.min.css
 ln -sr /usr/share/javascript/sorttable/2.0/sorttable.js %{buildroot}/%{microdep_web_dir}/js/
+
+# Make GeoLite2 avaiable for js scripts
+mkdir -p %{buildroot}/%{microdep_web_dir}/geo/
+ln -sr %{microdep_share_base}/GeoLite2/GeoLite2-ASN.mmdb %{buildroot}/%{microdep_web_dir}/geo/
+ln -sr %{microdep_share_base}/GeoLite2/GeoLite2-City.mmdb %{buildroot}/%{microdep_web_dir}/geo/
+ln -sr %{microdep_share_base}/GeoLite2/GeoLite2-Country.mmdb %{buildroot}/%{microdep_web_dir}/geo/
 
 # Link up some handy tools
 mkdir -p %{buildroot}/usr/local/bin/ || true
@@ -457,6 +474,23 @@ systemctl reload httpd.service || true
 %{microdep_config_base}/roles_yml_patch
 %config /etc/logrotate.d/microdep
 
+%files logstash
+%defattr(0644,perfsonar,perfsonar,0755)
+%license %{doc_base}/LICENSE-logstash
+%attr(0755,perfsonar,perfsonar) %{command_base}/opensearch_config_microdep.sh
+%attr(0755,perfsonar,perfsonar) %{command_base}/psconfig_archive_ana.sh
+/usr/local/bin/psconfig_archive_ana.sh
+/usr/local/bin/opensearch_config_microdep.sh
+/etc/httpd/conf.d/apache-microdep-ana.conf
+%{install_base}/logstash/microdep_pipeline/*.conf
+%{microdep_config_base}/logstash/microdep-pipelines.yml
+%{microdep_config_base}/microdep_default_policy.json
+%config /var/lib/logstash/microdep 
+%{microdep_config_base}/os-template-gap-ana.json
+%{microdep_config_base}/os-template-trace-ana.json
+%{microdep_config_base}/roles_yml_patch
+%config /etc/logrotate.d/microdep
+
 %files map
 %defattr(0644,perfsonar,perfsonar,0755)
 %license %{doc_base}/LICENSE-map
@@ -465,6 +499,7 @@ systemctl reload httpd.service || true
 %{microdep_web_dir}/js
 %{microdep_web_dir}/css
 %{microdep_web_dir}/fonts
+%{microdep_web_dir}/geo
 %attr(0755,perfsonar,perfsonar) %{command_base}/elastic-get-date-type.pl
 %attr(0755,perfsonar,perfsonar) %{command_base}/microdep-config.cgi
 %attr(0755,perfsonar,perfsonar) %{command_base}/yaml-to-json.cgi
