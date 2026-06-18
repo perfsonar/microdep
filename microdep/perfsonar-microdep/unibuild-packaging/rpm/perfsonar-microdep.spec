@@ -64,7 +64,7 @@ Requires:               python3-psycopg2
 Requires:               python3-pytz
 Requires:               python3-tzlocal
 Requires:               python3-pyyaml
-Requires:               perfsonar-microdep-geolite2
+Requires:               perfsonar-microdep-enrichdbs
 BuildRequires:          systemd
 BuildRequires:          systemd-rpm-macros    
 # ... but macros are not yet utilized below
@@ -82,12 +82,14 @@ Requires:               perfsonar-microdep-utils
 %description archive
 A package collection required to prepare for archiving of Microdep Analytics on a perfSONAR archive installation.
 
-%package geolite2
-Summary:		MaxMind's Geolite2 geoip databases
+%package enrichdbs
+Summary:		Enrichment databases for Microdep (geoip etc.)
 Group:			Applications/Communications
 
-%description geolite2
-Geopositioning information from Maxmind to enrich datasets with AS numbers, city and country.
+%description enrichdbs
+Databases used to enrich Microdep datasets. Currently ships MaxMind
+GeoLite2 (AS number, city and country geolocation); intended as a
+container for any future enrichment data sources.
 
 %package logstash
 Summary:		Logstash pipeline for archiving Microdep analytic events
@@ -182,7 +184,7 @@ systemctl stop perfsonar-microdep-trace-ana.service || true
 systemctl stop perfsonar-microdep-restart.timer || true
 systemctl stop perfsonar-microdep-hourly-aggregator.timer || true
 
-%pre geolite2
+%pre enrichdbs
 /usr/sbin/groupadd -r perfsonar 2> /dev/null || :
 /usr/sbin/useradd -g perfsonar -r -s /sbin/nologin -c "perfSONAR User" -d /tmp perfsonar 2> /dev/null || :
 
@@ -432,7 +434,7 @@ systemctl reload httpd.service || true
 %files archive
 %license %{doc_base}/LICENSE-archive
 
-%files geolite2
+%files enrichdbs
 %defattr(0644,perfsonar,perfsonar,0755)
 %license %{microdep_share_base}/GeoLite2/LICENSE.txt
 %{microdep_share_base}/GeoLite2/COPYRIGHT.txt
