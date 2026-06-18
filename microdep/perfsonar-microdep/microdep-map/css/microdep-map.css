@@ -2548,3 +2548,63 @@ div.graph:has(> .curve-iframe-wrap):not([aria-hidden="true"]) {
     .sidebar { position: fixed; top: 0; left: 0; bottom: 0; z-index: 100; box-shadow: var(--shadow-lg); transform: translateX(0); transition: transform .3s cubic-bezier(.4,0,.2,1); }
     .sidebar.collapsed { transform: translateX(calc(-1 * var(--sidebar-w))); width: var(--sidebar-w); min-width: var(--sidebar-w); }
 }
+
+
+/* ==========================================================
+   CSV EXPORT BUTTON (Summary / Asymmetry / Missing tabs)
+   ========================================================== */
+
+.tab-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.tab-header-row > h2 {
+    margin: 0;
+    flex: 1 1 auto;
+}
+
+.export-csv-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: var(--c-elevated);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r);
+    color: var(--c-text-2);
+    font-size: .78rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background .15s, border-color .15s, color .15s;
+    flex-shrink: 0;
+    line-height: 1;
+}
+
+.export-csv-btn:hover {
+    background: var(--c-control);
+    border-color: var(--c-border-h);
+    color: var(--c-text);
+}
+
+.export-csv-btn:active {
+    transform: translateY(1px);
+}
+
+.export-csv-btn svg {
+    flex-shrink: 0;
+    color: var(--c-accent);
+}
+
+.export-csv-btn .export-csv-done-label { display: none; }
+.export-csv-btn.exported {
+    background: var(--c-success-bg, #1f6f3a);
+    border-color: var(--c-success, #2ea043);
+    color: var(--c-text);
+}
+.export-csv-btn.exported svg     { color: var(--c-success, #2ea043); }
+.export-csv-btn.exported .export-csv-label      { display: none; }
+.export-csv-btn.exported .export-csv-done-label { display: inline; }

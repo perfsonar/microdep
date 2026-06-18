@@ -1609,6 +1609,124 @@ function sort_diff(a , b){
     if ( aa[0] === bb[0]){ return aa[1].localeCompare( bb[1] ); } else { return aa[0].localeCompare( bb[0] ); }
 }
 
+// ============================================================
+// CSV export — Summary / Asymmetry / Missing report tables
+// ============================================================
+// Table -> RFC 4180-ish CSV. Cells with the From/To link-stack expand
+// into two columns; cells carrying a `data-csv` attribute export that
+// raw value instead of their rendered text.
+function _csv_escape(s) {
+    if (s === null || s === undefined) return '';
+    s = String(s);
+    if (/[",\r\n]/.test(s)) {
+        s = '"' + s.replace(/"/g, '""') + '"';
+    }
+    return s;
+}
+
+function _table_to_csv(table) {
+    if (!table) return '';
+    var lines = [];
+    var rows = table.rows;
+    for (var r = 0; r < rows.length; r++) {
+        var cells = rows[r].cells;
+        var fields = [];
+        for (var c = 0; c < cells.length; c++) {
+            var cell = cells[c];
+            // Header & body cells with the linked-pair stack become two CSV cols
+            if (cell.classList && cell.classList.contains('summary-link-header')) {
+                fields.push(_csv_escape('From'));
+                fields.push(_csv_escape('To'));
+                continue;
+            }
+            if (cell.classList && cell.classList.contains('summary-link-cell')) {
+                var fromEl = cell.querySelector('.summary-from span, .summary-from');
+                var toEl   = cell.querySelector('.summary-to span,   .summary-to');
+                fields.push(_csv_escape(fromEl ? fromEl.textContent.trim() : ''));
+                fields.push(_csv_escape(toEl   ? toEl.textContent.trim()   : ''));
+                continue;
+            }
+            if (cell.dataset && cell.dataset.csv !== undefined) {
+                fields.push(_csv_escape(cell.dataset.csv));
+                continue;
+            }
+            var txt = cell.textContent || '';
+            txt = txt.replace(/\s+/g, ' ').trim();
+            fields.push(_csv_escape(txt));
+        }
+        lines.push(fields.join(','));
+    }
+    return lines.join('\r\n') + '\r\n';
+}
+
+function _csv_filename(prefix) {
+    var date = ($('#datepicker').val() || new Date().toISOString().slice(0, 10));
+    var d = new Date(date);
+    if (!isNaN(d.getTime())) {
+        date = d.getFullYear() + '-' +
+               String(d.getMonth() + 1).padStart(2, '0') + '-' +
+               String(d.getDate()).padStart(2, '0');
+    }
+    var net  = (parms && parms.net)      || 'unknown';
+    var ev   = (parms && parms.event)    || 'unknown';
+    var prop = (parms && parms.property) || '';
+    var bits = ['microdep', prefix, date, net, ev];
+    if (prop) bits.push(prop);
+    return bits.map(function (b) { return String(b).replace(/[^A-Za-z0-9._-]/g, '_'); }).join('-') + '.csv';
+}
+
+function _csv_download(filename, csv) {
+    // BOM helps Excel detect UTF-8 on Windows; harmless elsewhere.
+    var blob = new Blob(['﻿', csv], { type: 'text/csv;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }, 0);
+}
+
+// One delegated handler for every <button class="export-csv-btn">.
+$(document).on('click', '.export-csv-btn', function (e) {
+    e.preventDefault();
+    e.stopPropagation();
+    var btn = e.currentTarget;
+    var sel = btn.getAttribute('data-csv-table');
+    var name = btn.getAttribute('data-csv-name') || 'export';
+    var table = sel ? document.getElementById(sel) : null;
+    if (!table) {
+        var pane = btn.closest('.ui-tabs-panel, [role="tabpanel"], .tab-pane') || btn.parentNode;
+        table = pane ? pane.querySelector('table') : null;
+    }
+    if (!table) {
+        console.warn('export-csv: no table found (data-csv-table=' + sel + ')');
+        return;
+    }
+    _csv_download(_csv_filename(name), _table_to_csv(table));
+    btn.classList.add('exported');
+    setTimeout(function () { btn.classList.remove('exported'); }, 900);
+});
+
+// Reusable button markup; drops in next to a report <h2>.
+function _csv_button_html(tableId, namePrefix) {
+    return '<button type="button" class="export-csv-btn" ' +
+           'data-csv-table="' + tableId + '" ' +
+           'data-csv-name="' + namePrefix + '" ' +
+           'title="Download this table as CSV">' +
+             '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+               '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>' +
+               '<path d="M7 10l5 5 5-5"/>' +
+               '<path d="M12 15V3"/>' +
+             '</svg>' +
+             '<span class="export-csv-label">Export CSV</span>' +
+             '<span class="export-csv-done-label">Downloaded</span>' +
+           '</button>';
+}
+
 function check_asymmetry(report, div_id){
     var ab=[], down=[], diff=[], pair=[], i; var nok=0, nmiss=0, missing=[];
     for (i=0;i< summary.length;i++){ var entry=summary[i]._source; var a=entry.from + " " + entry.to; down[a]= entry[ parms.property ]; ab[a]=true; }
@@ -1621,7 +1739,7 @@ function check_asymmetry(report, div_id){
     let html='';
     if ( report === 'missing' ){
 	if (nmiss > 0) {
-	    html+= '<h2>Missing opposite flows for ' + title_state() + '</h2>';
+	    html+= '<div class="tab-header-row"><h2>Missing opposite flows for ' + title_state() + '</h2>' + _csv_button_html(div_id + '_miss_table', 'missing') + '</div>';
 	    html+='<p>The below ' + nmiss + ' (out of ' + summary.length + ") flows might be missing";
 	    html += '<table id=' + div_id + '_miss_table title="Missing opposite flows?" class=sortable>';
 	    html += '<thead><tr><th class="summary-link-header">' + fromIcon + 'From<br>' + toIcon + 'To</th></tr></thead>';
@@ -1638,7 +1756,7 @@ function check_asymmetry(report, div_id){
 	} else { html+= '<h2>No missing flows for ' + title_state() + '</h2>'; }
     } else {
 	if (diff.length > 0) {
-	    html+='<h2>Asymmetry in ' + prop_desc[event_sum_type[parms.event]][parms.property] + ' for ' + title_state() + '</h2>';
+	    html+='<div class="tab-header-row"><h2>Asymmetry in ' + prop_desc[event_sum_type[parms.event]][parms.property] + ' for ' + title_state() + '</h2>' + _csv_button_html(div_id + '_table', 'asymmetry') + '</div>';
 	    html += '<table id=' + div_id + '_table border=1 class=sortable><thead title="Click to sort on column"><tr>';
 	    html += '<th class="summary-link-header">' + fromIcon + 'From<br>' + toIcon + 'To';
 	    html += '<th align=right>From→To<th align=right>To→From<th align=right>Diff</tr></thead>';
@@ -1664,7 +1782,7 @@ var toIcon = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke
 
 function report_summary(div_id){
     let html='';
-    html+='<h2>Summary for ' + title_state() + '</h2>';
+    html+='<div class="tab-header-row"><h2>Summary for ' + title_state() + '</h2>' + _csv_button_html(div_id + '_table', 'summary') + '</div>';
     html+='<table border=1 id=' + div_id + '_table class=sortable>\n';
     var header_missing=true;
     for (let i=0;i< summary.length;i++){
