@@ -33,6 +33,7 @@ momentjs
 ifelse(PACKAGING,rpm,select2js)
 ifelse(DISTRO/MAJOR,Ubuntu/20,select2js)
 sorttablejs
+visjs
 perl_color_library
 perl_moosex_aliases
 perl_string_rewriteprefix

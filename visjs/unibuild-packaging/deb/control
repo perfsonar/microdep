@@ -1,0 +1,19 @@
+Source: vis
+Section: misc
+Priority: optional
+Maintainer: perfSONAR developers <debian@perfsonar.net>
+Uploaders: Otto J Wittner <otto.wittner@sikt.no>
+Build-Depends: debhelper (>= 10)
+Standards-Version: 4.7.0.0
+Homepage: https://almende.github.io/vis/
+#Vcs-Git: 
+#Vcs-Browser: 
+
+Package: libjs-vis
+Architecture: all
+Description: Dynamic, browser based visualization libraries
+ A dynamic, browser based javascript visualization library. Developed by Almende B.V.
+
+
+
+

@@ -110,7 +110,7 @@ if [ "$DISTRO" = "rpm" ]; then
     
     echo "Synching to remote repo at $HOST ..."
     rsync --rsync-path "sudo rsync" -vr -e "$RSH" unibuild-repo/RPMS $HOST:/var/lib/unibuild-repo/
-    rsync --rsync-path "sudo rsync" -vr -e "$RSH" pstracetree/unibuild-repo/RPMS $HOST:/var/lib/unibuild-repo/
+    #rsync --rsync-path "sudo rsync" -vr -e "$RSH" pstracetree/unibuild-repo/RPMS $HOST:/var/lib/unibuild-repo/
 
     echo "Preparing remote repo ..."
     $RSH $HOST sudo dnf -y install yum-utils createrepo
@@ -135,19 +135,20 @@ if [ "$DISTRO" = "rpm" ]; then
 
 elif [ "$DISTRO" = "deb" ]; then
 
-    if [ ! -e "unibuild-repo/Release" -o ! -e "pstracetree/unibuild-repo/Release" ]; then
+#    if [ ! -e "unibuild-repo/Release" -o ! -e "pstracetree/unibuild-repo/Release" ]; then
+    if [ ! -e "unibuild-repo/Release" ]; then
 	echo "Error: No valid DEB build found (unibuild-repo/Release or pstracetree/unibuild-repo/Release is missing). Run 'make deb' first." >&2
 	exit 1
     fi
     
     echo "Synching to remote $DISTRO-repo at $HOST ..."
     rsync --rsync-path "sudo rsync" -vr -e "$RSH" unibuild-repo/*.deb unibuild-repo/Packages unibuild-repo/Release $HOST:/var/lib/unibuild-microdep-repo/
-    rsync --rsync-path "sudo rsync" -vr -e "$RSH" pstracetree/unibuild-repo/*.deb pstracetree/unibuild-repo/Packages pstracetree/unibuild-repo/Release $HOST:/var/lib/unibuild-pstracetree-repo/
+    #rsync --rsync-path "sudo rsync" -vr -e "$RSH" pstracetree/unibuild-repo/*.deb pstracetree/unibuild-repo/Packages pstracetree/unibuild-repo/Release $HOST:/var/lib/unibuild-pstracetree-repo/
 
     echo "Enabling remote repo ..."
     TMPDIR=$(mktemp -d)
     echo "deb [trusted=yes] file:/var/lib/unibuild-microdep-repo ./" > $TMPDIR/local-microdep-repo.list
-    echo "deb [trusted=yes] file:/var/lib/unibuild-pstracetree-repo ./" > $TMPDIR/local-pstracetree-repo.list
+    #echo "deb [trusted=yes] file:/var/lib/unibuild-pstracetree-repo ./" > $TMPDIR/local-pstracetree-repo.list
     rsync --rsync-path "sudo rsync" -vr -e "$RSH" $TMPDIR/ $HOST:/etc/apt/sources.list.d/
     rm -r $TMPDIR
     echo "Refreshing repo list ..."

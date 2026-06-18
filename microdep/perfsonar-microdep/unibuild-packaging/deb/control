@@ -64,7 +64,7 @@ Description: MaxMind's Geolite2 geoip databases
 
 Package: perfsonar-microdep-logstash
 Architecture: all
-Depends: ${misc:Depends}, ${perl:Depends},
+Depends: ${misc:Depends},
  curl,
  logrotate
 #Recommends: perfsonar-archive
@@ -103,7 +103,7 @@ Depends: ${misc:Depends}, ${perl:Depends},
  libjs-moment, 
  libjs-select2.js,
  libjs-sorttable,
- perfsonar-tracetree
+ libjs-vis
 Description: Microdep map web GUI presenting analytic results
  Web GUI presenting Microdep analytic results in a map view
 
