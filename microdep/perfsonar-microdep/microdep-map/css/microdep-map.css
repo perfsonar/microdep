@@ -2887,3 +2887,89 @@ div.graph:has(> .curve-iframe-wrap):not([aria-hidden="true"]) {
 }
 
 
+
+
+/* ----- Compare-mode floating link chips ----------------
+   When compare mode is on, every link gets a small "+12%" /
+   "-7%" pill hovering at its geographic midpoint. Implemented
+   as a Leaflet divIcon so it follows the map's pan/zoom
+   automatically. We translate -50%/-50% to centre the chip on
+   the marker's latLng (Leaflet anchors top-left by default).
+*/
+.compare-pct-marker {
+    pointer-events: none !important;
+    background: transparent !important;
+    border: none !important;
+}
+.compare-pct-chip {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 11px;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    text-shadow: 0 1px 1px rgba(0, 0, 0, .5);
+    white-space: nowrap;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, .45);
+    border: 1px solid rgba(255, 255, 255, .25);
+    transform: translate(-50%, -50%);   /* centre on midpoint */
+    pointer-events: none;
+    line-height: 14px;
+    font-family: var(--font-mono, monospace);
+}
+@media (max-width: 768px) {
+    .compare-pct-chip {
+        font-size: 10px;
+        padding: 1px 6px;
+    }
+}
+
+/* ----- Compare-mode legend ------------------------------
+   In compare mode we replace the threshold semaphore with a
+   fixed-bucket diff palette. We MATCH the threshold legend's
+   outer dimensions (280px wide, same title-row + bucket-row
+   heights) so flipping compare on/off doesn't make the legend
+   "jump" between sizes. The 5 diff buckets fit by shrinking the
+   bucket-button font versus the threshold legend's typical 4
+   buckets — but `line-height` is pinned to the same value as the
+   regular bucket so the row height stays identical regardless of
+   font size. Buttons are inert (no hover-lift, no click).
+*/
+table#legend.compare-legend {
+    width: 280px !important;
+    min-width: 280px !important;
+    max-width: 280px !important;
+}
+table#legend.compare-legend td {
+    padding-left: 1px !important;
+    padding-right: 1px !important;
+}
+table#legend.compare-legend td button {
+    /* .58rem fits "+10..+30" in 280/5 ≈ 55px cells without wrapping. */
+    font-size: .58rem !important;
+    /* Pin row height to the regular legend's natural height (≈26px =
+       4px top + 18px content + 4px bottom). line-height: 18px keeps
+       the smaller font centered in the same vertical box. */
+    line-height: 18px !important;
+    min-height: 26px !important;
+    padding: 4px 1px !important;
+    box-sizing: border-box !important;
+    white-space: nowrap !important;
+    cursor: default !important;
+    color: #fff !important;
+    text-shadow: 0 1px 1px rgba(0, 0, 0, .4);
+}
+table#legend.compare-legend td button:hover {
+    transform: none !important;
+    box-shadow: none !important;
+    filter: none !important;
+}
+/* Title row — pin to the same height as the regular legend's title.
+   Slightly smaller font so "Property (unit) vs yesterday" fits the
+   280px row without wrapping; line-height keeps vertical box equal. */
+table#legend.compare-legend th button {
+    font-size: .78rem !important;
+    line-height: 20px !important;
+    min-height: 22px !important;
+    box-sizing: border-box !important;
+}

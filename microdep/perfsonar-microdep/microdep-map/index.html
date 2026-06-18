@@ -120,6 +120,19 @@
         </div>
 
         <div class="filter-group">
+          <label class="filter-label">Compare with</label>
+          <div class="select-wrap">
+            <select class="knapp hidden-select" id="compare_select" title="Colour links by change vs a prior period">
+              <option value="off" selected="selected">Off</option>
+              <option value="day">Yesterday</option>
+              <option value="week">Last week</option>
+              <option value="month">4 weeks ago</option>
+            </select>
+            <div class="custom-select" data-target="compare_select"></div>
+          </div>
+        </div>
+
+        <div class="filter-group">
           <label class="filter-label">Date &amp; Time</label>
           <div class="date-row">
             <input class="knapp" type="text" id="datepicker" size="12em" title="Measurement start">

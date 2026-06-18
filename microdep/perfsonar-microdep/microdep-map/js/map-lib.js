@@ -365,6 +365,8 @@ export function update_url(parameter, value){
 	pars.push( "stats=" + $("#stats_type").val() );
     if (parms.conffile) pars.push( "conffile=" + parms.conffile);   // Add configfile to url if relevant
     if (parms.report) pars.push( "report=" + parms.report);         // Add report to url if relevant
+    var cmpVal = ($("#compare_select").val && $("#compare_select").val()) || parms.compare;   // Snapshot compare mode
+    if (cmpVal && cmpVal !== 'off') pars.push( "compare=" + cmpVal );
     if ( parameter )
 	pars.push( parameter + "=" + value );
     url = urlBase+'?'+pars.join('&');

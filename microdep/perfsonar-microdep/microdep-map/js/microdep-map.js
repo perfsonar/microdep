@@ -198,6 +198,10 @@ var ends=[];
 var last_hits=[]; // last query detail data (gaps)
 var summary=[]; // last summary of query data (gapsum, gaps)
 var aggregates=[]; // last aggregate data (jitter)
+// Snapshot compare — baseline (prior-period) values keyed "from,to";
+// re-fetched when the composite key (event/prop/period/offset) changes.
+var baselineSummary = {};
+var baselineCompareKey = '';
 var focus_node="";
 var middle_point=[],
     line_bearing=[],
@@ -1797,17 +1801,319 @@ function taint_topology( topo, prop){
     }
 }
 
+// ============================================================
+// SNAPSHOT COMPARE — diff palette + baseline fetch helpers
+// ============================================================
+// Compare-mode color palette. When the user picks "Compare with
+// yesterday/last week/4 weeks ago", the link is coloured by the SIGNED
+// percentage change rather than its absolute value. Negative pct =
+// improvement (green), positive = degradation (red), near-zero = grey.
+// Polarity assumes "lower is better" for the property — true for
+// every microdep summary metric we care about (delay, loss,
+// down_ppm, jitter, asymmetry, ...).
+var COMPARE_COLORS = {
+    bigGreen: '#00a854',   // ≤ -30%   → much better
+    smallGreen: '#5cb85c', // -30…-10% → mildly better
+    grey: '#888888',       // -10…+10% → unchanged
+    smallRed: '#d9534f',   // +10…+30% → mildly worse
+    bigRed: '#c11919',     // ≥ +30%   → much worse
+    noBaseline: '#9aa3ad'  // no baseline value — paler grey, distinct from "unchanged"
+};
+
+function _compare_color_for_pct(pct) {
+    if (pct === null || pct === undefined || isNaN(pct)) return COMPARE_COLORS.noBaseline;
+    if (pct <= -30) return COMPARE_COLORS.bigGreen;
+    if (pct <= -10) return COMPARE_COLORS.smallGreen;
+    if (pct >=  30) return COMPARE_COLORS.bigRed;
+    if (pct >=  10) return COMPARE_COLORS.smallRed;
+    return COMPARE_COLORS.grey;
+}
+
+// Translate the dropdown value to a millisecond offset to subtract
+// from the current window's start/end. Returns 0 for "off".
+function _compare_offset_ms(mode) {
+    switch (mode) {
+        case 'day':   return 24 * 3600 * 1000;
+        case 'week':  return 7 * 24 * 3600 * 1000;
+        case 'month': return 28 * 24 * 3600 * 1000;
+        default:      return 0;
+    }
+}
+
+function _compare_label(mode) {
+    switch (mode) {
+        case 'day':   return 'yesterday';
+        case 'week':  return 'last week';
+        case 'month': return '4 weeks ago';
+        default:      return '';
+    }
+}
+
+// Fetch the baseline series for the same query as get_connections, but
+// shifted backwards by the compare offset. Calls cb(success) — true if
+// the baselineSummary map got populated, false on any error / empty.
+function _fetch_baseline_summary(currStart, currEnd, etype, prop, cb) {
+    var mode = parms.compare || 'off';
+    if (mode === 'off') { baselineSummary = {}; cb && cb(false); return; }
+    var offsetMs = _compare_offset_ms(mode);
+    if (!offsetMs) { baselineSummary = {}; cb && cb(false); return; }
+
+    // Cache key — skip refetch if event/prop/period/compare/start match
+    var key = [etype, prop, currStart, currEnd, mode].join('|');
+    if (key === baselineCompareKey && Object.keys(baselineSummary).length) {
+        cb && cb(true);
+        return;
+    }
+
+    var bStartMs = new Date(currStart).getTime() - offsetMs;
+    var bEndMs   = new Date(currEnd).getTime()   - offsetMs;
+    var bStart   = new Date(bStartMs).toISOString();
+    var bEnd     = new Date(bEndMs).toISOString();
+
+    var index   = (event_index && event_index[etype]) || parms.net + '_' + etype;
+    var sumType = (event_sum_type && event_sum_type[etype]) || etype;
+    // Mirror get_connections's logic for past-period queries: prefer summary
+    // when one exists (we're always in past for compare mode). The baseline
+    // is by definition older than now.
+    var queryEtype = sumType || etype;
+
+    var url = 'elastic-get-date-type.pl?index=' + index +
+              '&event_type=' + queryEtype +
+              '&start=' + adjust_to_timezone(bStart) +
+              '&end='   + adjust_to_timezone(bEnd);
+    if (net_ip_version && net_ip_version[parms.net]) {
+        url += '&ip_version=' + net_ip_version[parms.net];
+    }
+    if (parms.debug) console.log('compare: baseline url:', url);
+
+    $.getJSON(url).done(function (resp) {
+        var hits = (resp && resp.hits && resp.hits.hits) || [];
+        baselineSummary = {};
+        for (var i = 0; i < hits.length; i++) {
+            var s = hits[i] && hits[i]._source;
+            if (!s || !s.from || !s.to) continue;
+            var v = s[prop];
+            if (typeof v !== 'number' || isNaN(v)) continue;
+            baselineSummary[s.from + ',' + s.to] = v;
+        }
+        baselineCompareKey = key;
+        console.log('compare: baseline loaded —', Object.keys(baselineSummary).length, 'pairs');
+        cb && cb(true);
+    }).fail(function (e, ts, err) {
+        console.log('compare: baseline fetch failed —', ts, err);
+        baselineSummary = {};
+        baselineCompareKey = '';
+        cb && cb(false);
+    });
+}
+
+// Layer group holding the floating "+12%" / "-7%" chips that hover
+// next to each link in compare mode. Created lazily, attached to the
+// Leaflet map, and cleared (not destroyed) on each repaint so we
+// don't leak L.divIcon DOM nodes across toggles.
+var _compare_label_layer = null;
+
+function _ensure_compare_layer() {
+    if (!_compare_label_layer) {
+        _compare_label_layer = L.layerGroup();
+    }
+    if (typeof mymap !== 'undefined' && mymap && !mymap.hasLayer(_compare_label_layer)) {
+        _compare_label_layer.addTo(mymap);
+    }
+    return _compare_label_layer;
+}
+
+function _clear_compare_labels() {
+    if (_compare_label_layer) _compare_label_layer.clearLayers();
+}
+
+// Threshold below which a chip is suppressed. Matches the legend's
+// "same" bucket — if the value is essentially unchanged from baseline
+// the chip would just clutter the map without telling the user
+// anything new. They can still hover the link for the exact value.
+var COMPARE_LABEL_MIN_PCT = 10;
+
+// Build a single floating chip at the link's geographic centre.
+// pct comes from _compare_pct_for_link — null means we have no
+// baseline for that pair, in which case we skip the chip entirely
+// (cluttering the map with "?" badges helps no one).
+function _add_compare_label(link, pct) {
+    if (!link || pct === null || pct === undefined || isNaN(pct)) return;
+    // Hide chips for the "same" bucket — they all read "0%" / "±2%"
+    // and just clutter the map without communicating anything useful.
+    if (Math.abs(pct) < COMPARE_LABEL_MIN_PCT) return;
+    // Real-path mode splits a single A→B route into N hop-segment
+    // polylines (annotated with _isRealPathLine = true). All segments
+    // share the same end-to-end pct value, so labeling each one
+    // creates a vertical stack of identical chips. Skip them — the
+    // main bezier (no _isRealPathLine flag) gets the only label.
+    if (link._isRealPathLine) return;
+    // Use the polyline's actual midpoint by vertex count — for curved
+    // / great-circle lines (Norway→NZ, etc.) the bounds rectangle's
+    // centre falls way off the rendered line. Walking to vertices/2
+    // gives a point that's actually ON the curve.
+    //
+    // Defensive: getLatLngs() returns wildly different shapes
+    // depending on which Leaflet primitive backs the link:
+    //   • L.polyline       → flat [LatLng, LatLng, ...]
+    //   • L.polygon        → nested [[LatLng, ...]]
+    //   • L.curve (plugin) → SVG-path commands: ['M', [lat,lon], 'L', [lat,lon], 'Q', [c1], [end], ...]
+    // We collect every coordinate-shaped element regardless of nesting
+    // / command letters, then pick the middle one.
+    var center = null;
+    try {
+        var raw = link.getLatLngs ? link.getLatLngs() : [];
+        var coords = [];
+        var _walk = function (x) {
+            if (!x) return;
+            if (typeof x.lat === 'number' && typeof x.lng === 'number') {
+                coords.push(x);
+                return;
+            }
+            if (Array.isArray(x)) {
+                // [lat, lon] tuple of plain numbers (L.curve commands use these)
+                if (x.length >= 2 && typeof x[0] === 'number' && typeof x[1] === 'number') {
+                    coords.push(L.latLng(x[0], x[1]));
+                    return;
+                }
+                for (var i = 0; i < x.length; i++) _walk(x[i]);
+            }
+            // strings ('M' / 'L' / 'Q' / 'C') and anything else: skip
+        };
+        _walk(raw);
+        if (coords.length === 1) center = coords[0];
+        else if (coords.length >= 2) center = coords[Math.floor(coords.length / 2)];
+    } catch (_) {}
+    // Fallback to bounds-center if for some reason the link has no
+    // introspectable vertices (e.g. fully custom renderer).
+    if (!center && link.getBounds) {
+        try {
+            var b = link.getBounds();
+            if (b && b.isValid && b.isValid()) center = b.getCenter();
+        } catch (_) {}
+    }
+    if (!center || typeof center.lat !== 'number') return;
+
+    // Format: arrow + sign + rounded percent. Round to 1 decimal under
+    // 10%, integer otherwise — matches the at-a-glance feel of the
+    // legend buckets and keeps the chip narrow.
+    var abs = Math.abs(pct);
+    var rounded = abs >= 10 ? Math.round(pct) : Math.round(pct * 10) / 10;
+    var sign = pct > 0 ? '+' : '';                  // negative already prints '-'
+    var arrow = pct > 5 ? '▲' : pct < -5 ? '▼' : '·';
+    var color = _compare_color_for_pct(pct);
+    var label = arrow + ' ' + sign + rounded + '%';
+
+    var html = '<div class="compare-pct-chip" style="background:' + color + '">' +
+               escapeHtml(label) + '</div>';
+
+    var marker = L.marker(center, {
+        icon: L.divIcon({
+            className: 'compare-pct-marker',
+            html: html,
+            iconSize: null
+        }),
+        interactive: false,        // chip doesn't capture clicks — link below stays clickable
+        keyboard:    false,
+        zIndexOffset: 100          // above link lines so the chip doesn't get hidden
+    });
+    _ensure_compare_layer().addLayer(marker);
+}
+
+// Compute pct change for a (from, to) pair. Returns null when no
+// baseline value exists for that pair.
+function _compare_pct_for_link(from, to, currVal) {
+    if (typeof currVal !== 'number' || isNaN(currVal)) return null;
+    var bv = baselineSummary[from + ',' + to];
+    if (typeof bv !== 'number' || isNaN(bv)) return null;
+    if (bv === 0) {
+        // Avoid div-by-zero: any nonzero change from 0 reads as ∞%; cap at
+        // ±100 so the legend stays sensible. Treat 0→0 as no change.
+        return currVal === 0 ? 0 : (currVal > 0 ? 100 : -100);
+    }
+    return ((currVal - bv) / bv) * 100;
+}
+
+// Wrapper around taint_links/draw_links that fetches the baseline
+// first when compare mode is on. Acts as a drop-in replacement at all
+// the existing taint_links call sites inside get_connections so the
+// compare flow can wait for baseline data before painting.
+function _paint_with_compare(summary, etype, prop, start_iso, end_iso) {
+    var paint = function () {
+        if (!parms.connections) taint_links(summary, prop);
+        else                    draw_links(summary, prop);
+    };
+    if (parms.compare && parms.compare !== 'off') {
+        _fetch_baseline_summary(start_iso, end_iso, etype, prop, function () {
+            paint();
+        });
+    } else {
+        // Compare turned off → wipe any stale baseline so a later toggle
+        // back ON actually refetches with current params.
+        baselineSummary = {};
+        baselineCompareKey = '';
+        paint();
+    }
+}
+
+// Compare-mode legend — replaces the threshold semaphore with five
+// fixed buckets (much better / mildly better / unchanged / mildly
+// worse / much worse + no-baseline). Reuses the same #legend table
+// the threshold legend lives in so positioning/styling carry over.
+function update_compare_legend(propTitle, baselineLabel) {
+    var $leg = $('#legend').empty();
+    var rows = [
+        { col: COMPARE_COLORS.bigGreen,   label: '≤-30%'    },
+        { col: COMPARE_COLORS.smallGreen, label: '-10..-30' },
+        { col: COMPARE_COLORS.grey,       label: '±10%'     },
+        { col: COMPARE_COLORS.smallRed,   label: '+10..+30' },
+        { col: COMPARE_COLORS.bigRed,     label: '≥+30%'    }
+    ];
+    // Mirror update_legend()'s exact structure — ONE <tr> with the
+    // title <th> as first child and bucket <td>s as siblings. Flex CSS
+    // (#legend tr { display: flex; flex-wrap: wrap; }) makes the th
+    // (flex 0 0 100%) wrap to its own line above the bucket row, but
+    // because it's the same <tr>, the row gap and overall height
+    // calculation matches the threshold legend exactly.
+    var html = '<table id="legend" class="compare-legend"><tr align=center>';
+    html += '<th><button class="knapp" id="farge0" type="button" ' +
+            'title="Compare-mode legend (negative = improved, positive = degraded)">' +
+            escapeHtml(propTitle || '') + ' vs ' + escapeHtml(baselineLabel || 'baseline') +
+            '</button></th>';
+    for (var i = 0; i < rows.length; i++) {
+        html += '<td><button class="knapp" type="button" ' +
+                'style="background:' + rows[i].col + ';color:#fff;width:100%" ' +
+                'disabled>' + escapeHtml(rows[i].label) + '</button></td>';
+    }
+    html += '</tr></table>';
+    $leg.html(html);
+}
+
 function taint_links( hits, prop){
     var done=[];
+    var compareMode = parms.compare && parms.compare !== 'off';
     if ( hits.length > 0){
         get_thresholds(hits, prop);
-	update_legend(prop_desc[event_sum_type[parms.event]][prop],threshes);
+	if (compareMode) {
+	    update_compare_legend(prop_desc[event_sum_type[parms.event]][prop], _compare_label(parms.compare));
+	    _clear_compare_labels();
+	} else {
+	    update_legend(prop_desc[event_sum_type[parms.event]][prop],threshes);
+	    _clear_compare_labels();
+	}
 	for (var i=0; i < hits.length; i++){
 	    var link=hits[i]; var ab=[link._source.from, link._source.to]; var abs = ab.join();
 	    done[abs]=1;
 	    if ( linkByName[abs] ){
-		var color=get_color( link._source[prop], threshes);
+		var color, compPct = null;
+		if (compareMode) {
+		    compPct = _compare_pct_for_link(link._source.from, link._source.to, link._source[prop]);
+		    color = _compare_color_for_pct(compPct);
+		} else {
+		    color = get_color( link._source[prop], threshes);
+		}
 		taint_link( linkByName[abs], color );
+		if (compareMode) _add_compare_label(linkByName[abs], compPct);
 		var popup=link_popup(link._source);
 		var tooltip= link_tooltip( link._source.from + " to " + link._source.to , link._source, prop );
 		annotate_link( abs, linkByName[abs], tooltip, popup, link._source );
@@ -2441,7 +2747,7 @@ function get_connections(){
 		if (! jQuery.isEmptyObject(conffile) && conffile[parms.net].event_type[parms.event].asn_source ) {
 		    for (const h in last_hits) { var ab = last_hits[h]._source.from + ',' + last_hits[h]._source.to; if (linkByName[ab] && last_hits[h]._source.routechange_asn ) { linkByName[ab].asn_search += last_hits[h]._source[conffile[parms.net].event_type[parms.event].asn_source] + " "; } }
 		}
-		if ( ! parms.connections) taint_links(summary, $("#prop_select").val() ); else draw_links(summary, $("#prop_select").val() );
+		_paint_with_compare(summary, etype, $("#prop_select").val(), start, end);
 	    } else { taint_links([], "empty"); $("#error").html(hhmmss(new Date()) + " : No " + $("#event_type").val() + " data for " + $("#datepicker").val() + " " + $("#period_input").val() + ";;"); }
 	}).fail( function(e, textStatus, error ) { console.log("### Failed to get data from server :" + textStatus + ", " + error + " url: " + url); });
     } else if ( sum_etype) {
@@ -2456,7 +2762,7 @@ function get_connections(){
 		var nrecs=resp.hits.total.value.toString(); summary=resp.hits.hits; harvest_ip_name(summary);
 		var msg = hhmmss(new Date()) + " Got " + nrecs + " " + sum_etype + " records for " + $("#datepicker").val() + " " + $("#period_input").val() + " ;;";
 		$("#status").html( msg );
-		if ( ! parms.connections) taint_links(summary, $("#prop_select").val() ); else draw_links(summary, $("#prop_select").val() );
+		_paint_with_compare(summary, etype, $("#prop_select").val(), start, end);
 	    } else { taint_links([], "empty"); $("#error").html(hhmmss(new Date()) + " : No " + sum_etype + " data for " + $("#datepicker").val() + " " + $("#period_input").val() + ";;"); }
 	}).fail( function(e, textStatus, error ) { console.log("failed to get data from server :" + textStatus + ", " + error); });
     }
@@ -2495,9 +2801,11 @@ function init_map(){
     $("#search_input").keyup( function(){ var str = $("#search_input").val(); focus_links( str, 'flip' ); } );
     $("#network").change( async function(){ parms.net= $("#network").val(); update_props(); remove_links(links); show_network(parms.net); update_url(); $("#tabs").tabs("option", "active", 0); });
     $("#event_type").change( function(){ parms.event = $("#event_type").val(); update_props(); load_coords_from_all_sources(network); update_url(); $("#tabs").tabs("option", "active", 0); });
-    $("#prop_select").change( function(){ parms.property = $("#prop_select").val(); taint_links(summary, $("#prop_select").val() ); update_url(); $("#tabs").tabs("option", "active", 0); });
+    $("#prop_select").change( function(){ parms.property = $("#prop_select").val(); baselineCompareKey=''; _paint_with_compare(summary, parms.event, $("#prop_select").val(), start, end); update_url(); $("#tabs").tabs("option", "active", 0); });
+    // Snapshot compare dropdown — flips threshold vs diff-vs-baseline palette.
+    $("#compare_select").change( function(){ parms.compare = $("#compare_select").val(); baselineCompareKey=''; _paint_with_compare(summary, parms.event, $("#prop_select").val(), start, end); update_url(); });
     fill_select( "stats_type", stats_types );
-    $("#stats_type").change( function(){ summary=digest_aggregates(aggregates, $("#stats_type").val()); taint_links(summary, $("#prop_select").val() ); update_url(); $("#tabs").tabs("option", "active", 0); });
+    $("#stats_type").change( function(){ summary=digest_aggregates(aggregates, $("#stats_type").val()); _paint_with_compare(summary, parms.event, $("#prop_select").val(), start, end); update_url(); $("#tabs").tabs("option", "active", 0); });
     if ( parms.node){ focus_node=parms.node; get_topology(); links_on=true; }
     $("#check").change( function(){
 	var report_type = $("#check").val(); var title = $("#check").find(":selected").text();
@@ -2521,6 +2829,7 @@ function init_map(){
     });
     $( "#missing" ).dialog({ autoOpen: false, minWidth: 800 });
     $("#mapid").on('click', "a.trigger", function(e){ var node=e.target.id; focus_links( node, 'flip' ) });
+    if (parms.compare) { $("#compare_select").val(parms.compare); }
     $("#network").trigger("change");
 
     // Whenever the user switches tabs, remember the active one so we can
