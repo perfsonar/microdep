@@ -103,7 +103,8 @@ Depends: ${misc:Depends}, ${perl:Depends},
  libjs-moment, 
  libjs-select2.js,
  libjs-sorttable,
- libjs-vis
+ libjs-vis,
+ perfsonar-microdep-geolite2
 Description: Microdep map web GUI presenting analytic results
  Web GUI presenting Microdep analytic results in a map view
 

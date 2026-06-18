@@ -45,3 +45,6 @@
 /usr/share/javascript/vis/img /usr/lib/perfsonar/microdep-map/css/img 
 /usr/share/javascript/vis/vis-timeline-graph2d.min.css /usr/lib/perfsonar/microdep-map/css/vis-timeline-graph2d.min.css
 /usr/share/javascript/sorttable/sorttable.js /usr/lib/perfsonar/microdep-map/js/sorttable.js
+/usr/share/perfsonar/microdep/GeoLite2/GeoLite2-ASN.mmdb /usr/lib/perfsonar/microdep-map/geo/GeoLite2-ASN.mmdb
+/usr/share/perfsonar/microdep/GeoLite2/GeoLite2-City.mmdb /usr/lib/perfsonar/microdep-map/geo/GeoLite2-City.mmdb
+/usr/share/perfsonar/microdep/GeoLite2/GeoLite2-Country.mmdb /usr/lib/perfsonar/microdep-map/geo/GeoLite2-Country.mmdb
