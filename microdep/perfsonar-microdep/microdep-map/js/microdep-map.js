@@ -410,7 +410,7 @@ function openLinkPanel(content, linkSource) {
 function setHighlightedLink(leafletLine) {
     // Remove highlight from previous link
     if (highlightedLink && highlightedLink !== leafletLine) {
-        var prevColor = color_store[highlightedLink.leaflet_id] || highlightedLink._originalColor || empty_color;
+        var prevColor = color_store[L.stamp(highlightedLink)] || highlightedLink._originalColor || empty_color;
         highlightedLink.setStyle({"color": prevColor});
         // Restore arrow colors on previous link
         for (var abs in linkByName) {
@@ -427,7 +427,7 @@ function setHighlightedLink(leafletLine) {
     // Highlight current link
     if (leafletLine) {
         if (!leafletLine._originalColor || leafletLine._originalColor === "blue") {
-            leafletLine._originalColor = color_store[leafletLine.leaflet_id] || leafletLine.options.color;
+            leafletLine._originalColor = color_store[L.stamp(leafletLine)] || leafletLine.options.color;
         }
         leafletLine.setStyle({"color": "blue"});
         leafletLine.bringToFront();
@@ -444,7 +444,7 @@ function setHighlightedLink(leafletLine) {
 
 function clearHighlightedLink() {
     if (highlightedLink) {
-        var prevColor = color_store[highlightedLink.leaflet_id] || highlightedLink._originalColor || empty_color;
+        var prevColor = color_store[L.stamp(highlightedLink)] || highlightedLink._originalColor || empty_color;
         highlightedLink.setStyle({"color": prevColor});
         // Restore arrow colors
         for (var abs in linkByName) {
@@ -1767,9 +1767,9 @@ function draw_links(hits, prop){
 		    if(!linkByName[abs]) linkByName.length++;
  		    linkByName[abs]=l; ends.push(abs);
 		    l.on("mouseover", function(e){
-			if (! mouseover) { mouseover = true; color_store[e.target.leaflet_id]=e.target.options.color; e.target.bringToFront(); taint_link(e.target,"blue"); }
+			if (! mouseover) { mouseover = true; color_store[L.stamp(e.target)]=e.target.options.color; e.target.bringToFront(); taint_link(e.target,"blue"); }
 		    });
-		    l.on("mouseout", function(e){ taint_link(e.target, color_store[e.target.leaflet_id]); mouseover=false; });
+		    l.on("mouseout", function(e){ taint_link(e.target, color_store[L.stamp(e.target)]); mouseover=false; });
 		}
 	    }
 	} else { n_excluded++; remove_link(ab); }
@@ -1851,8 +1851,8 @@ function draw_topology(topo){
 	    var l=draw_link(ab, empty_color, ab, ab );
 	    if (l){
 		links.push(l); linkByName[abs]=l; ends.push(abs);
-		l.on("mouseover", function(e){ if (! mouseover) { mouseover = true; color_store[e.target.leaflet_id]=e.target.options.color; e.target.bringToFront(); taint_link(e.target,"blue"); } });
-		l.on("mouseout", function(e){ taint_link(e.target, color_store[e.target.leaflet_id]); mouseover=false; });
+		l.on("mouseover", function(e){ if (! mouseover) { mouseover = true; color_store[L.stamp(e.target)]=e.target.options.color; e.target.bringToFront(); taint_link(e.target,"blue"); } });
+		l.on("mouseout", function(e){ taint_link(e.target, color_store[L.stamp(e.target)]); mouseover=false; });
 	    }
 	} else { taint_link(linkByName[abs], empty_color); }
     }
@@ -2200,8 +2200,8 @@ function taint_links( hits, prop){
 		var l=draw_link(ab, color, tooltip, link_popup(link._source) );
 		if (l){
 		    linkByName[abs]=l; links.push(l); ends.push(abs);
-		    l.on("mouseover", function(e){ if (! mouseover) { mouseover = true; color_store[e.target.leaflet_id]=e.target.options.color; e.target.bringToFront(); taint_link(e.target,"blue"); } });
-		    l.on("mouseout", function(e){ taint_link(e.target, color_store[e.target.leaflet_id]); mouseover = false; });
+		    l.on("mouseover", function(e){ if (! mouseover) { mouseover = true; color_store[L.stamp(e.target)]=e.target.options.color; e.target.bringToFront(); taint_link(e.target,"blue"); } });
+		    l.on("mouseout", function(e){ taint_link(e.target, color_store[L.stamp(e.target)]); mouseover = false; });
 		}
 	    }
 	}
@@ -2224,6 +2224,12 @@ function taint_links( hits, prop){
 
 function taint_link( link, color ){
     if (link){
+	// Never apply an undefined/null colour: setStyle({color: undefined})
+	// renders stroke="undefined" and the line (and its arrows) vanish.
+	// The hover restore path can pass undefined when a link's stored
+	// colour was lost, so guard here as a safety net — worst case a link
+	// falls back to the no-data colour instead of disappearing.
+	if (color === undefined || color === null || color === '') color = empty_color;
 	link.setStyle( {"color": color} );
         for (var abs in linkByName) {
             if (linkByName[abs] === link) {
@@ -2246,8 +2252,8 @@ function extend_unidirectional_links() {
             halfLine.addTo(mymap);
             if (orig.tooltip) halfLine.bindTooltip(orig.tooltip, {"sticky":true});
             if (orig.popup) halfLine.on('click', function(){ openLinkPanel(orig.popup); });
-            halfLine.on("mouseover", function(e){ if (!mouseover) { mouseover = true; color_store[e.target.leaflet_id] = e.target.options.color; e.target.bringToFront(); taint_link(e.target, "blue"); } });
-            halfLine.on("mouseout", function(e){ taint_link(e.target, color_store[e.target.leaflet_id]); mouseover = false; });
+            halfLine.on("mouseover", function(e){ if (!mouseover) { mouseover = true; color_store[L.stamp(e.target)] = e.target.options.color; e.target.bringToFront(); taint_link(e.target, "blue"); } });
+            halfLine.on("mouseout", function(e){ taint_link(e.target, color_store[L.stamp(e.target)]); mouseover = false; });
             linkByName[abs] = halfLine;
             removeArrowMarkers(abs);
             addArrowsToLine(abs, orig.bp0, orig.bp1, orig.bp2, currentColor);
@@ -2272,8 +2278,8 @@ function extend_unidirectional_links() {
                 newLine.addTo(mymap);
                 if (tooltipContent) newLine.bindTooltip(tooltipContent, {"sticky":true});
                 if (popupContent) newLine.on('click', function(){ openLinkPanel(popupContent); });
-                newLine.on("mouseover", function(e){ if (!mouseover) { mouseover = true; color_store[e.target.leaflet_id] = e.target.options.color; e.target.bringToFront(); taint_link(e.target, "blue"); } });
-                newLine.on("mouseout", function(e){ taint_link(e.target, color_store[e.target.leaflet_id]); mouseover = false; });
+                newLine.on("mouseover", function(e){ if (!mouseover) { mouseover = true; color_store[L.stamp(e.target)] = e.target.options.color; e.target.bringToFront(); taint_link(e.target, "blue"); } });
+                newLine.on("mouseout", function(e){ taint_link(e.target, color_store[L.stamp(e.target)]); mouseover = false; });
                 linkByName[abs] = newLine;
                 removeArrowMarkers(abs);
                 addArrowsToCubicLine(abs, newBP0, cubicC1, cubicC2, newBP2, color);
@@ -2302,10 +2308,10 @@ function annotate_link(abs,link, tooltip, popup, linkSourceData){
 	    e.target.closeTooltip();
 	    // Don't restore color if this link is highlighted (panel open)
 	    if (highlightedLink !== e.target) {
-	        if (color_store[e.target.leaflet_id]) {
-	            e.target.setStyle({"color": color_store[e.target.leaflet_id]});
+	        if (color_store[L.stamp(e.target)]) {
+	            e.target.setStyle({"color": color_store[L.stamp(e.target)]});
 	            for (var k in linkByName) {
-	                if (linkByName[k] === e.target) { updateArrowColors(k, color_store[e.target.leaflet_id]); break; }
+	                if (linkByName[k] === e.target) { updateArrowColors(k, color_store[L.stamp(e.target)]); break; }
 	            }
 	        }
 	    }
