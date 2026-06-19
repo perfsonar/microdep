@@ -413,20 +413,25 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
             }
             wire_peers_tab(mahost, t_start, t_end, /*esmond=*/false);
 
-            // Auto-trigger topology load for the requested pair, using the
+            // Resolve the Traceroute pane for the requested pair, using the
             // exact strings as stored in the archive (microdep may pass a
             // slightly shorter form which would yield an empty hop graph).
-            if (params.from && params.to && pair_list.length) {
-                const match = find_matching_pair(pair_list, params.from, params.to);
+            // The "Resolving peer pair…" spinner was shown in ls_tab() for
+            // every from/to launch, so it MUST be replaced on every outcome —
+            // match, no-match, or no-peers — otherwise it spins forever.
+            if (params.from && params.to) {
+                const match = pair_list.length
+                    ? find_matching_pair(pair_list, params.from, params.to)
+                    : null;
                 if (match) {
                     open_tracetree_os(mahost, match.from, match.to, t_start, t_end);
                 } else {
                     el('trace').innerHTML =
                         '<div class="center-text" style="padding:40px">' +
-                          '<p>No traceroute peer pair matching ' +
+                          '<p>No traceroute data matching ' +
                             '<strong>' + params.from + '</strong> → <strong>' + params.to + '</strong> ' +
-                            'was found in this archive.</p>' +
-                          '<p style="color:var(--c-text-3);font-size:.85rem">Pick a pair from the <em>Peers</em> tab to view its topology.</p>' +
+                            'was found in this archive for the selected period.</p>' +
+                          '<p style="color:var(--c-text-3);font-size:.85rem">Pick a pair from the <em>Peers</em> tab, or widen the date range.</p>' +
                         '</div>';
                 }
             }
@@ -434,6 +439,14 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
             const msg = "Failed to get " + fetch_url + " (" + textStatus + ", " + error + ")";
             console.log("ls_tab: " + msg);
             el('peers').innerHTML = '<h4 class="center-text">' + msg + '</h4>';
+            // Don't leave the Traceroute spinner spinning on a failed fetch.
+            if (params.from && params.to) {
+                el('trace').innerHTML =
+                    '<div class="center-text" style="padding:40px">' +
+                      '<p>Failed to load traceroute data.</p>' +
+                      '<p style="color:var(--c-text-3);font-size:.85rem">' + msg + '</p>' +
+                    '</div>';
+            }
         });
     }
 
