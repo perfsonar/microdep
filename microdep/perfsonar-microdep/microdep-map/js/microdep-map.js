@@ -4,7 +4,7 @@ import LatLon from "./latlon-spherical.js";
 import {parms, conffile, prop_sum, update_url, stats_on, net_names, net_desc, net_long_desc, net_ip_version,
 	event_names, event_desc, event_long_desc, event_index, event_sum_type,
 	prop_names, prop_desc, prop_long_desc, prop_aggr,
-	colors, get_color, make_palette, threshes, get_thresholds, 
+	colors, get_color, make_palette, threshes, get_thresholds, escapeHtml,
 	get_parms,removeParam, parse_hhmm, hhmm , adjust_to_timezone,
 	get_config, update_props, make_prop_select, add_tab,
 	round_number, zero_fill, selected_date_is_today_or_future, selected_hour_is_future }

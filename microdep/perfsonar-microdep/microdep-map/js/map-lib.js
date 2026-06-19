@@ -4,6 +4,19 @@
 export var colors=[];
 export var threshes=[];  // color thresholds for current property
 
+// Escape user/host-derived strings before interpolating into innerHTML
+// (tooltips, link panel, compare legend, copy buttons). Missing this caused
+// "escapeHtml is not defined" once those call sites were ported.
+export function escapeHtml(s) {
+    if (s === undefined || s === null) return "";
+    return String(s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
+
 export function make_palette( palette){
     // Prepare color palette for global colors[] array
     
