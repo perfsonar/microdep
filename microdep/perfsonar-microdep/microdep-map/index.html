@@ -187,6 +187,17 @@
         </div>
 
         <div class="filter-group">
+          <label class="filter-label">Real locations</label>
+          <div class="refresh-row">
+            <label class="checkbox-wrap" id="reallocs_toggle" title="Replace each straight link with the real geographic path through its traceroute hops (hops geolocated via GeoLite2)">
+              <input type="checkbox" id="reallocs_checkbox">
+              <span class="checkbox-custom"></span>
+            </label>
+            <span style="font-size:0.85rem; color:var(--c-text-mute, #888);">Show hop geo-path</span>
+          </div>
+        </div>
+
+        <div class="filter-group">
           <label class="filter-label">Accessibility</label>
           <div class="refresh-row">
             <label class="checkbox-wrap" id="cbf_toggle" title="Use a colour-blind-safe palette (blue / amber / magenta) instead of the default green / yellow / red threshold colours">

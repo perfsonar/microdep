@@ -3242,3 +3242,33 @@ table#legend.compare-legend th button {
     opacity: .6;
 }
 .stale-data-close:hover { opacity: 1; }
+
+/* ===== Ported from work-snapshot: Real-locations hop labels (#TIER1) === */
+.leaflet-tooltip.real-hop-label {
+    background: rgba(0, 0, 0, 0.55) !important;
+    color: #fff !important;
+    border: none !important;
+    box-shadow: none !important;
+    font-size: .68rem !important;
+    padding: 1px 5px !important;
+    border-radius: 3px !important;
+    font-weight: 500;
+    pointer-events: none;
+    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.5);
+    opacity: 0 !important;
+    visibility: hidden;
+    transition: opacity .12s ease-out;
+}
+.leaflet-tooltip.real-hop-label.visible {
+    opacity: 1 !important;
+    visibility: visible;
+}
+/* Approximate-position hops (no geo data, placed by GC slerp between known
+   neighbours). Italic + faded to show these positions are guesses. */
+.leaflet-tooltip.real-hop-label-approx {
+    font-style: italic;
+    background: rgba(0, 0, 0, 0.4) !important;
+}
+.leaflet-tooltip.real-hop-label-approx.visible {
+    opacity: 0.85 !important;
+}

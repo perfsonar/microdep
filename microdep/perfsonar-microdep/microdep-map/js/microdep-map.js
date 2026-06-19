@@ -2275,6 +2275,764 @@ function clear_all_tabs() {
     try { $('main#tabs').tabs('refresh'); $('main#tabs').tabs('option', 'active', 0); } catch (_) {}
 }
 
+// ===================================================================
+//  REAL LOCATIONS (#TIER1) — ported from work-snapshot.
+//  Toggle that replaces each straight bezier link with a hop-by-hop
+//  polyline drawn through the *real* geographic location of every
+//  traceroute hop (resolved server-side by hopgeo.pl against GeoLite2).
+//  Endpoints come from get_coords(); unknown hops are great-circle
+//  interpolated between located neighbours.
+// ===================================================================
+function geo_cache_get(network, host_id, ip) {
+    const netCache = host_geo_cache[network];
+    if (!netCache || !host_id) return null;
+    // 1) exact host_id match
+    if (netCache[host_id]) return netCache[host_id];
+    // 2) IP cross-reference — same physical host can appear under entirely
+    //    different FQDNs (legacy LS registration, old hostname template,
+    //    DNS-search artifacts). If the caller knows the host's IP, find any
+    //    cached entry that shared that IP.
+    if (ip) {
+        for (const k in netCache) {
+            if (netCache[k].ip === ip) {
+                netCache[host_id] = netCache[k];   // promote under this name
+                return netCache[k];
+            }
+        }
+    }
+    // 3) Same first DNS label — covers the common case where the same
+    //    physical host shows up under FQDN variants (e.g. ps-branko.foo.org
+    //    vs ps-branko.foo.org.local-domain). Within one network the first
+    //    label is generally unique enough.
+    const head = host_id.split('.')[0].toLowerCase();
+    if (head) {
+        for (const k in netCache) {
+            if (k.split('.')[0].toLowerCase() === head) {
+                netCache[host_id] = netCache[k];   // promote
+                return netCache[k];
+            }
+        }
+    }
+    return null;
+}
+function geo_cache_put(network, host_id, geo) {
+    if (!host_geo_cache[network]) host_geo_cache[network] = {};
+    host_geo_cache[network][host_id] = geo;
+    _ls_set(HOST_GEO_CACHE_KEY, JSON.stringify(host_geo_cache));
+}
+
+// Pick the most-trustworthy value out of an Elasticsearch terms-agg
+// `buckets` array. Default sort is doc_count DESC, so the first bucket is
+// the dominant value — but we still skip null/0/NaN keys in case the geo
+// pipeline left an empty record at the top.
+function _pick_geo_bucket_value(buckets) {
+    if (!buckets || !buckets.length) return null;
+    for (const b of buckets) {
+        const k = b.key;
+        if (k === null || k === undefined) continue;
+        if (typeof k === 'number' && (k === 0 || isNaN(k))) continue;
+        return k;
+    }
+    return null;
+}
+
+// =============================================================================
+// Hop-IP geo cache — small persistent map keyed by IP, populated from
+// hopgeo.pl (server-side RIPE IPmap / DB-IP lookup). Separate from
+// host_geo_cache (which is keyed by FQDN/host_id from the topology pipeline)
+// because traceroute hops are mostly transit routers without a host_id.
+// =============================================================================
+const HOP_GEO_CACHE_KEY = 'microdep-hop-geo';
+var hop_geo_cache = {};   // { ip: {lat, lon, city?, country_code?} | null }
+// Expose on window so the cache can be inspected from DevTools console
+// without having to dig into the module scope. We keep the SAME object
+// reference throughout the session (use Object.assign instead of
+// reassignment) so the window mirror stays in sync after we mutate.
+window.hop_geo_cache = hop_geo_cache;
+try {
+    const raw = localStorage.getItem(HOP_GEO_CACHE_KEY);
+    if (raw) Object.assign(hop_geo_cache, JSON.parse(raw));
+} catch (_) { /* corrupt / private mode — start fresh */ }
+
+function hopgeo_cache_persist() {
+    // Persist ONLY positive entries to localStorage. Null entries (private
+    // IPs, geo-db misses, transient hopgeo errors) stay in-memory for the
+    // session so we don't retry them on every redraw, but they're dropped
+    // on reload so the next session has a fresh chance — useful when
+    // hopgeo.pl was misconfigured at the time the cache was written.
+    var positive = {};
+    for (var ip in hop_geo_cache) {
+        if (hop_geo_cache[ip]) positive[ip] = hop_geo_cache[ip];
+    }
+    _ls_set(HOP_GEO_CACHE_KEY, JSON.stringify(positive));
+}
+
+// Single batch request — pulls geo for any IPs we haven't seen yet, merges
+// into the cache, returns a Promise that resolves once everything is in
+// cache. Idempotent: calling with a fully-cached list short-circuits to
+// Promise.resolve().
+function hopgeo_lookup_batch(ips) {
+    var fresh = [];
+    for (var i = 0; i < ips.length; i++) {
+        var ip = ips[i];
+        if (!ip) continue;
+        if (Object.prototype.hasOwnProperty.call(hop_geo_cache, ip)) continue;
+        fresh.push(ip);
+    }
+    if (!fresh.length) return Promise.resolve();
+
+    // Server caps at 500/req; chunk to be safe with very large topologies.
+    var CHUNK = 400;
+    var chunks = [];
+    for (var c = 0; c < fresh.length; c += CHUNK) chunks.push(fresh.slice(c, c + CHUNK));
+
+    return Promise.all(chunks.map(function (chunk) {
+        return new Promise(function (resolve) {
+            var url = '/microdep/hopgeo.pl?ips=' + encodeURIComponent(chunk.join(','));
+            $.getJSON(url).done(function (resp) {
+                if (resp && !resp.error) {
+                    for (var i = 0; i < chunk.length; i++) {
+                        var ip = chunk[i];
+                        // Server returns null for unknown / private IPs;
+                        // store the null sentinel so we don't re-query.
+                        hop_geo_cache[ip] = (resp.hasOwnProperty(ip) ? resp[ip] : null);
+                    }
+                    hopgeo_cache_persist();
+                } else {
+                    console.log('hopgeo: server error: ' + (resp && resp.error));
+                }
+                resolve();
+            }).fail(function (_, textStatus, error) {
+                console.log('hopgeo: ' + textStatus + ': ' + error);
+                resolve();   // continue without this chunk
+            });
+        });
+    }));
+}
+
+// =============================================================================
+// "Real locations" mode (MVP probe)
+//
+// When enabled, fetch the latest traceroute per visible link from the local
+// pscheduler MA, look up geo for each hop using the existing host_geo_cache,
+// linearly interpolate hops with no known geo between their nearest located
+// neighbours, and draw a polyline through the result. The original bezier
+// curves are dimmed to opacity 0 (kept in DOM so toggling back is instant).
+//
+// This is a probe — accuracy depends entirely on how many hop IPs we can
+// resolve. Transit / internal routers are usually unknown and just land on a
+// straight segment between the previous and next known hops.
+// =============================================================================
+var realLocationsMode = false;
+var realPathLines = {};       // abs → { line: L.polyline, markers: [L.circleMarker, ...] }
+var realLocationsBusy = false;
+// Layers that we removed from the map when entering real-locations mode —
+// kept so disable_real_locations can re-attach them. We can't just hide via
+// opacity because (a) L.curve / canvas paths can still intercept clicks
+// while invisible, and (b) opacity-only-hide leaves stale stroke pixels
+// from the old draw cycle on canvas in certain renderer state changes.
+var _hiddenForRealMode = [];
+var _realModeHookSet = false;
+
+function _hide_layer_for_real(layer) {
+    if (!layer || !mymap || !mymap.hasLayer(layer)) return;
+    try { mymap.removeLayer(layer); } catch (_) { return; }
+    _hiddenForRealMode.push(layer);
+}
+
+// Detect whether a freshly-added layer is "old-style map content" (a bezier
+// link or its arrow markers) vs our own real-locations rendering or
+// unrelated map decoration we should leave alone.
+function _is_real_path_layer(layer) {
+    return layer && (layer._isRealPathLine || layer._isRealPathMarker);
+}
+function _is_bezier_or_arrow(layer) {
+    if (!layer) return false;
+    for (var k in linkByName) {
+        if (linkByName[k] === layer) return true;
+    }
+    for (var n in arrowMarkers) {
+        var arr = arrowMarkers[n];
+        if (arr && arr.indexOf && arr.indexOf(layer) >= 0) return true;
+    }
+    return false;
+}
+
+// Hook fires every time *any* layer is added to the map. While real-mode is
+// on we use it to catch the new bezier / arrow that taint_links rebuilds on
+// auto-refresh and immediately remove it again, so the user doesn't see the
+// approximation flicker back in.
+function _ensure_layeradd_hook() {
+    if (_realModeHookSet || !mymap) return;
+    _realModeHookSet = true;
+    mymap.on('layeradd', function (e) {
+        if (!realLocationsMode) return;
+        var layer = e.layer;
+        if (_is_real_path_layer(layer)) return;
+        if (layer instanceof L.TileLayer) return;
+        // linkByName gets reassigned *after* addTo() in the bezier creation
+        // paths, so the lookup may not yet match at the moment of the
+        // event. Defer one tick and re-check.
+        setTimeout(function () {
+            if (realLocationsMode && mymap.hasLayer(layer) && _is_bezier_or_arrow(layer)) {
+                _hide_layer_for_real(layer);
+            }
+        }, 0);
+    });
+}
+
+// Tear down all real-path polylines + hop markers and put the bezier curves
+// (and their arrows) back on the map. Safe to call repeatedly.
+function disable_real_locations() {
+    // Clear any active highlight first — if a polyline was the highlighted
+    // line, removing it leaves `highlightedLink` referencing a detached
+    // layer, which then can't be properly un-highlighted on the next click.
+    clearHighlightedLink();
+    for (var abs in realPathLines) {
+        var entry = realPathLines[abs];
+        if (!entry) continue;
+        try { entry.line.remove(); } catch (_) {}
+        for (var i = 0; i < entry.markers.length; i++) {
+            try { entry.markers[i].remove(); } catch (_) {}
+        }
+    }
+    realPathLines = {};
+    // Re-attach every layer we hid on enable. Order matters less than you'd
+    // think — Leaflet figures out z-ordering by pane, not by attach order.
+    for (var i = 0; i < _hiddenForRealMode.length; i++) {
+        var layer = _hiddenForRealMode[i];
+        if (layer && mymap && !mymap.hasLayer(layer)) {
+            try { layer.addTo(mymap); } catch (_) {}
+        }
+    }
+    _hiddenForRealMode = [];
+    realLocationsMode = false;
+}
+
+// Walk every link currently on the map, fetch its latest traceroute in
+// parallel, then BEFORE drawing fire a single batch geo lookup for every
+// hop IP we haven't seen yet. Doing the geo lookup as one batch (instead of
+// per-hop or per-pair) keeps the round-trip count to ~1 even on networks
+// with hundreds of pairs.
+function enable_real_locations() {
+    // Drop any pre-existing highlight before swapping renderers, otherwise
+    // the bezier we're about to hide is still "blue" in options.color and
+    // the new polyline would inherit blue as its base — every later click
+    // would just toggle blue→blue and the user sees every clicked link
+    // stuck blue forever.
+    clearHighlightedLink();
+
+    realLocationsMode = true;
+    realLocationsBusy = true;
+    _hiddenForRealMode = [];
+    _ensure_layeradd_hook();
+
+    var network = parms.net;
+    var dato = $("#datepicker").val();
+    var period = parseFloat($("#period").val()) || 24;
+    var start_epoch = Math.floor(new Date(dato + 'T00:00:00').getTime() / 1000);
+    var end_epoch = start_epoch + period * 3600;
+
+    // Detach beziers and their arrow markers from the map. Removing > opacity
+    // here because (a) some L.curve / canvas paths still intercept clicks at
+    // opacity 0, hijacking the new polyline's click handler, and (b) for
+    // unidirectional event types (Routes failed/errors) the cubic L.curve
+    // lines built by extend_unidirectional_links seemed to ignore opacity in
+    // the visible pane on some browsers — strict remove() is the only sure
+    // way to make them disappear.
+    for (var k in linkByName) {
+        _hide_layer_for_real(linkByName[k]);
+    }
+    for (var name in arrowMarkers) {
+        var arr = arrowMarkers[name];
+        if (!arr) continue;
+        for (var i = 0; i < arr.length; i++) {
+            _hide_layer_for_real(arr[i]);
+        }
+    }
+
+    var pairs = [];
+    for (var abs in linkByName) {
+        var parts = abs.split(',');
+        if (parts.length === 2) pairs.push({ abs: abs, from: parts[0], to: parts[1] });
+    }
+
+    if (pairs.length === 0) { realLocationsBusy = false; return; }
+
+    // Phase 1 — fetch every trace in parallel. allSettled: a broken pair
+    // shouldn't poison the whole layer.
+    var traceFetches = pairs.map(function (p) {
+        return fetch_real_path(p.from, p.to, start_epoch, end_epoch)
+            .then(function (hops) { return { pair: p, hops: hops }; })
+            .catch(function (err) {
+                console.log('real-loc: fetch failed for ' + p.abs + ': ' + err);
+                return { pair: p, hops: [] };
+            });
+    });
+
+    Promise.all(traceFetches).then(function (results) {
+        if (!realLocationsMode) { realLocationsBusy = false; return; }
+
+        // Phase 2 — collect every unique hop IP across all traces and batch
+        // their geo lookup. Cache hits are filtered server-side.
+        var allIps = {};
+        for (var i = 0; i < results.length; i++) {
+            var hops = results[i].hops || [];
+            for (var h = 0; h < hops.length; h++) if (hops[h].ip) allIps[hops[h].ip] = 1;
+        }
+        var ipList = Object.keys(allIps);
+        return hopgeo_lookup_batch(ipList).then(function () { return results; });
+    }).then(function (results) {
+        if (!realLocationsMode) { realLocationsBusy = false; return; }
+
+        // Phase 3 — every hop now has a (possibly null) cache entry; build
+        // each polyline using the resolved + interpolated coordinates.
+        var n_drawn = 0, n_dots = 0, n_approx = 0;
+        for (var i = 0; i < results.length; i++) {
+            var p = results[i].pair;
+            var entries = build_hop_path(results[i].hops, network, p.from, p.to);
+            if (entries && entries.length >= 2) {
+                draw_real_path(p.abs, entries);
+                n_drawn++;
+                for (var ei = 0; ei < entries.length; ei++) {
+                    if (entries[ei].src === 'cache')        n_dots++;
+                    else if (entries[ei].src === 'interpolated') n_approx++;
+                }
+            }
+        }
+        console.log('real-loc: drew ' + n_drawn + ' / ' + results.length + ' polylines, ' + n_dots + ' located hops, ' + n_approx + ' approx hops');
+        realLocationsBusy = false;
+    }).catch(function (err) {
+        console.log('real-loc: aborted: ' + err);
+        realLocationsBusy = false;
+    });
+}
+
+// Hit the local pscheduler MA via the existing get-tracetests.pl proxy and
+// return the hop list of the most recent trace for this pair, or [] if there
+// are no traces in the window.
+function fetch_real_path(from, to, start_epoch, end_epoch) {
+    var start_iso = new Date(start_epoch * 1000).toISOString();
+    var end_iso   = new Date(end_epoch   * 1000).toISOString();
+    var url = 'get-tracetests.pl' +
+              '?mahost=' + encodeURIComponent((conffile[parms.net] && conffile[parms.net].archive) || 'https://localhost/opensearch') +
+              '&verify_SSL=0' +
+              '&from='  + encodeURIComponent(from) +
+              '&to='    + encodeURIComponent(to) +
+              '&start=' + encodeURIComponent(start_iso) +
+              '&end='   + encodeURIComponent(end_iso);
+    return new Promise(function (resolve, reject) {
+        $.getJSON(url).done(function (resp) {
+            try {
+                var hits = (resp && resp.hits && resp.hits.hits) || [];
+                if (!hits.length) { resolve([]); return; }
+                // Pick the most recent trace by @timestamp.
+                var best = hits[0];
+                for (var i = 1; i < hits.length; i++) {
+                    if (hits[i]._source['@timestamp'] > best._source['@timestamp']) best = hits[i];
+                }
+                var raw = best._source && best._source.result && best._source.result.json;
+                // pscheduler/OS can serve `result.json` in three shapes
+                // depending on archiver version:
+                //   1) JSON string (early archivers — needs JSON.parse)
+                //   2) Object with .paths (raw pscheduler trace tool output)
+                //   3) Array of arrays of hops (nested by retry, common)
+                //   4) Flat array of hop objects (single retry, post-flatten)
+                // We unwrap (1) and (2) up front, then detect (3) vs (4) and
+                // pick the longest path for (3) so we never silently drop the
+                // body of a 12-hop trace just because we read [0] expecting
+                // nesting that wasn't there.
+                if (typeof raw === 'string') {
+                    try { raw = JSON.parse(raw); } catch (_) { raw = null; }
+                }
+                if (raw && raw.paths && Array.isArray(raw.paths)) raw = raw.paths;
+                if (!raw || !Array.isArray(raw) || !raw.length) { resolve([]); return; }
+
+                var hopList;
+                if (Array.isArray(raw[0])) {
+                    // Nested — pick longest sub-array
+                    hopList = raw[0];
+                    for (var ri = 1; ri < raw.length; ri++) {
+                        if (Array.isArray(raw[ri]) && raw[ri].length > hopList.length) hopList = raw[ri];
+                    }
+                } else {
+                    hopList = raw;   // flat
+                }
+
+                var hops = [];
+                for (var h = 0; h < hopList.length; h++) {
+                    var hop = hopList[h];
+                    if (!hop) continue;
+                    // Keep all hops, including non-responding ones (no ip).
+                    // They'll be marked interpolated and placed along the GC
+                    // arc between known neighbours so the user can still see
+                    // there's a router there.
+                    hops.push({ ip: hop.ip || null, hostname: hop.hostname || null });
+                }
+                resolve(hops);
+            } catch (e) { reject(e); }
+        }).fail(function (jqxhr, textStatus, error) {
+            reject(textStatus + ': ' + error);
+        });
+    });
+}
+
+// Convert raw hop list → rich array of hop entries
+//   { lat, lon, src, ip?, hostname?, city?, country_code? }
+// where `src` is one of:
+//   'endpoint'     — anchored from get_coords (always have geo)
+//   'cache'        — geo resolved via hopgeo.pl (RIPE IPmap / DB-IP) / topology cache
+//   'interpolated' — was unknown; lat/lon filled in linearly between neighbours
+// Used by draw_real_path to know which hops deserve a marker (resolved ones).
+function build_hop_path(hops, network, fromHost, toHost) {
+    var fromCoord = get_coords(fromHost);
+    var toCoord   = get_coords(toHost);
+    if (!fromCoord || !toCoord) return null;
+
+    var entries = [{ lat: fromCoord.lat, lon: fromCoord.lon, src: 'endpoint' }];
+    for (var i = 0; i < hops.length; i++) {
+        var hop = hops[i];
+        // Drop "* * *" no-response hops (no ip, no hostname). They're
+        // common after the last responding router on the path (destination
+        // blocking ICMP) — including them as interpolated markers
+        // packs the tail of the trace with "~?" labels stacked between
+        // the last known router and the destination, which is just visual
+        // noise: there's nothing useful to look up or display for them.
+        if (!hop.ip && !hop.hostname) continue;
+        var geo = null;
+        // 1. hopgeo result for the hop IP (covers transit / public hops).
+        if (hop.ip && Object.prototype.hasOwnProperty.call(hop_geo_cache, hop.ip)) {
+            geo = hop_geo_cache[hop.ip];
+        }
+        // 2. Topology cache by IP / hostname (covers known endpoint hosts
+        //    that happen to appear as transit hops in someone else's trace).
+        if (!geo && hop.ip)       geo = geo_cache_get(network, hop.ip, hop.ip);
+        if (!geo && hop.hostname) geo = geo_cache_get(network, hop.hostname, hop.ip);
+
+        if (geo && typeof geo.lat === 'number' && typeof geo.lon === 'number') {
+            entries.push({
+                lat: geo.lat, lon: geo.lon, src: 'cache',
+                ip: hop.ip || null,
+                hostname: hop.hostname || null,
+                city: geo.city || null,
+                country_code: geo.country_code || null
+            });
+        } else {
+            entries.push({
+                lat: null, lon: null, src: 'interpolated',
+                ip: hop.ip || null,
+                hostname: hop.hostname || null
+            });
+        }
+    }
+    entries.push({ lat: toCoord.lat, lon: toCoord.lon, src: 'endpoint' });
+
+    // Collapse consecutive duplicate-coordinate entries: many geo-resolved hops in
+    // the same metro area resolve to identical lat/lon (e.g. a /24 of routers
+    // all coded to the same city centre), and drawing them all just bunches
+    // segments on top of each other.
+    var dedup = [entries[0]];
+    for (var i = 1; i < entries.length; i++) {
+        var prev = dedup[dedup.length - 1];
+        if (entries[i].lat !== null && prev.lat !== null
+            && Math.abs(entries[i].lat - prev.lat) < 1e-4
+            && Math.abs(entries[i].lon - prev.lon) < 1e-4) continue;
+        dedup.push(entries[i]);
+    }
+
+    // Great-circle interpolation for unknown hops — using cartesian linear
+    // interpolation here puts a hop between Hawaii(-150) and NZ(+175) at
+    // lon=12.5 (somewhere in Africa) because the math goes the long way
+    // around. Slerping along the GC instead correctly places it in the
+    // Pacific, which is what the actual route goes through.
+    for (var i = 0; i < dedup.length; i++) {
+        if (dedup[i].lat !== null) continue;
+        var prev = i - 1;
+        while (prev >= 0 && dedup[prev].lat === null) prev--;
+        var next = i + 1;
+        while (next < dedup.length && dedup[next].lat === null) next++;
+        if (prev < 0 || next >= dedup.length) continue;
+        var f = (i - prev) / (next - prev);
+        var slerped = gc_slerp(dedup[prev].lat, dedup[prev].lon, dedup[next].lat, dedup[next].lon, f);
+        dedup[i].lat = slerped[0];
+        dedup[i].lon = slerped[1];
+    }
+    return dedup;
+}
+
+// Slerp ONE point at fraction `f` (0..1) along the great-circle between
+// (lat1,lon1) and (lat2,lon2). Used to position interpolated (unknown) hops
+// on the actual short-way arc rather than on a cartesian midpoint, which
+// would otherwise dump trans-Pacific hops into the middle of Africa.
+function gc_slerp(lat1, lon1, lat2, lon2, f) {
+    var f1 = lat1 * Math.PI / 180;
+    var f2 = lat2 * Math.PI / 180;
+    var l1 = lon1 * Math.PI / 180;
+    var l2 = lon2 * Math.PI / 180;
+    var df = f2 - f1;
+    var dl = l2 - l1;
+    var a = Math.sin(df/2) * Math.sin(df/2) + Math.cos(f1) * Math.cos(f2) * Math.sin(dl/2) * Math.sin(dl/2);
+    var d = 2 * Math.asin(Math.min(1, Math.sqrt(a)));
+    if (d < 1e-9) return [lat1, lon1];
+    var A = Math.sin((1 - f) * d) / Math.sin(d);
+    var B = Math.sin(f * d) / Math.sin(d);
+    var x = A * Math.cos(f1) * Math.cos(l1) + B * Math.cos(f2) * Math.cos(l2);
+    var y = A * Math.cos(f1) * Math.sin(l1) + B * Math.cos(f2) * Math.sin(l2);
+    var z = A * Math.sin(f1) + B * Math.sin(f2);
+    return [
+        Math.atan2(z, Math.sqrt(x * x + y * y)) * 180 / Math.PI,
+        Math.atan2(y, x) * 180 / Math.PI
+    ];
+}
+
+// Slerp interpolation between two lat/lon points along the great-circle. n
+// gives the number of intermediate steps (return array has n+1 entries
+// including both endpoints). Uses spherical law of cosines variant; for
+// d=0 returns endpoints unchanged to dodge a div-by-zero on identical
+// coords.
+function gc_interpolate(lat1, lon1, lat2, lon2, n) {
+    var f1 = lat1 * Math.PI / 180;
+    var f2 = lat2 * Math.PI / 180;
+    var l1 = lon1 * Math.PI / 180;
+    var l2 = lon2 * Math.PI / 180;
+    var df = f2 - f1;
+    var dl = l2 - l1;
+    var a = Math.sin(df/2) * Math.sin(df/2) + Math.cos(f1) * Math.cos(f2) * Math.sin(dl/2) * Math.sin(dl/2);
+    var d = 2 * Math.asin(Math.min(1, Math.sqrt(a)));
+    if (d < 1e-9) return [[lat1, lon1], [lat2, lon2]];
+    var pts = [];
+    for (var i = 0; i <= n; i++) {
+        var f = i / n;
+        var A = Math.sin((1 - f) * d) / Math.sin(d);
+        var B = Math.sin(f * d) / Math.sin(d);
+        var x = A * Math.cos(f1) * Math.cos(l1) + B * Math.cos(f2) * Math.cos(l2);
+        var y = A * Math.cos(f1) * Math.sin(l1) + B * Math.cos(f2) * Math.sin(l2);
+        var z = A * Math.sin(f1) + B * Math.sin(f2);
+        var lat = Math.atan2(z, Math.sqrt(x * x + y * y)) * 180 / Math.PI;
+        var lon = Math.atan2(y, x) * 180 / Math.PI;
+        pts.push([lat, lon]);
+    }
+    return pts;
+}
+
+// Same as gc_interpolate, but bends each waypoint perpendicular to the
+// segment with a parabolic profile that peaks at the midpoint (f=0.5) and
+// tapers to zero at the endpoints. `bend` is the peak offset as a fraction
+// of segment length — 0 gives a flat GC arc, 0.15 gives a clearly curved
+// look without distorting the geographic positioning at the hop endpoints.
+// On Mercator the resulting line looks like a soft arc, similar to the
+// classic shipping/route-map aesthetic.
+function gc_arc_with_bend(lat1, lon1, lat2, lon2, n, bend) {
+    var pts = gc_interpolate(lat1, lon1, lat2, lon2, n);
+    if (!bend || bend < 1e-6) return pts;
+    var dlat = lat2 - lat1;
+    var dlon = lon2 - lon1;
+    if (Math.abs(dlat) + Math.abs(dlon) < 1e-9) return pts;
+    for (var i = 1; i < pts.length - 1; i++) {
+        var f = i / (pts.length - 1);
+        var w = 4 * f * (1 - f) * bend;       // peaks at f=0.5
+        // Perpendicular CCW from segment direction (-dlon, +dlat). Offset
+        // is intentionally one-sided so all curves bend the same way and
+        // remain visually consistent across pairs going in either
+        // direction.
+        pts[i] = [
+            pts[i][0] - dlon * w,
+            pts[i][1] + dlat * w
+        ];
+    }
+    return pts;
+}
+
+// Stitch GC arcs across all hop entries, returning a multi-line latlng
+// array (array of arrays) so we can pass it straight into L.polyline as a
+// MultiPolyline. Antimeridian crossings get split into separate sub-lines:
+// the first piece terminates at ±180, the second resumes at ∓180. Without
+// this split, two trace directions for the same trans-Pacific pair
+// "unwrap" their endpoint to opposite sides of the Mercator panel and the
+// user sees two ghost copies of NZ on the map.
+function path_through_hops_gc(entries) {
+    if (entries.length < 2) return [entries.map(function (e) { return [e.lat, e.lon]; })];
+    var STEPS = 40;
+    var BEND  = 0.13;   // peak perpendicular offset as fraction of segment
+    var pts = [];
+    for (var i = 0; i + 1 < entries.length; i++) {
+        var seg = gc_arc_with_bend(entries[i].lat, entries[i].lon, entries[i+1].lat, entries[i+1].lon, STEPS, BEND);
+        // For all but the first segment, drop the first point (shared with
+        // the previous segment's last point).
+        if (i > 0) seg = seg.slice(1);
+        for (var k = 0; k < seg.length; k++) pts.push(seg[k]);
+    }
+
+    var lines = [[pts[0]]];
+    for (var j = 1; j < pts.length; j++) {
+        var prev = pts[j - 1];
+        var curr = pts[j];
+        var dlon = curr[1] - prev[1];
+        if (Math.abs(dlon) > 180) {
+            // |dlon|>180 means the GC curve crossed the antimeridian: shorter
+            // way wraps the other side. We figure out which border (+180 vs
+            // -180) the previous point was approaching, drop a synthetic point
+            // there to terminate the visible segment, and open a new sub-line
+            // from the opposite border.
+            var sign = (dlon > 180) ? -1 : 1;       // first sub-line ends at sign*180
+            var currUnwrapped = curr[1] + sign * 360;
+            var t = (sign * 180 - prev[1]) / (currUnwrapped - prev[1]);
+            var crossLat = prev[0] + t * (curr[0] - prev[0]);
+            lines[lines.length - 1].push([crossLat,  sign * 180]);
+            lines.push([[crossLat, -sign * 180], curr]);
+        } else {
+            lines[lines.length - 1].push(curr);
+        }
+    }
+    return lines;
+}
+
+// Draw the great-circle polyline + hop dots for one pair. Picks up the
+// bezier's current colour so the threshold colour category (red/yellow/green)
+// carries over to the real-path render.
+function draw_real_path(abs, entries) {
+    if (realPathLines[abs]) {
+        try { realPathLines[abs].line.remove(); } catch (_) {}
+        for (var im = 0; im < realPathLines[abs].markers.length; im++) {
+            try { realPathLines[abs].markers[im].remove(); } catch (_) {}
+        }
+    }
+    var color = '#3388ff';
+    var bezier = linkByName[abs];
+    // Pull threshold colour from the bezier we're replacing — but reject
+    // "blue", which would mean the bezier is in highlighted state from a
+    // user click before Real-Locations mode was toggled on. Falling back
+    // to the bezier's own _originalColor (set by setHighlightedLink) or
+    // the default keeps the new polyline starting from a clean colour
+    // state.
+    var bezColor = bezier && bezier.options && bezier.options.color;
+    var bezOrig  = bezier && bezier._originalColor;
+    if (bezColor && bezColor !== 'blue')      color = bezColor;
+    else if (bezOrig && bezOrig !== 'blue')   color = bezOrig;
+
+    // The "curve" appearance comes for free from the great-circle math:
+    // ~30 GC waypoints per segment + Mercator projection = visually smooth
+    // arcs that bend toward the poles for long-distance legs (and follow the
+    // shortest path across the antimeridian rather than the long way round).
+    var pts = path_through_hops_gc(entries);
+    // Canvas renderer (myRenderer) gives a hover halo around the stroke
+    // controlled by `tolerance` — much more forgiving than SVG's
+    // pixel-exact stroke hit detection, which made it nearly impossible
+    // to grab a 3px line cleanly.
+    var line = L.polyline(pts, {
+        color: color,
+        weight: 4,
+        opacity: 0.9,
+        smoothFactor: 1.5,
+        renderer: (typeof myRenderer !== 'undefined' && myRenderer) ? myRenderer : undefined
+    });
+    line._isRealPathLine = true;   // tag for the layeradd hook so it doesn't try to hide our own polyline
+    line._originalColor = color;   // pin so setHighlightedLink can restore correctly even if options.color drifts
+    line.addTo(mymap);
+
+    // Reuse the popup/source the bezier already has (annotate_link stashed
+    // them there in this branch's earlier fixes). Without this the polyline
+    // would be click-dead.
+    var popup = bezier && bezier._panelPopup ? bezier._panelPopup : null;
+    var source = bezier && bezier._panelSource ? bezier._panelSource : null;
+    if (popup) {
+        line._panelPopup = popup;
+        line._panelSource = source;
+        line.on('click', (function (p, s) {
+            return function (e) { setHighlightedLink(e.target); openLinkPanel(p, s); };
+        })(popup, source));
+    }
+    var tt = bezier && bezier.getTooltip && bezier.getTooltip();
+    if (tt) line.bindTooltip(tt.getContent(), { sticky: true });
+
+    // Dots for both LOCATED hops (cache) and INTERPOLATED ones (no geo, but
+    // we still want the user to see "yes, there are routers here even if we
+    // don't know exactly where"). Endpoints are skipped — they already have
+    // their own city markers from the topology pipeline.
+    //   cache       → solid filled circle, city/country label
+    //   interpolated→ smaller hollow circle, hostname/IP label with "~"
+    //                  prefix to make the approximate nature obvious
+    var markers = [];
+    for (var i = 0; i < entries.length; i++) {
+        var e = entries[i];
+        if (e.src === 'endpoint') continue;
+
+        var approx = (e.src === 'interpolated');
+        var marker = L.circleMarker([e.lat, e.lon], approx ? {
+            radius: 3,
+            color: color,
+            weight: 1.5,
+            fillColor: '#fff',
+            fillOpacity: 0.6
+        } : {
+            radius: 4,
+            color: '#fff',
+            weight: 1.5,
+            fillColor: color,
+            fillOpacity: 0.95
+        });
+
+        // Label text: cache hops show city / country; interpolated hops show
+        // hostname's first DNS label (or IP / "?") with a "~" prefix so the
+        // user can tell at a glance which positions are guesses.
+        var labelText = '';
+        if (e.city) labelText = e.city;
+        else if (e.country_code) labelText = e.country_code;
+        else if (e.hostname)     labelText = e.hostname.split('.')[0];
+        else if (e.ip)           labelText = e.ip;
+        else if (approx)         labelText = '?';
+        if (labelText && approx) labelText = '~ ' + labelText;
+        if (labelText) {
+            marker.bindTooltip(escapeHtml(labelText), {
+                permanent: true,
+                direction: 'right',
+                offset: [6, 0],
+                className: approx ? 'real-hop-label real-hop-label-approx' : 'real-hop-label'
+            });
+        }
+
+        marker._isRealPathMarker = true;   // tag so the layeradd hook leaves it alone
+        marker.addTo(mymap);
+        markers.push(marker);
+    }
+
+    realPathLines[abs] = { line: line, markers: markers };
+}
+
+var empty_color="LightGray";
+
+var stats_types = { "1.0": "1%", "50.0": "50%", "95.0": "95%", "99.0": "99%" };
+  
+
+var a=1;
+var lat, lng;
+var loads=0; // number of loaded point series
+var duplines=[];
+var points_cache=[];
+var arrowMarkers=[]; // store arrow direction markers by link name
+var extendedLinks=[]; // track links extended to full length
+
+// --- Arrow direction marker helpers ---
+
+
+function _toggle_real_hop_labels(activeLine) {
+    for (var abs in realPathLines) {
+        var entry = realPathLines[abs];
+        if (!entry) continue;
+        var visible = (entry.line === activeLine);
+        for (var i = 0; i < entry.markers.length; i++) {
+            var tt = entry.markers[i].getTooltip && entry.markers[i].getTooltip();
+            var el = tt && tt.getElement && tt.getElement();
+            if (!el) continue;
+            if (visible) el.classList.add('visible');
+            else         el.classList.remove('visible');
+        }
+    }
+}
+
+
+// ===== end REAL LOCATIONS =====
+
 function taint_link( link, color ){
     if (link){
 	// Never apply an undefined/null colour: setStyle({color: undefined})
@@ -2948,6 +3706,12 @@ function init_map(){
     $("#prop_select").change( function(){ parms.property = $("#prop_select").val(); baselineCompareKey=''; _paint_with_compare(summary, parms.event, $("#prop_select").val(), start, end); update_url(); $("#tabs").tabs("option", "active", 0); });
     // Snapshot compare dropdown — flips threshold vs diff-vs-baseline palette.
     $("#compare_select").change( function(){ parms.compare = $("#compare_select").val(); baselineCompareKey=''; _paint_with_compare(summary, parms.event, $("#prop_select").val(), start, end); update_url(); });
+    // Real-locations toggle (#TIER1): replace straight links with hop-by-hop
+    // geo-paths (enable/disable_real_locations live in the REAL LOCATIONS block).
+    $("#reallocs_checkbox").change( function(){
+        if (this.checked) enable_real_locations();
+        else              disable_real_locations();
+    });
     // Colour-blind-safe palette toggle (#5): swap colors[] via make_palette
     // then repaint the current summary (respecting compare mode) so links +
     // legend reflect the new palette immediately. Ported from work-snapshot.
