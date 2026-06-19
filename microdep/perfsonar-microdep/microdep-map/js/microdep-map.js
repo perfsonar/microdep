@@ -1694,7 +1694,7 @@ function draw_links(hits, prop){
 	var link=hits[i]; var ab=[link._source.from, link._source.to]; var abs=ab.join();
 	if(!new_ends[abs]) new_ends.length++; new_ends[abs]=1;
 	if ( focus_node === "" || ab.indexOf(focus_node) >= 0 ){
-	    var color=get_color( link._source[prop], threshes);
+	    var color=get_color( link._source[prop], threshes) || empty_color;
 	    if ( ! linkByName[abs]){
 		var tooltip= link_tooltip( link._source.from + " to " + link._source.to , link._source, prop );
 		var l=draw_link(ab, color, tooltip, link_popup(link._source) );
@@ -1804,7 +1804,7 @@ function taint_topology( topo, prop){
     for (var i=0; i < topo.length; i++){
 	var link=topo[i]; var ab=[link._source.from, link._source.to]; var abs = ab.join();
 	if ( linkByName[abs] ){
-	    var color=get_color( link._source[prop], threshes);
+	    var color=get_color( link._source[prop], threshes) || empty_color;
 	    taint_link( linkByName[abs], color );
 	    var popup=link_popup(link._source);
 	    var tooltip= link_tooltip( link._source.from + " to " + link._source.to , link._source, prop );
@@ -2122,7 +2122,7 @@ function taint_links( hits, prop){
 		    compPct = _compare_pct_for_link(link._source.from, link._source.to, link._source[prop]);
 		    color = _compare_color_for_pct(compPct);
 		} else {
-		    color = get_color( link._source[prop], threshes);
+		    color = get_color( link._source[prop], threshes) || empty_color;
 		}
 		taint_link( linkByName[abs], color );
 		if (compareMode) _add_compare_label(linkByName[abs], compPct);

@@ -144,7 +144,9 @@ export function heatmap( div, hits, property, get_color, threshes, title, templa
 	.attr("height", y.bandwidth() )
 	.style("fill", function(d, i) {
 	    // console.log( 'property: '+d[property]);
-	    return get_color( d[property], threshes) } )
+	    // get_color now returns null for NaN/missing — paint such cells
+	    // light grey ("no data") rather than leaving the fill unset.
+	    return get_color( d[property], threshes) || "#e8e8e8" } )
     //	    return myColor(d[property])} )
 	.style("stroke-width", 4)
 	.style("stroke", "none")
