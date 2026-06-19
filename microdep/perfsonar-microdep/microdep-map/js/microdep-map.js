@@ -14,6 +14,21 @@ import { ls_tab } from "./ls-tab.js";
 
   var start, end;  // startend time for current period
 
+// Shrink Leaflet's default marker icon. The defaults (25x41 / 41x41
+// shadow) read heavy at our zoom levels where pairs sit close and pins
+// overlap. Setting these BEFORE any L.marker() runs propagates to every
+// marker. (CSS transform: scale() can't be used — Leaflet positions
+// markers via transform: translate3d() and the two would compete.)
+if (typeof L !== 'undefined' && L.Icon && L.Icon.Default) {
+    L.Icon.Default.mergeOptions({
+        iconSize:    [16, 27],
+        iconAnchor:  [ 8, 27],
+        popupAnchor: [ 0, -22],
+        shadowSize:  [27, 27],
+        shadowAnchor:[ 8, 27]
+    });
+}
+
 // =============================================================================
 // Tab persistence — remembers which tabs (Routes, Queues, Heatmap, ...) were
 // open across page reloads. Specs are stored in localStorage; on init we wait
@@ -164,7 +179,7 @@ function restoreOneTab(spec) {
         const bustedUrl = spec.url + sep + '_t=' + Date.now();
         const iframe_html =
             '<div class="curve-iframe-wrap">' +
-                '<iframe class="curve-iframe" src="' + bustedUrl + '" frameborder="0"></iframe>' +
+                '<iframe class="curve-iframe" src="' + bustedUrl + '" frameborder="0" sandbox="allow-scripts allow-same-origin"></iframe>' +
             '</div>';
         add_tab('div', spec.title, before, iframe_html);
         tabSpecs.set('tab' + before, spec);
@@ -560,7 +575,13 @@ function make_markers ( network, points, focus) {
         bounds =  [[-90,-180],   [90,180]];
     }
     if ( focus ){
-	mymap.fitBounds(bounds);
+	// padding gives the edge markers breathing room; maxZoom 6 stops
+	// the fit from zooming to street level when a network has just one
+	// pair (or tightly-clustered pairs). The first-show gate is handled
+	// by the caller (make_markers only runs with focus=true on the
+	// first show per network), so this doesn't fight user pan/zoom on
+	// later refreshes.
+	mymap.fitBounds(bounds, { padding: [12, 12], maxZoom: 6 });
     }
 }
 
@@ -726,9 +747,12 @@ function update_legend(title, threshes){
     var lower=threshes.slice();
     lower.unshift(0);
     for ( i in lower ){
+	// Trim binary-rounding noise (e.g. 0.30000000000004) to 2 decimals.
+	var _v = lower[i];
+	if (typeof _v === 'number' && !isNaN(_v)) _v = Math.round(_v * 100) / 100;
 	html += "<td width=200>" +
 	    "<button class=knapp title='Push to hide/show other links' style=width:100%" + " id=legend" + i + " bgcolor="
-	    + colors[i] + ">" + lower[i] + "</button></td>";
+	    + colors[i] + ">" + _v + "</button></td>";
     }
     if (! jQuery.isEmptyObject(conffile[parms.net].dashboardURL)) {
 	html += '<td><button class=knapp title="Database dashboard" onclick=\'window.open("' + conffile[parms.net].dashboardURL + '", "_blank");\'>Dashboard</button>';
@@ -1424,7 +1448,7 @@ function link_popup(link){
 	    var bustedUrl = url + sep + '_t=' + Date.now();
 	    var iframe_html =
 		'<div class="curve-iframe-wrap">' +
-		    '<iframe class="curve-iframe" src="' + bustedUrl + '" frameborder="0"></iframe>' +
+		    '<iframe class="curve-iframe" src="' + bustedUrl + '" frameborder="0" sandbox="allow-scripts allow-same-origin"></iframe>' +
 		'</div>';
 	    add_tab('div', title, num_tabs, iframe_html);
 	    var divid = 'tab' + num_tabs;
@@ -2717,6 +2741,10 @@ function get_peer_data(from, to, div){
 var links_on = false;
 const index_extension={};
 
+// Expose get_connections on window so inline handlers in index.html
+// (auto-refresh, "Refresh now" on the stale-data banner) can call it —
+// ES module top-level declarations don't leak to the global object.
+window.get_connections = function () { return get_connections.apply(this, arguments); };
 function get_connections(){
     var index=parms.net; var etype= parms.event; var sum_etype=""; var sum_index="";
     if ( ! jQuery.isEmptyObject(event_index)) { index = event_index[parms.event]; sum_etype = event_sum_type[parms.event]; }
