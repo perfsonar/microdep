@@ -2222,6 +2222,9 @@ function taint_links( hits, prop){
     if ( $("#search_input").val() !== "" )
 	focus_links( $("#search_input").val(), 'noflip' );
     _set_map_empty_state(_is_map_visually_empty());
+    // Status-bar "Updated" label + stale-banner re-check (#8, #10). The
+    // handler lives in index.html; guard so it's a no-op if absent.
+    if (typeof window._microdep_mark_refreshed === 'function') window._microdep_mark_refreshed();
 }
 
 // --- Empty-state overlay (#11) -------------------------------------------

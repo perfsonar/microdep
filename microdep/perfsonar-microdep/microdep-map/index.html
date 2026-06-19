@@ -262,6 +262,15 @@
           </li>
         </ul>
         <div class="map-container">
+          <!-- Stale-data banner (#8): shown when displayed data is older than threshold -->
+          <div id="stale_data_banner" class="stale-data-banner" hidden>
+            <span class="stale-data-icon" aria-hidden="true">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+            </span>
+            <span class="stale-data-text">Data is stale</span>
+            <button class="stale-data-refresh" type="button">Refresh now</button>
+            <button class="stale-data-close" type="button" title="Dismiss">&times;</button>
+          </div>
           <div id="mapid"></div>
           <!-- Empty-state overlay shown when topology returns no links (#11) -->
           <div id="map_empty_overlay" class="map-empty-overlay" hidden>
@@ -293,6 +302,10 @@
         <div class="status-item">
           <span class="status-label">Status:</span>
           <span id="status">none</span>
+        </div>
+        <div class="status-item">
+          <span class="status-label">Updated:</span>
+          <span id="last_refresh_label">never</span>
         </div>
         <div class="status-item">
           <span class="status-label">Error:</span>
@@ -580,6 +593,70 @@
           if (this.checked) { startAutoRefresh(); } else { stopAutoRefresh(); }
         });
       }
+
+      // --- Status-bar "Updated" timestamp + stale-data banner (#8, #10) ---
+      // _lastRefreshAt ticks on every successful taint_links (set via
+      // window._microdep_mark_refreshed, called from microdep-map.js). The
+      // "Updated Xs ago" label re-renders each second. We deliberately omit a
+      // "next refresh" label — the auto-refresh progress bar already shows it.
+      window._lastRefreshAt = null;
+      var lastRefreshLabel = document.getElementById('last_refresh_label');
+      function _fmt_ago(ms) {
+        if (ms < 0) return 'just now';
+        var s = Math.floor(ms / 1000);
+        if (s < 5)  return 'just now';
+        if (s < 60) return s + 's ago';
+        var m = Math.floor(s / 60);
+        if (m < 60) return m + 'm ago';
+        var h = Math.floor(m / 60);
+        if (h < 24) return h + 'h ago';
+        return Math.floor(h / 24) + 'd ago';
+      }
+      function _tick_status_labels() {
+        if (lastRefreshLabel) {
+          lastRefreshLabel.textContent = window._lastRefreshAt
+            ? _fmt_ago(Date.now() - window._lastRefreshAt) : 'never';
+        }
+      }
+      setInterval(_tick_status_labels, 1000);
+
+      // Stale-data banner: shown when the displayed data is older than the
+      // threshold (5 min when auto-refresh is off, 2x the interval when on).
+      // Click / "Refresh now" → re-fetch; × → dismiss until the next stale event.
+      var staleBanner  = document.getElementById('stale_data_banner');
+      var staleText    = staleBanner && staleBanner.querySelector('.stale-data-text');
+      var staleRefresh = staleBanner && staleBanner.querySelector('.stale-data-refresh');
+      var staleClose   = staleBanner && staleBanner.querySelector('.stale-data-close');
+      var _staleDismissed = false;
+      function _stale_threshold_ms() {
+        var auto = !!(autorefreshCheckbox && autorefreshCheckbox.checked);
+        var period = window.refresh_period || 60000;
+        return auto ? Math.max(2 * period, 60000) : 5 * 60 * 1000;
+      }
+      function _check_stale_banner() {
+        if (!staleBanner) return;
+        if (!window._lastRefreshAt || _staleDismissed) { staleBanner.hidden = true; return; }
+        var ageMs = Date.now() - window._lastRefreshAt;
+        if (ageMs < _stale_threshold_ms()) { staleBanner.hidden = true; return; }
+        var ageMin = Math.floor(ageMs / 60000);
+        var ageStr = ageMin >= 60 ? Math.floor(ageMin / 60) + 'h ' + (ageMin % 60) + 'm' : ageMin + 'm';
+        if (staleText) staleText.textContent = 'Data is ' + ageStr + ' old';
+        staleBanner.hidden = false;
+      }
+      window._microdep_mark_refreshed = function () {
+        window._lastRefreshAt = Date.now();
+        _tick_status_labels();
+        _check_stale_banner();
+      };
+      function _do_refresh_now() {
+        _staleDismissed = false;
+        if (typeof get_connections === 'function') get_connections();
+        if (staleBanner) staleBanner.hidden = true;
+      }
+      if (staleRefresh) staleRefresh.addEventListener('click', function (e) { e.stopPropagation(); _do_refresh_now(); });
+      if (staleClose)   staleClose.addEventListener('click',   function (e) { e.stopPropagation(); _staleDismissed = true; staleBanner.hidden = true; });
+      if (staleBanner)  staleBanner.addEventListener('click', _do_refresh_now);
+      setInterval(_check_stale_banner, 30000);
 
       function replaceNaN() {
         $('#legend button').each(function(){
