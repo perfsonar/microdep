@@ -1505,12 +1505,52 @@ function link_popup(link){
     return div;
 }
 
+// Small clipboard button rendered next to each hostname in the link
+// panel, so users can copy an FQDN straight into a ticket. One delegated
+// handler (wired below) serves every button via the .link-copy-btn class.
+function _link_copy_btn(val) {
+    var v = escapeHtml(String(val == null ? '' : val));
+    return '<button type="button" class="link-copy-btn" data-copy-value="' + v + '" title="Copy hostname" aria-label="Copy hostname">' +
+        '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+          '<rect x="9" y="9" width="13" height="13" rx="2"/>' +
+          '<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>' +
+        '</svg></button>';
+}
+function _link_copy_delegate(e) {
+    var btn = e.target && e.target.closest && e.target.closest('.link-copy-btn');
+    if (!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    var value = btn.dataset.copyValue || '';
+    if (!value) return;
+    function _flash() {
+        btn.classList.add('copied');
+        setTimeout(function () { btn.classList.remove('copied'); }, 1100);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(value).then(_flash, function () { _link_copy_fallback(value, _flash); });
+    } else {
+        _link_copy_fallback(value, _flash);
+    }
+}
+function _link_copy_fallback(text, onDone) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus(); ta.select();
+    try { document.execCommand('copy'); onDone && onDone(); } catch (_) {}
+    document.body.removeChild(ta);
+}
+$(document).on('click', '.link-copy-btn', _link_copy_delegate);
+
 function make_tooltip_v2(fromHost, toHost, link){
     if (! jQuery.isEmptyObject(conffile)) {
 	var nrows=0;
 	var tip='<div class="link-panel-endpoints">';
-	tip += '<div class="link-endpoint"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg> <span>' + fromHost + '</span></div>';
-	tip += '<div class="link-endpoint"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg> <span>' + toHost + '</span></div>';
+	tip += '<div class="link-endpoint"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg> <span>' + fromHost + '</span>' + _link_copy_btn(fromHost) + '</div>';
+	tip += '<div class="link-endpoint"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg> <span>' + toHost + '</span>' + _link_copy_btn(toHost) + '</div>';
 	tip += '</div>';
 	tip += "<table width=100%>";
 	if ( selected_date_is_today_or_future() ) {

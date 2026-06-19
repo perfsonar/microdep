@@ -3100,3 +3100,32 @@ table#legend.compare-legend th button {
 .trace-compare-chart {
     display: block;
 }
+
+
+/* ===== Copy-hostname buttons in the link panel ===== */
+.link-endpoint { display: flex; align-items: center; }
+.link-copy-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-left: auto;       /* push to the right edge of the endpoint row */
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--c-text-3);
+    padding: 2px 5px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: color .12s, background .12s, border-color .12s;
+}
+.link-copy-btn:hover {
+    color: var(--c-text);
+    background: var(--c-control);
+    border-color: var(--c-border);
+}
+.link-copy-btn.copied,
+.link-copy-btn.copied:hover {
+    color: var(--c-ok, #059669);
+    border-color: var(--c-ok, #059669);
+    background: transparent;
+}
