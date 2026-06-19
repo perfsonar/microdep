@@ -2623,11 +2623,18 @@ function enable_real_locations() {
 function fetch_real_path(from, to, start_epoch, end_epoch) {
     var start_iso = new Date(start_epoch * 1000).toISOString();
     var end_iso   = new Date(end_epoch   * 1000).toISOString();
+    // The map identifies a node by its topology name, but pscheduler records
+    // test.spec.source/dest as an IP on one side and a hostname on the other.
+    // Send BOTH the name and its IP (from name_to_ip) as candidates so
+    // get-tracetests can match either form — and it matches either direction,
+    // since traces usually exist only one way.
+    var fromList = name_to_ip[from] ? (from + ',' + name_to_ip[from]) : from;
+    var toList   = name_to_ip[to]   ? (to   + ',' + name_to_ip[to])   : to;
     var url = 'get-tracetests.pl' +
               '?mahost=' + encodeURIComponent((conffile[parms.net] && conffile[parms.net].archive) || 'https://localhost/opensearch') +
               '&verify_SSL=0' +
-              '&from='  + encodeURIComponent(from) +
-              '&to='    + encodeURIComponent(to) +
+              '&from='  + encodeURIComponent(fromList) +
+              '&to='    + encodeURIComponent(toList) +
               '&start=' + encodeURIComponent(start_iso) +
               '&end='   + encodeURIComponent(end_iso);
     return new Promise(function (resolve, reject) {
@@ -3128,6 +3135,10 @@ function dash_link( link, dash=true){
 
 function annotate_link(abs,link, tooltip, popup, linkSourceData){
     if (link){
+	// Stash popup/source on the layer so draw_real_path (real-locations mode)
+	// can reuse them to keep the hop-path polyline clickable.
+	link._panelPopup = popup;
+	if (linkSourceData) link._panelSource = linkSourceData;
 	link.bindTooltip( tooltip, {"sticky":true} );
 	link.off('click');
 	link.off('mouseout');
