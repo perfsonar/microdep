@@ -2221,6 +2221,7 @@ function taint_links( hits, prop){
     refreshLinkPanel();
     if ( $("#search_input").val() !== "" )
 	focus_links( $("#search_input").val(), 'noflip' );
+    _resync_real_path_colors();   // keep geo-view colours in sync in real-loc mode
     _set_map_empty_state(_is_map_visually_empty());
     // Status-bar "Updated" label + stale-banner re-check (#8, #10). The
     // handler lives in index.html; guard so it's a no-op if absent.
@@ -2234,6 +2235,14 @@ function taint_links( hits, prop){
 // "no data"). Ported from work-snapshot.
 function _is_map_visually_empty() {
     if (typeof mymap === 'undefined' || !mymap) return false;
+    // Real-locations mode hides the normal links and draws hop-path polylines
+    // instead — judge emptiness by those so a repaint (e.g. the CBF toggle, a
+    // property change or an auto-refresh) doesn't flash the "No links" overlay
+    // over a perfectly populated geo view.
+    if (typeof realLocationsMode !== 'undefined' && realLocationsMode) {
+        return !(typeof realPathLines !== 'undefined' && realPathLines
+                 && Object.keys(realPathLines).length > 0);
+    }
     var anyColoured = false;
     for (var k in linkByName) {
         var l = linkByName[k];
@@ -2996,7 +3005,21 @@ function draw_real_path(abs, entries) {
         markers.push(marker);
     }
 
-    realPathLines[abs] = { line: line, markers: markers };
+    realPathLines[abs] = { line: line, markers: markers, entries: entries };
+}
+
+// Re-sync the visible hop-path polylines after a repaint while real-locations
+// mode is on. taint_links re-colours the (hidden) linkByName layers for the new
+// palette / property / data, but the real-path lines were drawn from the old
+// colours — redraw each from its cached entries so draw_real_path re-reads the
+// current link colour. Geometry is unchanged (same hops), so this is cheap and
+// needs no re-fetch.
+function _resync_real_path_colors() {
+    if (typeof realLocationsMode === 'undefined' || !realLocationsMode) return;
+    for (var abs in realPathLines) {
+        var rp = realPathLines[abs];
+        if (rp && rp.entries) draw_real_path(abs, rp.entries);
+    }
 }
 
 var empty_color="LightGray";
