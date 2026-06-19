@@ -16,6 +16,7 @@ bin/microdep_commands/yaml-to-json.cgi
 bin/microdep_commands/get-mapconfig.cgi
 bin/microdep_commands/microdep-config.cgi
 bin/microdep_commands/get-tracetests.pl
+bin/microdep_commands/hopgeo.pl
 etc/mapconfig.yml
 etc/mapconfig.d/dragonlab.yml
 microdep-map/dragonlab/dragonlab-base-geo.json
