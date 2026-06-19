@@ -2910,9 +2910,9 @@ function init_map(){
 	}
 	$("#check").val('choose'); $("#tabs").tabs("option", "active", num_tabs);
     });
-    document.getElementById("mapid").addEventListener("contextmenu", function (event) {
-	event.preventDefault(); alert(lat.toFixed(5) + ', ' + lng.toFixed(5)); return false;
-    });
+    // (Right-click coordinate alert intentionally removed — it was a leftover
+    // debug helper. Do not re-add: it pops an alert(lat,lng) on every
+    // right-click over the map.)
     $( "#missing" ).dialog({ autoOpen: false, minWidth: 800 });
     $("#mapid").on('click', "a.trigger", function(e){ var node=e.target.id; focus_links( node, 'flip' ) });
     if (parms.compare) { $("#compare_select").val(parms.compare); }
