@@ -2536,11 +2536,21 @@ function _ensure_layeradd_hook() {
 
 // Tear down all real-path polylines + hop markers and put the bezier curves
 // (and their arrows) back on the map. Safe to call repeatedly.
+// Toggle the "Resolving real locations…" overlay shown while
+// enable_real_locations fetches traceroutes + geolocates hops (several seconds,
+// during which the beziers are already hidden so the map would otherwise look
+// empty with no feedback).
+function _set_real_loc_loading(on) {
+    var el = document.getElementById('real_loc_loading');
+    if (el) el.hidden = !on;
+}
+
 function disable_real_locations() {
     // Clear any active highlight first — if a polyline was the highlighted
     // line, removing it leaves `highlightedLink` referencing a detached
     // layer, which then can't be properly un-highlighted on the next click.
     clearHighlightedLink();
+    _set_real_loc_loading(false);
     for (var abs in realPathLines) {
         var entry = realPathLines[abs];
         if (!entry) continue;
@@ -2577,6 +2587,7 @@ function enable_real_locations() {
 
     realLocationsMode = true;
     realLocationsBusy = true;
+    _set_real_loc_loading(true);
     _hiddenForRealMode = [];
     _ensure_layeradd_hook();
 
@@ -2610,7 +2621,7 @@ function enable_real_locations() {
         if (parts.length === 2) pairs.push({ abs: abs, from: parts[0], to: parts[1] });
     }
 
-    if (pairs.length === 0) { realLocationsBusy = false; return; }
+    if (pairs.length === 0) { realLocationsBusy = false; _set_real_loc_loading(false); return; }
 
     // Phase 1 — fetch every trace in parallel. allSettled: a broken pair
     // shouldn't poison the whole layer.
@@ -2660,9 +2671,11 @@ function enable_real_locations() {
         }
         console.log('real-loc: drew ' + n_drawn + ' / ' + results.length + ' polylines, ' + n_dots + ' located hops, ' + n_approx + ' approx hops');
         realLocationsBusy = false;
+        _set_real_loc_loading(false);
     }).catch(function (err) {
         console.log('real-loc: aborted: ' + err);
         realLocationsBusy = false;
+        _set_real_loc_loading(false);
     });
 }
 

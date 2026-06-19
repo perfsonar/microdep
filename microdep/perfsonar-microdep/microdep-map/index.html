@@ -283,6 +283,11 @@
             <button class="stale-data-close" type="button" title="Dismiss">&times;</button>
           </div>
           <div id="mapid"></div>
+          <!-- Loading overlay while Real-locations resolves hop geo (#TIER1) -->
+          <div id="real_loc_loading" class="map-loading-overlay" hidden>
+            <div class="spinner"></div>
+            <p>Resolving real locations…</p>
+          </div>
           <!-- Empty-state overlay shown when topology returns no links (#11) -->
           <div id="map_empty_overlay" class="map-empty-overlay" hidden>
             <div class="map-empty-icon">
