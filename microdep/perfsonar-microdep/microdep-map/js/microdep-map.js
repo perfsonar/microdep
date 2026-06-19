@@ -2292,6 +2292,50 @@ function clear_all_tabs() {
 //  Endpoints come from get_coords(); unknown hops are great-circle
 //  interpolated between located neighbours.
 // ===================================================================
+// localStorage write helper with quota-eviction-retry + the node-geo cache it
+// guards. These sit BEFORE the extracted real-locations block in work-snapshot
+// so they were missed in the first port — geo_cache_get/hopgeo_cache_persist
+// then threw "_ls_set / host_geo_cache is not defined" inside the hopgeo Promise
+// chain, which never resolved, so the geo view hid every link and never redrew.
+function _ls_set(key, value) {
+    try { localStorage.setItem(key, value); return true; }
+    catch (e) {
+        const isQuota = e && (
+            e.name === 'QuotaExceededError' ||
+            e.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
+            e.code === 22 || e.code === 1014
+        );
+        if (!isQuota) return false;
+        const evictors = [
+            function () {
+                if (typeof hop_geo_cache !== 'undefined') {
+                    Object.keys(hop_geo_cache).forEach(function (k) { delete hop_geo_cache[k]; });
+                }
+                try { localStorage.removeItem('microdep-hop-geo'); } catch (_) {}
+            },
+            function () {
+                if (typeof host_geo_cache !== 'undefined') {
+                    Object.keys(host_geo_cache).forEach(function (k) { delete host_geo_cache[k]; });
+                }
+                try { localStorage.removeItem('microdep-host-geo'); } catch (_) {}
+            },
+            function () { try { localStorage.removeItem('microdep-active-tab'); } catch (_) {} }
+        ];
+        for (var ei = 0; ei < evictors.length; ei++) {
+            try { evictors[ei](); } catch (_) {}
+            try {
+                localStorage.setItem(key, value);
+                console.warn('localStorage: evicted a cache to free space for ' + key);
+                return true;
+            } catch (_) { /* still over quota — try next evictor */ }
+        }
+        console.warn('localStorage: out of space — dropped write of ' + key);
+        return false;
+    }
+}
+const HOST_GEO_CACHE_KEY = 'microdep-host-geo';
+var host_geo_cache = {}; // { network: { host_id: {lat, lon, name} } }
+
 function geo_cache_get(network, host_id, ip) {
     const netCache = host_geo_cache[network];
     if (!netCache || !host_id) return null;
@@ -2598,15 +2642,20 @@ function enable_real_locations() {
         // each polyline using the resolved + interpolated coordinates.
         var n_drawn = 0, n_dots = 0, n_approx = 0;
         for (var i = 0; i < results.length; i++) {
-            var p = results[i].pair;
-            var entries = build_hop_path(results[i].hops, network, p.from, p.to);
-            if (entries && entries.length >= 2) {
-                draw_real_path(p.abs, entries);
-                n_drawn++;
-                for (var ei = 0; ei < entries.length; ei++) {
-                    if (entries[ei].src === 'cache')        n_dots++;
-                    else if (entries[ei].src === 'interpolated') n_approx++;
+            try {
+                var p = results[i].pair;
+                var entries = build_hop_path(results[i].hops, network, p.from, p.to);
+                if (entries && entries.length >= 2) {
+                    draw_real_path(p.abs, entries);
+                    n_drawn++;
+                    for (var ei = 0; ei < entries.length; ei++) {
+                        if (entries[ei].src === 'cache')        n_dots++;
+                        else if (entries[ei].src === 'interpolated') n_approx++;
+                    }
                 }
+            } catch (e) {
+                // One bad pair must not blank the whole geo view — log + skip.
+                console.log('real-loc: draw failed for ' + (results[i] && results[i].pair && results[i].pair.abs) + ': ' + e);
             }
         }
         console.log('real-loc: drew ' + n_drawn + ' / ' + results.length + ' polylines, ' + n_dots + ' located hops, ' + n_approx + ' approx hops');
