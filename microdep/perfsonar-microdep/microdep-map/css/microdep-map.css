@@ -3129,3 +3129,72 @@ table#legend.compare-legend th button {
     border-color: var(--c-ok, #059669);
     background: transparent;
 }
+
+/* ===== Ported from work-snapshot: tab-nav tool button (#16) + empty-state
+   overlay (#11) ========================================================== */
+
+/* Tool buttons (e.g. Clear-all-tabs) live in the ui-tabs-nav <ul> as
+   <li class="tabnav-tool-li">; strip the inherited "tab" styling and present
+   a flat icon-only square matching the other tool buttons. */
+.ui-tabs .ui-tabs-nav li.tabnav-tool-li {
+    background: none !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+}
+.tabnav-tool-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    background: var(--c-control);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r);
+    color: var(--c-text-2);
+    cursor: pointer;
+    margin-right: 8px;
+    transition: all .15s;
+}
+.tabnav-tool-btn:hover { background: var(--c-control-h); color: var(--c-text); }
+
+/* Empty-state overlay shown over the map when no links are present. */
+.map-empty-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 24px;
+    background: color-mix(in srgb, var(--c-bg) 85%, transparent);
+    color: var(--c-text-2);
+    pointer-events: none;
+}
+.map-empty-overlay[hidden] { display: none; }
+.map-empty-overlay h3 {
+    margin: 12px 0 4px;
+    color: var(--c-text);
+    font-size: 1.05rem;
+}
+.map-empty-overlay p {
+    margin: 0 0 12px;
+    max-width: 480px;
+    font-size: .85rem;
+}
+.map-empty-overlay ul {
+    margin: 0;
+    padding-left: 18px;
+    text-align: left;
+    font-size: .82rem;
+    line-height: 1.6;
+    color: var(--c-text-3);
+}
+.map-empty-icon {
+    color: var(--c-text-3);
+    opacity: .7;
+}

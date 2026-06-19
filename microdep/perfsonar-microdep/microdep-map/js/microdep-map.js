@@ -1799,6 +1799,7 @@ function get_topology(source = "archive"){
 	    if (topology.length == 0) {
 		$("#error").html(hhmmss(new Date()) + " : No topology data found for " + parms.event + " events on " + $("#datepicker").val() + " " + $("#period_input").val() + ";;");
 		remove_links(links);
+		_set_map_empty_state(true);
 	    } else {
 		if (points.length == 0) { load_coords_from_all_sources(network); return; }
 		draw_topology( topology ); get_connections();
@@ -1842,7 +1843,7 @@ function duplex_topology(topo){
 var mouseover=false;
 
 function draw_topology(topo){
-    if (topo.length == 0) { remove_links(links); return; }
+    if (topo.length == 0) { remove_links(links); _set_map_empty_state(true); return; }
     var new_ends=[];
     for (var i=0; i < topo.length; i++){
         var ab=topo[i]; var abs= ab.join();
@@ -2220,6 +2221,55 @@ function taint_links( hits, prop){
     refreshLinkPanel();
     if ( $("#search_input").val() !== "" )
 	focus_links( $("#search_input").val(), 'noflip' );
+    _set_map_empty_state(_is_map_visually_empty());
+}
+
+// --- Empty-state overlay (#11) -------------------------------------------
+// Show a "no links for this period" overlay when the map has no coloured
+// links, so navigating to an empty date isn't just a blank map. Also hides
+// the threshold legend (which describes a scale that doesn't apply to
+// "no data"). Ported from work-snapshot.
+function _is_map_visually_empty() {
+    if (typeof mymap === 'undefined' || !mymap) return false;
+    var anyColoured = false;
+    for (var k in linkByName) {
+        var l = linkByName[k];
+        if (!l || typeof l !== 'object') continue;
+        if (mymap.hasLayer && !mymap.hasLayer(l)) continue;
+        var c = l.options && l.options.color;
+        if (c && c !== empty_color) { anyColoured = true; break; }
+    }
+    return !anyColoured;   // true when no layer OR every layer is grey
+}
+function _set_map_empty_state(empty) {
+    var el = document.getElementById('map_empty_overlay');
+    if (!el) return;
+    el.hidden = !empty;
+    // Hide the threshold legend together with the overlay — it describes a
+    // property scale that doesn't apply when nothing is measured. The
+    // tabsactivate handler restores display:'' when data returns.
+    var lg = document.getElementById('legend');
+    if (lg) lg.style.display = empty ? 'none' : '';
+}
+
+// --- Clear-all-tabs (#16) ------------------------------------------------
+// Close every tab except the Map and forget them across reloads (the
+// microdep-tab-closed listener calls unpersistTab). Ported from work-snapshot.
+function clear_all_tabs() {
+    var divIds = [];
+    $('main#tabs > ul > li').each(function () {
+        var divId = $(this).attr('aria-controls');
+        if (divId && divId !== 'mapid') divIds.push(divId);
+    });
+    if (!divIds.length) return;
+    divIds.forEach(function (divId) {
+        $('main#tabs > ul > li[aria-controls="' + divId + '"]').remove();
+        $('#' + divId).remove();
+        document.dispatchEvent(new CustomEvent('microdep-tab-closed', {
+            detail: { divid: divId }
+        }));
+    });
+    try { $('main#tabs').tabs('refresh'); $('main#tabs').tabs('option', 'active', 0); } catch (_) {}
 }
 
 function taint_link( link, color ){
@@ -2866,7 +2916,12 @@ function title_state(){
 
 function init_map(){
     if ( parms.net){ $("#network").val(parms.net); } else { parms.net = $("#network").val(); }
-    update_props(); make_palette( parms.palette);
+    update_props();
+    // Colour-blind-safe palette (#5): persisted across sessions in localStorage.
+    var _cbfOn = false;
+    try { _cbfOn = localStorage.getItem('microdep-cbf') === '1'; } catch (_) {}
+    make_palette( _cbfOn ? 'cbf' : parms.palette );
+    $('#cbf_checkbox').prop('checked', _cbfOn);
     var busy_no=0;
     $.ajaxSetup({ beforeSend:function(){ $("#busy").show(); busy_no++; }, complete:function(){ busy_no--; if ( busy_no <= 0) $("#busy").hide(); } });
     $("#busy").height( $("#network").height() );
@@ -2890,6 +2945,16 @@ function init_map(){
     $("#prop_select").change( function(){ parms.property = $("#prop_select").val(); baselineCompareKey=''; _paint_with_compare(summary, parms.event, $("#prop_select").val(), start, end); update_url(); $("#tabs").tabs("option", "active", 0); });
     // Snapshot compare dropdown — flips threshold vs diff-vs-baseline palette.
     $("#compare_select").change( function(){ parms.compare = $("#compare_select").val(); baselineCompareKey=''; _paint_with_compare(summary, parms.event, $("#prop_select").val(), start, end); update_url(); });
+    // Colour-blind-safe palette toggle (#5): swap colors[] via make_palette
+    // then repaint the current summary (respecting compare mode) so links +
+    // legend reflect the new palette immediately. Ported from work-snapshot.
+    $("#cbf_checkbox").change( function(){
+        var on = this.checked;
+        try { localStorage.setItem('microdep-cbf', on ? '1' : '0'); } catch (_) {}
+        make_palette(on ? 'cbf' : (parms.palette || ''));
+        _paint_with_compare(summary, parms.event, $("#prop_select").val(), start, end);
+        update_url();
+    });
     fill_select( "stats_type", stats_types );
     $("#stats_type").change( function(){ summary=digest_aggregates(aggregates, $("#stats_type").val()); _paint_with_compare(summary, parms.event, $("#prop_select").val(), start, end); update_url(); $("#tabs").tabs("option", "active", 0); });
     if ( parms.node){ focus_node=parms.node; get_topology(); links_on=true; }
@@ -2914,6 +2979,7 @@ function init_map(){
     // debug helper. Do not re-add: it pops an alert(lat,lng) on every
     // right-click over the map.)
     $( "#missing" ).dialog({ autoOpen: false, minWidth: 800 });
+    $("#clearAllTabsBtn").click(function () { clear_all_tabs(); });
     $("#mapid").on('click', "a.trigger", function(e){ var node=e.target.id; focus_links( node, 'flip' ) });
     if (parms.compare) { $("#compare_select").val(parms.compare); }
     $("#network").trigger("change");

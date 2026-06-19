@@ -186,6 +186,17 @@
           </div>
         </div>
 
+        <div class="filter-group">
+          <label class="filter-label">Accessibility</label>
+          <div class="refresh-row">
+            <label class="checkbox-wrap" id="cbf_toggle" title="Use a colour-blind-safe palette (blue / amber / magenta) instead of the default green / yellow / red threshold colours">
+              <input type="checkbox" id="cbf_checkbox">
+              <span class="checkbox-custom"></span>
+            </label>
+            <span style="font-size:0.85rem; color:var(--c-text-mute, #888);">Color-blind safe</span>
+          </div>
+        </div>
+
         <div id="busy"></div>
       </div>
 
@@ -233,6 +244,11 @@
               </svg>
             </button>
           </li>
+          <li class="tabnav-tool-li">
+            <button class="tabnav-tool-btn" id="clearAllTabsBtn" type="button" title="Close every tab except the map and forget them across reloads">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>
+            </button>
+          </li>
           <li><a href="#mapid">Map</a></li>
           <li>
             <select class="knapp hidden-select" id="check" title="Reports for current parameter">
@@ -247,6 +263,19 @@
         </ul>
         <div class="map-container">
           <div id="mapid"></div>
+          <!-- Empty-state overlay shown when topology returns no links (#11) -->
+          <div id="map_empty_overlay" class="map-empty-overlay" hidden>
+            <div class="map-empty-icon">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            </div>
+            <h3>No links for this period</h3>
+            <p id="map_empty_msg">No measurement data was returned for the selected time window.</p>
+            <ul>
+              <li>Click <strong>Prev</strong> to step back to a date with data.</li>
+              <li>Switch to a wider <strong>Period</strong> (Day → Week → 4 weeks).</li>
+              <li>Pick a different <strong>Network</strong> or <strong>Event type</strong>.</li>
+            </ul>
+          </div>
           <!-- Link detail panel -->
           <div id="link-panel" class="link-panel hidden">
             <div class="link-panel-header">
