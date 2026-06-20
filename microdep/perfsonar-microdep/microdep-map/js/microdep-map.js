@@ -9,7 +9,7 @@ import {parms, conffile, prop_sum, update_url, stats_on, net_names, net_desc, ne
 	get_config, update_props, make_prop_select, add_tab,
 	round_number, zero_fill, selected_date_is_today_or_future, selected_hour_is_future }
 from "./map-lib.js" ;
-import { heatmap } from "./graph.js";
+import { heatmap, chart_curve } from "./graph.js";
 import { ls_tab } from "./ls-tab.js";
 
   var start, end;  // startend time for current period
@@ -3869,7 +3869,14 @@ function init_map(){
 	case 'heatmap':
 	    let template_url='curve-chart.html?net=' + parms.net + '&index=' + event_index[parms.event] + '&from={0}&to={1}&event=' + parms.event + '&property=h_ddelay&start=' + start + '&end=' + end + "&title=\"From {2} to {3}\"";
 	    add_tab( 'div', title, num_tabs, 'This will be graph soon'); heatmap(tab_id, summary, $("#prop_select").val(), get_color, threshes, title_state(), template_url, open_heatmap_cell ); break;
-	case 'curve': add_tab( 'div', title, num_tabs, 'This will be graph soon'); curve(tab_id, last_hits, $("#prop_select").val(), title_state() ); break;
+	case 'curve': {
+	    // Chart.js scatter of the current property across all measurements over
+	    // time (chart_curve — the legacy graph.js curve() was D3 + never imported).
+	    var curve_canvas = 'curve-canvas-' + num_tabs;
+	    add_tab( 'div', title, num_tabs, '<canvas id="' + curve_canvas + '" class="report-canvas"></canvas>');
+	    chart_curve( curve_canvas, last_hits, $("#prop_select").val(), title_state() );
+	    break;
+	}
 	}
 	if (report_type !== 'choose') {
 	    persistTab(tab_id, { kind: 'check', report_type: report_type, title: title });

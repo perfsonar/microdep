@@ -3531,3 +3531,6 @@ table#legend.compare-legend th button {
     color: var(--c-text-3);
     opacity: 0.3;
 }
+
+/* Curve report canvas (chart_curve, Chart.js scatter) */
+.report-canvas { display: block; margin: 8px auto; max-width: 100%; }

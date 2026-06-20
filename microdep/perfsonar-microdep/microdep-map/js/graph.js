@@ -480,23 +480,19 @@ export function chart_curve( div, hits, property, title, unit ){
 
             scales: {
                 x: {
-                    type: 'time',
-                    time: {
-                        tooltipFormat: 'DD HH:mm',
-                        round: true,
-                        displayFormats: {
-                            millisecond: 'HH:mm:ss.SSS',
-                            second:      'HH:mm:ss',
-                            minute:      'HH:mm',
-                            hour:        'DD HH:mm',
-                            day:         'DD HH',
-                            week:        'DD HH',
-                            month:       'MM DD'
-                        }
-                    },
+                    // The main page loads only chart.umd.js (no date adapter — see
+                    // the sparkline note in microdep-map.js), so a 'time' scale won't
+                    // work here. Use a linear epoch-ms axis and format ticks ourselves.
+                    type: 'linear',
                     grid:   { color: _alpha(border, 0.5), drawTicks: true, tickColor: borderH, drawBorder: false },
                     border: { display: false },
-                    ticks:  { color: text3, font: { size: 11 }, maxRotation: 0, autoSkipPadding: 18 },
+                    ticks:  { color: text3, font: { size: 11 }, maxRotation: 0, autoSkipPadding: 18,
+                              callback: function (v) {
+                                  var d = new Date(v);
+                                  return ('0'+d.getDate()).slice(-2) + ' ' +
+                                         ('0'+d.getHours()).slice(-2) + ':' +
+                                         ('0'+d.getMinutes()).slice(-2);
+                              } },
                     title:  { display: true, text: 'Time', color: text3,
                               font: { size: 11, weight: '600' },
                               padding: { top: 8, bottom: 0 } }
@@ -545,7 +541,13 @@ export function chart_curve( div, hits, property, title, unit ){
                     titleFont: { size: 12, weight: '600' },
                     bodyFont:  { size: 12 },
                     displayColors: true,
-                    usePointStyle: true
+                    usePointStyle: true,
+                    callbacks: {
+                        // No date adapter → format the epoch-ms x ourselves.
+                        title: function (items) {
+                            return items && items.length ? new Date(items[0].parsed.x).toLocaleString() : '';
+                        }
+                    }
                 },
                 zoom: {
                     pan: {
