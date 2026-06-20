@@ -3300,3 +3300,234 @@ table#legend.compare-legend th button {
 }
 .map-loading-overlay[hidden] { display: none; }
 .map-loading-overlay p { margin: 0; font-size: .9rem; }
+
+/* ===== Ported from work-snapshot: HTML heatmap (#TIER1) ============== */
+.ui-tabs .ui-tabs-panel.ui-widget-content.graph:has(.heatmap-header) {
+    padding: 12px 16px !important;
+}
+
+.heatmap-header {
+    padding: 12px 16px 8px;
+}
+
+/* Title-row layout — pushes the [Export CSV] button to the right edge
+   of the title bar across all data tabs (Heatmap, Summary, Asymmetry,
+   Missing). The :first-child h2 keeps its existing sizing. */
+.tab-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.tab-header-row > h2 {
+    margin: 0;
+    flex: 1 1 auto;
+}
+
+.export-csv-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: var(--c-elevated);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r);
+    color: var(--c-text-2);
+    font-size: .78rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background .15s, border-color .15s, color .15s;
+    flex-shrink: 0;
+    line-height: 1;
+}
+
+.export-csv-btn:hover {
+    background: var(--c-control);
+    border-color: var(--c-border-h);
+    color: var(--c-text);
+}
+
+.export-csv-btn:active {
+    transform: translateY(1px);
+}
+
+.export-csv-btn svg {
+    flex-shrink: 0;
+    color: var(--c-accent);
+}
+
+.export-csv-btn .export-csv-done-label { display: none; }
+.export-csv-btn.exported {
+    background: var(--c-success-bg, #1f6f3a);
+    border-color: var(--c-success, #2ea043);
+    color: var(--c-text);
+}
+.export-csv-btn.exported svg     { color: var(--c-success, #2ea043); }
+.export-csv-btn.exported .export-csv-label      { display: none; }
+.export-csv-btn.exported .export-csv-done-label { display: inline; }
+
+.heatmap-title {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--c-text);
+    margin: 0 0 4px;
+}
+
+.heatmap-subtitle {
+    font-size: .82rem;
+    color: var(--c-text-2);
+    margin-bottom: 2px;
+}
+
+.heatmap-range {
+    font-size: .75rem;
+    font-family: var(--font-mono);
+    color: var(--c-text-3);
+}
+
+.heatmap-scroll {
+    overflow-x: auto;
+    padding: 0 16px 16px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--c-control-h) transparent;
+}
+
+.heatmap-scroll::-webkit-scrollbar { height: 6px; }
+.heatmap-scroll::-webkit-scrollbar-track { background: transparent; }
+.heatmap-scroll::-webkit-scrollbar-thumb { background: var(--c-control-h); border-radius: 3px; }
+
+.heatmap-table {
+    border-collapse: separate;
+    border-spacing: 2px;
+    width: max-content;
+}
+
+.heatmap-table thead th,
+.heatmap-table tbody td {
+    font-size: .72rem !important;
+    padding: 0 !important;
+    border: none !important;
+}
+
+.heatmap-corner {
+    position: sticky;
+    left: 0;
+    z-index: 3;
+    background: var(--c-surface) !important;
+    font-size: .68rem !important;
+    font-weight: 600 !important;
+    color: var(--c-text-3) !important;
+    padding: 6px 10px !important;
+    text-align: left !important;
+    white-space: nowrap;
+    font-family: var(--font-mono) !important;
+}
+
+.heatmap-col-header {
+    font-size: .65rem !important;
+    font-weight: 500 !important;
+    color: var(--c-text-2) !important;
+    padding: 8px 4px 10px !important;
+    text-align: center !important;
+    vertical-align: bottom !important;
+    font-family: var(--font-mono) !important;
+    height: 150px;
+    max-height: 150px;
+    overflow: hidden;
+    position: relative;
+}
+
+.heatmap-col-header > span {
+    display: block;
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    transform: rotate(180deg);
+    max-height: 130px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin: 0 auto;
+    padding: 8px 0;
+}
+
+.heatmap-row-header {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    background: var(--c-surface) !important;
+    font-size: .7rem !important;
+    font-weight: 500 !important;
+    color: var(--c-text-2) !important;
+    padding: 4px 12px 4px 8px !important;
+    text-align: left !important;
+    white-space: nowrap;
+    font-family: var(--font-mono) !important;
+}
+
+.heatmap-cell {
+    padding: 1px !important;
+    text-align: center !important;
+}
+
+.heatmap-cell-inner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 46px;
+    min-height: 32px;
+    padding: 3px 6px;
+    border-radius: 4px;
+    font-size: .7rem;
+    font-weight: 600;
+    font-family: var(--font-mono);
+    transition: transform .1s, box-shadow .1s;
+}
+
+/* Cell link wraps the coloured square. Strip default <button> chrome so the
+   element looks identical whether rendered as <a> (new-window mode) or
+   <button> (integrated-tab mode). */
+.heatmap-cell-link {
+    display: block;
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+    text-decoration: none;
+}
+.heatmap-cell-link:focus { outline: none; }
+.heatmap-cell-link:focus-visible .heatmap-cell-inner {
+    box-shadow: 0 0 0 2px var(--c-accent);
+}
+
+.heatmap-cell:hover .heatmap-cell-inner {
+    transform: scale(1.15);
+    box-shadow: 0 2px 8px rgba(0,0,0,.3);
+    z-index: 1;
+    position: relative;
+}
+
+.heatmap-diagonal .heatmap-cell-inner {
+    background: repeating-linear-gradient(
+        45deg,
+        rgba(100,120,150,0.3),
+        rgba(100,120,150,0.3) 3px,
+        transparent 3px,
+        transparent 6px
+    ) !important;
+    color: transparent !important;
+    min-width: 46px !important;
+    min-height: 32px !important;
+    border: 1px dashed rgba(100,120,150,0.4) !important;
+    border-radius: 4px;
+}
+
+.heatmap-nodata .heatmap-cell-inner {
+    background: transparent;
+    color: var(--c-text-3);
+    opacity: 0.3;
+}

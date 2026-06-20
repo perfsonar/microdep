@@ -3125,6 +3125,44 @@ function _toggle_real_hop_labels(activeLine) {
 
 // ===== end REAL LOCATIONS =====
 
+// Open a curve-chart.html (or heatmap-cell curve) URL in a new iframe tab,
+// persisted across reloads (kind 'curve' → restoreOneTab). Ported from
+// work-snapshot; used by the HTML heatmap's clickable cells (open_heatmap_cell).
+function open_curve_in_tab(title, label, url) {
+    const num_tabs = $("main#tabs > ul > li").length;
+    const sep = url.indexOf('?') >= 0 ? '&' : '?';
+    const bustedUrl = url + sep + '_t=' + Date.now();
+    const loader_id = 'curve-loader-' + num_tabs;
+    const iframe_html =
+        '<div class="curve-iframe-wrap">' +
+            '<div class="curve-iframe-loader" id="' + loader_id + '">' +
+              '<div class="spinner"></div>' +
+              '<p>Loading ' + label + '…</p>' +
+            '</div>' +
+            '<iframe class="curve-iframe" src="' + bustedUrl + '" frameborder="0" sandbox="allow-scripts allow-same-origin"></iframe>' +
+        '</div>';
+    add_tab('div', title, num_tabs, iframe_html);
+    const divid = 'tab' + num_tabs;
+    persistTab(divid, { kind: 'curve', title: title, label: label, url: url });
+    const iframe = document.querySelector('#' + divid + ' .curve-iframe');
+    if (iframe) {
+        iframe.addEventListener('load', function () {
+            const loader = document.getElementById(loader_id);
+            if (loader) loader.style.display = 'none';
+        });
+    }
+    const tab_count = $('main#tabs > ul > li > a').length;
+    if (tab_count > 0) $('main#tabs').tabs('option', 'active', tab_count - 1);
+}
+
+// Heatmap cell click → open that from/to pair's curve in a tab.
+function open_heatmap_cell(url, from_host, to_host) {
+    const fromShort = (from_host || '').split('.').slice(0, 2).join('.');
+    const toShort   = (to_host   || '').split('.').slice(0, 2).join('.');
+    const title = 'Heatmap: ' + fromShort + ' → ' + toShort;
+    open_curve_in_tab(title, 'Heatmap', url);
+}
+
 function taint_link( link, color ){
     if (link){
 	// Never apply an undefined/null colour: setStyle({color: undefined})
@@ -3830,7 +3868,7 @@ function init_map(){
 	case 'summary': add_tab( 'div', title, num_tabs, report_summary(tab_id) ); break;
 	case 'heatmap':
 	    let template_url='curve-chart.html?net=' + parms.net + '&index=' + event_index[parms.event] + '&from={0}&to={1}&event=' + parms.event + '&property=h_ddelay&start=' + start + '&end=' + end + "&title=\"From {2} to {3}\"";
-	    add_tab( 'div', title, num_tabs, 'This will be graph soon'); heatmap(tab_id, summary, $("#prop_select").val(), get_color, threshes, title_state(), template_url ); break;
+	    add_tab( 'div', title, num_tabs, 'This will be graph soon'); heatmap(tab_id, summary, $("#prop_select").val(), get_color, threshes, title_state(), template_url, open_heatmap_cell ); break;
 	case 'curve': add_tab( 'div', title, num_tabs, 'This will be graph soon'); curve(tab_id, last_hits, $("#prop_select").val(), title_state() ); break;
 	}
 	if (report_type !== 'choose') {
