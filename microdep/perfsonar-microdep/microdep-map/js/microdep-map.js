@@ -578,15 +578,19 @@ function make_markers ( network, points, focus) {
     if ( points.length == 0 ){
         bounds =  [[-90,-180],   [90,180]];
     }
-    if ( focus ){
+    // Only set the initial view on the FIRST show per network — _hubCenteredNets
+    // is set by draw_topology once it has hub-centred. Gating on it here means a
+    // date / event / data change does NOT reposition the map, so the user's
+    // pan/zoom (and chosen view) are preserved. (show_map's own focus gate is
+    // unreliable — it rebuilds the cluster on every reload — so we gate here.)
+    if ( focus && !_hubCenteredNets[parms.net] ){
 	// COVER the map area (fill the screen, no empty grey borders) rather
 	// than contain-with-padding. getBoundsZoom(b, true) returns the lowest
 	// zoom at which the viewport fits INSIDE the data bounds — i.e. the
 	// bounds cover the whole view (the longer axis is cropped instead of
 	// leaving margins). Capped at 6 so a single tightly-clustered pair
-	// doesn't slam to street level. The first-show gate is handled by the
-	// caller (focus=true only on first show per network), so this doesn't
-	// fight user pan/zoom on later refreshes.
+	// doesn't slam to street level. draw_topology then refines this to the
+	// hub host and marks the network done.
 	var b = L.latLngBounds(bounds);
 	mymap.setView(b.getCenter(), Math.min(mymap.getBoundsZoom(b, true), 6));
     }
