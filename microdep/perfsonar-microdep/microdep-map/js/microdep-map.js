@@ -1850,6 +1850,30 @@ function duplex_topology(topo){
 
 var mouseover=false;
 
+// Networks whose initial view has already been centred on their hub host, so
+// later topology refreshes don't yank the map back from where the user panned.
+var _hubCenteredNets = {};
+
+// The "hub" host = the node that appears in the most links (in a star topology
+// like dragonlab that's the monitoring host every pair shares). Returns its
+// point ({id,lat,lon}) or null.
+function _hub_point() {
+    var counts = {};
+    for (var abs in linkByName) {
+        var parts = abs.split(',');
+        if (parts.length !== 2) continue;
+        counts[parts[0]] = (counts[parts[0]] || 0) + 1;
+        counts[parts[1]] = (counts[parts[1]] || 0) + 1;
+    }
+    var hubId = null, max = -1;
+    for (var id in counts) { if (counts[id] > max) { max = counts[id]; hubId = id; } }
+    if (hubId === null) return null;
+    for (var i = 0; i < points.length; i++) {
+        if (points[i].id === hubId && points[i].lat != null) return points[i];
+    }
+    return null;
+}
+
 function draw_topology(topo){
     if (topo.length == 0) { remove_links(links); _set_map_empty_state(true); return; }
     var new_ends=[];
@@ -1869,6 +1893,22 @@ function draw_topology(topo){
     for (var i=0; i < ends.length; i++){ if ( ! new_ends[ ends[i]] ) { stale_link.push(ends[i]); } }
     for (var i=0; i < stale_link.length; i++){ remove_link(stale_link[i]); }
     links_on=true;
+    // Centre the initial view on the hub host (most-connected node) rather than
+    // the bbox centre, keeping the cover-zoom so the map still fills the screen.
+    // First show per network only — don't fight the user's later pan/zoom.
+    if (mymap && !_hubCenteredNets[parms.net]) {
+        var hub = _hub_point();
+        if (hub) {
+            var hb = new L.LatLngBounds();
+            for (var hi = 0; hi < points.length; hi++) {
+                if (points[hi].lat != null) hb.extend([points[hi].lat, points[hi].lon]);
+            }
+            var z = (points.length > 1 && hb.isValid())
+                  ? Math.min(mymap.getBoundsZoom(hb, true), 6) : 6;
+            mymap.setView([hub.lat, hub.lon], z);
+            _hubCenteredNets[parms.net] = true;
+        }
+    }
 }
 
 function taint_topology( topo, prop){
