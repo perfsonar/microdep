@@ -908,7 +908,12 @@ function _render_link_sparkline_inner(canvas, link, etype, prop, dato, period, f
     // raw concatenation (no encodeURIComponent — colons in ISO stamps
     // and the IPv6-style addresses are passed through literally), and
     // include ip_version when the network requires it.
-    var url = 'elastic-get-date-type.pl?index=' + event_index[etype] +
+    // net= is REQUIRED: elastic-get-date-type.pl resolves the archive URL from
+    // config[net].archive — without it the CGI falls back to http://localhost:9200
+    // and the query dies with curl-code 52 (empty reply). (index= sets the OS
+    // index path; net= picks the archive.)
+    var url = 'elastic-get-date-type.pl?net=' + parms.net +
+              '&index=' + event_index[etype] +
               '&event_type=' + queryEtype +
               '&start=' + adjust_to_timezone(start_iso) +
               '&end='   + adjust_to_timezone(end_iso) +
@@ -1954,7 +1959,10 @@ function _fetch_baseline_summary(currStart, currEnd, etype, prop, cb) {
     // is by definition older than now.
     var queryEtype = sumType || etype;
 
-    var url = 'elastic-get-date-type.pl?index=' + index +
+    // net= is REQUIRED so the CGI resolves the archive URL (config[net].archive);
+    // without it it falls back to http://localhost:9200 → curl-52 empty reply.
+    var url = 'elastic-get-date-type.pl?net=' + parms.net +
+              '&index=' + index +
               '&event_type=' + queryEtype +
               '&start=' + adjust_to_timezone(bStart) +
               '&end='   + adjust_to_timezone(bEnd);
