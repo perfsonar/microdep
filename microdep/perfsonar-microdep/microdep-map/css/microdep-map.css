@@ -3534,3 +3534,128 @@ table#legend.compare-legend th button {
 
 /* Curve report canvas (chart_curve, Chart.js scatter) */
 .report-canvas { display: block; margin: 8px auto; max-width: 100%; }
+
+/* ===== Ported from work-snapshot: TIER3 (legend count, swap-dir, shortcuts) ===== */
+.legend-count {
+    display: block;
+    width: 280px;
+    box-sizing: border-box;
+    margin: -1px auto 0;
+    padding: 4px 12px 6px;
+    /* Pin the chip to a single line at a fixed height — otherwise the
+       compare-mode chip ("6 worse · 2 better · …") can wrap and make
+       the total legend height differ from the threshold-mode chip. */
+    height: 24px;
+    line-height: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: .72rem;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.78);
+    background: rgba(30, 40, 55, 0.88);
+    border: 1px solid rgba(148, 163, 184, 0.15);
+    border-top: none;
+    border-radius: 0 0 10px 10px;
+}
+.legend-count strong {
+    color: var(--c-accent);
+    font-weight: 600;
+}
+/* When the count chip is present, flatten the legend table's bottom
+   corners so the chip docks cleanly. We rely on the chip's existence
+   in the DOM via :has() — supported in all current browsers. */
+div#legend:has(.legend-count) table#legend {
+    border-bottom-left-radius: 0 !important;
+    border-bottom-right-radius: 0 !important;
+}
+
+.link-swap-btn {
+    flex: 0 0 auto;
+    background: var(--c-control);
+    color: var(--c-text-2);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r);
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: color .15s, background .15s, border-color .15s, transform .2s;
+}
+.link-swap-btn:hover {
+    color: var(--c-accent);
+    background: var(--c-accent-mute);
+    border-color: var(--c-accent);
+    transform: rotate(180deg);
+}
+.link-swap-btn svg { width: 16px; height: 16px; }
+.link-swap-btn:focus { outline: none; box-shadow: 0 0 0 2px var(--c-accent-mute); }
+
+.keyboard-shortcuts-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, .55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 99999;
+    padding: 30px;
+}
+.keyboard-shortcuts-overlay[hidden] { display: none; }
+.keyboard-shortcuts-modal {
+    width: min(520px, 100%);
+    max-height: 80vh;
+    overflow-y: auto;
+    background: var(--c-surface);
+    color: var(--c-text);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-lg);
+}
+.keyboard-shortcuts-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--c-border);
+    background: var(--c-elevated);
+}
+.keyboard-shortcuts-header h3 {
+    margin: 0;
+    font-size: .95rem;
+    font-weight: 600;
+    color: var(--c-accent);
+}
+.keyboard-shortcuts-close {
+    background: none;
+    border: none;
+    color: var(--c-text-3);
+    font-size: 1.6rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 6px;
+}
+.keyboard-shortcuts-close:hover { color: var(--c-text); }
+.keyboard-shortcuts-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .88rem;
+}
+.keyboard-shortcuts-table tr td { padding: 8px 18px; border-top: 1px solid var(--c-border); }
+.keyboard-shortcuts-table tr:first-child td { border-top: none; }
+.keyboard-shortcuts-table td:first-child { width: 90px; text-align: center; }
+.keyboard-shortcuts-table kbd {
+    display: inline-block;
+    min-width: 24px;
+    padding: 3px 8px;
+    background: var(--c-control);
+    border: 1px solid var(--c-border);
+    border-bottom-width: 2px;
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    font-size: .82rem;
+    color: var(--c-text);
+}

@@ -387,6 +387,10 @@ function openLinkPanel(content, linkSource) {
             body.appendChild(content);
         }
         panel.classList.remove('hidden');
+        // Wire the swap-direction button (rendered fresh by make_tooltip_v2 on
+        // every open, so it needs re-binding each time).
+        var swapBtn = body.querySelector('#linkSwapBtn');
+        if (swapBtn) swapBtn.addEventListener('click', swap_panel_direction);
         // Sparkline render at CLICK time (not in link_popup, which runs at
         // link-draw time against detached canvases). The render fn itself
         // waits via rAF for the panel to settle to a non-zero size before
@@ -1553,12 +1557,58 @@ function _link_copy_fallback(text, onDone) {
 }
 $(document).on('click', '.link-copy-btn', _link_copy_delegate);
 
+// Reverse the link panel: show the opposite-direction pair (to→from). Uses the
+// reverse summary record if the archive has one, else just relabels. Moves the
+// blue map highlight to the reverse line (bezier, or the geo polyline in real-
+// locations mode). Wired to #linkSwapBtn in openLinkPanel. Ported from work-snapshot.
+function swap_panel_direction() {
+    if (!currentPanelLink) return;
+    var fromOld = currentPanelLink.from;
+    var toOld   = currentPanelLink.to;
+    var reversed = null;
+    if (typeof summary !== 'undefined' && summary && summary.length) {
+        for (var i = 0; i < summary.length; i++) {
+            var s = summary[i] && summary[i]._source;
+            if (s && s.from === toOld && s.to === fromOld) { reversed = s; break; }
+        }
+    }
+    if (!reversed) {
+        reversed = Object.assign({}, currentPanelLink, { from: toOld, to: fromOld });
+    }
+    currentPanelLink = reversed;
+    openLinkPanel(link_popup(reversed), reversed);
+
+    var reverseKey = [reversed.from, reversed.to].join();
+    var reverseLine = null;
+    if (realLocationsMode && realPathLines[reverseKey] && realPathLines[reverseKey].line) {
+        reverseLine = realPathLines[reverseKey].line;
+    } else if (typeof linkByName !== 'undefined') {
+        reverseLine = linkByName[reverseKey];
+    }
+    if (reverseLine) setHighlightedLink(reverseLine);
+}
+
 function make_tooltip_v2(fromHost, toHost, link){
     if (! jQuery.isEmptyObject(conffile)) {
 	var nrows=0;
 	var tip='<div class="link-panel-endpoints">';
 	tip += '<div class="link-endpoint"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg> <span>' + fromHost + '</span>' + _link_copy_btn(fromHost) + '</div>';
 	tip += '<div class="link-endpoint"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg> <span>' + toHost + '</span>' + _link_copy_btn(toHost) + '</div>';
+	// Swap-direction button — only when the archive actually has the reverse
+	// pair to show (otherwise the swap would just relabel the same numbers).
+	var hasReverse = false;
+	if (typeof summary !== 'undefined' && summary && summary.length) {
+	    for (var si = 0; si < summary.length; si++) {
+		var rs = summary[si] && summary[si]._source;
+		if (rs && rs.from === toHost && rs.to === fromHost) { hasReverse = true; break; }
+	    }
+	}
+	if (hasReverse) {
+	    tip += '<button type="button" class="link-swap-btn" id="linkSwapBtn" title="Reverse direction">' +
+		     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+		       '<path d="M7 16V4M4 7l3-3 3 3"/><path d="M17 8v12M14 17l3 3 3-3"/>' +
+		     '</svg></button>';
+	}
 	tip += '</div>';
 	tip += "<table width=100%>";
 	if ( selected_date_is_today_or_future() ) {
@@ -2273,6 +2323,7 @@ function taint_links( hits, prop){
     if ( $("#search_input").val() !== "" )
 	focus_links( $("#search_input").val(), 'noflip' );
     _resync_real_path_colors();   // keep geo-view colours in sync in real-loc mode
+    _update_legend_count(hits, prop);
     _set_map_empty_state(_is_map_visually_empty());
     // Status-bar "Updated" label + stale-banner re-check (#8, #10). The
     // handler lives in index.html; guard so it's a no-op if absent.
@@ -3212,6 +3263,151 @@ function open_heatmap_cell(url, from_host, to_host) {
     const toShort   = (to_host   || '').split('.').slice(0, 2).join('.');
     const title = 'Heatmap: ' + fromShort + ' → ' + toShort;
     open_curve_in_tab(title, 'Heatmap', url);
+}
+
+// ===================================================================
+//  Keyboard shortcuts (#TIER3) — ported from work-snapshot. A "?" help
+//  overlay (built on demand) + a global keydown handler mapping keys to the
+//  existing controls. Ignores typing targets and Ctrl/Cmd/Alt combos.
+// ===================================================================
+const _shortcuts = [
+    { key: '?',   desc: 'Show this help' },
+    { key: 'Esc', desc: 'Close any open modal or overlay' },
+    { key: '←',   desc: 'Previous period' },
+    { key: '→',   desc: 'Next period' },
+    { key: 'T',   desc: 'Jump to today' },
+    { key: 'R',   desc: 'Toggle auto-refresh' },
+    { key: 'L',   desc: 'Toggle Real Locations' },
+    { key: 'H',   desc: 'Toggle sidebar' },
+    { key: 'D',   desc: 'Cycle theme (light · dark · auto)' },
+    { key: '/',   desc: 'Focus search' }
+];
+function _is_typing_target(el) {
+    if (!el) return false;
+    var tag = (el.tagName || '').toUpperCase();
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+    if (el.isContentEditable) return true;
+    return false;
+}
+function _show_shortcuts_overlay() {
+    var existing = document.getElementById('keyboard-shortcuts-overlay');
+    if (existing) { existing.hidden = false; return; }
+    var overlay = document.createElement('div');
+    overlay.id = 'keyboard-shortcuts-overlay';
+    overlay.className = 'keyboard-shortcuts-overlay';
+    var html = '<div class="keyboard-shortcuts-modal">';
+    html += '<div class="keyboard-shortcuts-header"><h3>Keyboard shortcuts</h3>';
+    html += '<button class="keyboard-shortcuts-close" type="button" title="Close">&times;</button></div>';
+    html += '<table class="keyboard-shortcuts-table">';
+    for (var i = 0; i < _shortcuts.length; i++) {
+        html += '<tr><td><kbd>' + escapeHtml(_shortcuts[i].key) + '</kbd></td><td>' + escapeHtml(_shortcuts[i].desc) + '</td></tr>';
+    }
+    html += '</table></div>';
+    overlay.innerHTML = html;
+    document.body.appendChild(overlay);
+    overlay.querySelector('.keyboard-shortcuts-close').addEventListener('click', _hide_shortcuts_overlay);
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) _hide_shortcuts_overlay(); });
+}
+function _hide_shortcuts_overlay() {
+    var el = document.getElementById('keyboard-shortcuts-overlay');
+    if (el) el.hidden = true;
+}
+document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') { _hide_shortcuts_overlay(); }
+    if (_is_typing_target(e.target)) return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;   // don't fight Ctrl+R, Cmd+S, etc.
+    switch (e.key) {
+        case '?': _show_shortcuts_overlay(); e.preventDefault(); break;
+        case 'ArrowLeft': $('#prev').trigger('click'); e.preventDefault(); break;
+        case 'ArrowRight': if (!$('#next').prop('disabled')) $('#next').trigger('click'); e.preventDefault(); break;
+        case 't': case 'T': $('#today').trigger('click'); break;
+        case 'r': case 'R': $('#autorefresh_checkbox').trigger('click'); break;
+        case 'l': case 'L': $('#reallocs_checkbox').trigger('click'); break;
+        case 'h': case 'H': {
+            var sb = document.getElementById('sidebar');
+            if (sb && sb.classList.contains('collapsed')) {
+                var ob = document.getElementById('openSidebarBtn'); if (ob) ob.click();
+            } else {
+                var tb = document.getElementById('sidebarToggle'); if (tb) tb.click();
+            }
+            break;
+        }
+        case '/': { var si = document.getElementById('search_input'); if (si) { si.focus(); e.preventDefault(); } break; }
+        case 'd': case 'D': {
+            var btns = document.querySelectorAll('.theme-btn');
+            if (!btns.length) break;
+            var current = document.documentElement.getAttribute('data-theme') || 'auto';
+            var order = ['light', 'dark', 'auto'];
+            var next = order[(order.indexOf(current) + 1) % order.length];
+            for (var bi = 0; bi < btns.length; bi++) {
+                if (btns[bi].dataset.theme === next) { btns[bi].click(); break; }
+            }
+            break;
+        }
+    }
+});
+
+// Legend footer chip: "<N> links · <M> over threshold" (or, in compare mode,
+// "<N> links · <w> worse · <b> better · …"). Counts only links currently on the
+// map; "over threshold" compares the property VALUE to the top threshold so it
+// stays correct across palette (CBF) toggles. Ported from work-snapshot.
+function _update_legend_count(hits, prop) {
+    var el = document.getElementById('legend');
+    if (!el || !el.firstChild) return;
+    var hitByPair = {};
+    if (Array.isArray(hits)) {
+        for (var i = 0; i < hits.length; i++) {
+            var s = hits[i] && hits[i]._source;
+            if (s && s.from !== undefined && s.to !== undefined) {
+                var pkey = s.from + ',' + s.to;
+                if (!hitByPair[pkey]) hitByPair[pkey] = s;
+            }
+        }
+    }
+    var compareMode = parms.compare && parms.compare !== 'off';
+    var topT      = (Array.isArray(threshes) && threshes.length) ? threshes[threshes.length - 1] : null;
+    var reversed  = (Array.isArray(threshes) && threshes.length >= 2) ? threshes[0] > threshes[1] : false;
+    var total = 0, bad = 0, worse = 0, better = 0, same = 0, noBase = 0;
+    for (var k in linkByName) {
+        var l = linkByName[k];
+        if (!l || !mymap || !mymap.hasLayer(l)) continue;
+        total++;
+        var hit = hitByPair[k];
+        if (!hit) continue;
+        var v = hit[prop];
+        if (typeof v !== 'number') continue;
+        if (compareMode) {
+            var pct = _compare_pct_for_link(hit.from, hit.to, v);
+            if (pct === null) noBase++;
+            else if (pct <= -10) better++;
+            else if (pct >= 10)  worse++;
+            else                 same++;
+        } else if (topT !== null) {
+            if (reversed ? v < topT : v >= topT) bad++;
+        }
+    }
+    var html;
+    if (compareMode) {
+        var bits = [];
+        if (worse)  bits.push('<strong style="color:#e57373">' + worse  + '</strong> worse');
+        if (better) bits.push('<strong style="color:#7fcc8b">' + better + '</strong> better');
+        if (same)   bits.push(same + ' same');
+        if (noBase) bits.push('<span style="opacity:.7">' + noBase + ' new</span>');
+        html = total + ' link' + (total === 1 ? '' : 's')
+             + (bits.length ? ' · ' + bits.join(' · ') : '');
+    } else {
+        html = total + ' link' + (total === 1 ? '' : 's')
+             + (bad ? ' · <strong>' + bad + '</strong> over threshold' : '');
+    }
+    var existing = el.querySelector('.legend-count');
+    if (existing) {
+        existing.innerHTML = html;
+    } else {
+        var span = document.createElement('span');
+        span.className = 'legend-count';
+        span.innerHTML = html;
+        el.appendChild(span);
+    }
 }
 
 function taint_link( link, color ){
