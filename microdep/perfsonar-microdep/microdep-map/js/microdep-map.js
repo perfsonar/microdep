@@ -410,7 +410,7 @@ function openLinkPanel(content, linkSource) {
 function setHighlightedLink(leafletLine) {
     // Remove highlight from previous link
     if (highlightedLink && highlightedLink !== leafletLine) {
-        var prevColor = color_store[L.stamp(highlightedLink)] || highlightedLink._originalColor || empty_color;
+        var prevColor = highlightedLink._baseColor || color_store[L.stamp(highlightedLink)] || highlightedLink._originalColor || empty_color;
         highlightedLink.setStyle({"color": prevColor});
         // Restore arrow colors on previous link
         for (var abs in linkByName) {
@@ -444,7 +444,7 @@ function setHighlightedLink(leafletLine) {
 
 function clearHighlightedLink() {
     if (highlightedLink) {
-        var prevColor = color_store[L.stamp(highlightedLink)] || highlightedLink._originalColor || empty_color;
+        var prevColor = highlightedLink._baseColor || color_store[L.stamp(highlightedLink)] || highlightedLink._originalColor || empty_color;
         highlightedLink.setStyle({"color": prevColor});
         // Restore arrow colors
         for (var abs in linkByName) {
@@ -575,13 +575,16 @@ function make_markers ( network, points, focus) {
         bounds =  [[-90,-180],   [90,180]];
     }
     if ( focus ){
-	// padding gives the edge markers breathing room; maxZoom 6 stops
-	// the fit from zooming to street level when a network has just one
-	// pair (or tightly-clustered pairs). The first-show gate is handled
-	// by the caller (make_markers only runs with focus=true on the
-	// first show per network), so this doesn't fight user pan/zoom on
-	// later refreshes.
-	mymap.fitBounds(bounds, { padding: [12, 12], maxZoom: 6 });
+	// COVER the map area (fill the screen, no empty grey borders) rather
+	// than contain-with-padding. getBoundsZoom(b, true) returns the lowest
+	// zoom at which the viewport fits INSIDE the data bounds — i.e. the
+	// bounds cover the whole view (the longer axis is cropped instead of
+	// leaving margins). Capped at 6 so a single tightly-clustered pair
+	// doesn't slam to street level. The first-show gate is handled by the
+	// caller (focus=true only on first show per network), so this doesn't
+	// fight user pan/zoom on later refreshes.
+	var b = L.latLngBounds(bounds);
+	mymap.setView(b.getCenter(), Math.min(mymap.getBoundsZoom(b, true), 6));
     }
 }
 
@@ -1774,7 +1777,7 @@ function draw_links(hits, prop){
 		    l.on("mouseover", function(e){
 			if (! mouseover) { mouseover = true; color_store[L.stamp(e.target)]=e.target.options.color; e.target.bringToFront(); taint_link(e.target,"blue"); }
 		    });
-		    l.on("mouseout", function(e){ taint_link(e.target, color_store[L.stamp(e.target)]); mouseover=false; });
+		    l.on("mouseout", function(e){ taint_link(e.target, e.target._baseColor || color_store[L.stamp(e.target)]); mouseover=false; });
 		}
 	    }
 	} else { n_excluded++; remove_link(ab); }
@@ -1858,7 +1861,7 @@ function draw_topology(topo){
 	    if (l){
 		links.push(l); linkByName[abs]=l; ends.push(abs);
 		l.on("mouseover", function(e){ if (! mouseover) { mouseover = true; color_store[L.stamp(e.target)]=e.target.options.color; e.target.bringToFront(); taint_link(e.target,"blue"); } });
-		l.on("mouseout", function(e){ taint_link(e.target, color_store[L.stamp(e.target)]); mouseover=false; });
+		l.on("mouseout", function(e){ taint_link(e.target, e.target._baseColor || color_store[L.stamp(e.target)]); mouseover=false; });
 	    }
 	} else { taint_link(linkByName[abs], empty_color); }
     }
@@ -2210,7 +2213,7 @@ function taint_links( hits, prop){
 		if (l){
 		    linkByName[abs]=l; links.push(l); ends.push(abs);
 		    l.on("mouseover", function(e){ if (! mouseover) { mouseover = true; color_store[L.stamp(e.target)]=e.target.options.color; e.target.bringToFront(); taint_link(e.target,"blue"); } });
-		    l.on("mouseout", function(e){ taint_link(e.target, color_store[L.stamp(e.target)]); mouseover = false; });
+		    l.on("mouseout", function(e){ taint_link(e.target, e.target._baseColor || color_store[L.stamp(e.target)]); mouseover = false; });
 		}
 	    }
 	}
@@ -3179,6 +3182,10 @@ function taint_link( link, color ){
 	// colour was lost, so guard here as a safety net — worst case a link
 	// falls back to the no-data colour instead of disappearing.
 	if (color === undefined || color === null || color === '') color = empty_color;
+	// Remember the last REAL (non-highlight) colour so every un-highlight /
+	// hover-out restores to it — never to "blue" or undefined. Single source
+	// of truth for restores; fixes links that occasionally stayed stuck blue.
+	if (color !== 'blue') link._baseColor = color;
 	link.setStyle( {"color": color} );
         for (var abs in linkByName) {
             if (linkByName[abs] === link) {
@@ -3202,7 +3209,7 @@ function extend_unidirectional_links() {
             if (orig.tooltip) halfLine.bindTooltip(orig.tooltip, {"sticky":true});
             if (orig.popup) halfLine.on('click', function(){ openLinkPanel(orig.popup); });
             halfLine.on("mouseover", function(e){ if (!mouseover) { mouseover = true; color_store[L.stamp(e.target)] = e.target.options.color; e.target.bringToFront(); taint_link(e.target, "blue"); } });
-            halfLine.on("mouseout", function(e){ taint_link(e.target, color_store[L.stamp(e.target)]); mouseover = false; });
+            halfLine.on("mouseout", function(e){ taint_link(e.target, e.target._baseColor || color_store[L.stamp(e.target)]); mouseover = false; });
             linkByName[abs] = halfLine;
             removeArrowMarkers(abs);
             addArrowsToLine(abs, orig.bp0, orig.bp1, orig.bp2, currentColor);
@@ -3228,7 +3235,7 @@ function extend_unidirectional_links() {
                 if (tooltipContent) newLine.bindTooltip(tooltipContent, {"sticky":true});
                 if (popupContent) newLine.on('click', function(){ openLinkPanel(popupContent); });
                 newLine.on("mouseover", function(e){ if (!mouseover) { mouseover = true; color_store[L.stamp(e.target)] = e.target.options.color; e.target.bringToFront(); taint_link(e.target, "blue"); } });
-                newLine.on("mouseout", function(e){ taint_link(e.target, color_store[L.stamp(e.target)]); mouseover = false; });
+                newLine.on("mouseout", function(e){ taint_link(e.target, e.target._baseColor || color_store[L.stamp(e.target)]); mouseover = false; });
                 linkByName[abs] = newLine;
                 removeArrowMarkers(abs);
                 addArrowsToCubicLine(abs, newBP0, cubicC1, cubicC2, newBP2, color);
@@ -3259,13 +3266,13 @@ function annotate_link(abs,link, tooltip, popup, linkSourceData){
 	link.on("mouseout", function(e){
 	    mouseover = false;
 	    e.target.closeTooltip();
-	    // Don't restore color if this link is highlighted (panel open)
+	    // Don't restore color if this link is highlighted (panel open).
+	    // Always restore to the real base colour (never leave it stuck blue).
 	    if (highlightedLink !== e.target) {
-	        if (color_store[L.stamp(e.target)]) {
-	            e.target.setStyle({"color": color_store[L.stamp(e.target)]});
-	            for (var k in linkByName) {
-	                if (linkByName[k] === e.target) { updateArrowColors(k, color_store[L.stamp(e.target)]); break; }
-	            }
+	        var bc = e.target._baseColor || color_store[L.stamp(e.target)] || empty_color;
+	        e.target.setStyle({"color": bc});
+	        for (var k in linkByName) {
+	            if (linkByName[k] === e.target) { updateArrowColors(k, bc); break; }
 	        }
 	    }
 	});
