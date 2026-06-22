@@ -32,13 +32,21 @@
   <script src="js/vis.min.js"></script>
   <link href="css/vis.min.css" rel="stylesheet" type="text/css">
   <link href="css/vis-timeline-graph2d.min.css" rel="stylesheet" type="text/css">
-  
+
+  <!-- Chart.js — used by the per-link RTT sparkline in the link panel.
+       Symlinked into js/ by the package install (chartjs 4.4.2). -->
+  <script src="js/chart.umd.js"></script>
+
   <!-- Our modern CSS -->
   <link rel="stylesheet" href="css/microdep-map.css">
 </head>
 <body>
 
   <div class="app-layout">
+
+    <!-- Mobile (<=768px) sidebar-drawer backdrop. Tap to close; hidden
+         on desktop where the sidebar is part of the grid layout. -->
+    <div class="sidebar-backdrop" id="sidebarBackdrop" aria-hidden="true"></div>
 
     <!-- ========== SIDEBAR ========== -->
     <aside class="sidebar" id="sidebar">
@@ -112,6 +120,19 @@
         </div>
 
         <div class="filter-group">
+          <label class="filter-label">Compare with</label>
+          <div class="select-wrap">
+            <select class="knapp hidden-select" id="compare_select" title="Colour links by change vs a prior period">
+              <option value="off" selected="selected">Off</option>
+              <option value="day">Yesterday</option>
+              <option value="week">Last week</option>
+              <option value="month">4 weeks ago</option>
+            </select>
+            <div class="custom-select" data-target="compare_select"></div>
+          </div>
+        </div>
+
+        <div class="filter-group">
           <label class="filter-label">Date &amp; Time</label>
           <div class="date-row">
             <input class="knapp" type="text" id="datepicker" size="12em" title="Measurement start">
@@ -165,6 +186,28 @@
           </div>
         </div>
 
+        <div class="filter-group">
+          <label class="filter-label">Real locations</label>
+          <div class="refresh-row">
+            <label class="checkbox-wrap" id="reallocs_toggle" title="Replace each straight link with the real geographic path through its traceroute hops (hops geolocated via GeoLite2)">
+              <input type="checkbox" id="reallocs_checkbox">
+              <span class="checkbox-custom"></span>
+            </label>
+            <span style="font-size:0.85rem; color:var(--c-text-mute, #888);">Show hop geo-path</span>
+          </div>
+        </div>
+
+        <div class="filter-group">
+          <label class="filter-label">Accessibility</label>
+          <div class="refresh-row">
+            <label class="checkbox-wrap" id="cbf_toggle" title="Use a colour-blind-safe palette (blue / amber / magenta) instead of the default green / yellow / red threshold colours">
+              <input type="checkbox" id="cbf_checkbox">
+              <span class="checkbox-custom"></span>
+            </label>
+            <span style="font-size:0.85rem; color:var(--c-text-mute, #888);">Color-blind safe</span>
+          </div>
+        </div>
+
         <div id="busy"></div>
       </div>
 
@@ -212,6 +255,11 @@
               </svg>
             </button>
           </li>
+          <li class="tabnav-tool-li">
+            <button class="tabnav-tool-btn" id="clearAllTabsBtn" type="button" title="Close every tab except the map and forget them across reloads">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>
+            </button>
+          </li>
           <li><a href="#mapid">Map</a></li>
           <li>
             <select class="knapp hidden-select" id="check" title="Reports for current parameter">
@@ -225,7 +273,34 @@
           </li>
         </ul>
         <div class="map-container">
+          <!-- Stale-data banner (#8): shown when displayed data is older than threshold -->
+          <div id="stale_data_banner" class="stale-data-banner" hidden>
+            <span class="stale-data-icon" aria-hidden="true">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+            </span>
+            <span class="stale-data-text">Data is stale</span>
+            <button class="stale-data-refresh" type="button">Refresh now</button>
+            <button class="stale-data-close" type="button" title="Dismiss">&times;</button>
+          </div>
           <div id="mapid"></div>
+          <!-- Loading overlay while Real-locations resolves hop geo (#TIER1) -->
+          <div id="real_loc_loading" class="map-loading-overlay" hidden>
+            <div class="spinner"></div>
+            <p>Resolving real locations…</p>
+          </div>
+          <!-- Empty-state overlay shown when topology returns no links (#11) -->
+          <div id="map_empty_overlay" class="map-empty-overlay" hidden>
+            <div class="map-empty-icon">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            </div>
+            <h3>No links for this period</h3>
+            <p id="map_empty_msg">No measurement data was returned for the selected time window.</p>
+            <ul>
+              <li>Click <strong>Prev</strong> to step back to a date with data.</li>
+              <li>Switch to a wider <strong>Period</strong> (Day → Week → 4 weeks).</li>
+              <li>Pick a different <strong>Network</strong> or <strong>Event type</strong>.</li>
+            </ul>
+          </div>
           <!-- Link detail panel -->
           <div id="link-panel" class="link-panel hidden">
             <div class="link-panel-header">
@@ -243,6 +318,10 @@
         <div class="status-item">
           <span class="status-label">Status:</span>
           <span id="status">none</span>
+        </div>
+        <div class="status-item">
+          <span class="status-label">Updated:</span>
+          <span id="last_refresh_label">never</span>
         </div>
         <div class="status-item">
           <span class="status-label">Error:</span>
@@ -283,13 +362,24 @@
     var toggleBtn = document.getElementById('sidebarToggle');
     var openBtn = document.getElementById('openSidebarBtn');
     var openLi = document.getElementById('openSidebarLi');
+    var backdrop = document.getElementById('sidebarBackdrop');
+
+    // Mobile-first default: on small viewports start collapsed so the
+    // user lands on the map; the drawer opens over a backdrop on demand.
+    var mobileMql = window.matchMedia('(max-width: 768px)');
+    if (mobileMql.matches) {
+      sidebar.classList.add('collapsed');
+    }
 
     function updateOpenBtn() {
-      if (sidebar.classList.contains('collapsed')) {
+      var collapsed = sidebar.classList.contains('collapsed');
+      if (collapsed) {
         openLi.style.display = '';
       } else {
         openLi.style.display = 'none';
       }
+      // Mirror state onto <body> so the mobile backdrop CSS can react.
+      document.body.classList.toggle('sidebar-open', !collapsed);
     }
 
     toggleBtn.addEventListener('click', function(){
@@ -303,6 +393,16 @@
       updateOpenBtn();
       setTimeout(function(){ window.dispatchEvent(new Event('resize')); }, 350);
     });
+
+    // Tap the backdrop on mobile -> close the drawer (no-op on desktop
+    // where the backdrop is display:none).
+    if (backdrop) {
+      backdrop.addEventListener('click', function(){
+        sidebar.classList.add('collapsed');
+        updateOpenBtn();
+        setTimeout(function(){ window.dispatchEvent(new Event('resize')); }, 350);
+      });
+    }
 
     updateOpenBtn();
 
@@ -509,6 +609,70 @@
           if (this.checked) { startAutoRefresh(); } else { stopAutoRefresh(); }
         });
       }
+
+      // --- Status-bar "Updated" timestamp + stale-data banner (#8, #10) ---
+      // _lastRefreshAt ticks on every successful taint_links (set via
+      // window._microdep_mark_refreshed, called from microdep-map.js). The
+      // "Updated Xs ago" label re-renders each second. We deliberately omit a
+      // "next refresh" label — the auto-refresh progress bar already shows it.
+      window._lastRefreshAt = null;
+      var lastRefreshLabel = document.getElementById('last_refresh_label');
+      function _fmt_ago(ms) {
+        if (ms < 0) return 'just now';
+        var s = Math.floor(ms / 1000);
+        if (s < 5)  return 'just now';
+        if (s < 60) return s + 's ago';
+        var m = Math.floor(s / 60);
+        if (m < 60) return m + 'm ago';
+        var h = Math.floor(m / 60);
+        if (h < 24) return h + 'h ago';
+        return Math.floor(h / 24) + 'd ago';
+      }
+      function _tick_status_labels() {
+        if (lastRefreshLabel) {
+          lastRefreshLabel.textContent = window._lastRefreshAt
+            ? _fmt_ago(Date.now() - window._lastRefreshAt) : 'never';
+        }
+      }
+      setInterval(_tick_status_labels, 1000);
+
+      // Stale-data banner: shown when the displayed data is older than the
+      // threshold (5 min when auto-refresh is off, 2x the interval when on).
+      // Click / "Refresh now" → re-fetch; × → dismiss until the next stale event.
+      var staleBanner  = document.getElementById('stale_data_banner');
+      var staleText    = staleBanner && staleBanner.querySelector('.stale-data-text');
+      var staleRefresh = staleBanner && staleBanner.querySelector('.stale-data-refresh');
+      var staleClose   = staleBanner && staleBanner.querySelector('.stale-data-close');
+      var _staleDismissed = false;
+      function _stale_threshold_ms() {
+        var auto = !!(autorefreshCheckbox && autorefreshCheckbox.checked);
+        var period = window.refresh_period || 60000;
+        return auto ? Math.max(2 * period, 60000) : 5 * 60 * 1000;
+      }
+      function _check_stale_banner() {
+        if (!staleBanner) return;
+        if (!window._lastRefreshAt || _staleDismissed) { staleBanner.hidden = true; return; }
+        var ageMs = Date.now() - window._lastRefreshAt;
+        if (ageMs < _stale_threshold_ms()) { staleBanner.hidden = true; return; }
+        var ageMin = Math.floor(ageMs / 60000);
+        var ageStr = ageMin >= 60 ? Math.floor(ageMin / 60) + 'h ' + (ageMin % 60) + 'm' : ageMin + 'm';
+        if (staleText) staleText.textContent = 'Data is ' + ageStr + ' old';
+        staleBanner.hidden = false;
+      }
+      window._microdep_mark_refreshed = function () {
+        window._lastRefreshAt = Date.now();
+        _tick_status_labels();
+        _check_stale_banner();
+      };
+      function _do_refresh_now() {
+        _staleDismissed = false;
+        if (typeof get_connections === 'function') get_connections();
+        if (staleBanner) staleBanner.hidden = true;
+      }
+      if (staleRefresh) staleRefresh.addEventListener('click', function (e) { e.stopPropagation(); _do_refresh_now(); });
+      if (staleClose)   staleClose.addEventListener('click',   function (e) { e.stopPropagation(); _staleDismissed = true; staleBanner.hidden = true; });
+      if (staleBanner)  staleBanner.addEventListener('click', _do_refresh_now);
+      setInterval(_check_stale_banner, 30000);
 
       function replaceNaN() {
         $('#legend button').each(function(){

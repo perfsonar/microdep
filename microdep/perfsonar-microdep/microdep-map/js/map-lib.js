@@ -4,6 +4,19 @@
 export var colors=[];
 export var threshes=[];  // color thresholds for current property
 
+// Escape user/host-derived strings before interpolating into innerHTML
+// (tooltips, link panel, compare legend, copy buttons). Missing this caused
+// "escapeHtml is not defined" once those call sites were ported.
+export function escapeHtml(s) {
+    if (s === undefined || s === null) return "";
+    return String(s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
+
 export function make_palette( palette){
     // Prepare color palette for global colors[] array
     
@@ -11,6 +24,15 @@ export function make_palette( palette){
 	  colors=generate_colors(10, [0.8,0.2,0.2]); // 5 colors in red with 50% green and blue
     } else if ( palette === "traffic2" ) {
 	colors=[ "#80e982", "#80a982", "#e2e404", "#e2a404", "#d98182", "#a98182"]; // GGYYRR
+    } else if ( palette === "cbf" ) {
+	// Color-blind safe (IBM Design "Color Blind Safe" palette):
+	// blue / amber / magenta. Distinguishable for deuteranopia,
+	// protanopia, and tritanopia, while still reading as
+	// "good → middle → bad" via brightness/saturation cues.
+	colors=[ "#648FFF", "#FFB000", "#DC267F" ];
+    } else if ( palette === "cbf2" ) {
+	// 6-step CBF variant — used when traffic2 would be in play.
+	colors=[ "#92B5FF", "#648FFF", "#FFD480", "#FFB000", "#FF7AB6", "#DC267F" ];
     } else {
 	colors=[ "#80d982", "#e2e404", "#d98182"]; // GYR
 	// colors=["#FFCCCC","#FFE5CC","#FFFFCC","#E5FFCC","#CCFFCC","#CCE5FF","#E5CCFF"];
@@ -53,6 +75,13 @@ export function get_color_ppm( val, max){
 }
 
 export function get_color( val, threshes){
+    // Return null for missing / non-numeric values so the caller can tint
+    // the link grey ("no data") instead of running the comparison with NaN
+    // — every NaN comparison is false, so the loop would fall through to
+    // the worst-zone colour and paint no-data links solid red. Callers do
+    // `get_color(...) || empty_color`.
+    if (val === null || val === undefined) return null;
+    if (typeof val !== 'number' || isNaN(val)) return null;
     var n=colors.length;
     var reversed = threshes[0] > threshes[1];
     var ix=0;
@@ -365,6 +394,8 @@ export function update_url(parameter, value){
 	pars.push( "stats=" + $("#stats_type").val() );
     if (parms.conffile) pars.push( "conffile=" + parms.conffile);   // Add configfile to url if relevant
     if (parms.report) pars.push( "report=" + parms.report);         // Add report to url if relevant
+    var cmpVal = ($("#compare_select").val && $("#compare_select").val()) || parms.compare;   // Snapshot compare mode
+    if (cmpVal && cmpVal !== 'off') pars.push( "compare=" + cmpVal );
     if ( parameter )
 	pars.push( parameter + "=" + value );
     url = urlBase+'?'+pars.join('&');

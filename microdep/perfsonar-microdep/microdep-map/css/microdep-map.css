@@ -3,7 +3,122 @@
    Sidebar layout · Light/Dark/Auto themes · Custom Dropdowns
    ============================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+/* Self-hosted fonts (DM Sans + JetBrains Mono, latin + latin-ext).
+   Vendored into fonts/ per the no-CDN policy — replaces the former
+   Google Fonts web import. latin-ext covers Croatian diacritics
+   (c-caron, etc.) in host labels. */
+@font-face {
+  font-family: 'DM Sans';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('fonts/dmsans-400-latinext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'DM Sans';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('fonts/dmsans-400-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'DM Sans';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('fonts/dmsans-500-latinext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'DM Sans';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('fonts/dmsans-500-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'DM Sans';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('fonts/dmsans-600-latinext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'DM Sans';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('fonts/dmsans-600-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'DM Sans';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('fonts/dmsans-700-latinext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'DM Sans';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('fonts/dmsans-700-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('fonts/jetbrainsmono-400-latinext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('fonts/jetbrainsmono-400-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('fonts/jetbrainsmono-500-latinext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('fonts/jetbrainsmono-500-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('fonts/jetbrainsmono-600-latinext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('fonts/jetbrainsmono-600-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
 
 /* ==========================================================
    THEME TOKENS
@@ -2543,8 +2658,1004 @@ div.graph:has(> .curve-iframe-wrap):not([aria-hidden="true"]) {
    RESPONSIVE
    ========================================================== */
 
-@media (max-width: 800px) {
-    .app-layout { grid-template-columns: 1fr; }
-    .sidebar { position: fixed; top: 0; left: 0; bottom: 0; z-index: 100; box-shadow: var(--shadow-lg); transform: translateX(0); transition: transform .3s cubic-bezier(.4,0,.2,1); }
-    .sidebar.collapsed { transform: translateX(calc(-1 * var(--sidebar-w))); width: var(--sidebar-w); min-width: var(--sidebar-w); }
+
+/* ==========================================================
+   RESPONSIVE — mobile / tablet portrait (≤ 768px)
+   ==========================================================
+   Goal: every microdep-map feature reachable on a phone. Sidebar
+   becomes a slide-in drawer that overlays the map; link details
+   becomes a bottom sheet; tab strip scrolls horizontally; all
+   tappable elements are at least 44×44 (Apple HIG) / 48×48
+   (Material) high. Desktop layout untouched above the breakpoint.
+   ========================================================== */
+
+/* The backdrop element is always in the DOM but invisible on
+   desktop; mobile media query lights it up when body has the
+   .sidebar-open class. */
+.sidebar-backdrop { display: none; }
+
+@media (max-width: 768px) {
+
+    /* --- Layout: collapse the grid into a single column ------ */
+    .app-layout {
+        grid-template-columns: 1fr;
+    }
+
+    /* --- Sidebar drawer -------------------------------------- */
+    .sidebar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        height: 100vh;
+        width: 280px;
+        max-width: 88vw;
+        min-width: 0;
+        z-index: 1500;
+        box-shadow: 4px 0 24px rgba(0, 0, 0, .35);
+        transform: translateX(0);
+        transition: transform .25s cubic-bezier(.4, 0, .2, 1);
+    }
+    .sidebar.collapsed {
+        transform: translateX(-100%);
+        /* Override the desktop "width: 0" rule so the drawer can
+           slide back in at full width — translateX hides it instead. */
+        width: 280px !important;
+        min-width: 0 !important;
+        max-width: 88vw;
+        border-right: 1px solid var(--c-border) !important;
+    }
+
+    /* --- Backdrop -------------------------------------------- */
+    .sidebar-backdrop {
+        display: block;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, .5);
+        z-index: 1490;       /* below sidebar (1500), above everything else */
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity .25s;
+    }
+    body.sidebar-open .sidebar-backdrop {
+        opacity: 1;
+        pointer-events: auto;
+    }
+
+    /* --- Touch target sizing --------------------------------- */
+    /* Apple HIG → 44px min; we go 44 to keep visual density. */
+    .knapp,
+    button.knapp,
+    .sidebar button,
+    .sidebar .knapp,
+    select,
+    input[type="text"],
+    input[type="search"],
+    input[type="number"] {
+        min-height: 44px;
+        font-size: .92rem !important;
+    }
+    .sidebar-toggle-btn,
+    .link-panel-close {
+        min-width: 44px;
+        min-height: 44px;
+    }
+
+    /* --- Link Details panel as bottom sheet ------------------ */
+    .link-panel {
+        top: auto;
+        right: 0;
+        left: 0;
+        bottom: 0;
+        width: 100%;
+        max-width: 100%;
+        max-height: 75vh;
+        border-radius: var(--r-lg) var(--r-lg) 0 0;
+        border-bottom: none;
+        border-left: none;
+        border-right: none;
+        box-shadow: 0 -8px 24px rgba(0, 0, 0, .3);
+        /* slide up from bottom — mirrors the desktop right-edge slide */
+        animation: linkPanelSlideUp .25s cubic-bezier(.4, 0, .2, 1);
+    }
+    @keyframes linkPanelSlideUp {
+        from { transform: translateY(100%); }
+        to   { transform: translateY(0);    }
+    }
+    .link-panel-header {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        /* Drag-handle hint: a small grey pill above the title bar */
+    }
+    .link-panel-header::before {
+        content: '';
+        position: absolute;
+        top: 6px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 36px;
+        height: 4px;
+        border-radius: 2px;
+        background: var(--c-border-h);
+    }
+    .link-panel-header { padding-top: 16px; }
+
+    /* --- Tab strip horizontal scroll ------------------------- */
+    .ui-tabs-nav {
+        flex-wrap: nowrap !important;
+        overflow-x: auto;
+        overflow-y: hidden;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+    }
+    .ui-tabs-nav::-webkit-scrollbar { display: none; }
+    .ui-tabs-nav > li {
+        flex-shrink: 0;
+    }
+
+    /* --- Status bar: single line + ellipsis on overflow ------ */
+    .status-bar {
+        flex-wrap: nowrap;
+        overflow: hidden;
+    }
+    .status-bar > * {
+        flex-shrink: 0;
+        white-space: nowrap;
+    }
+    .status-message {
+        flex-shrink: 1 !important;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    /* --- Map controls: bigger zoom buttons for fingers ------- */
+    .leaflet-control-zoom a {
+        width: 36px !important;
+        height: 36px !important;
+        line-height: 36px !important;
+        font-size: 18px !important;
+    }
+
+    /* --- Heatmap title row stacks on narrow screens ---------- */
+    .tab-header-row {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .export-csv-btn {
+        align-self: flex-end;
+    }
+
+    /* --- Map legend: shrink fixed 280px width + button padding so
+           the legend doesn't dominate the map on small phones. The
+           desktop legend is fixed width because of equal-column flex
+           math for semaphore cells; we override it with a flexible
+           max-width and tighter typography. */
+    table#legend {
+        width: auto !important;
+        min-width: 0 !important;
+        max-width: 240px !important;
+        padding: 4px 6px !important;
+    }
+    /* The "N links" count chip docks below the legend table and has
+       its own hardcoded 280px width on desktop — match it to the
+       table width on mobile so it doesn't poke out. */
+    .legend-count {
+        width: auto !important;
+        max-width: 240px !important;
+        padding: 3px 8px 4px !important;
+        font-size: .65rem !important;
+    }
+    #legend table th button,
+    table#legend th button,
+    #legend #farge0,
+    table#legend #farge0 {
+        font-size: .72rem !important;
+        line-height: 1.15 !important;
+    }
+    #legend table td button,
+    table#legend td button {
+        font-size: .65rem !important;
+        padding: 3px 3px !important;
+        min-height: 0 !important;
+    }
+    #legend table tr,
+    table#legend tr {
+        gap: 2px !important;
+    }
+
+    /* --- Compare modal: full screen on mobile ---------------- */
+    .compare-modal-content {
+        width: 96vw;
+        max-width: 96vw;
+        max-height: 92vh;
+    }
+
+    /* --- Keyboard-shortcuts overlay: tighter padding --------- */
+    .kbd-help-content {
+        max-width: 92vw;
+        padding: 16px;
+    }
+}
+
+/* ----------------------------------------------------------
+   Very small phones (<= 380px) — squeeze sidebar tighter so
+   the backdrop is still visible behind it (helps users
+   discover that tapping outside dismisses).
+   ---------------------------------------------------------- */
+@media (max-width: 380px) {
+    .sidebar,
+    .sidebar.collapsed {
+        width: 260px !important;
+    }
+}
+
+
+/* ==========================================================
+   CSV EXPORT BUTTON (Summary / Asymmetry / Missing tabs)
+   ========================================================== */
+
+.tab-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.tab-header-row > h2 {
+    margin: 0;
+    flex: 1 1 auto;
+}
+
+.export-csv-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: var(--c-elevated);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r);
+    color: var(--c-text-2);
+    font-size: .78rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background .15s, border-color .15s, color .15s;
+    flex-shrink: 0;
+    line-height: 1;
+}
+
+.export-csv-btn:hover {
+    background: var(--c-control);
+    border-color: var(--c-border-h);
+    color: var(--c-text);
+}
+
+.export-csv-btn:active {
+    transform: translateY(1px);
+}
+
+.export-csv-btn svg {
+    flex-shrink: 0;
+    color: var(--c-accent);
+}
+
+.export-csv-btn .export-csv-done-label { display: none; }
+.export-csv-btn.exported {
+    background: var(--c-success-bg, #1f6f3a);
+    border-color: var(--c-success, #2ea043);
+    color: var(--c-text);
+}
+.export-csv-btn.exported svg     { color: var(--c-success, #2ea043); }
+.export-csv-btn.exported .export-csv-label      { display: none; }
+.export-csv-btn.exported .export-csv-done-label { display: inline; }
+
+/* ----- Per-link RTT sparkline (Trend card) ----- */
+.link-sparkline-card .link-sparkline-prop {
+    color: var(--c-text-2);
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: 0;
+    font-family: inherit;
+}
+
+.link-sparkline-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 10px;
+    margin: 2px 0 6px;
+    font-family: var(--font-mono);
+    font-size: .72rem;
+}
+
+.link-sparkline-stats .lss-item {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+}
+
+.link-sparkline-stats .lss-k {
+    color: var(--c-text-3);
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    font-size: .62rem;
+}
+
+.link-sparkline-stats .lss-v {
+    color: var(--c-text);
+    font-weight: 600;
+}
+
+.link-sparkline-stats .lss-n .lss-v {
+    color: var(--c-text-2);
+    font-weight: 400;
+}
+
+.link-sparkline-wrap {
+    position: relative;
+    width: 100%;
+    height: 110px;
+}
+
+.link-sparkline {
+    display: block;
+}
+
+
+
+
+/* ----- Compare-mode floating link chips ----------------
+   When compare mode is on, every link gets a small "+12%" /
+   "-7%" pill hovering at its geographic midpoint. Implemented
+   as a Leaflet divIcon so it follows the map's pan/zoom
+   automatically. We translate -50%/-50% to centre the chip on
+   the marker's latLng (Leaflet anchors top-left by default).
+*/
+.compare-pct-marker {
+    pointer-events: none !important;
+    background: transparent !important;
+    border: none !important;
+}
+.compare-pct-chip {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 11px;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    text-shadow: 0 1px 1px rgba(0, 0, 0, .5);
+    white-space: nowrap;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, .45);
+    border: 1px solid rgba(255, 255, 255, .25);
+    transform: translate(-50%, -50%);   /* centre on midpoint */
+    pointer-events: none;
+    line-height: 14px;
+    font-family: var(--font-mono, monospace);
+}
+@media (max-width: 768px) {
+    .compare-pct-chip {
+        font-size: 10px;
+        padding: 1px 6px;
+    }
+}
+
+/* ----- Compare-mode legend ------------------------------
+   In compare mode we replace the threshold semaphore with a
+   fixed-bucket diff palette. We MATCH the threshold legend's
+   outer dimensions (280px wide, same title-row + bucket-row
+   heights) so flipping compare on/off doesn't make the legend
+   "jump" between sizes. The 5 diff buckets fit by shrinking the
+   bucket-button font versus the threshold legend's typical 4
+   buckets — but `line-height` is pinned to the same value as the
+   regular bucket so the row height stays identical regardless of
+   font size. Buttons are inert (no hover-lift, no click).
+*/
+table#legend.compare-legend {
+    width: 280px !important;
+    min-width: 280px !important;
+    max-width: 280px !important;
+}
+table#legend.compare-legend td {
+    padding-left: 1px !important;
+    padding-right: 1px !important;
+}
+table#legend.compare-legend td button {
+    /* .58rem fits "+10..+30" in 280/5 ≈ 55px cells without wrapping. */
+    font-size: .58rem !important;
+    /* Pin row height to the regular legend's natural height (≈26px =
+       4px top + 18px content + 4px bottom). line-height: 18px keeps
+       the smaller font centered in the same vertical box. */
+    line-height: 18px !important;
+    min-height: 26px !important;
+    padding: 4px 1px !important;
+    box-sizing: border-box !important;
+    white-space: nowrap !important;
+    cursor: default !important;
+    color: #fff !important;
+    text-shadow: 0 1px 1px rgba(0, 0, 0, .4);
+}
+table#legend.compare-legend td button:hover {
+    transform: none !important;
+    box-shadow: none !important;
+    filter: none !important;
+}
+/* Title row — pin to the same height as the regular legend's title.
+   Slightly smaller font so "Property (unit) vs yesterday" fits the
+   280px row without wrapping; line-height keeps vertical box equal. */
+table#legend.compare-legend th button {
+    font-size: .78rem !important;
+    line-height: 20px !important;
+    min-height: 22px !important;
+    box-sizing: border-box !important;
+}
+
+
+/* ===== Compare-modal RTT-per-hop chart (tracetree) ===== */
+.trace-compare-chart-wrap {
+    position: relative;
+    width: 100%;
+    height: 240px;
+    margin-bottom: 16px;
+}
+.trace-compare-chart {
+    display: block;
+}
+
+
+/* ===== Copy-hostname buttons in the link panel ===== */
+.link-endpoint { display: flex; align-items: center; }
+.link-copy-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-left: auto;       /* push to the right edge of the endpoint row */
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--c-text-3);
+    padding: 2px 5px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: color .12s, background .12s, border-color .12s;
+}
+.link-copy-btn:hover {
+    color: var(--c-text);
+    background: var(--c-control);
+    border-color: var(--c-border);
+}
+.link-copy-btn.copied,
+.link-copy-btn.copied:hover {
+    color: var(--c-ok, #059669);
+    border-color: var(--c-ok, #059669);
+    background: transparent;
+}
+
+/* ===== Ported from work-snapshot: tab-nav tool button (#16) + empty-state
+   overlay (#11) ========================================================== */
+
+/* Tool buttons (e.g. Clear-all-tabs) live in the ui-tabs-nav <ul> as
+   <li class="tabnav-tool-li">; strip the inherited "tab" styling and present
+   a flat icon-only square matching the other tool buttons. */
+.ui-tabs .ui-tabs-nav li.tabnav-tool-li {
+    background: none !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+}
+.tabnav-tool-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    background: var(--c-control);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r);
+    color: var(--c-text-2);
+    cursor: pointer;
+    margin-right: 8px;
+    transition: all .15s;
+}
+.tabnav-tool-btn:hover { background: var(--c-control-h); color: var(--c-text); }
+
+/* Empty-state overlay shown over the map when no links are present. */
+.map-empty-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 24px;
+    background: color-mix(in srgb, var(--c-bg) 85%, transparent);
+    color: var(--c-text-2);
+    pointer-events: none;
+}
+.map-empty-overlay[hidden] { display: none; }
+.map-empty-overlay h3 {
+    margin: 12px 0 4px;
+    color: var(--c-text);
+    font-size: 1.05rem;
+}
+.map-empty-overlay p {
+    margin: 0 0 12px;
+    max-width: 480px;
+    font-size: .85rem;
+}
+.map-empty-overlay ul {
+    margin: 0;
+    padding-left: 18px;
+    text-align: left;
+    font-size: .82rem;
+    line-height: 1.6;
+    color: var(--c-text-3);
+}
+.map-empty-icon {
+    color: var(--c-text-3);
+    opacity: .7;
+}
+
+/* ===== Ported from work-snapshot: stale-data banner (#8) =============== */
+.stale-data-banner {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 14px;
+    background: var(--c-warn, #d97706);
+    color: #1a1a1a;
+    font-size: .85rem;
+    font-weight: 500;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, .25);
+    cursor: pointer;
+}
+.stale-data-banner[hidden] { display: none; }
+.stale-data-icon { display: inline-flex; align-items: center; }
+.stale-data-text { flex: 1; }
+.stale-data-refresh {
+    background: rgba(0, 0, 0, .15);
+    color: inherit;
+    border: 1px solid rgba(0, 0, 0, .25);
+    border-radius: 4px;
+    padding: 4px 10px;
+    cursor: pointer;
+    font-size: .8rem;
+    font-weight: 600;
+}
+.stale-data-refresh:hover { background: rgba(0, 0, 0, .25); }
+.stale-data-close {
+    background: transparent;
+    color: inherit;
+    border: none;
+    font-size: 1.4rem;
+    line-height: 1;
+    padding: 0 4px;
+    cursor: pointer;
+    opacity: .6;
+}
+.stale-data-close:hover { opacity: 1; }
+
+/* ===== Ported from work-snapshot: Real-locations hop labels (#TIER1) === */
+.leaflet-tooltip.real-hop-label {
+    background: rgba(0, 0, 0, 0.55) !important;
+    color: #fff !important;
+    border: none !important;
+    box-shadow: none !important;
+    font-size: .68rem !important;
+    padding: 1px 5px !important;
+    border-radius: 3px !important;
+    font-weight: 500;
+    pointer-events: none;
+    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.5);
+    opacity: 0 !important;
+    visibility: hidden;
+    transition: opacity .12s ease-out;
+}
+.leaflet-tooltip.real-hop-label.visible {
+    opacity: 1 !important;
+    visibility: visible;
+}
+/* Approximate-position hops (no geo data, placed by GC slerp between known
+   neighbours). Italic + faded to show these positions are guesses. */
+.leaflet-tooltip.real-hop-label-approx {
+    font-style: italic;
+    background: rgba(0, 0, 0, 0.4) !important;
+}
+.leaflet-tooltip.real-hop-label-approx.visible {
+    opacity: 0.85 !important;
+}
+
+/* ===== Spinner + Real-locations loading overlay (#TIER1) ============== */
+/* The JS uses <div class="spinner"> in several places (restored route tabs,
+   traceroute panes, the geo-loading overlay) but only #busy was styled — give
+   .spinner the same rotating-ring treatment so they're all visible. */
+.spinner {
+    width: 28px;
+    height: 28px;
+    margin: 0 auto;
+    border: 3px solid var(--c-border-h);
+    border-top-color: var(--c-accent);
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+}
+.map-loading-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 6;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    background: color-mix(in srgb, var(--c-bg) 70%, transparent);
+    color: var(--c-text-2);
+}
+.map-loading-overlay[hidden] { display: none; }
+.map-loading-overlay p { margin: 0; font-size: .9rem; }
+
+/* ===== Ported from work-snapshot: HTML heatmap (#TIER1) ============== */
+.ui-tabs .ui-tabs-panel.ui-widget-content.graph:has(.heatmap-header) {
+    padding: 12px 16px !important;
+}
+
+.heatmap-header {
+    padding: 12px 16px 8px;
+}
+
+/* Title-row layout — pushes the [Export CSV] button to the right edge
+   of the title bar across all data tabs (Heatmap, Summary, Asymmetry,
+   Missing). The :first-child h2 keeps its existing sizing. */
+.tab-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.tab-header-row > h2 {
+    margin: 0;
+    flex: 1 1 auto;
+}
+
+.export-csv-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: var(--c-elevated);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r);
+    color: var(--c-text-2);
+    font-size: .78rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background .15s, border-color .15s, color .15s;
+    flex-shrink: 0;
+    line-height: 1;
+}
+
+.export-csv-btn:hover {
+    background: var(--c-control);
+    border-color: var(--c-border-h);
+    color: var(--c-text);
+}
+
+.export-csv-btn:active {
+    transform: translateY(1px);
+}
+
+.export-csv-btn svg {
+    flex-shrink: 0;
+    color: var(--c-accent);
+}
+
+.export-csv-btn .export-csv-done-label { display: none; }
+.export-csv-btn.exported {
+    background: var(--c-success-bg, #1f6f3a);
+    border-color: var(--c-success, #2ea043);
+    color: var(--c-text);
+}
+.export-csv-btn.exported svg     { color: var(--c-success, #2ea043); }
+.export-csv-btn.exported .export-csv-label      { display: none; }
+.export-csv-btn.exported .export-csv-done-label { display: inline; }
+
+.heatmap-title {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--c-text);
+    margin: 0 0 4px;
+}
+
+.heatmap-subtitle {
+    font-size: .82rem;
+    color: var(--c-text-2);
+    margin-bottom: 2px;
+}
+
+.heatmap-range {
+    font-size: .75rem;
+    font-family: var(--font-mono);
+    color: var(--c-text-3);
+}
+
+.heatmap-scroll {
+    overflow-x: auto;
+    padding: 0 16px 16px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--c-control-h) transparent;
+}
+
+.heatmap-scroll::-webkit-scrollbar { height: 6px; }
+.heatmap-scroll::-webkit-scrollbar-track { background: transparent; }
+.heatmap-scroll::-webkit-scrollbar-thumb { background: var(--c-control-h); border-radius: 3px; }
+
+.heatmap-table {
+    border-collapse: separate;
+    border-spacing: 2px;
+    width: max-content;
+}
+
+.heatmap-table thead th,
+.heatmap-table tbody td {
+    font-size: .72rem !important;
+    padding: 0 !important;
+    border: none !important;
+}
+
+.heatmap-corner {
+    position: sticky;
+    left: 0;
+    z-index: 3;
+    background: var(--c-surface) !important;
+    font-size: .68rem !important;
+    font-weight: 600 !important;
+    color: var(--c-text-3) !important;
+    padding: 6px 10px !important;
+    text-align: left !important;
+    white-space: nowrap;
+    font-family: var(--font-mono) !important;
+}
+
+.heatmap-col-header {
+    font-size: .65rem !important;
+    font-weight: 500 !important;
+    color: var(--c-text-2) !important;
+    padding: 8px 4px 10px !important;
+    text-align: center !important;
+    vertical-align: bottom !important;
+    font-family: var(--font-mono) !important;
+    height: 150px;
+    max-height: 150px;
+    overflow: hidden;
+    position: relative;
+}
+
+.heatmap-col-header > span {
+    display: block;
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    transform: rotate(180deg);
+    max-height: 130px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin: 0 auto;
+    padding: 8px 0;
+}
+
+.heatmap-row-header {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    background: var(--c-surface) !important;
+    font-size: .7rem !important;
+    font-weight: 500 !important;
+    color: var(--c-text-2) !important;
+    padding: 4px 12px 4px 8px !important;
+    text-align: left !important;
+    white-space: nowrap;
+    font-family: var(--font-mono) !important;
+}
+
+.heatmap-cell {
+    padding: 1px !important;
+    text-align: center !important;
+}
+
+.heatmap-cell-inner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 46px;
+    min-height: 32px;
+    padding: 3px 6px;
+    border-radius: 4px;
+    font-size: .7rem;
+    font-weight: 600;
+    font-family: var(--font-mono);
+    transition: transform .1s, box-shadow .1s;
+}
+
+/* Cell link wraps the coloured square. Strip default <button> chrome so the
+   element looks identical whether rendered as <a> (new-window mode) or
+   <button> (integrated-tab mode). */
+.heatmap-cell-link {
+    display: block;
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+    text-decoration: none;
+}
+.heatmap-cell-link:focus { outline: none; }
+.heatmap-cell-link:focus-visible .heatmap-cell-inner {
+    box-shadow: 0 0 0 2px var(--c-accent);
+}
+
+.heatmap-cell:hover .heatmap-cell-inner {
+    transform: scale(1.15);
+    box-shadow: 0 2px 8px rgba(0,0,0,.3);
+    z-index: 1;
+    position: relative;
+}
+
+.heatmap-diagonal .heatmap-cell-inner {
+    background: repeating-linear-gradient(
+        45deg,
+        rgba(100,120,150,0.3),
+        rgba(100,120,150,0.3) 3px,
+        transparent 3px,
+        transparent 6px
+    ) !important;
+    color: transparent !important;
+    min-width: 46px !important;
+    min-height: 32px !important;
+    border: 1px dashed rgba(100,120,150,0.4) !important;
+    border-radius: 4px;
+}
+
+.heatmap-nodata .heatmap-cell-inner {
+    background: transparent;
+    color: var(--c-text-3);
+    opacity: 0.3;
+}
+
+/* Curve report canvas (chart_curve, Chart.js scatter) */
+.report-canvas { display: block; margin: 8px auto; max-width: 100%; }
+
+/* ===== Ported from work-snapshot: TIER3 (legend count, swap-dir, shortcuts) ===== */
+.legend-count {
+    display: block;
+    width: 280px;
+    box-sizing: border-box;
+    margin: -1px auto 0;
+    padding: 4px 12px 6px;
+    /* Pin the chip to a single line at a fixed height — otherwise the
+       compare-mode chip ("6 worse · 2 better · …") can wrap and make
+       the total legend height differ from the threshold-mode chip. */
+    height: 24px;
+    line-height: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: .72rem;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.78);
+    background: rgba(30, 40, 55, 0.88);
+    border: 1px solid rgba(148, 163, 184, 0.15);
+    border-top: none;
+    border-radius: 0 0 10px 10px;
+}
+.legend-count strong {
+    color: var(--c-accent);
+    font-weight: 600;
+}
+/* When the count chip is present, flatten the legend table's bottom
+   corners so the chip docks cleanly. We rely on the chip's existence
+   in the DOM via :has() — supported in all current browsers. */
+div#legend:has(.legend-count) table#legend {
+    border-bottom-left-radius: 0 !important;
+    border-bottom-right-radius: 0 !important;
+}
+
+.link-swap-btn {
+    flex: 0 0 auto;
+    background: var(--c-control);
+    color: var(--c-text-2);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r);
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: color .15s, background .15s, border-color .15s, transform .2s;
+}
+.link-swap-btn:hover {
+    color: var(--c-accent);
+    background: var(--c-accent-mute);
+    border-color: var(--c-accent);
+    transform: rotate(180deg);
+}
+.link-swap-btn svg { width: 16px; height: 16px; }
+.link-swap-btn:focus { outline: none; box-shadow: 0 0 0 2px var(--c-accent-mute); }
+
+.keyboard-shortcuts-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, .55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 99999;
+    padding: 30px;
+}
+.keyboard-shortcuts-overlay[hidden] { display: none; }
+.keyboard-shortcuts-modal {
+    width: min(520px, 100%);
+    max-height: 80vh;
+    overflow-y: auto;
+    background: var(--c-surface);
+    color: var(--c-text);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-lg);
+}
+.keyboard-shortcuts-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--c-border);
+    background: var(--c-elevated);
+}
+.keyboard-shortcuts-header h3 {
+    margin: 0;
+    font-size: .95rem;
+    font-weight: 600;
+    color: var(--c-accent);
+}
+.keyboard-shortcuts-close {
+    background: none;
+    border: none;
+    color: var(--c-text-3);
+    font-size: 1.6rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 6px;
+}
+.keyboard-shortcuts-close:hover { color: var(--c-text); }
+.keyboard-shortcuts-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .88rem;
+}
+.keyboard-shortcuts-table tr td { padding: 8px 18px; border-top: 1px solid var(--c-border); }
+.keyboard-shortcuts-table tr:first-child td { border-top: none; }
+.keyboard-shortcuts-table td:first-child { width: 90px; text-align: center; }
+.keyboard-shortcuts-table kbd {
+    display: inline-block;
+    min-width: 24px;
+    padding: 3px 8px;
+    background: var(--c-control);
+    border: 1px solid var(--c-border);
+    border-bottom-width: 2px;
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    font-size: .82rem;
+    color: var(--c-text);
 }

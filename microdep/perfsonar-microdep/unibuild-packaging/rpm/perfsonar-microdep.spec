@@ -64,7 +64,7 @@ Requires:               python3-psycopg2
 Requires:               python3-pytz
 Requires:               python3-tzlocal
 Requires:               python3-pyyaml
-Requires:               perfsonar-microdep-geolite2
+Requires:               perfsonar-microdep-enrichdbs
 BuildRequires:          systemd
 BuildRequires:          systemd-rpm-macros    
 # ... but macros are not yet utilized below
@@ -82,12 +82,14 @@ Requires:               perfsonar-microdep-utils
 %description archive
 A package collection required to prepare for archiving of Microdep Analytics on a perfSONAR archive installation.
 
-%package geolite2
-Summary:		MaxMind's Geolite2 geoip databases
+%package enrichdbs
+Summary:		Enrichment databases for Microdep (geoip etc.)
 Group:			Applications/Communications
 
-%description geolite2
-Geopositioning information from Maxmind to enrich datasets with AS numbers, city and country.
+%description enrichdbs
+Databases used to enrich Microdep datasets. Currently ships MaxMind
+GeoLite2 (AS number, city and country geolocation); intended as a
+container for any future enrichment data sources.
 
 %package logstash
 Summary:		Logstash pipeline for archiving Microdep analytic events
@@ -144,9 +146,9 @@ Requires:               momentjs = 2.30.1
 Requires:               select2js = 4.0.13
 Requires:               sorttablejs = 2.0
 Requires:               visjs
-Requires:               perfsonar-microdep-geolite2
+Requires:               perfsonar-microdep-enrichdbs
 BuildRequires:          systemd
-BuildRequires:          systemd-rpm-macros       
+BuildRequires:          systemd-rpm-macros
 # ... but macros are not yet utilized below
 
 %description map
@@ -181,8 +183,9 @@ A collection of handy utilities to apply when working with Microdep analytic dat
 systemctl stop perfsonar-microdep-gap-ana.service || true
 systemctl stop perfsonar-microdep-trace-ana.service || true
 systemctl stop perfsonar-microdep-restart.timer || true
+systemctl stop perfsonar-microdep-hourly-aggregator.timer || true
 
-%pre geolite2
+%pre enrichdbs
 /usr/sbin/groupadd -r perfsonar 2> /dev/null || :
 /usr/sbin/useradd -g perfsonar -r -s /sbin/nologin -c "perfSONAR User" -d /tmp perfsonar 2> /dev/null || :
 
@@ -342,9 +345,11 @@ systemctl daemon-reload || true
 systemctl enable perfsonar-microdep-gap-ana.service || true
 systemctl enable perfsonar-microdep-trace-ana.service || true
 systemctl enable perfsonar-microdep-restart.timer || true
+systemctl enable perfsonar-microdep-hourly-aggregator.timer || true
 systemctl start perfsonar-microdep-gap-ana.service || true
 systemctl start perfsonar-microdep-trace-ana.service || true
 systemctl start perfsonar-microdep-restart.timer || true
+systemctl start perfsonar-microdep-hourly-aggregator.timer || true
 
 %post logstash
 # Add Microdep to Opensearch setup (including Logstash) 
@@ -390,6 +395,7 @@ fi
 systemctl stop perfsonar-microdep-gap-ana.service || true
 systemctl stop perfsonar-microdep-trace-ana.service || true
 systemctl stop perfsonar-microdep-restart.timer || true
+systemctl stop perfsonar-microdep-hourly-aggregator.timer || true
 
 %preun logstash
 # Remove Microdep from Opensearch setup (including Logstash) 
@@ -430,10 +436,13 @@ systemctl reload httpd.service || true
 %{_unitdir}/perfsonar-microdep-trace-ana.service
 %{_unitdir}/perfsonar-microdep-restart.service
 %{_unitdir}/perfsonar-microdep-restart.timer
+%{_unitdir}/perfsonar-microdep-hourly-aggregator.service
+%{_unitdir}/perfsonar-microdep-hourly-aggregator.timer
 %attr(0755,perfsonar,perfsonar) %{command_base}/qstream-gap-ana
 %attr(0755,perfsonar,perfsonar) %{command_base}/trace_event_reader.py
 %attr(0755,perfsonar,perfsonar) %{command_base}/create_new_db.sh
 %attr(0755,perfsonar,perfsonar) %{command_base}/fix-pgsql-access.sh
+%attr(0755,perfsonar,perfsonar) %{command_base}/microdep-hourly-aggregator.pl
 %{microdep_config_base}/microdep-tests.json.example
 %{microdep_config_base}/microdep-tests-packet-subcount.json.example
 %config %{microdep_config_base}/microdep-gap-ana.yml
@@ -442,7 +451,7 @@ systemctl reload httpd.service || true
 %files archive
 %license %{doc_base}/LICENSE-archive
 
-%files geolite2
+%files enrichdbs
 %defattr(0644,perfsonar,perfsonar,0755)
 %license %{microdep_share_base}/GeoLite2/LICENSE.txt
 %{microdep_share_base}/GeoLite2/COPYRIGHT.txt
@@ -489,12 +498,14 @@ systemctl reload httpd.service || true
 %{microdep_web_dir}/img
 %{microdep_web_dir}/js
 %{microdep_web_dir}/css
+%{microdep_web_dir}/fonts
 %{microdep_web_dir}/geo
 %attr(0755,perfsonar,perfsonar) %{command_base}/elastic-get-date-type.pl
 %attr(0755,perfsonar,perfsonar) %{command_base}/microdep-config.cgi
 %attr(0755,perfsonar,perfsonar) %{command_base}/yaml-to-json.cgi
 %attr(0755,perfsonar,perfsonar) %{command_base}/get-mapconfig.cgi
 %attr(0755,perfsonar,perfsonar) %{command_base}/get-tracetests.pl
+%attr(0755,perfsonar,perfsonar) %{command_base}/hopgeo.pl
 %config %{microdep_config_base}/mapconfig.yml
 %config %{microdep_config_base}/mapconfig.d/
 %{microdep_config_base}/dragonlab-base-geo.json.example

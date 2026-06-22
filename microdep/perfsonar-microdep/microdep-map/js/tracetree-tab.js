@@ -1036,6 +1036,104 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
     }
 
     // Wire the compare-bar interaction and modal rendering
+    let _compareChart = null;
+    function _render_compare_chart(canvas, variants, selected) {
+        if (!canvas || typeof Chart === 'undefined') return;
+        if (_compareChart) { try { _compareChart.destroy(); } catch (_) {} _compareChart = null; }
+
+        const PALETTE = ['#2f81f7', '#ef4444', '#22c55e', '#f59e0b', '#a855f7', '#06b6d4', '#ec4899'];
+        const cs = getComputedStyle(document.documentElement);
+        function tk(name, fb) { const v = cs.getPropertyValue(name).trim(); return v || fb; }
+        const text2  = tk('--c-text-2',  '#b1b8c2');
+        const text3  = tk('--c-text-3',  '#7e8794');
+        const border = tk('--c-border',  '#2a313a');
+        const elev   = tk('--c-elevated','#1c2229');
+
+        const cols = selected.map(i => ({ idx: i, v: variants[i] }));
+        cols.forEach(c => {
+            c.by_ttl = {};
+            for (const hop of c.v.samples[0].val) {
+                if (hop.ttl > c.v.last_ttl) break;
+                if (c.by_ttl[hop.ttl]) continue;
+                c.by_ttl[hop.ttl] = hop;
+            }
+        });
+        const max_ttl = cols.reduce((m, c) => Math.max(m, c.v.last_ttl), 0);
+
+        // Datasets: one line per variant. spanGaps lets us connect across
+        // unresponsive hops (null RTT) instead of stopping at the first
+        // gap, which makes the overall shape easier to read for sparse
+        // traces.
+        const labels = [];
+        for (let t = 1; t <= max_ttl; t++) labels.push(t);
+        const datasets = cols.map((c, i) => {
+            const colour = PALETTE[i % PALETTE.length];
+            return {
+                label: 'V' + c.idx,
+                data: labels.map(ttl => {
+                    const h = c.by_ttl[ttl];
+                    return (h && typeof h.rtt === 'number') ? h.rtt : null;
+                }),
+                borderColor: colour,
+                backgroundColor: colour + '22',
+                pointBackgroundColor: colour,
+                pointBorderColor: '#fff',
+                pointRadius: 3.5,
+                pointHoverRadius: 6,
+                borderWidth: 2,
+                tension: 0.2,
+                spanGaps: true
+            };
+        });
+
+        _compareChart = new Chart(canvas, {
+            type: 'line',
+            data: { labels: labels, datasets: datasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'nearest', intersect: false, axis: 'x' },
+                scales: {
+                    x: {
+                        title: { display: true, text: 'Hop (TTL)', color: text3, font: { size: 11, weight: '600' } },
+                        grid:  { color: border, drawBorder: false },
+                        ticks: { color: text3, font: { size: 11 } }
+                    },
+                    y: {
+                        title: { display: true, text: 'RTT (ms)', color: text3, font: { size: 11, weight: '600' } },
+                        grid:  { color: border, drawBorder: false },
+                        ticks: { color: text3, font: { size: 11 } },
+                        beginAtZero: true
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top',
+                        labels: { color: text2, font: { size: 12 }, boxWidth: 14, boxHeight: 14, usePointStyle: true, pointStyle: 'circle', padding: 12 }
+                    },
+                    tooltip: {
+                        backgroundColor: elev,
+                        // Explicit titleColor / bodyColor — without them
+                        // Chart.js defaults to white, which is invisible
+                        // on the light-mode tooltip background.
+                        titleColor: tk('--c-text', '#e6e9ee'),
+                        bodyColor:  text2,
+                        borderColor: border,
+                        borderWidth: 1,
+                        padding: 10,
+                        cornerRadius: 8,
+                        usePointStyle: true,
+                        callbacks: {
+                            title: items => 'Hop ' + items[0].label,
+                            label: ctx => ctx.dataset.label + ': ' + (ctx.parsed.y == null ? '—' : ctx.parsed.y.toFixed(2) + ' ms')
+                        }
+                    }
+                }
+            }
+        });
+    }
+
     function wire_compare(trace_el, variants) {
         const compare_bar  = document.getElementById(id + '-compare-bar');
         const compare_btn  = document.getElementById(id + '-compare-btn');
@@ -1067,7 +1165,21 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
             const sel = get_selected();
             if (sel.length < 2) return;
             modal_body.innerHTML = render_comparison(variants, sel);
+            // RTT-per-hop chart above the comparison table — one line per
+            // selected variant. variants already carry samples[0].val[{ttl,
+            // rtt}] + last_ttl, exactly what _render_compare_chart reads.
+            var chartWrap = document.createElement('div');
+            chartWrap.className = 'trace-compare-chart-wrap';
+            var chartCanvas = document.createElement('canvas');
+            chartCanvas.className = 'trace-compare-chart';
+            chartWrap.appendChild(chartCanvas);
+            modal_body.insertBefore(chartWrap, modal_body.firstChild);
             modal.hidden = false;
+            if (typeof requestAnimationFrame === 'function') {
+                requestAnimationFrame(function () { _render_compare_chart(chartCanvas, variants, sel); });
+            } else {
+                _render_compare_chart(chartCanvas, variants, sel);
+            }
         });
         clear_btn.addEventListener('click', function () {
             trace_el.querySelectorAll('.trace-variant-checkbox:checked').forEach(cb => {

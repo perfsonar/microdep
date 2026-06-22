@@ -81,15 +81,37 @@ if (! $from || ! $to ) {
 
                                    } } }'; # size = <large-number> to ensure all peers found are returned
 } else {
-    # Search for trace test results (traceroutes) in time range between given hosts 
-   $query = '{ "query": { "bool": { "filter": [ { "term": { "test.type.keyword": "trace" } }, 
-                                                { "term": { "test.spec.source.keyword": "' . $from . '" } },
-                                                { "term": { "test.spec.dest.keyword": "' . $to . '" } },
-                                                { "range": { "@timestamp": { "gte": "' . $iso_start . '", "lt": "' . $iso_end . '" } } } 
-                                              ] 
-                                   } 
-                         },
-	       "size": 8640  }';   # size = 8640 => fetch everything for 10s sampling periode over 24 hours
+    # Search for trace test results (traceroutes) in a time range between the
+    # given hosts. `from`/`to` may be COMMA-SEPARATED candidate lists (e.g.
+    # "hostname,IP"): the microdep map identifies a node by its topology name,
+    # while pscheduler records test.spec.source/dest as an IP on one side and a
+    # hostname on the other. When a list is supplied we match ANY candidate and
+    # accept EITHER direction (traces frequently exist only one way), so the
+    # Real-locations view still resolves a path. A single value each keeps the
+    # original exact, directional behaviour (used by ls-tab / tracetree).
+    # Candidates are sanitised to hostname/IP characters to keep the
+    # interpolated JSON well-formed.
+    my @from_list = grep { /^[0-9A-Za-z._:-]+$/ } map { my $x=$_; $x =~ s/^\s+|\s+$//g; $x } split(/,/, $from);
+    my @to_list   = grep { /^[0-9A-Za-z._:-]+$/ } map { my $x=$_; $x =~ s/^\s+|\s+$//g; $x } split(/,/, $to);
+    @from_list = ($from) unless @from_list;   # fall back to raw if sanitiser emptied it
+    @to_list   = ($to)   unless @to_list;
+    if (@from_list > 1 || @to_list > 1) {
+        my $fl = join(',', map { '"' . $_ . '"' } @from_list);
+        my $tl = join(',', map { '"' . $_ . '"' } @to_list);
+        $query = '{ "query": { "bool": { "filter": [ { "term": { "test.type.keyword": "trace" } },
+                       { "range": { "@timestamp": { "gte": "' . $iso_start . '", "lt": "' . $iso_end . '" } } },
+                       { "bool": { "minimum_should_match": 1, "should": [
+                           { "bool": { "must": [ { "terms": { "test.spec.source.keyword": [' . $fl . '] } }, { "terms": { "test.spec.dest.keyword": [' . $tl . '] } } ] } },
+                           { "bool": { "must": [ { "terms": { "test.spec.source.keyword": [' . $tl . '] } }, { "terms": { "test.spec.dest.keyword": [' . $fl . '] } } ] } }
+                         ] } }
+                     ] } }, "size": 8640 }';
+    } else {
+        $query = '{ "query": { "bool": { "filter": [ { "term": { "test.type.keyword": "trace" } },
+                                                     { "term": { "test.spec.source.keyword": "' . $from . '" } },
+                                                     { "term": { "test.spec.dest.keyword": "' . $to . '" } },
+                                                     { "range": { "@timestamp": { "gte": "' . $iso_start . '", "lt": "' . $iso_end . '" } } }
+                                                   ] } }, "size": 8640 }';
+    }
 }
 
 print $query,"\n" if ($cgi->param('debug'));
