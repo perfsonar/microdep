@@ -3445,9 +3445,11 @@ function extend_unidirectional_links() {
             var halfLine = L.curve(['M', orig.bp0, 'Q', orig.bp1, orig.bp2], { color: currentColor, fill: false, weight: 6 });
             halfLine._bezierP0 = orig.bp0; halfLine._bezierP1 = orig.bp1; halfLine._bezierP2 = orig.bp2;
             halfLine._fullStart = orig.fullStart; halfLine._fullEnd = orig.fullEnd; halfLine._fullControl = orig.fullControl;
+            halfLine._panelPopup = orig.popup; halfLine._panelSource = orig.source;
+            if (orig.baseColor) halfLine._baseColor = orig.baseColor;
             halfLine.addTo(mymap);
             if (orig.tooltip) halfLine.bindTooltip(orig.tooltip, {"sticky":true});
-            if (orig.popup) halfLine.on('click', function(){ openLinkPanel(orig.popup); });
+            if (orig.popup) halfLine.on('click', function(e){ setHighlightedLink(e.target); openLinkPanel(e.target._panelPopup, e.target._panelSource); });
             halfLine.on("mouseover", function(e){ if (!mouseover) { mouseover = true; color_store[L.stamp(e.target)] = e.target.options.color; e.target.bringToFront(); taint_link(e.target, "blue"); } });
             halfLine.on("mouseout", function(e){ taint_link(e.target, e.target._baseColor || color_store[L.stamp(e.target)]); mouseover = false; });
             linkByName[abs] = halfLine;
@@ -3463,17 +3465,28 @@ function extend_unidirectional_links() {
             if (link._fullStart && link._fullEnd && link._fullControl) {
                 var color = link.options.color;
                 var tooltipContent = link.getTooltip() ? link.getTooltip().getContent() : null;
-                var popupContent = link.getPopup ? null : null;
-                extendedLinks[abs] = { bp0: link._bezierP0, bp1: link._bezierP1, bp2: link._bezierP2, fullStart: link._fullStart, fullEnd: link._fullEnd, fullControl: link._fullControl, tooltip: tooltipContent, popup: popupContent };
+                // Preserve the click->details-panel popup (+ source data and base
+                // colour) that annotate_link stashed on the layer. The old code
+                // hardcoded this to null, so rebuilt one-way links lost their click
+                // handler entirely (issue #93: no popup on TCP trace error / route
+                // change flows, which are drawn one-way).
+                var popupContent = link._panelPopup;
+                var sourceData = link._panelSource;
+                var baseColor = link._baseColor;
+                extendedLinks[abs] = { bp0: link._bezierP0, bp1: link._bezierP1, bp2: link._bezierP2, fullStart: link._fullStart, fullEnd: link._fullEnd, fullControl: link._fullControl, tooltip: tooltipContent, popup: popupContent, source: sourceData, baseColor: baseColor };
                 link.remove();
                 var newBP0 = link._fullStart; var newBP2 = link._fullEnd;
                 var cubicC1 = link._fullControl; var cubicC2 = link._bezierP1 || link._fullControl;
                 var newLine = L.curve(['M', newBP0, 'C', cubicC1, cubicC2, newBP2], { color: color, fill: false, weight: 6 });
                 newLine._bezierP0 = link._bezierP0; newLine._bezierP1 = link._bezierP1; newLine._bezierP2 = link._bezierP2;
                 newLine._fullStart = link._fullStart; newLine._fullEnd = link._fullEnd; newLine._fullControl = link._fullControl;
+                newLine._panelPopup = popupContent; newLine._panelSource = sourceData;
+                if (baseColor) newLine._baseColor = baseColor;
                 newLine.addTo(mymap);
                 if (tooltipContent) newLine.bindTooltip(tooltipContent, {"sticky":true});
-                if (popupContent) newLine.on('click', function(){ openLinkPanel(popupContent); });
+                // Read the popup off the clicked layer (not the loop-scoped var) so
+                // each one-way link opens its own panel, not the last link's.
+                if (popupContent) newLine.on('click', function(e){ setHighlightedLink(e.target); openLinkPanel(e.target._panelPopup, e.target._panelSource); });
                 newLine.on("mouseover", function(e){ if (!mouseover) { mouseover = true; color_store[L.stamp(e.target)] = e.target.options.color; e.target.bringToFront(); taint_link(e.target, "blue"); } });
                 newLine.on("mouseout", function(e){ taint_link(e.target, e.target._baseColor || color_store[L.stamp(e.target)]); mouseover = false; });
                 linkByName[abs] = newLine;
