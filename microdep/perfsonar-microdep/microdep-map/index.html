@@ -649,8 +649,20 @@
         var period = window.refresh_period || 60000;
         return auto ? Math.max(2 * period, 60000) : 5 * 60 * 1000;
       }
+      // The "data is stale / refresh now" nudge only makes sense for live data.
+      // When the viewed window ends in the past (a historic date) the data is
+      // meant to be old, so suppress the banner there (issue #95). The window
+      // end is published by get_connections as window._microdep_view_end.
+      function _viewing_live_data() {
+        var endIso = window._microdep_view_end;
+        if (!endIso) return true;                    // unknown yet -> don't suppress
+        var endMs = Date.parse(endIso);
+        if (isNaN(endMs)) return true;
+        return endMs >= Date.now() - 5 * 60 * 1000;  // window reaches ~now -> live
+      }
       function _check_stale_banner() {
         if (!staleBanner) return;
+        if (!_viewing_live_data()) { staleBanner.hidden = true; return; }
         if (!window._lastRefreshAt || _staleDismissed) { staleBanner.hidden = true; return; }
         var ageMs = Date.now() - window._lastRefreshAt;
         if (ageMs < _stale_threshold_ms()) { staleBanner.hidden = true; return; }

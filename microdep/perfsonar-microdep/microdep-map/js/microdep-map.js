@@ -4022,6 +4022,10 @@ function get_connections(){
 	start= new Date(msstart).toISOString(); end= new Date(msend).toISOString();
 	if ( period < 2*24 ){ tloss=1000; } else if ( period <= 7*24 ){ tloss=5000; } else { tloss=60000; }
     }
+    // Publish the viewed window's end so the inline stale-data banner can tell
+    // live from historic views: a window ending in the past is historic, so the
+    // "data is N old / refresh now" nag is suppressed there (issue #95).
+    window._microdep_view_end = end;
     last_hits=[]; summary=[]; var now = new Date();
     if ( ! sum_etype || typeof sum_etype == 'undefined' || start.substr(0,10) === now.toISOString().substr(0,10) || period < 24){
 	var url="elastic-get-date-type.pl?net=" + parms.net + "&index=" + index + "&event_type=" + etype + "&start=" + start + "&end=" + end ;
