@@ -14,7 +14,8 @@ button injected into the perfSONAR main dashboard) — it does not replace it.
 |------|---------|--------------|
 | `microdep-datasource.yaml`        | OpenSearch datasource for the `dragonlab` index | `…/grafana/provisioning/datasources/` |
 | `microdep-dashboards.yaml`        | Dashboard provider (loads the `dashboards/` dir into a "Microdep" folder) | `…/grafana/provisioning/dashboards/` |
-| `dashboards/microdep-gaps.json`   | Starter dashboard: total gaps (stat), gaps over time, top-10 source hosts, map button | `…/grafana/dashboards/microdep/` |
+| `dashboards/microdep-gaps.json`   | Native dashboard: total gaps (stat), gaps over time, top-10 source hosts, map button | `…/grafana/dashboards/microdep/` |
+| `dashboards/microdep-map.json`    | The geographic map embedded full-size as an `<iframe>` to `/microdep/` | `…/grafana/dashboards/microdep/` |
 
 On a perfSONAR host the provisioning root is `/usr/lib/perfsonar/grafana/provisioning`
 (`grafana.ini` → `[paths] provisioning`).
@@ -26,6 +27,7 @@ install -m640 microdep-datasource.yaml  /usr/lib/perfsonar/grafana/provisioning/
 install -m640 microdep-dashboards.yaml  /usr/lib/perfsonar/grafana/provisioning/dashboards/
 install -d                              /usr/lib/perfsonar/grafana/dashboards/microdep
 install -m644 dashboards/microdep-gaps.json /usr/lib/perfsonar/grafana/dashboards/microdep/
+install -m644 dashboards/microdep-map.json  /usr/lib/perfsonar/grafana/dashboards/microdep/
 systemctl restart grafana-server
 ```
 
@@ -37,6 +39,10 @@ Then open Grafana → Dashboards → **Microdep / Microdep — Gaps overview**.
   epoch `float` and `datetime` is `text` — neither works as a Grafana time
   field or in `date_histogram`.
 - **Term aggregations need `.keyword`** (e.g. `from.keyword`).
+- **The embedded map** (`microdep-map.json`) relies on `[panels]
+  disable_sanitize_html = true` in `grafana.ini` (so the Text panel keeps the
+  `<iframe>`) and on `/microdep/` not sending a blocking `X-Frame-Options` /
+  CSP `frame-ancestors` (it is same-origin with Grafana, so it frames fine).
 - The datasource mirrors perfSONAR's own `perfsonar-local.yaml` (proxy access,
   `tlsSkipVerify`, flavor `opensearch`) but targets the `dragonlab` index with a
   distinct uid `microdep-dragonlab`, so it sits alongside the pscheduler one.
