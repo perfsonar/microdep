@@ -3440,16 +3440,27 @@ function extend_unidirectional_links() {
     for (var abs in extendedLinks) {
         if (linkByName[abs] && extendedLinks[abs]) {
             var orig = extendedLinks[abs];
-            var currentColor = linkByName[abs].options.color;
-            linkByName[abs].remove();
+            var live = linkByName[abs];
+            // Geometry (bezier points) comes from the cache - it doesn't change -
+            // but the DISPLAY content (colour/tooltip/popup/source/base colour)
+            // must be read from the LIVE link, which annotate_link refreshes on
+            // every repaint. Reading the stale cached tooltip/popup here left the
+            // mouse-over tooltip showing the previous property/event (issue #98)
+            // even though the colour (read live) did update.
+            var currentColor = live.options.color;
+            var liveTip = (live.getTooltip && live.getTooltip()) ? live.getTooltip().getContent() : orig.tooltip;
+            var livePopup = (live._panelPopup != null) ? live._panelPopup : orig.popup;
+            var liveSource = (live._panelSource !== undefined) ? live._panelSource : orig.source;
+            var liveBase = live._baseColor || orig.baseColor;
+            live.remove();
             var halfLine = L.curve(['M', orig.bp0, 'Q', orig.bp1, orig.bp2], { color: currentColor, fill: false, weight: 6 });
             halfLine._bezierP0 = orig.bp0; halfLine._bezierP1 = orig.bp1; halfLine._bezierP2 = orig.bp2;
             halfLine._fullStart = orig.fullStart; halfLine._fullEnd = orig.fullEnd; halfLine._fullControl = orig.fullControl;
-            halfLine._panelPopup = orig.popup; halfLine._panelSource = orig.source;
-            if (orig.baseColor) halfLine._baseColor = orig.baseColor;
+            halfLine._panelPopup = livePopup; halfLine._panelSource = liveSource;
+            if (liveBase) halfLine._baseColor = liveBase;
             halfLine.addTo(mymap);
-            if (orig.tooltip) halfLine.bindTooltip(orig.tooltip, {"sticky":true});
-            if (orig.popup) halfLine.on('click', function(e){ setHighlightedLink(e.target); openLinkPanel(e.target._panelPopup, e.target._panelSource); });
+            if (liveTip) halfLine.bindTooltip(liveTip, {"sticky":true});
+            if (livePopup) halfLine.on('click', function(e){ setHighlightedLink(e.target); openLinkPanel(e.target._panelPopup, e.target._panelSource); });
             halfLine.on("mouseover", function(e){ if (!mouseover) { mouseover = true; color_store[L.stamp(e.target)] = e.target.options.color; e.target.bringToFront(); taint_link(e.target, "blue"); } });
             halfLine.on("mouseout", function(e){ taint_link(e.target, e.target._baseColor || color_store[L.stamp(e.target)]); mouseover = false; });
             linkByName[abs] = halfLine;
