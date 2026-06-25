@@ -1481,7 +1481,11 @@ function link_popup(link){
 	}
 
 	// --- Queues (jitter / h_ddelay) ---
-	var queuesUrl = 'curve-chart.html?net=' + parms.net + '&index=' + parms.net + '_jitter&from=' + link.from + '&to=' + link.to + '&event=jitter&property=h_ddelay&start=' + start + '&end=' + end + "&title=From " + link.from + " to " + link.to;
+	// Use the configured jitter index (e.g. dragonlab_jitter, shared by both
+	// nets) - NOT parms.net + '_jitter', which becomes dragonlab_6_jitter on
+	// Net-6 and reports "No jitter data" (issue #100).
+	var queuesIndex = (event_index && event_index['jitter']) ? event_index['jitter'] : (parms.net + '_jitter');
+	var queuesUrl = 'curve-chart.html?net=' + parms.net + '&index=' + queuesIndex + '&from=' + link.from + '&to=' + link.to + '&event=jitter&property=h_ddelay&start=' + start + '&end=' + end + "&title=From " + link.from + " to " + link.to;
 	var queuesBtn = document.createElement("button");
 	queuesBtn.className = "knapp";
 	queuesBtn.title = "Curve over queues in this period";
