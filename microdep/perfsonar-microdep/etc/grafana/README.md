@@ -12,10 +12,12 @@ button injected into the perfSONAR main dashboard) — it does not replace it.
 
 | File | Purpose | Provision to |
 |------|---------|--------------|
-| `microdep-datasource.yaml`        | OpenSearch datasource for the `dragonlab` index | `…/grafana/provisioning/datasources/` |
+| `microdep-datasource.yaml`        | OpenSearch datasource for the `dragonlab` index (gap) | `…/grafana/provisioning/datasources/` |
+| `microdep-jitter-datasource.yaml` | OpenSearch datasource for the `dragonlab_jitter` index (Queues/jitter) | `…/grafana/provisioning/datasources/` |
 | `microdep-dashboards.yaml`        | Dashboard provider (loads the `dashboards/` dir into a "Microdep" folder) | `…/grafana/provisioning/dashboards/` |
 | `dashboards/microdep-gaps.json`   | Native dashboard: total gaps (stat), gaps over time, top-10 source hosts, map button | `…/grafana/dashboards/microdep/` |
 | `dashboards/microdep-map.json`    | The geographic map embedded full-size as an `<iframe>` to `/microdep/` | `…/grafana/dashboards/microdep/` |
+| `dashboards/microdep-details.json`| Native dashboard: jitter percentiles over time, top link pairs by time-lost, source×target gap matrix (`esnet-matrix-panel`), gap/jitter data-freshness stats | `…/grafana/dashboards/microdep/` |
 
 On a perfSONAR host the provisioning root is `/usr/lib/perfsonar/grafana/provisioning`
 (`grafana.ini` → `[paths] provisioning`).
@@ -23,11 +25,13 @@ On a perfSONAR host the provisioning root is `/usr/lib/perfsonar/grafana/provisi
 ## Provision (manual, for testing)
 
 ```sh
-install -m640 microdep-datasource.yaml  /usr/lib/perfsonar/grafana/provisioning/datasources/
-install -m640 microdep-dashboards.yaml  /usr/lib/perfsonar/grafana/provisioning/dashboards/
-install -d                              /usr/lib/perfsonar/grafana/dashboards/microdep
-install -m644 dashboards/microdep-gaps.json /usr/lib/perfsonar/grafana/dashboards/microdep/
-install -m644 dashboards/microdep-map.json  /usr/lib/perfsonar/grafana/dashboards/microdep/
+install -m640 microdep-datasource.yaml         /usr/lib/perfsonar/grafana/provisioning/datasources/
+install -m640 microdep-jitter-datasource.yaml  /usr/lib/perfsonar/grafana/provisioning/datasources/
+install -m640 microdep-dashboards.yaml         /usr/lib/perfsonar/grafana/provisioning/dashboards/
+install -d                                     /usr/lib/perfsonar/grafana/dashboards/microdep
+install -m644 dashboards/microdep-gaps.json    /usr/lib/perfsonar/grafana/dashboards/microdep/
+install -m644 dashboards/microdep-map.json     /usr/lib/perfsonar/grafana/dashboards/microdep/
+install -m644 dashboards/microdep-details.json /usr/lib/perfsonar/grafana/dashboards/microdep/
 systemctl restart grafana-server
 ```
 
