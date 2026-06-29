@@ -1541,13 +1541,22 @@ table.sortable th:not(.sorttable_sorted):not(.sorttable_sorted_reverse):not(.sor
 /* From/To endpoint display */
 .link-panel-endpoints {
     display: flex;
-    flex-direction: column;
-    gap: 6px;
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
     margin-bottom: 12px;
     padding: 10px 12px;
     background: var(--c-elevated);
     border-radius: var(--r);
     border: 1px solid var(--c-border);
+}
+/* The two endpoints stack vertically; the swap button sits to their right. */
+.link-endpoint-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1 1 auto;
+    min-width: 0;
 }
 
 .link-endpoint {
@@ -1567,7 +1576,45 @@ table.sortable th:not(.sorttable_sorted):not(.sorttable_sorted_reverse):not(.sor
     font-family: var(--font-mono);
     font-size: .8rem;
     font-weight: 500;
-    word-break: break-all;
+    /* Let the host use the full (column-stacked) row width and only wrap when it
+       truly must - never break mid-token. break-all split hostnames like
+       "ytelse-tos.u|ninett.no". min-width:0 lets the flex item shrink so the
+       wrap happens inside the row instead of overflowing. */
+    min-width: 0;
+    word-break: normal;
+    overflow-wrap: anywhere;
+}
+/* Hostnames copy to the clipboard on double-click (the per-host copy buttons
+   were removed to declutter the row). */
+.link-endpoint { min-width: 0; }
+.link-host { cursor: pointer; }
+.link-host:hover { color: var(--c-accent); }
+.link-host.copied { color: var(--c-accent); }
+
+/* Transient "copied to clipboard" toast (bottom-centre, theme-aware). */
+.copy-toast {
+    position: fixed;
+    left: 50%;
+    bottom: 28px;
+    transform: translateX(-50%) translateY(8px);
+    z-index: 10000;
+    max-width: 80vw;
+    padding: 9px 16px;
+    background: var(--c-elevated);
+    color: var(--c-text);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r);
+    box-shadow: 0 6px 24px rgba(0, 0, 0, .35);
+    font-size: .85rem;
+    font-weight: 500;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .2s ease, transform .2s ease;
+}
+.copy-toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
 }
 
 /* Action cards in panel (See / Plot) */
