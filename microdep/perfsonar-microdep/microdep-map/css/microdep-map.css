@@ -1591,6 +1591,32 @@ table.sortable th:not(.sorttable_sorted):not(.sorttable_sorted_reverse):not(.sor
 .link-host:hover { color: var(--c-accent); }
 .link-host.copied { color: var(--c-accent); }
 
+/* Transient "copied to clipboard" toast (bottom-centre, theme-aware). */
+.copy-toast {
+    position: fixed;
+    left: 50%;
+    bottom: 28px;
+    transform: translateX(-50%) translateY(8px);
+    z-index: 10000;
+    max-width: 80vw;
+    padding: 9px 16px;
+    background: var(--c-elevated);
+    color: var(--c-text);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r);
+    box-shadow: 0 6px 24px rgba(0, 0, 0, .35);
+    font-size: .85rem;
+    font-weight: 500;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .2s ease, transform .2s ease;
+}
+.copy-toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+
 /* Action cards in panel (See / Plot) */
 .panel-card {
     margin-top: 10px;

@@ -1539,6 +1539,7 @@ function _link_copy_delegate(e) {
     function _flash() {
         btn.classList.add('copied');
         setTimeout(function () { btn.classList.remove('copied'); }, 1100);
+        _show_copy_toast('Hostname copied to clipboard');
     }
     if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(value).then(_flash, function () { _link_copy_fallback(value, _flash); });
@@ -1555,6 +1556,24 @@ function _link_copy_fallback(text, onDone) {
     ta.focus(); ta.select();
     try { document.execCommand('copy'); onDone && onDone(); } catch (_) {}
     document.body.removeChild(ta);
+}
+// Small transient toast (bottom-centre) confirming a copy. Singleton element,
+// reused so rapid copies don't stack; each call restarts the show/hide cycle.
+var _copyToastTimer = null;
+function _show_copy_toast(msg) {
+    var t = document.getElementById('copy-toast');
+    if (!t) {
+        t = document.createElement('div');
+        t.id = 'copy-toast';
+        t.className = 'copy-toast';
+        t.setAttribute('role', 'status');
+        t.setAttribute('aria-live', 'polite');
+        document.body.appendChild(t);
+    }
+    t.textContent = msg;
+    if (_copyToastTimer) clearTimeout(_copyToastTimer);
+    requestAnimationFrame(function () { t.classList.add('show'); });
+    _copyToastTimer = setTimeout(function () { t.classList.remove('show'); }, 1600);
 }
 $(document).on('click', '.link-copy-btn', _link_copy_delegate);
 $(document).on('dblclick', '.link-host', _link_copy_delegate);
