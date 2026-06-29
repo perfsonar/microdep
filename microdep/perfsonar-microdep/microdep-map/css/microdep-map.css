@@ -1541,13 +1541,22 @@ table.sortable th:not(.sorttable_sorted):not(.sorttable_sorted_reverse):not(.sor
 /* From/To endpoint display */
 .link-panel-endpoints {
     display: flex;
-    flex-direction: column;
-    gap: 6px;
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
     margin-bottom: 12px;
     padding: 10px 12px;
     background: var(--c-elevated);
     border-radius: var(--r);
     border: 1px solid var(--c-border);
+}
+/* The two endpoints stack vertically; the swap button sits to their right. */
+.link-endpoint-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1 1 auto;
+    min-width: 0;
 }
 
 .link-endpoint {
@@ -1575,6 +1584,12 @@ table.sortable th:not(.sorttable_sorted):not(.sorttable_sorted_reverse):not(.sor
     word-break: normal;
     overflow-wrap: anywhere;
 }
+/* Hostnames copy to the clipboard on double-click (the per-host copy buttons
+   were removed to declutter the row). */
+.link-endpoint { min-width: 0; }
+.link-host { cursor: pointer; }
+.link-host:hover { color: var(--c-accent); }
+.link-host.copied { color: var(--c-accent); }
 
 /* Action cards in panel (See / Plot) */
 .panel-card {
