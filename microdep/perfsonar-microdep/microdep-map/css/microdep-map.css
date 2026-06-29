@@ -1567,7 +1567,13 @@ table.sortable th:not(.sorttable_sorted):not(.sorttable_sorted_reverse):not(.sor
     font-family: var(--font-mono);
     font-size: .8rem;
     font-weight: 500;
-    word-break: break-all;
+    /* Let the host use the full (column-stacked) row width and only wrap when it
+       truly must - never break mid-token. break-all split hostnames like
+       "ytelse-tos.u|ninett.no". min-width:0 lets the flex item shrink so the
+       wrap happens inside the row instead of overflowing. */
+    min-width: 0;
+    word-break: normal;
+    overflow-wrap: anywhere;
 }
 
 /* Action cards in panel (See / Plot) */
