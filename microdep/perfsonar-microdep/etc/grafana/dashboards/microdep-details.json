@@ -127,7 +127,7 @@
           { "matcher": { "id": "byName", "options": "Sum" }, "properties": [ { "id": "displayName", "value": "Time lost (ms)" }, { "id": "unit", "value": "ms" } ] }
         ]
       },
-      "gridPos": { "h": 12, "w": 12, "x": 0, "y": 8 },
+      "gridPos": { "h": 16, "w": 14, "x": 0, "y": 8 },
       "id": 4,
       "options": {
         "cellHeight": "sm",
@@ -159,7 +159,7 @@
       "datasource": { "type": "grafana-opensearch-datasource", "uid": "microdep-dragonlab" },
       "description": "Source x target matrix coloured by gap-event count over the selected range.",
       "fieldConfig": { "defaults": { "color": { "mode": "continuous-YlRd" }, "mappings": [], "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null } ] }, "unit": "short" }, "overrides": [] },
-      "gridPos": { "h": 12, "w": 12, "x": 12, "y": 8 },
+      "gridPos": { "h": 16, "w": 10, "x": 14, "y": 8 },
       "id": 5,
       "options": {
         "sourceField": "from.keyword",
@@ -170,10 +170,10 @@
         "valueText": "Gaps",
         "showLegend": true,
         "legendType": "range",
-        "cellSize": 26,
-        "cellPadding": 2,
-        "txtLength": 16,
-        "txtSize": 11
+        "cellSize": 46,
+        "cellPadding": 3,
+        "txtLength": 18,
+        "txtSize": 12
       },
       "pluginVersion": "2.0.0",
       "targets": [
