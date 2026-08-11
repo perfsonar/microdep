@@ -1,0 +1,9 @@
+[Unit]
+Description=Re-apply the Microdep OpenSearch read grant if a perfSONAR/OpenSearch upgrade reset it
+After=network-online.target opensearch.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/perfsonar/bin/microdep_commands/microdep-opensearch-guard.sh
+Nice=10
