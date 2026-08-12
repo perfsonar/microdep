@@ -443,9 +443,14 @@
           optionEl.className = 'custom-select-option';
           optionEl.dataset.value = opt.value;
           optionEl.innerHTML = checkIconSVG + '<span class="custom-select-option-text">' + opt.textContent + '</span>';
+          // Carry the native option's help text (the config `descr`, set as the
+          // option title by make_prop_select) onto the styled option, so hovering
+          // a menu item shows its description (issue #108).
+          if (opt.title) optionEl.title = opt.title;
           if (opt.selected) {
             optionEl.classList.add('selected');
             valueEl.textContent = opt.textContent;
+            if (opt.title) trigger.title = opt.title; else trigger.removeAttribute('title');
           }
           optionEl.addEventListener('click', function(e) {
             e.stopPropagation();
@@ -481,6 +486,8 @@
         var selectedOpt = nativeSelect.options[nativeSelect.selectedIndex];
         if (selectedOpt) {
           valueEl.textContent = selectedOpt.textContent;
+          // Keep the selectbox's hover help text in sync with the selection (#108).
+          if (selectedOpt.title) trigger.title = selectedOpt.title; else trigger.removeAttribute('title');
           dropdown.querySelectorAll('.custom-select-option').forEach(function(opt) {
             opt.classList.toggle('selected', opt.dataset.value === selectedOpt.value);
           });
