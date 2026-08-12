@@ -1652,6 +1652,11 @@ function make_tooltip_v2(fromHost, toHost, link){
 	    }
 	}
 	tip+="</table>";
+	if (nrows === 0) {
+	    // Topology-only link (grey): no event data for this period. Surface it
+	    // here in the popup instead of a map-covering overlay (issue #113).
+	    tip += '<p class="link-panel-nodata">No event-data available for this period.</p>';
+	}
 	return tip;
     } else {
 	console.log('Error: No config loaded. Not able to prepare tooltips.');
@@ -2378,15 +2383,33 @@ function _is_map_visually_empty() {
     }
     return !anyColoured;   // true when no layer OR every layer is grey
 }
+// Whether the map currently has ANY link layer (coloured OR grey topology).
+function _has_any_links() {
+    if (typeof mymap === 'undefined' || !mymap) return false;
+    if (typeof realLocationsMode !== 'undefined' && realLocationsMode) {
+        return !!(typeof realPathLines !== 'undefined' && realPathLines
+                  && Object.keys(realPathLines).length > 0);
+    }
+    for (var k in linkByName) {
+        var l = linkByName[k];
+        if (!l || typeof l !== 'object') continue;
+        if (mymap.hasLayer && !mymap.hasLayer(l)) continue;
+        return true;
+    }
+    return false;
+}
 function _set_map_empty_state(empty) {
-    var el = document.getElementById('map_empty_overlay');
-    if (!el) return;
-    el.hidden = !empty;
-    // Hide the threshold legend together with the overlay — it describes a
-    // property scale that doesn't apply when nothing is measured. The
-    // tabsactivate handler restores display:'' when data returns.
+    // Hide the threshold legend when there's no coloured event data — it
+    // describes a scale that doesn't apply. (tabsactivate restores it.)
     var lg = document.getElementById('legend');
     if (lg) lg.style.display = empty ? 'none' : '';
+    // Only cover the map with the overlay when there's literally nothing to show
+    // (no links at all). When topology links are present (grey, no event data)
+    // keep the map visible + clickable — the "no event data" note lives in the
+    // link popup instead (issue #113).
+    var el = document.getElementById('map_empty_overlay');
+    if (!el) return;
+    el.hidden = !(empty && !_has_any_links());
 }
 
 // --- Clear-all-tabs (#16) ------------------------------------------------
@@ -3688,16 +3711,8 @@ function load_coords(network, service, goal){
 		}
 		if ( ! result.responses.length ) { console.log("No node data returned from archive for time period " + start_iso + " to " + end_iso + "."); }
 	    }
-	    loads++;
-	    if (loads >= goal) {
-		// All other calls to load_coords() have completed.
-		loads=0;
-		show_map(network);
-		if (points.length > 0)
-		    // Some nodes are available. Plot the links too.
-		    get_topology();
-	    }
-	}).fail( function(e, textStatus, error ) { console.log( "Request" + url + " Failed: " + textStatus + ", " + error ); loads++; });
+	    _coords_load_done(network, goal);
+	}).fail( function(e, textStatus, error ) { console.log( "Request" + url + " Failed: " + textStatus + ", " + error ); _coords_load_done(network, goal); });
 	return;
     }
     if ( service === "db" ) {
@@ -3712,9 +3727,8 @@ function load_coords(network, service, goal){
 		let point_already_loaded = points.find(o => o.id === p.id);
 		if (! point_already_loaded) { points.push( p); } else { console.log( "Duplicate node info for node " + p.id ); }
 	    }
-	    loads++;
-	    if (loads >= goal) { loads=0; show_map(network); if (points.length > 0) get_topology(); }
-	}).fail( function( jqxhr, textStatus, error ) { console.log( "Request" + url + " Failed: " + textStatus + ", " + error ); loads++; });
+	    _coords_load_done(network, goal);
+	}).fail( function( jqxhr, textStatus, error ) { console.log( "Request" + url + " Failed: " + textStatus + ", " + error ); _coords_load_done(network, goal); });
 	return;
     }
     var url= "./" + network + "/" + network + "-" + service + "-geo.json";
@@ -3733,9 +3747,23 @@ function load_coords(network, service, goal){
 		if (! point_already_loaded) { points.push( tjenester[t]); } else { console.log( "Duplicate node info for node " + t.id ); }
 	    }
 	}
-	loads++;
-	if (loads >= goal) { loads=0; show_map(network); if (points.length > 0) get_topology(); }
-    }).fail( function( jqxhr, textStatus, error ) { console.log( "Request" + url + " Failed: " + textStatus + ", " + error ); loads++; });
+	_coords_load_done(network, goal);
+    }).fail( function( jqxhr, textStatus, error ) { console.log( "Request" + url + " Failed: " + textStatus + ", " + error ); _coords_load_done(network, goal); });
+}
+
+// Called when ONE load_coords() source finishes — success or failure. Once all
+// sources are done, show the map and either plot the topology or, when no nodes
+// were found at all, show the empty-period notice. Every completion path must go
+// through here: previously the "topoevents" branch had no else and the .fail()
+// handlers never re-checked the counter, so a date with no nodes (or a failed
+// request) left a silently blank map with no explanation (issue #113).
+function _coords_load_done(network, goal) {
+    loads++;
+    if (loads < goal) return;
+    loads = 0;
+    show_map(network);
+    if (points.length > 0) get_topology();
+    else _set_map_empty_state(true);
 }
 
 function load_coords_from_all_sources(network){
