@@ -3736,7 +3736,7 @@ function load_coords(network, service, goal){
 		if (! point_already_loaded) { points.push( p); } else { console.log( "Duplicate node info for node " + p.id ); }
 	    }
 	    loads++;
-	    if (loads >= goal) { loads=0; show_map(network); if (points.length > 0) get_topology(); }
+	    if (loads >= goal) { loads=0; show_map(network); if (points.length > 0) get_topology(); else _set_map_empty_state(true); }
 	}).fail( function( jqxhr, textStatus, error ) { console.log( "Request" + url + " Failed: " + textStatus + ", " + error ); loads++; });
 	return;
     }
@@ -3757,7 +3757,7 @@ function load_coords(network, service, goal){
 	    }
 	}
 	loads++;
-	if (loads >= goal) { loads=0; show_map(network); if (points.length > 0) get_topology(); }
+	if (loads >= goal) { loads=0; show_map(network); if (points.length > 0) get_topology(); else _set_map_empty_state(true); }
     }).fail( function( jqxhr, textStatus, error ) { console.log( "Request" + url + " Failed: " + textStatus + ", " + error ); loads++; });
 }
 
