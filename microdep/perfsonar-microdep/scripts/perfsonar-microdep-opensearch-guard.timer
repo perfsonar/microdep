@@ -1,0 +1,14 @@
+[Unit]
+Description=Periodically ensure the Microdep OpenSearch read grant is present
+
+[Timer]
+# A few minutes after boot, then every 15 minutes. Persistent catches up a
+# missed run after downtime. So a grant wiped by an upgrade is restored within
+# ~15 min automatically.
+OnBootSec=3min
+OnUnitActiveSec=15min
+RandomizedDelaySec=60
+Persistent=true
+
+[Install]
+WantedBy=timers.target

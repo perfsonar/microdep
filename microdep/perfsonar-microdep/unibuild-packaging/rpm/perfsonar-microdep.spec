@@ -352,8 +352,14 @@ systemctl start perfsonar-microdep-restart.timer || true
 systemctl start perfsonar-microdep-hourly-aggregator.timer || true
 
 %post logstash
-# Add Microdep to Opensearch setup (including Logstash) 
+# Add Microdep to Opensearch setup (including Logstash)
 /usr/lib/perfsonar/bin/microdep_commands/opensearch_config_microdep.sh || true
+
+# Self-heal timer: re-apply the OpenSearch read grant if a perfSONAR/OpenSearch
+# upgrade later resets roles.yml and drops it.
+systemctl daemon-reload || true
+systemctl enable perfsonar-microdep-opensearch-guard.timer || true
+systemctl start perfsonar-microdep-opensearch-guard.timer || true
 
 if [ ! -f /etc/perfsonar/microdep/microdep-ana-archive.json ]; then
     # Prepare default logstash archive config for analytic results
@@ -398,7 +404,10 @@ systemctl stop perfsonar-microdep-restart.timer || true
 systemctl stop perfsonar-microdep-hourly-aggregator.timer || true
 
 %preun logstash
-# Remove Microdep from Opensearch setup (including Logstash) 
+# Stop the OpenSearch read-grant self-heal timer
+systemctl stop perfsonar-microdep-opensearch-guard.timer || true
+systemctl disable perfsonar-microdep-opensearch-guard.timer || true
+# Remove Microdep from Opensearch setup (including Logstash)
 /usr/lib/perfsonar/bin/microdep_commands/opensearch_config_microdep.sh -r config || true
 
 %preun map
@@ -461,6 +470,9 @@ systemctl reload httpd.service || true
 %defattr(0644,perfsonar,perfsonar,0755)
 %license %{doc_base}/LICENSE-logstash
 %attr(0755,perfsonar,perfsonar) %{command_base}/opensearch_config_microdep.sh
+%attr(0755,perfsonar,perfsonar) %{command_base}/microdep-opensearch-guard.sh
+%{_unitdir}/perfsonar-microdep-opensearch-guard.service
+%{_unitdir}/perfsonar-microdep-opensearch-guard.timer
 %attr(0755,perfsonar,perfsonar) %{command_base}/psconfig_archive_ana.sh
 /usr/local/bin/psconfig_archive_ana.sh
 /usr/local/bin/opensearch_config_microdep.sh
@@ -478,6 +490,9 @@ systemctl reload httpd.service || true
 %defattr(0644,perfsonar,perfsonar,0755)
 %license %{doc_base}/LICENSE-logstash
 %attr(0755,perfsonar,perfsonar) %{command_base}/opensearch_config_microdep.sh
+%attr(0755,perfsonar,perfsonar) %{command_base}/microdep-opensearch-guard.sh
+%{_unitdir}/perfsonar-microdep-opensearch-guard.service
+%{_unitdir}/perfsonar-microdep-opensearch-guard.timer
 %attr(0755,perfsonar,perfsonar) %{command_base}/psconfig_archive_ana.sh
 /usr/local/bin/psconfig_archive_ana.sh
 /usr/local/bin/opensearch_config_microdep.sh
