@@ -3711,16 +3711,8 @@ function load_coords(network, service, goal){
 		}
 		if ( ! result.responses.length ) { console.log("No node data returned from archive for time period " + start_iso + " to " + end_iso + "."); }
 	    }
-	    loads++;
-	    if (loads >= goal) {
-		// All other calls to load_coords() have completed.
-		loads=0;
-		show_map(network);
-		if (points.length > 0)
-		    // Some nodes are available. Plot the links too.
-		    get_topology();
-	    }
-	}).fail( function(e, textStatus, error ) { console.log( "Request" + url + " Failed: " + textStatus + ", " + error ); loads++; });
+	    _coords_load_done(network, goal);
+	}).fail( function(e, textStatus, error ) { console.log( "Request" + url + " Failed: " + textStatus + ", " + error ); _coords_load_done(network, goal); });
 	return;
     }
     if ( service === "db" ) {
@@ -3735,9 +3727,8 @@ function load_coords(network, service, goal){
 		let point_already_loaded = points.find(o => o.id === p.id);
 		if (! point_already_loaded) { points.push( p); } else { console.log( "Duplicate node info for node " + p.id ); }
 	    }
-	    loads++;
-	    if (loads >= goal) { loads=0; show_map(network); if (points.length > 0) get_topology(); else _set_map_empty_state(true); }
-	}).fail( function( jqxhr, textStatus, error ) { console.log( "Request" + url + " Failed: " + textStatus + ", " + error ); loads++; });
+	    _coords_load_done(network, goal);
+	}).fail( function( jqxhr, textStatus, error ) { console.log( "Request" + url + " Failed: " + textStatus + ", " + error ); _coords_load_done(network, goal); });
 	return;
     }
     var url= "./" + network + "/" + network + "-" + service + "-geo.json";
@@ -3756,9 +3747,23 @@ function load_coords(network, service, goal){
 		if (! point_already_loaded) { points.push( tjenester[t]); } else { console.log( "Duplicate node info for node " + t.id ); }
 	    }
 	}
-	loads++;
-	if (loads >= goal) { loads=0; show_map(network); if (points.length > 0) get_topology(); else _set_map_empty_state(true); }
-    }).fail( function( jqxhr, textStatus, error ) { console.log( "Request" + url + " Failed: " + textStatus + ", " + error ); loads++; });
+	_coords_load_done(network, goal);
+    }).fail( function( jqxhr, textStatus, error ) { console.log( "Request" + url + " Failed: " + textStatus + ", " + error ); _coords_load_done(network, goal); });
+}
+
+// Called when ONE load_coords() source finishes — success or failure. Once all
+// sources are done, show the map and either plot the topology or, when no nodes
+// were found at all, show the empty-period notice. Every completion path must go
+// through here: previously the "topoevents" branch had no else and the .fail()
+// handlers never re-checked the counter, so a date with no nodes (or a failed
+// request) left a silently blank map with no explanation (issue #113).
+function _coords_load_done(network, goal) {
+    loads++;
+    if (loads < goal) return;
+    loads = 0;
+    show_map(network);
+    if (points.length > 0) get_topology();
+    else _set_map_empty_state(true);
 }
 
 function load_coords_from_all_sources(network){
