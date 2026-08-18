@@ -242,7 +242,16 @@ export function add_tab(type, title, num_tabs, html){
     );
     $("#"+divid).html(html);
     $("main#tabs").tabs("refresh");
-    $('main#tabs').tabs({ active: num_tabs-1});
+    // Focus the tab we just created. Activating by index was fragile: callers
+    // compute num_tabs in different ways (most count the tabs BEFORE adding, and
+    // some count non-tab <li> children), so `active: num_tabs-1` often selected
+    // the previous tab and the new one stayed hidden behind the map (issue #117).
+    // Look up the <li> that controls this panel instead.
+    var $tab_items = $("main#tabs > ul > li");
+    var new_idx = $tab_items.index($tab_items.filter(function(){
+	return $(this).attr("aria-controls") === divid;
+    }));
+    if (new_idx >= 0) $("main#tabs").tabs("option", "active", new_idx);
 
     // activate sorting if sortable tables within
     let collection= document.getElementById(divid).getElementsByClassName("sortable");
