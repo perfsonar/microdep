@@ -1638,7 +1638,10 @@ function make_tooltip_v2(fromHost, toHost, link){
 	    for (const sum_var in conffile[parms.net].event_type[parms.event].field) {
 		if ( typeof link[sum_var] != 'undefined' ) {
 		    var prop_value = Math.round((link[sum_var] + Number.EPSILON) * 100) / 100;
-		    tip+= '<tr><td>' + prop_desc[parms.event][sum_var] + '<td align=right>' + prop_value;
+		    // Config `descr` as a mouse-over help text on the row (issue #108).
+		    var help1 = (prop_long_desc[parms.event] && prop_long_desc[parms.event][sum_var])
+			? ' title="' + escapeHtml(prop_long_desc[parms.event][sum_var]) + '"' : '';
+		    tip+= '<tr' + help1 + '><td>' + prop_desc[parms.event][sum_var] + '<td align=right>' + prop_value;
 		    nrows++;
 		}
 	    }
@@ -1646,7 +1649,11 @@ function make_tooltip_v2(fromHost, toHost, link){
 	    for (const sum_var of conffile[parms.net].event_type[parms.event].popup.summary) {
 		if ( typeof link[sum_var] != 'undefined' ) {
 		    var prop_value = Math.round((link[sum_var] + Number.EPSILON) * 100) / 100;
-		    tip+= '<tr><td>' + prop_desc[conffile[parms.net].event_type[parms.event].summary_event_type][sum_var] + '<td align=right>' + prop_value;
+		    // Config `descr` as a mouse-over help text on the row (issue #108).
+		    var sum_key = conffile[parms.net].event_type[parms.event].summary_event_type;
+		    var help2 = (prop_long_desc[sum_key] && prop_long_desc[sum_key][sum_var])
+			? ' title="' + escapeHtml(prop_long_desc[sum_key][sum_var]) + '"' : '';
+		    tip+= '<tr' + help2 + '><td>' + prop_desc[sum_key][sum_var] + '<td align=right>' + prop_value;
 		    nrows++;
 		}
 	    }
