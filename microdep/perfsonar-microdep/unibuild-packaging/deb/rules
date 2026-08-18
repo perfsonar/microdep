@@ -20,3 +20,7 @@ override_dh_installsystemd:
 	dh_installsystemd --name=perfsonar-microdep-gap-ana
 	dh_installsystemd --name=perfsonar-microdep-trace-ana
 	dh_installsystemd --name=perfsonar-microdep-restart
+# The OpenSearch read-grant guard is a stop-gap: install the units, but leave
+# them disabled so an admin opts in with
+#   systemctl enable --now perfsonar-microdep-opensearch-guard.timer
+	dh_installsystemd --name=perfsonar-microdep-opensearch-guard --no-enable --no-start

@@ -355,11 +355,11 @@ systemctl start perfsonar-microdep-hourly-aggregator.timer || true
 # Add Microdep to Opensearch setup (including Logstash)
 /usr/lib/perfsonar/bin/microdep_commands/opensearch_config_microdep.sh || true
 
-# Self-heal timer: re-apply the OpenSearch read grant if a perfSONAR/OpenSearch
-# upgrade later resets roles.yml and drops it.
+# Self-heal timer: re-applies the OpenSearch read grant if a perfSONAR/OpenSearch
+# upgrade later resets roles.yml and drops it. Installed but NOT enabled - it is
+# a stop-gap, so an admin opts in explicitly with
+#   systemctl enable --now perfsonar-microdep-opensearch-guard.timer
 systemctl daemon-reload || true
-systemctl enable perfsonar-microdep-opensearch-guard.timer || true
-systemctl start perfsonar-microdep-opensearch-guard.timer || true
 
 if [ ! -f /etc/perfsonar/microdep/microdep-ana-archive.json ]; then
     # Prepare default logstash archive config for analytic results
