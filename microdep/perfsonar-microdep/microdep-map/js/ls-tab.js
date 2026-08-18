@@ -361,7 +361,10 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
         const start_iso = new Date(t_start * 1000).toISOString();
         const end_iso   = new Date(t_end   * 1000).toISOString();
 
-        const server = mahost.split('/').slice(0, 3).join('/');
+        // NB: keep the FULL archive base (mahost) everywhere below, including on
+        // the peer buttons. get-tracetests.pl needs the complete base URL; given
+        // only the origin it answers "Resource not found." (plain text), which
+        // then fails to parse as JSON (issue #118).
 //        const fetch_url = '/pstracetree/get-tracetests.pl?' + verify_SSL_qs('') +
         const fetch_url = 'get-tracetests.pl?' + verify_SSL_qs('') +
                           (params.verify_SSL !== undefined ? '&' : '') +
@@ -400,7 +403,7 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
                 const tu = new Date(buckets[r].timestamp.value);
                 body += '<tr>' +
                           '<td>' + tu.toLocaleDateString() + 'T' + tu.toLocaleTimeString() + '</td>' +
-                          '<td><button class="knapp ls-pair-btn" data-action="os-pair" data-server="' + server + '"' +
+                          '<td><button class="knapp ls-pair-btn" data-action="os-pair" data-server="' + mahost + '"' +
                             ' data-from="' + peer_from + '" data-to="' + peer_to + '"' +
                             ' data-start="' + t_start + '" data-end="' + t_end + '">' + pair_key + '</button></td>' +
                         '</tr>';
