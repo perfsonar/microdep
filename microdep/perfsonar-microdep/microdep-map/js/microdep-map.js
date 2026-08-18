@@ -4218,7 +4218,10 @@ function init_map(){
 	if (report_type !== 'choose') {
 	    persistTab(tab_id, { kind: 'check', report_type: report_type, title: title });
 	}
-	$("#check").val('choose'); $("#tabs").tabs("option", "active", num_tabs);
+	// add_tab() focuses the new tab itself; the old activate-by-num_tabs here
+	// counted the non-tab <li> items too and selected a non-existent index,
+	// which left the map active (issue #117).
+	$("#check").val('choose');
     });
     // (Right-click coordinate alert intentionally removed — it was a leftover
     // debug helper. Do not re-add: it pops an alert(lat,lng) on every
