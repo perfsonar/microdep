@@ -247,10 +247,13 @@ export function add_tab(type, title, num_tabs, html){
     // some count non-tab <li> children), so `active: num_tabs-1` often selected
     // the previous tab and the new one stayed hidden behind the map (issue #117).
     // Look up the <li> that controls this panel instead.
-    var $tab_items = $("main#tabs > ul > li");
-    var new_idx = $tab_items.index($tab_items.filter(function(){
-	return $(this).attr("aria-controls") === divid;
-    }));
+    // NOTE: the tab-nav <ul> also holds non-tab <li> items (the sidebar-open and
+    // clear-all-tabs buttons, and the "+" report select). jQuery UI only counts
+    // <li> that contain an <a href> as tabs, so any index derived from the raw
+    // <li> count is too high and selecting it silently leaves the map active.
+    // Index within the anchor set instead, matching jQuery UI's own numbering.
+    var $tab_links = $("main#tabs > ul > li > a");
+    var new_idx = $tab_links.index($tab_links.filter("[href='#" + divid + "']"));
     if (new_idx >= 0) $("main#tabs").tabs("option", "active", new_idx);
 
     // activate sorting if sortable tables within
