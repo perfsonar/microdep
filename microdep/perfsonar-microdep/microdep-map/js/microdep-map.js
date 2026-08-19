@@ -1324,6 +1324,63 @@ function link_popup(link){
     div.classList.add("sprettom");
     div.innerHTML = html;
 
+    // The "See" card (Routes button) is built here so it can be used both for
+    // links with event data and for topology-only ones - traceroute data is
+    // usually available even when no events are yet (issue #123).
+    function build_see_card() {
+	var seeCard = document.createElement("div");
+	seeCard.className = "panel-card";
+	var seeLabel = document.createElement("label");
+	seeLabel.className = "panel-card-label";
+	seeLabel.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> See';
+	seeCard.appendChild(seeLabel);
+	var seeBtns = document.createElement("div");
+	seeBtns.className = "panel-card-buttons";
+	var routesBtn = document.createElement("button");
+	routesBtn.className = "knapp";
+	routesBtn.title = "See the routes graph and stats in this period";
+	routesBtn.innerHTML = 'Routes';
+	routesBtn.onclick = function(){
+	    let num_tabs = $("main#tabs > ul > li").length;
+	    let fromShort = link.from.split('.').slice(0,2).join('.');
+	    let toShort = link.to.split('.').slice(0,2).join('.');
+	    let title = 'Routes: ' + fromShort + ' \u2192 ' + toShort;
+	    add_tab('div', title, num_tabs, '<div class="center-text" style="padding:40px"><div class="spinner"></div><p>Loading traceroute data\u2026</p></div>');
+	    let tab_id = 'tab' + num_tabs;
+	    let start_epoch = new Date(dato).getTime() / 1000;
+	    let end_epoch = start_epoch + parms.period * 3600;
+	    var routesOpts = {
+		net: parms.net,
+		mahost: 'https://localhost:9200/',
+		verify_SSL: 0,
+		api: 'opensearch'
+	    };
+	    if(! jQuery.isEmptyObject(conffile[parms.net].archive) ) {
+		routesOpts.mahost = conffile[parms.net].archive;
+	    }
+	    ls_tab(tab_id, link.from, link.to, start_epoch, end_epoch, routesOpts);
+	    persistTab(tab_id, {
+		kind: 'routes',
+		title: title,
+		from: link.from,
+		to: link.to,
+		startEpoch: start_epoch,
+		endEpoch: end_epoch,
+		options: routesOpts
+	    });
+	    // Ensure the newly added Routes tab is actually the active one
+	    // (add_tab() counts ALL <li> children including non-tab ones, so
+	    // its active-index can be off-by-one for our header layout).
+	    const tab_count = $('main#tabs > ul > li > a').length;
+	    if (tab_count > 0) {
+		$('main#tabs').tabs('option', 'active', tab_count - 1);
+	    }
+	};
+	seeBtns.appendChild(routesBtn);
+	seeCard.appendChild(seeBtns);
+	return { card: seeCard, btns: seeBtns };
+    }
+
     if (Object.keys(link).length > 2) {
 	/* IRRELEVANT CODE
 	// Link object has more than just "from" and "to" properties.
@@ -1381,63 +1438,11 @@ function link_popup(link){
 	// and renders at CLICK time with fresh parms.
 
 	// --- "See" card ---
-	var seeCard = document.createElement("div");
-	seeCard.className = "panel-card";
-	var seeLabel = document.createElement("label");
-	seeLabel.className = "panel-card-label";
-	seeLabel.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> See';
-	seeCard.appendChild(seeLabel);
-
-	var seeBtns = document.createElement("div");
-	seeBtns.className = "panel-card-buttons";
-
-	var routesBtn = document.createElement("button");
-	routesBtn.className = "knapp";
-	routesBtn.title = "See the routes graph and stats in this period";
-	routesBtn.innerHTML = 'Routes';
-	routesBtn.onclick = function(){
-	    let num_tabs = $("main#tabs > ul > li").length;
-	    let fromShort = link.from.split('.').slice(0,2).join('.');
-	    let toShort = link.to.split('.').slice(0,2).join('.');
-	    let title = 'Routes: ' + fromShort + ' \u2192 ' + toShort;
-	    add_tab('div', title, num_tabs, '<div class="center-text" style="padding:40px"><div class="spinner"></div><p>Loading traceroute data\u2026</p></div>');
-	    let tab_id = 'tab' + num_tabs;
-	    let start_epoch = new Date(dato).getTime() / 1000;
-	    let end_epoch = start_epoch + parms.period * 3600;
-	    var routesOpts = {
-		net: parms.net,
-		mahost: 'https://localhost:9200/',
-		verify_SSL: 0,
-		api: 'opensearch'
-	    };
-	    if(! jQuery.isEmptyObject(conffile[parms.net].archive) ) {
-		routesOpts.mahost = conffile[parms.net].archive;
-	    }
-	    ls_tab(tab_id, link.from, link.to, start_epoch, end_epoch, routesOpts);
-	    persistTab(tab_id, {
-		kind: 'routes',
-		title: title,
-		from: link.from,
-		to: link.to,
-		startEpoch: start_epoch,
-		endEpoch: end_epoch,
-		options: routesOpts
-	    });
-	    // Ensure the newly added Routes tab is actually the active one
-	    // (add_tab() counts ALL <li> children including non-tab ones, so
-	    // its active-index can be off-by-one for our header layout).
-	    const tab_count = $('main#tabs > ul > li > a').length;
-	    if (tab_count > 0) {
-		$('main#tabs').tabs('option', 'active', tab_count - 1);
-	    }
-	};
-	seeBtns.appendChild(routesBtn);
-
-	seeCard.appendChild(seeBtns);
-	div.appendChild(seeCard);
+	var see = build_see_card();
+	div.appendChild(see.card);
 
 	// Add "Top events" button via gap_popup (appends to seeCard buttons)
-	gap_popup( seeBtns, link);
+	gap_popup( see.btns, link);
 
 	// --- "Plot" card ---
 	var plotCard = document.createElement("div");
@@ -1521,6 +1526,10 @@ function link_popup(link){
 
 	plotCard.appendChild(plotBtns);
 	div.appendChild(plotCard);
+    } else {
+	// Topology-only link (grey): no event data, but traceroutes usually
+	// exist - offer Routes anyway (issue #123).
+	div.appendChild(build_see_card().card);
     }
     return div;
 }
