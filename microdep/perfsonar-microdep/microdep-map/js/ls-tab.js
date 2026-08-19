@@ -542,7 +542,10 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
         const inner_id = id + '-trace-inner';
         const trace_pane = el('trace');
         trace_pane.innerHTML = '<div id="' + inner_id + '"></div>';
-        $('#' + id + '-tabs').tabs({ active: 2 });
+        // Sub-tabs are Traceroute (0) and Peers (1) - the old `active: 2` is a
+        // leftover from a three-tab layout and selects nothing, so opening a
+        // pair from the Peers list never switched to the graph.
+        $('#' + id + '-tabs').tabs({ active: 0 });
 
         tracetree_tab(inner_id, p_from, p_to, t_start, t_end, {
             mahost:     mahost,
@@ -619,11 +622,19 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
         // archive recorded — exact-string match on from/to is required by the
         // backend or the hop graph comes back empty).
         if (params.from && params.to) {
-            $('#' + id + '-tabs').tabs({ active: 2 });
+            $('#' + id + '-tabs').tabs({ active: 0 });
             el('trace').innerHTML =
                 '<div class="center-text" style="padding:40px">' +
                   '<div class="spinner"></div>' +
                   '<p>Resolving peer pair for ' + params.from + ' → ' + params.to + '…</p>' +
+                '</div>';
+        } else {
+            // Opened without a pair (the map's "Routes" menu entry): show the
+            // Peers list, which is what the user came for (issue #124).
+            $('#' + id + '-tabs').tabs({ active: 1 });
+            el('peers').innerHTML =
+                '<div class="center-text" style="padding:40px">' +
+                  '<div class="spinner"></div><p>Loading traceroute peers…</p>' +
                 '</div>';
         }
 

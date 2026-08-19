@@ -4212,6 +4212,26 @@ function init_map(){
 	case 'missing': add_tab( 'div', title, num_tabs, check_asymmetry(report_type, tab_id) ); break;
 	case 'asymmetry': add_tab( 'div', title, num_tabs, check_asymmetry(report_type, tab_id) ); break;
 	case 'summary': add_tab( 'div', title, num_tabs, report_summary(tab_id) ); break;
+	case 'routes': {
+	    // Traceroute browser for the whole topology: launched without a peer
+	    // pair, so ls_tab opens on its Peers list for the selected period
+	    // (issue #124). Same archive/options as the link popup's Routes button.
+	    add_tab( 'div', title, num_tabs,
+		     '<div class="center-text" style="padding:40px"><div class="spinner"></div><p>Loading traceroute peers\u2026</p></div>' );
+	    var routes_start = new Date($("#datepicker").val()).getTime() / 1000;
+	    var routes_end   = routes_start + parms.period * 3600;
+	    var menuRoutesOpts = {
+		net: parms.net,
+		mahost: 'https://localhost:9200/',
+		verify_SSL: 0,
+		api: 'opensearch'
+	    };
+	    if (! jQuery.isEmptyObject(conffile[parms.net].archive) ) {
+		menuRoutesOpts.mahost = conffile[parms.net].archive;
+	    }
+	    ls_tab( tab_id, '', '', routes_start, routes_end, menuRoutesOpts );
+	    break;
+	}
 	case 'heatmap':
 	    let template_url='curve-chart.html?net=' + parms.net + '&index=' + event_index[parms.event] + '&from={0}&to={1}&event=' + parms.event + '&property=h_ddelay&start=' + start + '&end=' + end + "&title=\"From {2} to {3}\"";
 	    add_tab( 'div', title, num_tabs, 'This will be graph soon'); heatmap(tab_id, summary, $("#prop_select").val(), get_color, threshes, title_state(), template_url, open_heatmap_cell ); break;
