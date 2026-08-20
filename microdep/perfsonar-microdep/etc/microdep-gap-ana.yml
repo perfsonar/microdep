@@ -26,7 +26,7 @@
 #follow: false	       # Reread input source at intervals and analyse newly arrived packets. Applys only for owamp http* urls.
 #followinterval: 10     # Interval in seconds for rereading input source.
 #json: ""               # Output event data in JSON format to given file or to destination specified in file via perfsonar's JSON achive spec format.
-#jitter: 600            # Emit jitter statistics at at least given interval.
+#jitter: 600            # Emit jitter statistics at given interval, in seconds, in addition to burst events.
 #v: false               # Be verbose.
 #rtp: 5                 # RTP jitter algorithm with 1/n change of average.
 #ddelay_low: 2          # Lower limit in ms for recording jitter burst.

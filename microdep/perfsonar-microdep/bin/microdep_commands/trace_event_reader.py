@@ -1515,8 +1515,8 @@ def RouteCompare(traceroute, unique_pair, time, analysis_state_jumps, analysis_s
     fullscore = 0
     highscore = 0
     anomroute = {}
-    total_ce = 0          # Total cross entropy or all hops
-    prev_total_ce = 0     # Total cross entropy or all hops in previously analysed route
+    total_ce = 0          # Total cross entropy for all hops
+    prev_total_ce = 0     # Total cross entropy for all hops in previously analysed route
     ce_delta = []         # Delta cross entropy per hop (relative to previous traceroute analysed) 
     all_dest_dists_initialized = False   # Flag to postpone anomality calculations until destination distributions for all hops are initialised properly
     
