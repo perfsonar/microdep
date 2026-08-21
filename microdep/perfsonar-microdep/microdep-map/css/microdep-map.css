@@ -2541,6 +2541,23 @@ div.graph:has(> .curve-iframe-wrap):not([aria-hidden="true"]) {
     flex-direction: column;
 }
 
+/* vis-network's navigation buttons are bright green PNGs meant for a light
+   canvas; on the dark topology they glare. Tone them down to the UI's muted
+   grey and light up on hover. (The images ship with vis; we only re-tint.) */
+.tracetree-graph .vis-network .vis-navigation .vis-button {
+    filter: grayscale(1) brightness(1.7) opacity(.45);
+    transition: filter .15s ease;
+}
+.tracetree-graph .vis-network .vis-navigation .vis-button:hover {
+    filter: grayscale(1) brightness(2.2) opacity(.9);
+}
+:root[data-theme="light"] .tracetree-graph .vis-network .vis-navigation .vis-button {
+    filter: grayscale(1) brightness(.75) opacity(.55);
+}
+:root[data-theme="light"] .tracetree-graph .vis-network .vis-navigation .vis-button:hover {
+    filter: grayscale(1) brightness(.55) opacity(.9);
+}
+
 .tracetree-timeline-wrap {
     flex: 0 0 auto;
     background: var(--c-surface);
