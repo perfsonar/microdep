@@ -2532,6 +2532,15 @@ div.graph:has(> .curve-iframe-wrap):not([aria-hidden="true"]) {
     flex: 0 0 auto;      /* the tab nav keeps its content height */
 }
 
+/* Wrapper that ls_tab() puts the tracetree into: it sits between the flex
+   .ls-pane and .tracetree-inner, so it has to pass the height through. */
+.tracetree-host {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
 .tracetree-timeline-wrap {
     flex: 0 0 auto;
     background: var(--c-surface);
