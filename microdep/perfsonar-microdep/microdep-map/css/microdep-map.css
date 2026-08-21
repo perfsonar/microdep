@@ -1863,12 +1863,16 @@ table.sortable th:not(.sorttable_sorted):not(.sorttable_sorted_reverse):not(.sor
    negation to scope the rule to the visible panel only. */
 .tracetree-topo:not([aria-hidden="true"]) {
     display: grid !important;
+    flex: 1 1 auto;          /* grow past min-height to use the whole tab */
+    min-height: 0;
+    grid-template-rows: 1fr; /* the single row takes the available height */
 }
 
 .tracetree-graph {
     position: relative;          /* anchor for the absolutely-positioned popup */
     width: 100%;
     min-width: 0;
+    height: 100%;                /* fill the row; vis-network follows the box */
     min-height: 450px;
     border: 1px solid var(--c-border);
     border-radius: var(--r);
@@ -2488,6 +2492,10 @@ div.graph:has(> .curve-iframe-wrap):not([aria-hidden="true"]) {
 .ls-pane {
     flex: 1 1 auto;
     min-height: 0;
+    /* The Traceroute pane hosts the tracetree, whose own flex:1 only works if
+       its parent is a flex container. */
+    display: flex;
+    flex-direction: column;
 }
 
 /* Wrapper div my code creates around tracetree_tab() also fills */
@@ -2514,6 +2522,14 @@ div.graph:has(> .curve-iframe-wrap):not([aria-hidden="true"]) {
     flex: 1 1 auto;
     min-height: 0;
     overflow: auto;
+    /* Flex column so the active tab pane can fill the height. Without this the
+       panes are plain blocks, their flex:1 does nothing and the topology stops
+       at its min-height, leaving the lower part of the tab empty. */
+    display: flex;
+    flex-direction: column;
+}
+.tracetree-tabs-wrap > ul {
+    flex: 0 0 auto;      /* the tab nav keeps its content height */
 }
 
 .tracetree-timeline-wrap {
