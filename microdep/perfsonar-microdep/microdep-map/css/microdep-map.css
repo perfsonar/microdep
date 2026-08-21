@@ -1591,15 +1591,48 @@ table.sortable th:not(.sorttable_sorted):not(.sorttable_sorted_reverse):not(.sor
 .link-host:hover { color: var(--c-accent); }
 .link-host.copied { color: var(--c-accent); }
 
-/* Progress readout next to the traceroute spinner: parsing/laying out a large
-   trace set takes a while, so it counts up instead of looking frozen (#130). */
+/* Busy overlay for the traceroute topology: parsing/laying out a large trace set
+   takes a while, so it says how far along it is instead of looking frozen (#130).
+   Centred over the graph, big enough to read across the tab. */
+.tracetree-busy {
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    background: color-mix(in srgb, var(--c-surface) 78%, transparent);
+    border-radius: var(--r);
+}
+.spinner-lg {
+    width: 56px;
+    height: 56px;
+    border-width: 5px;
+}
 .tracetree-progress {
-    display: block;
-    margin-top: 8px;
-    color: var(--c-text-2);
-    font-size: .82rem;
+    color: var(--c-text);
+    font-size: 1rem;
+    font-weight: 500;
     font-variant-numeric: tabular-nums;
     text-align: center;
+}
+.tracetree-progressbar {
+    width: min(320px, 60%);
+    height: 8px;
+    background: var(--c-control);
+    border: 1px solid var(--c-border);
+    border-radius: 999px;
+    overflow: hidden;
+}
+.tracetree-progressbar > span {
+    display: block;
+    width: 0;
+    height: 100%;
+    background: var(--c-accent);
+    border-radius: 999px;
+    transition: width .15s linear;
 }
 
 /* Shown in the link popup when a (grey topology) link has no event data for the

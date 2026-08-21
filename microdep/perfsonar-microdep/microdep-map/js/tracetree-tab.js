@@ -188,12 +188,16 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
     }
     function show_awaiting(on) {
         const a = el('awaiting');
-        if (a) a.style.display = on ? 'block' : 'none';
+        if (a) a.style.display = on ? 'flex' : 'none';
     }
     function set_progress(pct, label) {
         const p = el('progress');
-        if (!p) return;
-        p.textContent = (label || '') + (pct === null || pct === undefined ? '' : ' ' + pct + '%');
+        if (p) p.textContent = (label || '') + (pct === null || pct === undefined ? '' : ' ' + pct + '%');
+        const fill = el('progressfill');
+        if (fill) {
+            // No percentage yet (or done): show an empty bar rather than a stale one.
+            fill.style.width = (pct === null || pct === undefined ? 0 : Math.max(0, Math.min(100, pct))) + '%';
+        }
     }
 
     // ====================================================================
@@ -590,7 +594,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
     // ====================================================================
 
     function fetch_and_plot_json(slice, base) {
-        el('awaiting').style.display = 'block';
+        show_awaiting(true);
         show_time_info(slice);
         in_slice = slice;
 
@@ -625,7 +629,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
             let msg = "Failed to get traceroute data: " + textStatus + ", " + error;
             console.log(msg);
             show_popup(msg);
-            el('awaiting').style.display = 'none';
+            show_awaiting(false);
         });
     }
 
@@ -1548,7 +1552,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         timeline.setCustomTime(start, 'start');
         timeline.setCustomTime(end, 'end');
         timeline.setWindow(start - range, end + range);
-        el('awaiting').style.display = 'none';
+        show_awaiting(false);
     }
 
     function zoom_by_factor(parms, factor) {
@@ -1562,7 +1566,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
     }
 
     function zoom_by_timeline_slice(start, range) {
-        el('awaiting').style.display = 'block';
+        show_awaiting(true);
 
         let n_slice = { start: start, range: range, end: start + range };
 
@@ -1636,7 +1640,11 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
     </ul>
     <div id="${id}-topo" class="tracetree-topo">
       <div class="tracetree-graph" id="${id}-treetainer">
-        <div class="center-text"><div class="spinner"></div><p>Processing topology...</p></div>
+        <div class="tracetree-busy" id="${id}-awaiting">
+          <div class="spinner spinner-lg"></div>
+          <div class="tracetree-progress" id="${id}-progress">Processing topology…</div>
+          <div class="tracetree-progressbar"><span id="${id}-progressfill"></span></div>
+        </div>
       </div>
       <div class="tracetree-sidebar">
         <div class="topo-controls">
@@ -1647,7 +1655,6 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
           <button class="knapp topo-btn" id="${id}-start">Start layout</button>
         </div>
         <div id="${id}-legend"></div>
-        <span id="${id}-awaiting" style="display:none"><div class="spinner"></div><span id="${id}-progress" class="tracetree-progress"></span></span>
       </div>
     </div>
     <div id="${id}-stats"></div>
