@@ -67,12 +67,22 @@ my $to = $cgi->param("to");
 my $verify_SSL= 1;
 $verify_SSL = $cgi->param("verify_SSL") if (defined $cgi->param("verify_SSL"));
 
+# Optional IP-version filter. The map passes the selected network's version so a
+# Net-6 traceroute view does not fall back to the v4 traces (issue #127). Only
+# 4 and 6 are accepted; anything else (including an empty value, meaning "all
+# versions") leaves the results unfiltered.
+my $ip_version = $cgi->param("ip_version");
+my $ipv_filter = '';
+if (defined $ip_version && $ip_version =~ /^([46])$/) {
+    $ipv_filter = ', { "term": { "test.spec.ip-version": ' . $1 . ' } }';
+}
+
 # Prepare query
 my $query='';
 if (! $from || ! $to ) {
     # Search for all peers with trace test results available
     $query = '{ "query": { "bool": { "filter": [ { "term": { "test.type.keyword": "trace" } }, 
-                                                 { "range": { "@timestamp": { "gte": "' . $iso_start . '", "lt": "' . $iso_end . '" } } } ] } },
+                                                 { "range": { "@timestamp": { "gte": "' . $iso_start . '", "lt": "' . $iso_end . '" } } }' . $ipv_filter . ' ] } },
 		"size": 0,
   	        "aggs": { "peers": { "multi_terms": { "terms": [ { "field": "test.spec.source.keyword"}, 
                                                                 { "field": "test.spec.dest.keyword"} ],
@@ -99,7 +109,7 @@ if (! $from || ! $to ) {
         my $fl = join(',', map { '"' . $_ . '"' } @from_list);
         my $tl = join(',', map { '"' . $_ . '"' } @to_list);
         $query = '{ "query": { "bool": { "filter": [ { "term": { "test.type.keyword": "trace" } },
-                       { "range": { "@timestamp": { "gte": "' . $iso_start . '", "lt": "' . $iso_end . '" } } },
+                       { "range": { "@timestamp": { "gte": "' . $iso_start . '", "lt": "' . $iso_end . '" } } }' . $ipv_filter . ',
                        { "bool": { "minimum_should_match": 1, "should": [
                            { "bool": { "must": [ { "terms": { "test.spec.source.keyword": [' . $fl . '] } }, { "terms": { "test.spec.dest.keyword": [' . $tl . '] } } ] } },
                            { "bool": { "must": [ { "terms": { "test.spec.source.keyword": [' . $tl . '] } }, { "terms": { "test.spec.dest.keyword": [' . $fl . '] } } ] } }
@@ -109,7 +119,7 @@ if (! $from || ! $to ) {
         $query = '{ "query": { "bool": { "filter": [ { "term": { "test.type.keyword": "trace" } },
                                                      { "term": { "test.spec.source.keyword": "' . $from . '" } },
                                                      { "term": { "test.spec.dest.keyword": "' . $to . '" } },
-                                                     { "range": { "@timestamp": { "gte": "' . $iso_start . '", "lt": "' . $iso_end . '" } } }
+                                                     { "range": { "@timestamp": { "gte": "' . $iso_start . '", "lt": "' . $iso_end . '" } } }' . $ipv_filter . '
                                                    ] } }, "size": 8640 }';
     }
 }
