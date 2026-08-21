@@ -559,7 +559,10 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
                 set_progress(Math.round(40 * tr / total), 'Parsing traceroutes');
                 await _yield();
             }
-            if (Number(params['ip-version']) !== os_json.hits.hits[tr]._source.test.spec['ip-version'])
+            // Only filter when the network actually pins a version (empty means
+            // "all versions"; Number('') is 0, which dropped every trace).
+            if (params['ip-version'] &&
+                Number(params['ip-version']) !== Number(os_json.hits.hits[tr]._source.test.spec['ip-version']))
                 continue;
 
             let esmond_tr = {};
