@@ -64,7 +64,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         mahost:     options.mahost  || '',
         verify_SSL: options.verify_SSL,
         api:        options.api     || '',
-        'ip-version': options.ip_version || 4,
+        'ip-version': options.ip_version,     // unset = all versions (issue #127)
         start:      time_start,
         end:        time_end
     };
@@ -570,6 +570,9 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
 	
         if (params.verify_SSL !== undefined) {
             url += '&verify_SSL=' + params.verify_SSL;
+        }
+        if (params['ip-version']) {
+            url += '&ip_version=' + encodeURIComponent(params['ip-version']);
         }
 
         console.log('Fetching traceroutes via: ' + url);

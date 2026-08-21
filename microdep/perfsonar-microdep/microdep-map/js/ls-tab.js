@@ -52,7 +52,9 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
         verify_SSL:  options.verify_SSL,
         api:         options.api        || '',
         stime:       options.stime,
-        ip_version:  options.ip_version || 4
+        // Empty/absent means "all versions" (the config allows that) - only
+        // filter when the network actually pins one (issue #127).
+        ip_version:  options.ip_version
     };
 
     // Compute time range (epoch seconds)
@@ -370,7 +372,8 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
                           (params.verify_SSL !== undefined ? '&' : '') +
                           'mahost=' + encodeURIComponent(mahost) +
                           '&start=' + encodeURIComponent(start_iso) +
-                          '&end='   + encodeURIComponent(end_iso);
+                          '&end='   + encodeURIComponent(end_iso) +
+                          (params.ip_version ? '&ip_version=' + encodeURIComponent(params.ip_version) : '');
 
         const start = new Date(t_start * 1000);
         const end   = new Date(t_end   * 1000);
@@ -550,7 +553,8 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
         tracetree_tab(inner_id, p_from, p_to, t_start, t_end, {
             mahost:     mahost,
             verify_SSL: params.verify_SSL,
-            api:        api
+            api:        api,
+            ip_version: params.ip_version
         });
     }
 

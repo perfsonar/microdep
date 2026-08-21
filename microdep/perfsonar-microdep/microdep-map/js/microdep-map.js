@@ -1353,7 +1353,10 @@ function link_popup(link){
 		net: parms.net,
 		mahost: 'https://localhost:9200/',
 		verify_SSL: 0,
-		api: 'opensearch'
+		api: 'opensearch',
+		// Follow the selected network's IP version, so Net-6 shows v6
+		// traceroutes instead of always falling back to v4 (issue #127).
+		ip_version: net_ip_version[parms.net]
 	    };
 	    if(! jQuery.isEmptyObject(conffile[parms.net].archive) ) {
 		routesOpts.mahost = conffile[parms.net].archive;
@@ -4224,7 +4227,8 @@ function init_map(){
 		net: parms.net,
 		mahost: 'https://localhost:9200/',
 		verify_SSL: 0,
-		api: 'opensearch'
+		api: 'opensearch',
+		ip_version: net_ip_version[parms.net]
 	    };
 	    if (! jQuery.isEmptyObject(conffile[parms.net].archive) ) {
 		menuRoutesOpts.mahost = conffile[parms.net].archive;
