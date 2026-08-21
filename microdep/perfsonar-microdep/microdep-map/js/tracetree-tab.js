@@ -1737,11 +1737,10 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         tl.style.display = is_docs ? 'none' : '';
     });
 
-    // Size the tree container (width controlled by CSS grid)
-    let treeC = el('treetainer');
-    if (treeC) {
-        treeC.style.height = (window.innerHeight * 0.55) + "px";
-    }
+    // The tree container is sized by CSS now: its grid row fills the tab, so the
+    // graph follows the window instead of being pinned to 55% of the viewport
+    // height by an inline style (which won regardless of the available space and
+    // left the lower part of the tab empty).
 
     bind_buttons();
 
