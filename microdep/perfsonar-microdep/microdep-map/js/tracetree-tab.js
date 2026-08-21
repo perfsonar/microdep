@@ -520,7 +520,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         let esmond_json = [];
 
         for (let tr = 0; tr < os_json.hits.hits.length; tr++) {
-            if (params['ip-version'] !== os_json.hits.hits[tr]._source.test.spec['ip-version'])
+            if (Number(params['ip-version']) !== os_json.hits.hits[tr]._source.test.spec['ip-version'])
                 continue;
 
             let esmond_tr = {};
