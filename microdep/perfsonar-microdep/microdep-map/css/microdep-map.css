@@ -1591,6 +1591,17 @@ table.sortable th:not(.sorttable_sorted):not(.sorttable_sorted_reverse):not(.sor
 .link-host:hover { color: var(--c-accent); }
 .link-host.copied { color: var(--c-accent); }
 
+/* Progress readout next to the traceroute spinner: parsing/laying out a large
+   trace set takes a while, so it counts up instead of looking frozen (#130). */
+.tracetree-progress {
+    display: block;
+    margin-top: 8px;
+    color: var(--c-text-2);
+    font-size: .82rem;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+}
+
 /* Shown in the link popup when a (grey topology) link has no event data for the
    selected period — issue #113. */
 .link-panel-nodata {

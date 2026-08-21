@@ -177,6 +177,25 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         return document.getElementById(id + '-' + suffix);
     }
 
+    // --- Cooperative chunking + progress readout -----------------------
+    // Parsing and laying out a large trace set (>5k traceroutes) keeps the
+    // main thread busy for minutes, so the page stops repainting and looks
+    // frozen. The heavy loops below process CHUNK items, then yield to the
+    // browser and report how far along they are (issue #130).
+    const CHUNK = 250;
+    function _yield() {
+        return new Promise(function (resolve) { setTimeout(resolve, 0); });
+    }
+    function show_awaiting(on) {
+        const a = el('awaiting');
+        if (a) a.style.display = on ? 'block' : 'none';
+    }
+    function set_progress(pct, label) {
+        const p = el('progress');
+        if (!p) return;
+        p.textContent = (label || '') + (pct === null || pct === undefined ? '' : ' ' + pct + '%');
+    }
+
     // ====================================================================
     //  Colour limits / legend
     // ====================================================================
@@ -290,10 +309,14 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         slices.push(n_slice);
     }
 
-    function tr_slice_show(slice) {
+    async function tr_slice_show(slice) {
         if (slice.tr_data) {
-            if (!slice.tree)
-                slice.tree = traceroute_sum(slice.tr_data);
+            if (!slice.tree) {
+                show_awaiting(true);
+                slice.tree = await traceroute_sum(slice.tr_data);
+            }
+            set_progress(90, 'Drawing');
+            await _yield();
 
             let limits = create_limits(slice.tree.nodes, node_colors);
             taint_nodes(slice.tree.nodes, node_colors, limits);
@@ -309,6 +332,8 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
 
             if (slice.range > 1)
                 update_timeline_window(slice);
+            set_progress(null, '');
+            show_awaiting(false);
         } else {
             show_popup("Empty slice for slice " + slice.slice_no + ' starting ' + slice.start);
         }
@@ -373,7 +398,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
     //  Traceroute summarisation
     // ====================================================================
 
-    function traceroute_sum(tr_data) {
+    async function traceroute_sum(tr_data) {
         let nodes = [{ label: 'start', id: 'start', hop: 0, color: { background: '#20C020' } }];
         let node_ix = [];
         let edges = [];
@@ -385,7 +410,12 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         routers['start'] = 1;
         let start, range;
 
+        let _seen = 0;
         for (let tr of tr_data) {
+            if ((++_seen % CHUNK) === 0) {
+                set_progress(40 + Math.round(50 * _seen / tr_data.length), 'Building topology');
+                await _yield();
+            }
             let last_node = 0, all_hops = [];
             if (!start) start = tr.ts;
             range = tr.ts - start;
@@ -516,10 +546,15 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
     //  OpenSearch to esmond conversion
     // ====================================================================
 
-    function os2esmond_traceroute(os_json) {
+    async function os2esmond_traceroute(os_json) {
         let esmond_json = [];
+        const total = os_json.hits.hits.length;
 
-        for (let tr = 0; tr < os_json.hits.hits.length; tr++) {
+        for (let tr = 0; tr < total; tr++) {
+            if (tr && (tr % CHUNK) === 0) {
+                set_progress(Math.round(40 * tr / total), 'Parsing traceroutes');
+                await _yield();
+            }
             if (Number(params['ip-version']) !== os_json.hits.hits[tr]._source.test.spec['ip-version'])
                 continue;
 
@@ -577,12 +612,13 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
 
         console.log('Fetching traceroutes via: ' + url);
 
-        $.getJSON(url, function (tr_json) {
+        $.getJSON(url, async function (tr_json) {
             slice.tr_data = tr_json;
             if (params.api === 'opensearch') {
-                slice.tr_data = os2esmond_traceroute(tr_json);
+                set_progress(0, 'Parsing traceroutes');
+                slice.tr_data = await os2esmond_traceroute(tr_json);
             }
-            tr_slice_show(slice);
+            await tr_slice_show(slice);
             update_timeline_items(slice);
         })
         .fail(function (jqxhr, textStatus, error) {
@@ -1611,7 +1647,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
           <button class="knapp topo-btn" id="${id}-start">Start layout</button>
         </div>
         <div id="${id}-legend"></div>
-        <span id="${id}-awaiting" style="display:none"><div class="spinner"></div></span>
+        <span id="${id}-awaiting" style="display:none"><div class="spinner"></div><span id="${id}-progress" class="tracetree-progress"></span></span>
       </div>
     </div>
     <div id="${id}-stats"></div>
