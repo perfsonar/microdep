@@ -544,7 +544,10 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
     function render_tracetree(mahost, p_from, p_to, t_start, t_end, api) {
         const inner_id = id + '-trace-inner';
         const trace_pane = el('trace');
-        trace_pane.innerHTML = '<div id="' + inner_id + '"></div>';
+        // The wrapper needs a class: as a plain block it would not grow, and the
+        // tracetree inside it (flex: 1) would stop at its min-height, leaving the
+        // lower part of the tab empty.
+        trace_pane.innerHTML = '<div id="' + inner_id + '" class="tracetree-host"></div>';
         // Sub-tabs are Traceroute (0) and Peers (1) - the old `active: 2` is a
         // leftover from a three-tab layout and selects nothing, so opening a
         // pair from the Peers list never switched to the graph.
