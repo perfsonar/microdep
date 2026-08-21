@@ -520,7 +520,12 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         let esmond_json = [];
 
         for (let tr = 0; tr < os_json.hits.hits.length; tr++) {
-            if (Number(params['ip-version']) !== os_json.hits.hits[tr]._source.test.spec['ip-version'])
+            // Only filter when the network actually pins a version. mapconfig's
+            // ip_version is a string and an empty one means "all versions" -
+            // but Number('') is 0 (and Number(undefined) NaN), so an unguarded
+            // compare dropped every trace and left the viewer empty.
+            if (params['ip-version'] &&
+                Number(params['ip-version']) !== Number(os_json.hits.hits[tr]._source.test.spec['ip-version']))
                 continue;
 
             let esmond_tr = {};
