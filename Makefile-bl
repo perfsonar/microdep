@@ -74,11 +74,15 @@ unibuild-repo/RPMS: unibuild-compose.yml
 # 	Add pstracetree repo before building
 #	${COMPOSECMD} -f unibuild-compose.yml run ${RPMDIST} bash -c "dnf -y install yum-utils && yum-config-manager --add-repo file:/app/pstracetree/unibuild-repo; echo gpgcheck=0 >> /etc/yum.repos.d/app_pstracetree_unibuild-repo.repo; dnf clean all && dnf -y update --nogpgcheck && ${BUILDCMD}"
 
-deb-systemd-services: 
+deb-systemd-services:
 	rsync  -t microdep/perfsonar-microdep/scripts/perfsonar-microdep-gap-ana.service microdep/perfsonar-microdep/unibuild-packaging/deb/perfsonar-microdep-ana.perfsonar-microdep-gap-ana.service
 	rsync  -t microdep/perfsonar-microdep/scripts/perfsonar-microdep-trace-ana.service microdep/perfsonar-microdep/unibuild-packaging/deb/perfsonar-microdep-ana.perfsonar-microdep-trace-ana.service
 	rsync  -t microdep/perfsonar-microdep/scripts/perfsonar-microdep-restart.service microdep/perfsonar-microdep/unibuild-packaging/deb/perfsonar-microdep-ana.perfsonar-microdep-restart.service
 	rsync  -t microdep/perfsonar-microdep/scripts/perfsonar-microdep-restart.timer microdep/perfsonar-microdep/unibuild-packaging/deb/perfsonar-microdep-ana.perfsonar-microdep-restart.timer
+	rsync  -t microdep/perfsonar-microdep/scripts/perfsonar-microdep-hourly-aggregator.service microdep/perfsonar-microdep/unibuild-packaging/deb/perfsonar-microdep-ana.perfsonar-microdep-hourly-aggregator.service
+	rsync  -t microdep/perfsonar-microdep/scripts/perfsonar-microdep-hourly-aggregator.timer microdep/perfsonar-microdep/unibuild-packaging/deb/perfsonar-microdep-ana.perfsonar-microdep-hourly-aggregator.timer
+	rsync  -t microdep/perfsonar-microdep/scripts/perfsonar-microdep-opensearch-guard.service microdep/perfsonar-microdep/unibuild-packaging/deb/perfsonar-microdep-logstash.perfsonar-microdep-opensearch-guard.service
+	rsync  -t microdep/perfsonar-microdep/scripts/perfsonar-microdep-opensearch-guard.timer microdep/perfsonar-microdep/unibuild-packaging/deb/perfsonar-microdep-logstash.perfsonar-microdep-opensearch-guard.timer
 
 #unibuild-repo/Packages: deb-systemd-services unibuild-compose.yml pstracetree/unibuild-repo/Packages
 unibuild-repo/Packages: deb-systemd-services unibuild-compose.yml 
