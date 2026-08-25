@@ -3,10 +3,11 @@
 # Refresh remote repos at give host
 #
 
-USER="root"
+USER="$USERNAME"
 HOST=""
 DISTRO="auto"
 RSH="ssh"
+RSYNCPATH="sudo rsync"
 
 usage () {
     echo "Usage: `basename $0` [options] host-name"
@@ -62,11 +63,16 @@ if [ -z "$HOST" ]; then
     usage
 fi
 
+if [[ ! "$HOST" =~ @ ]]; then
+    # Add user to host string
+    HOST="$USER@$HOST"
+fi
+
 if [ "$DISTRO" = "auto" ]; then
-    # Attempt to detect relevant distro
-    $RSH $USER@$HOST grep ID_LIKE /etc/os-release | grep -q rhel && DISTRO="rpm"
-    $RSH $USER@$HOST grep "ID=" /etc/os-release | grep -q debian && DISTRO="deb"
-    $RSH $USER@$HOST grep "ID=" /etc/os-release | grep -q ubuntu && DISTRO="deb"
+    echo "Detecting relevant distro..."
+    $RSH $HOST grep ID_LIKE /etc/os-release 2> /dev/null | grep -q rhel && DISTRO="rpm"
+    $RSH $HOST grep "ID=" /etc/os-release 2> /dev/null | grep -q -e debian -e ubuntu && DISTRO="deb"
+#    $RSH $HOST grep "ID=" /etc/os-release 2> /dev/null | grep -q ubuntu && DISTRO="deb"
 fi
 
 if [ "$DISTRO" = "auto" ]; then
@@ -74,9 +80,26 @@ if [ "$DISTRO" = "auto" ]; then
     exit 1
 fi 
 
-read -p "Sync $DISTRO-repos to $USER@$HOST (y/N)? " YESNO
+read -p "Sync $DISTRO-repos to $HOST (y/N)? " YESNO
 if [  "$YESNO" != "y" -a  "$YESNO" != "Y" ]; then exit 0; fi
 
+# Check if sudo is avaiable on remote host
+echo "Checking remote sudo status..."
+if ! ssh $HOST which sudo > /dev/null; then
+    echo "Error: sudo not available for $HOST"
+    exit 1
+fi
+# Check if sudo requires password
+if ! ssh $HOST sudo true 2> /dev/null; then
+    echo "Error: Passwordless sudo required on remote host, e.i. 'your_username ALL=(ALL) NOPASSWD: ALL' in /etc/sudoers.d/refresh-repo"
+    exit 1
+fi
+# Check if rsync is avaiable on remote host
+echo "Checking for rsync on remote host..."
+if ! ssh $HOST which rsync > /dev/null; then
+    echo "Error: rsync not available on $HOST"
+    exit 1
+fi
 
 if [ "$DISTRO" = "rpm" ]; then
 
@@ -85,58 +108,59 @@ if [ "$DISTRO" = "rpm" ]; then
 	exit 1
     fi
     
-    echo "Synching to remote repo at $USER@$HOST ..."
-    rsync -vr -e "$RSH" unibuild-repo/RPMS $USER@$HOST:/var/lib/unibuild-repo/
-    rsync -vr -e "$RSH" pstracetree/unibuild-repo/RPMS $USER@$HOST:/var/lib/unibuild-repo/
+    echo "Synching to remote repo at $HOST ..."
+    rsync --rsync-path "sudo rsync" -vr -e "$RSH" unibuild-repo/RPMS $HOST:/var/lib/unibuild-repo/
+    #rsync --rsync-path "sudo rsync" -vr -e "$RSH" pstracetree/unibuild-repo/RPMS $HOST:/var/lib/unibuild-repo/
 
     echo "Preparing remote repo ..."
-    $RSH $USER@$HOST dnf -y install yum-utils createrepo
-    #$RSH $USER@$HOST rm -rf /var/lib/unibuild-repo/repodata
-    $RSH $USER@$HOST createrepo /var/lib/unibuild-repo
+    $RSH $HOST sudo dnf -y install yum-utils createrepo
+    #$RSH $HOST sudo rm -rf /var/lib/unibuild-repo/repodata
+    $RSH $HOST sudo createrepo /var/lib/unibuild-repo
     
     echo "Enabling remote repo ..."
-    $RSH $USER@$HOST yum-config-manager --add-repo file:///var/lib/unibuild-repo
-    $RSH $USER@$HOST "echo gpgcheck=0 >> /etc/yum.repos.d/var_lib_unibuild-repo.repo"
+    $RSH $HOST sudo yum-config-manager --add-repo file:///var/lib/unibuild-repo
+    $RSH $HOST sudo bash -c "'echo gpgcheck=0 >> /etc/yum.repos.d/var_lib_unibuild-repo.repo'"
     
     echo "Refreshing repo list ..."
-    $RSH $USER@$HOST dnf clean all
+    $RSH $HOST sudo dnf clean all
     echo "Done!"
     read -p "List packages in new local repo on $HOST (y/N)? " YESNO
     if [  "$YESNO" = "y" -o  "$YESNO" = "Y" ]; then
-	$RSH $USER@$HOST dnf list | grep unibuild-repo
+	$RSH $HOST sudo dnf list | grep unibuild-repo
     fi
     read -p "Update installed packages on $HOST (y/N)? " YESNO
     if [  "$YESNO" = "y" -o  "$YESNO" = "Y" ]; then
-	$RSH $USER@$HOST dnf -y update --nogpgcheck
+	$RSH $HOST sudo dnf -y update --nogpgcheck
     fi
 
 elif [ "$DISTRO" = "deb" ]; then
 
-    if [ ! -e "unibuild-repo/Release" -o ! -e "pstracetree/unibuild-repo/Release" ]; then
+#    if [ ! -e "unibuild-repo/Release" -o ! -e "pstracetree/unibuild-repo/Release" ]; then
+    if [ ! -e "unibuild-repo/Release" ]; then
 	echo "Error: No valid DEB build found (unibuild-repo/Release or pstracetree/unibuild-repo/Release is missing). Run 'make deb' first." >&2
 	exit 1
     fi
     
-    echo "Synching to remote $DISTRO-repo at $USER@$HOST ..."
-    rsync -vr -e "$RSH" unibuild-repo/*.deb unibuild-repo/Packages unibuild-repo/Release $USER@$HOST:/var/lib/unibuild-microdep-repo/
-    rsync -vr -e "$RSH" pstracetree/unibuild-repo/*.deb pstracetree/unibuild-repo/Packages pstracetree/unibuild-repo/Release $USER@$HOST:/var/lib/unibuild-pstracetree-repo/
+    echo "Synching to remote $DISTRO-repo at $HOST ..."
+    rsync --rsync-path "sudo rsync" -vr -e "$RSH" unibuild-repo/*.deb unibuild-repo/Packages unibuild-repo/Release $HOST:/var/lib/unibuild-microdep-repo/
+    #rsync --rsync-path "sudo rsync" -vr -e "$RSH" pstracetree/unibuild-repo/*.deb pstracetree/unibuild-repo/Packages pstracetree/unibuild-repo/Release $HOST:/var/lib/unibuild-pstracetree-repo/
 
     echo "Enabling remote repo ..."
     TMPDIR=$(mktemp -d)
     echo "deb [trusted=yes] file:/var/lib/unibuild-microdep-repo ./" > $TMPDIR/local-microdep-repo.list
-    echo "deb [trusted=yes] file:/var/lib/unibuild-pstracetree-repo ./" > $TMPDIR/local-pstracetree-repo.list
-    rsync -vr -e "$RSH" $TMPDIR/ $USER@$HOST:/etc/apt/sources.list.d/
+    #echo "deb [trusted=yes] file:/var/lib/unibuild-pstracetree-repo ./" > $TMPDIR/local-pstracetree-repo.list
+    rsync --rsync-path "sudo rsync" -vr -e "$RSH" $TMPDIR/ $HOST:/etc/apt/sources.list.d/
     rm -r $TMPDIR
     echo "Refreshing repo list ..."
-    $RSH $USER@$HOST apt-get -y update
+    $RSH $HOST sudo apt-get -y update
     echo "Done!"
     read -p "List packages in new local repo on $HOST (y/N)? " YESNO
     if [  "$YESNO" = "y" -o  "$YESNO" = "Y" ]; then
-	$RSH $USER@$HOST apt list | grep "/unibuild"
+	$RSH $HOST apt list | grep "/unibuild"
     fi
     read -p "Update installed packages on $HOST (y/N)? " YESNO
     if [  "$YESNO" = "y" -o  "$YESNO" = "Y" ]; then
-	$RSH $USER@$HOST apt-get -y upgrade
+	$RSH $HOST sudo apt-get -y upgrade
     fi
 else
     echo "Error: Unknown distro $DISTRO."

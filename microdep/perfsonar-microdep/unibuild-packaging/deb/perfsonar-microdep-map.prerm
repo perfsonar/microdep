@@ -20,7 +20,7 @@ case "$1" in
 #    remove | deconfigure)
     remove | deconfigure | upgrade | failed-upgrade)
 	
-	# Remove Microdep button from Grafana main dashboard (if present)
+	# Remove Microdep button from Grafana main dashboard (if present) REMARK: TEMPORARY NOT RELEVANT
 	if [ -e /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json ]; then
 	    if grep -q  "Microdep map" /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json; then
 		DASHBOARDFILE=$(mktemp)

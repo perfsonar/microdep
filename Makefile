@@ -44,5 +44,12 @@ clean:
 	find . -name '*~' | xargs rm -f
 
 deb clean-deb-build deb-build rpm clean-rpm-build rpm-build:
-# Run build local repo
+# Run build of local repo
 	make -f Makefile-bl $@
+
+d12 d13 u22 u24:
+# Run build of specific distro of local repo
+	make -f Makefile-bl -e DEBDIST=$@ deb 
+el8 el9:
+# Run build of specific distro of local repo
+	make -f Makefile-bl -e RPMDIST=$@ rpm

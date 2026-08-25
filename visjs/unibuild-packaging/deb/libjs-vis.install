@@ -1,0 +1,3 @@
+dist/* usr/share/javascript/vis/
+dist/img/network/* usr/share/javascript/vis/img/network/
+LICENSE-MIT usr/share/doc/vis/copyright

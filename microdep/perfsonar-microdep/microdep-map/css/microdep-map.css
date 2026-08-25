@@ -1,46 +1,3820 @@
-    #mapid { height: 900px; z-index: 1;}
-    #midding {width:600px}
-    #busyx {  margin: auto;
-	      width: 5%; 
-	      /* border: 3px solid #2222aa; */
-	      padding: 10px;
-	   }
-    
-    /* css to customize Leaflet default styles  */
-    .popupCustom .leaflet-popup-tip,
-    .popupCustom .leaflet-popup-content-wrapper {
-	font-size:large;
-	background: #e0e0e0;
-	color: #234c5e;
-    }
-    .leaflet-popup, .leaflet-pane {
-	font-size:large;	
-    }
-    .knapp, select, td, th { font-size:x-large;   }
-    table td { padding:5px; }
-    .knapp { line-height: 1.3em; }
-    th {
-	cursor: pointer;
-    }
-    caption { font-size: x-large;  font-weight: bold; width:100% }
-    
-    table.sortable thead {
-	background-color:#eee;
-	color:#666666;
-	font-weight: bold;
-	cursor: default;
-    }
-    
-    
-    table.sortable th:not(.sorttable_sorted):not(.sorttable_sorted_reverse):not(.sorttable_nosort):after { 
-	content: " \25B4\25BE" 
-    } 
+/* ============================================================
+   Microdep Map — Modern Redesign (Final v3)
+   Sidebar layout · Light/Dark/Auto themes · Custom Dropdowns
+   ============================================================ */
 
-    .sprettom {
-	height:500; 
-	overflow:auto;
+/* Self-hosted fonts (DM Sans + JetBrains Mono, latin + latin-ext).
+   Vendored into <maproot>/fonts/ per the no-CDN policy — replaces the
+   former Google Fonts web import. latin-ext covers Croatian diacritics
+   (c-caron, etc.) in host labels.
+   NOTE: url() paths are resolved relative to THIS css file (in css/),
+   so they must be ../fonts/… — not fonts/… (issue #94: fonts 404'd). */
+@font-face {
+  font-family: 'DM Sans';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/dmsans-400-latinext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'DM Sans';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/dmsans-400-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'DM Sans';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('../fonts/dmsans-500-latinext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'DM Sans';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('../fonts/dmsans-500-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'DM Sans';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('../fonts/dmsans-600-latinext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'DM Sans';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('../fonts/dmsans-600-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'DM Sans';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('../fonts/dmsans-700-latinext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'DM Sans';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('../fonts/dmsans-700-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/jetbrainsmono-400-latinext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/jetbrainsmono-400-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('../fonts/jetbrainsmono-500-latinext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('../fonts/jetbrainsmono-500-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('../fonts/jetbrainsmono-600-latinext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('../fonts/jetbrainsmono-600-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* ==========================================================
+   THEME TOKENS
+   ========================================================== */
+
+:root,
+[data-theme="dark"] {
+    --c-bg:          #0c1017;
+    --c-surface:     #141a24;
+    --c-elevated:    #1b2333;
+    --c-control:     #222c3c;
+    --c-control-h:   #2a3648;
+    --c-border:      rgba(148,163,184,0.10);
+    --c-border-h:    rgba(148,163,184,0.22);
+
+    --c-text:        #e8ecf1;
+    --c-text-2:      #94a3b8;
+    --c-text-3:      #5a6a80;
+
+    --c-accent:      #22d3ee;
+    --c-accent-h:    #67e8f9;
+    --c-accent-mute: rgba(34,211,238,0.12);
+    --c-accent-glow: rgba(34,211,238,0.25);
+
+    --c-ok:          #34d399;
+    --c-warn:        #fbbf24;
+    --c-err:         #f87171;
+
+    --c-sidebar:     #111720;
+    --c-sidebar-h:   #19202d;
+
+    --shadow-sm: 0 1px 3px rgba(0,0,0,.35);
+    --shadow-md: 0 4px 14px rgba(0,0,0,.45);
+    --shadow-lg: 0 10px 30px rgba(0,0,0,.55);
+
+    --grid-line:     rgba(34,211,238,0.025);
+    --tile-filter:   brightness(0.65) contrast(1.15) saturate(0.8);
+}
+
+[data-theme="light"] {
+    --c-bg:          #f0f2f5;
+    --c-surface:     #ffffff;
+    --c-elevated:    #f7f8fa;
+    --c-control:     #e9ecf0;
+    --c-control-h:   #dde1e7;
+    --c-border:      rgba(0,0,0,0.09);
+    --c-border-h:    rgba(0,0,0,0.18);
+
+    --c-text:        #1a2332;
+    --c-text-2:      #506070;
+    --c-text-3:      #8896a6;
+
+    --c-accent:      #0891b2;
+    --c-accent-h:    #06b6d4;
+    --c-accent-mute: rgba(8,145,178,0.08);
+    --c-accent-glow: rgba(8,145,178,0.18);
+
+    --c-ok:          #059669;
+    --c-warn:        #d97706;
+    --c-err:         #dc2626;
+
+    --c-sidebar:     #ffffff;
+    --c-sidebar-h:   #f3f5f7;
+
+    --shadow-sm: 0 1px 3px rgba(0,0,0,.06);
+    --shadow-md: 0 4px 14px rgba(0,0,0,.08);
+    --shadow-lg: 0 10px 30px rgba(0,0,0,.1);
+
+    --grid-line:     rgba(8,145,178,0.04);
+    --tile-filter:   none;
+}
+
+@media (prefers-color-scheme: light) {
+    [data-theme="auto"] {
+        --c-bg:          #f0f2f5;
+        --c-surface:     #ffffff;
+        --c-elevated:    #f7f8fa;
+        --c-control:     #e9ecf0;
+        --c-control-h:   #dde1e7;
+        --c-border:      rgba(0,0,0,0.09);
+        --c-border-h:    rgba(0,0,0,0.18);
+        --c-text:        #1a2332;
+        --c-text-2:      #506070;
+        --c-text-3:      #8896a6;
+        --c-accent:      #0891b2;
+        --c-accent-h:    #06b6d4;
+        --c-accent-mute: rgba(8,145,178,0.08);
+        --c-accent-glow: rgba(8,145,178,0.18);
+        --c-ok:          #059669;
+        --c-warn:        #d97706;
+        --c-err:         #dc2626;
+        --c-sidebar:     #ffffff;
+        --c-sidebar-h:   #f3f5f7;
+        --shadow-sm: 0 1px 3px rgba(0,0,0,.06);
+        --shadow-md: 0 4px 14px rgba(0,0,0,.08);
+        --shadow-lg: 0 10px 30px rgba(0,0,0,.1);
+        --grid-line:     rgba(8,145,178,0.04);
+        --tile-filter:   none;
     }
-    .sprettopp {
-	height:300px; 
-	overflow:auto;
+}
+
+/* ==========================================================
+   FOUNDATION
+   ========================================================== */
+
+:root {
+    --font-ui:   'DM Sans', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+    --r:         6px;
+    --r-lg:      10px;
+    --sidebar-w: 270px;
+    --header-h:  0px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+    height: 100%;
+    overflow: hidden;
+    font-family: var(--font-ui);
+    font-size: 14px;
+    background: var(--c-bg);
+    color: var(--c-text);
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.5;
+}
+
+body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+        linear-gradient(var(--grid-line) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+    background-size: 48px 48px;
+    pointer-events: none;
+    z-index: 0;
+}
+
+a { color: var(--c-accent); text-decoration: none; transition: color .15s; }
+a:hover { color: var(--c-accent-h); }
+
+/* ==========================================================
+   APP LAYOUT
+   ========================================================== */
+
+.app-layout {
+    display: grid;
+    grid-template-columns: var(--sidebar-w) 1fr;
+    height: 100vh;
+    position: relative;
+    z-index: 1;
+}
+
+/* ==========================================================
+   SIDEBAR
+   ========================================================== */
+
+.sidebar {
+    display: flex;
+    flex-direction: column;
+    background: var(--c-sidebar);
+    border-right: 1px solid var(--c-border);
+    overflow: hidden;
+    transition: width .3s cubic-bezier(.4,0,.2,1), min-width .3s cubic-bezier(.4,0,.2,1);
+    width: var(--sidebar-w);
+    min-width: var(--sidebar-w);
+    z-index: 20;
+}
+
+.sidebar.collapsed {
+    width: 0 !important;
+    min-width: 0 !important;
+    border-right: none !important;
+    overflow: hidden !important;
+}
+
+.sidebar.collapsed .sidebar-body,
+.sidebar.collapsed .sidebar-footer,
+.sidebar.collapsed .logo-text {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.sidebar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--c-border);
+    min-height: 58px;
+}
+
+.sidebar-logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.logo-svg {
+    width: 32px;
+    height: 32px;
+    color: var(--c-accent);
+    flex-shrink: 0;
+}
+
+.logo-text {
+    display: flex;
+    flex-direction: column;
+    transition: opacity .2s;
+}
+
+.logo-text strong {
+    font-size: .95rem;
+    font-weight: 700;
+    letter-spacing: -.02em;
+    line-height: 1.2;
+}
+
+.logo-text span {
+    font-size: .65rem;
+    color: var(--c-text-3);
+    font-family: var(--font-mono);
+    letter-spacing: .06em;
+}
+
+.sidebar-toggle-btn {
+    background: none;
+    border: none;
+    color: var(--c-text-3);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: var(--r);
+    transition: color .15s, background .15s;
+    display: flex;
+    align-items: center;
+}
+
+.sidebar-toggle-btn:hover {
+    color: var(--c-text);
+    background: var(--c-accent-mute);
+}
+
+.sidebar-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    transition: opacity .2s;
+    scrollbar-width: thin;
+    scrollbar-color: var(--c-control-h) transparent;
+}
+
+.sidebar-body::-webkit-scrollbar { width: 5px; }
+.sidebar-body::-webkit-scrollbar-track { background: transparent; }
+.sidebar-body::-webkit-scrollbar-thumb { background: var(--c-control-h); border-radius: 3px; }
+
+.sidebar-divider {
+    height: 1px;
+    background: var(--c-border);
+    margin: 2px 0;
+}
+
+.filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.filter-label {
+    font-size: .68rem;
+    font-weight: 600;
+    color: var(--c-text-3);
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    font-family: var(--font-mono);
+}
+
+/* ==========================================================
+   FORM CONTROLS
+   ========================================================== */
+
+.knapp,
+input[type="text"],
+input[type="search"] {
+    font-family: var(--font-ui) !important;
+    font-size: .85rem !important;
+    font-weight: 500;
+    line-height: 1.4;
+    color: var(--c-text);
+    background: var(--c-control);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r);
+    padding: 8px 12px;
+    cursor: pointer;
+    transition: border-color .15s, background .15s, box-shadow .15s, transform .1s;
+    outline: none;
+}
+
+.sidebar button,
+.sidebar .knapp {
+    font-family: var(--font-ui) !important;
+    font-size: .85rem !important;
+    font-weight: 500;
+    line-height: 1.4;
+    color: var(--c-text);
+    background: var(--c-control);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r);
+    padding: 8px 12px;
+    cursor: pointer;
+    transition: border-color .15s, background .15s, box-shadow .15s, transform .1s;
+    outline: none;
+}
+
+.select-wrap { position: relative; }
+
+.knapp:hover,
+.sidebar button:hover,
+input[type="text"]:hover,
+input[type="search"]:hover {
+    border-color: var(--c-border-h);
+    background: var(--c-control-h);
+}
+
+.knapp:focus,
+.sidebar button:focus,
+input[type="text"]:focus,
+input[type="search"]:focus {
+    border-color: var(--c-accent);
+    box-shadow: 0 0 0 2.5px var(--c-accent-glow);
+}
+
+.sidebar button:active { transform: scale(.97); }
+
+input[type="text"], input[type="search"] { cursor: text; }
+input[type="search"]::placeholder { color: var(--c-text-3); font-style: italic; }
+
+/* Hide native selects replaced by custom dropdowns */
+select.hidden-select {
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    padding: 0 !important;
+    margin: -1px !important;
+    overflow: hidden !important;
+    clip: rect(0, 0, 0, 0) !important;
+    white-space: nowrap !important;
+    border: 0 !important;
+}
+
+/* ==========================================================
+   CUSTOM DROPDOWN
+   ========================================================== */
+
+.custom-select {
+    position: relative;
+    width: 100%;
+    user-select: none;
+}
+
+.custom-select-trigger {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 12px;
+    background: var(--c-control);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r);
+    cursor: pointer;
+    transition: border-color .15s, background .15s, box-shadow .15s;
+}
+
+.custom-select-trigger:hover {
+    border-color: var(--c-border-h);
+    background: var(--c-control-h);
+}
+
+.custom-select.open .custom-select-trigger {
+    border-color: var(--c-accent);
+    box-shadow: 0 0 0 2.5px var(--c-accent-glow);
+}
+
+.custom-select-value {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-ui);
+    font-size: .85rem;
+    font-weight: 500;
+    color: var(--c-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.custom-select-arrow {
+    flex-shrink: 0;
+    width: 10px;
+    height: 6px;
+    background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%2394a3b8' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: center;
+    transition: transform .2s;
+}
+
+.custom-select.open .custom-select-arrow {
+    transform: rotate(180deg);
+}
+
+.custom-select-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    background: var(--c-surface);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-lg);
+    z-index: 1000;
+    max-height: 240px;
+    overflow-y: auto;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-8px);
+    transition: opacity .15s, transform .15s, visibility .15s;
+    scrollbar-width: thin;
+    scrollbar-color: var(--c-control-h) transparent;
+}
+
+.custom-select-dropdown::-webkit-scrollbar { width: 5px; }
+.custom-select-dropdown::-webkit-scrollbar-track { background: transparent; }
+.custom-select-dropdown::-webkit-scrollbar-thumb { background: var(--c-control-h); border-radius: 3px; }
+
+.custom-select.open .custom-select-dropdown {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+.custom-select-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    font-family: var(--font-ui);
+    font-size: .85rem;
+    color: var(--c-text);
+    cursor: pointer;
+    transition: background .1s;
+}
+
+.custom-select-option:first-child { border-radius: var(--r) var(--r) 0 0; }
+.custom-select-option:last-child { border-radius: 0 0 var(--r) var(--r); }
+
+.custom-select-option:hover {
+    background: var(--c-accent-mute);
+}
+
+.custom-select-option.selected {
+    background: var(--c-accent-mute);
+    color: var(--c-accent);
+    font-weight: 600;
+}
+
+.custom-select-option .check-icon {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    opacity: 0;
+    color: var(--c-accent);
+}
+
+.custom-select-option.selected .check-icon {
+    opacity: 1;
+}
+
+.custom-select-option-text {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Compact variant */
+.custom-select.compact .custom-select-trigger { padding: 6px 10px; }
+.custom-select.compact .custom-select-value { font-size: .82rem; }
+.custom-select.compact .custom-select-option { padding: 8px 12px; font-size: .82rem; }
+
+/* Tab bar custom select */
+.ui-tabs-nav .custom-select { width: auto; min-width: 50px; }
+.ui-tabs-nav .custom-select-trigger { padding: 6px 10px; background: var(--c-control); }
+.ui-tabs-nav .custom-select-value { font-size: .82rem; }
+.ui-tabs-nav .custom-select-dropdown { min-width: 140px; right: auto; }
+
+/* ==========================================================
+   DATE & NAV CONTROLS
+   ========================================================== */
+
+.date-row { display: flex; gap: 6px; }
+.date-row #datepicker {
+    flex: 1;
+    font-family: var(--font-mono) !important;
+    font-size: .84rem !important;
+}
+.date-row #period_input {
+    width: 5.5em;
+    font-family: var(--font-mono) !important;
+    text-align: center;
+    font-size: .84rem !important;
+}
+
+.nav-row { display: flex; gap: 6px; margin-top: 4px; }
+.nav-btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+}
+
+.search-input { width: 100%; cursor: text !important; }
+
+/* ==========================================================
+   AUTOREFRESH CONTROLS
+   ========================================================== */
+
+.refresh-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.checkbox-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.checkbox-wrap input[type="checkbox"] { display: none; }
+
+.checkbox-custom {
+    width: 18px;
+    height: 18px;
+    border: 2px solid var(--c-border-h);
+    border-radius: 4px;
+    background: var(--c-control);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all .15s;
+    flex-shrink: 0;
+}
+
+.checkbox-custom::after {
+    content: '';
+    width: 10px;
+    height: 6px;
+    border: 2px solid transparent;
+    border-top: none;
+    border-right: none;
+    transform: rotate(-45deg) translate(1px, -1px);
+    opacity: 0;
+    transition: opacity .15s;
+}
+
+.checkbox-wrap input:checked + .checkbox-custom {
+    background: var(--c-accent);
+    border-color: var(--c-accent);
+}
+
+.checkbox-wrap input:checked + .checkbox-custom::after {
+    border-color: #000;
+    opacity: 1;
+}
+
+.refresh-select { flex: 1; }
+
+.refresh-progress {
+    display: none;
+    height: 3px;
+    background: var(--c-border);
+    border-radius: 2px;
+    margin-top: 8px;
+    overflow: hidden;
+}
+.refresh-progress-bar {
+    height: 100%;
+    width: 0%;
+    background: var(--c-accent);
+    border-radius: 2px;
+}
+
+#busy {
+    display: none;
+    width: 20px !important;
+    height: 20px !important;
+    margin: 4px auto 0;
+    border: 2.5px solid var(--c-border-h);
+    border-top-color: var(--c-accent);
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ==========================================================
+   SIDEBAR FOOTER
+   ========================================================== */
+
+.sidebar-footer {
+    padding: 12px 16px;
+    border-top: 1px solid var(--c-border);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    transition: opacity .2s;
+}
+
+.theme-switcher {
+    display: flex;
+    gap: 2px;
+    padding: 3px;
+    background: var(--c-control);
+    border-radius: var(--r);
+    border: 1px solid var(--c-border);
+}
+
+.theme-btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 5px 0;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    color: var(--c-text-3);
+    cursor: pointer;
+    font-size: .72rem;
+    font-family: var(--font-ui);
+    transition: all .15s;
+}
+
+.theme-btn span { pointer-events: none; }
+.theme-btn svg { pointer-events: none; flex-shrink: 0; }
+.theme-btn:hover { color: var(--c-text-2); background: var(--c-accent-mute); }
+.theme-btn.active { color: var(--c-accent); background: var(--c-accent-mute); }
+
+.about-link {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: .78rem;
+    color: var(--c-text-3);
+}
+.about-link:hover { color: var(--c-accent); }
+
+/* ==========================================================
+   MAIN AREA
+   ========================================================== */
+
+.main-area {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-width: 0;
+    position: relative;
+}
+
+/* ==========================================================
+   TABS
+   ========================================================== */
+
+main#tabs {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.ui-tabs {
+    padding: 0 !important;
+    border: none !important;
+    background: none !important;
+}
+
+.ui-tabs .ui-tabs-nav {
+    padding: 0 16px !important;
+    background: var(--c-surface) !important;
+    border: none !important;
+    border-bottom: 1px solid var(--c-border) !important;
+    border-radius: 0 !important;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    min-height: 44px;
+}
+
+/* Visual styling lives on the <li> so the close-icon <span> (sibling of <a>
+   inside the same <li>) shares the tab's background and rounded corners
+   instead of leaking outside it. */
+.ui-tabs .ui-tabs-nav li {
+    display: inline-flex !important;
+    align-items: center;
+    margin: 0 !important;
+    border: none !important;
+    border-bottom: 2px solid transparent !important;
+    background: none !important;
+    border-radius: var(--r) var(--r) 0 0 !important;
+    float: none !important;
+    padding: 0 4px 0 0 !important;
+    transition: background .15s, border-color .15s;
+}
+
+.ui-tabs .ui-tabs-nav li:hover {
+    background: var(--c-accent-mute) !important;
+}
+
+.ui-tabs .ui-tabs-nav li.ui-tabs-active {
+    background: var(--c-elevated) !important;
+    border-bottom-color: var(--c-accent) !important;
+}
+
+.ui-tabs .ui-tabs-nav li a {
+    font-family: var(--font-ui) !important;
+    font-size: .85rem;
+    font-weight: 500;
+    color: var(--c-text-3) !important;
+    padding: 10px 18px !important;
+    border: none !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    transition: color .15s;
+    outline: none !important;
+}
+
+.ui-tabs .ui-tabs-nav li:hover a {
+    color: var(--c-text-2) !important;
+}
+
+.ui-tabs .ui-tabs-nav li.ui-tabs-active a {
+    color: var(--c-text) !important;
+}
+
+.ui-tabs .ui-tabs-panel {
+    padding: 0 !important;
+    background: none !important;
+    border: none !important;
+    flex: 1;
+    overflow: hidden;
+}
+
+.ui-tabs .ui-tabs-panel:not(#mapid) { overflow: auto; }
+
+/* Graph/report panels need padding */
+.ui-tabs .ui-tabs-panel.ui-widget-content.graph {
+    padding: 20px 24px !important;
+}
+
+/* Heatmap tab needs less padding */
+.ui-tabs .ui-tabs-panel.ui-widget-content.graph:has(.heatmap-header) {
+    padding: 12px 16px !important;
+}
+
+/* Ensure graph/report tabs start content from top */
+div.graph {
+    overflow: auto !important;
+    flex: 1 !important;
+}
+
+/* Report tab content styling */
+div.graph h2 {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--c-text);
+    padding: 0 0 4px;
+    margin: 0 0 4px;
+}
+
+div.graph > p {
+    font-size: .84rem;
+    color: var(--c-text-2);
+    padding: 0 0 12px;
+    margin: 0;
+}
+
+div.graph > table,
+div.graph > table.sortable {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .8rem;
+    border-bottom: 2px solid var(--c-border);
+    margin-bottom: 20px;
+}
+
+/* Summary table needs full width */
+div.graph > table[id*="_table"] {
+    width: 100%;
+    max-width: none;
+}
+
+div.graph table th {
+    background: var(--c-elevated) !important;
+    color: var(--c-text-2) !important;
+    font-weight: 600 !important;
+    font-size: .75rem !important;
+    padding: 8px 10px !important;
+    border-bottom: 2px solid var(--c-border) !important;
+    text-align: left !important;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+div.graph table td {
+    color: var(--c-text) !important;
+    font-size: .8rem !important;
+    padding: 6px 10px !important;
+    border-bottom: 1px solid var(--c-border) !important;
+    white-space: nowrap;
+}
+
+div.graph table td[align="right"] {
+    font-family: var(--font-mono) !important;
+    text-align: right !important;
+}
+
+div.graph table tr:hover td {
+    background: var(--c-accent-mute) !important;
+}
+
+div.graph table thead {
+    background: var(--c-elevated) !important;
+}
+
+div.graph table caption {
+    color: var(--c-accent) !important;
+    font-weight: 600;
+    text-align: left;
+    padding: 8px 0;
+}
+
+/* Sort indicators for sortable tables */
+div.graph table.sortable th {
+    user-select: none;
+}
+
+/* Combined From/To link cell in reports */
+.summary-link-header {
+    min-width: 200px;
+    white-space: nowrap;
+    line-height: 1.8;
+}
+
+.summary-link-cell {
+    padding: 4px 10px !important;
+}
+
+.summary-from,
+.summary-to {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    font-family: var(--font-mono);
+    font-size: .78rem;
+    line-height: 1.6;
+    white-space: nowrap;
+}
+
+.summary-from svg,
+.summary-to svg {
+    flex-shrink: 0;
+}
+
+.summary-from span,
+.summary-to span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.summary-to {
+    opacity: 0.75;
+}
+
+/* Two-line property headers in summary */
+.summary-prop-header {
+    white-space: normal !important;
+    min-width: 70px;
+    max-width: 120px;
+    font-size: .7rem !important;
+    line-height: 1.3 !important;
+    text-align: right !important;
+}
+
+div.graph table.sortable th:not(.sorttable_sorted):not(.sorttable_sorted_reverse):not(.sorttable_nosort)::after {
+    content: " \25B4\25BE";
+    color: var(--c-text-3);
+    font-size: .7em;
+    opacity: 0.6;
+}
+
+div.graph table.sortable th.sorttable_sorted::after {
+    content: " \25B4";
+    color: var(--c-accent);
+}
+
+div.graph table.sortable th.sorttable_sorted_reverse::after {
+    content: " \25BE";
+    color: var(--c-accent);
+}
+
+/* (map-container visibility handled by the tabsactivate handler in
+   index.html; the previous CSS-only :has() rule kept the container hidden
+   even after the Map tab was reactivated, because jQuery UI's panel
+   show/hide leaves residual inline styles on #mapid.) */
+
+/* Replace the jQuery UI sprite icon with a themed × glyph so it stays
+   visible in both light and dark modes — sprite is hidden, span gets
+   explicit dimensions and a centred ::before glyph. */
+.ui-tabs .ui-tabs-nav li span.ui-icon-close {
+    background: none !important;
+    background-image: none !important;
+    text-indent: 0 !important;
+    width: 20px !important;
+    height: 20px !important;
+    margin: 0 0 0 4px !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    cursor: pointer;
+    font-size: 0;                          /* hide the "Remove Tab" text */
+    line-height: 1;
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    vertical-align: middle;
+    border-radius: var(--r);
+    color: var(--c-text-3);
+    transition: background .15s, color .15s;
+    position: relative;
+    z-index: 2;
+}
+.ui-tabs .ui-tabs-nav li span.ui-icon-close::before {
+    content: '×';
+    display: block;
+    font-size: 18px;
+    line-height: 18px;
+    font-weight: 600;
+    color: inherit;
+    text-indent: 0;
+}
+.ui-tabs .ui-tabs-nav li.ui-tabs-active span.ui-icon-close {
+    color: var(--c-text);
+}
+.ui-tabs .ui-tabs-nav li span.ui-icon-close:hover {
+    background: var(--c-accent-mute);
+    color: var(--c-accent);
+}
+
+.sidebar-open-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    background: var(--c-control);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r);
+    color: var(--c-text-2);
+    cursor: pointer;
+    margin-right: 8px;
+    transition: all .15s;
+}
+.sidebar-open-btn:hover { background: var(--c-control-h); color: var(--c-text); }
+
+/* ==========================================================
+   MAP CONTAINER
+   ========================================================== */
+
+.map-container {
+    position: relative;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+#mapid {
+    flex: 1;
+    height: 100% !important;
+    min-height: 400px;
+    z-index: 1;
+    background: var(--c-bg);
+}
+
+/* ==========================================================
+   LEAFLET OVERRIDES
+   ========================================================== */
+
+.leaflet-container {
+    background: var(--c-bg) !important;
+    font-family: var(--font-ui) !important;
+}
+
+.leaflet-tile-pane { filter: var(--tile-filter); }
+
+.leaflet-control-zoom {
+    border: none !important;
+    box-shadow: var(--shadow-md) !important;
+    border-radius: var(--r-lg) !important;
+    overflow: hidden;
+}
+
+.leaflet-control-zoom a {
+    background: var(--c-surface) !important;
+    color: var(--c-text) !important;
+    border: 1px solid var(--c-border) !important;
+    width: 34px !important;
+    height: 34px !important;
+    line-height: 34px !important;
+    font-size: 16px !important;
+    transition: background .15s;
+}
+
+.leaflet-control-zoom a:hover { background: var(--c-control-h) !important; }
+.leaflet-control-zoom-in { border-radius: var(--r) var(--r) 0 0 !important; border-bottom: none !important; }
+.leaflet-control-zoom-out { border-radius: 0 0 var(--r) var(--r) !important; }
+
+.leaflet-control-attribution {
+    background: color-mix(in srgb, var(--c-bg) 85%, transparent) !important;
+    color: var(--c-text-3) !important;
+    font-size: .65rem !important;
+    padding: 2px 8px !important;
+    backdrop-filter: blur(4px);
+}
+.leaflet-control-attribution a { color: var(--c-text-3) !important; }
+
+.leaflet-interactive:focus {
+    outline: none !important;
+}
+
+.leaflet-popup-content-wrapper {
+    background: var(--c-surface) !important;
+    color: var(--c-text) !important;
+    border: 1px solid var(--c-border) !important;
+    border-radius: var(--r-lg) !important;
+    box-shadow: var(--shadow-lg) !important;
+    font-family: var(--font-ui) !important;
+}
+
+.leaflet-popup-content {
+    margin: 14px 18px !important;
+    font-size: .88rem !important;
+    line-height: 1.6 !important;
+}
+
+.leaflet-popup-tip {
+    background: var(--c-surface) !important;
+    border: 1px solid var(--c-border) !important;
+    box-shadow: none !important;
+}
+
+.leaflet-popup-close-button { color: var(--c-text-3) !important; font-size: 20px !important; }
+.leaflet-popup-close-button:hover { color: var(--c-text) !important; }
+
+.popupCustom .leaflet-popup-tip,
+.popupCustom .leaflet-popup-content-wrapper {
+    font-size: .88rem;
+    background: var(--c-surface);
+    color: var(--c-text);
+}
+
+.leaflet-popup, .leaflet-pane { font-size: .88rem; }
+
+.leaflet-tooltip {
+    background: var(--c-elevated) !important;
+    color: var(--c-text) !important;
+    border: 1px solid var(--c-border) !important;
+    border-radius: var(--r) !important;
+    box-shadow: var(--shadow-sm) !important;
+    font-family: var(--font-ui) !important;
+    font-size: .82rem !important;
+    padding: 4px 10px !important;
+}
+
+.leaflet-tooltip-top:before,
+.leaflet-tooltip-bottom:before,
+.leaflet-tooltip-left:before,
+.leaflet-tooltip-right:before { border-color: transparent !important; }
+
+.marker-cluster-small { background-color: color-mix(in srgb, var(--c-accent) 30%, transparent) !important; }
+.marker-cluster-small div { background-color: color-mix(in srgb, var(--c-accent) 60%, transparent) !important; color: #fff !important; font-family: var(--font-mono) !important; font-weight: 600; }
+
+.marker-cluster-medium { background-color: rgba(251,191,36,.3) !important; }
+.marker-cluster-medium div { background-color: rgba(251,191,36,.6) !important; color: #000 !important; font-family: var(--font-mono) !important; font-weight: 600; }
+
+.marker-cluster-large { background-color: rgba(248,113,113,.3) !important; }
+.marker-cluster-large div { background-color: rgba(248,113,113,.6) !important; color: #fff !important; font-family: var(--font-mono) !important; font-weight: 600; }
+
+/* ==========================================================
+   LEGEND — overlay on map
+   Structure: div#legend > table#legend > tr > th + td*
+   JS sets: $("#legend").html("<table id=legend>...")
+   th = title row, td = semaphore buttons (inline colored)
+   ========================================================== */
+
+div#legend {
+    position: absolute;
+    bottom: 40px;
+    left: 10px !important;
+    right: auto !important;
+    z-index: 1000;
+    background: transparent !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    pointer-events: auto;
+}
+
+div#legend:empty { display: none; }
+
+table#legend {
+    background: rgba(30, 40, 55, 0.88) !important;
+    padding: 6px 10px !important;
+    border: 1px solid rgba(148,163,184,0.15) !important;
+    border-radius: 10px !important;
+    box-shadow: 0 4px 14px rgba(0,0,0,.45) !important;
+    border-collapse: separate !important;
+    border-spacing: 0 !important;
+    width: 280px !important;
+    min-width: 280px !important;
+    max-width: 280px !important;
+}
+
+/* Remove the ::after pseudo-element that caused artifact below legend */
+table#legend::after { display: none !important; }
+
+/* Single <tr> becomes flex — th on top row, td's in bottom row */
+#legend table tr, table#legend tr {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    justify-content: center !important;
+    align-items: center !important;
+    gap: 4px !important;
+}
+
+/* Title cell (th) — full width, sits on its own row */
+#legend table th, table#legend th {
+    flex: 0 0 100% !important;
+    text-align: center !important;
+    padding: 0 0 4px 0 !important;
+    border: none !important;
+    background: transparent !important;
+}
+
+#legend table th button, table#legend th button, #legend #farge0, table#legend #farge0 {
+    background: transparent !important;
+    border: none !important;
+    color: #fff !important;
+    font-size: .85rem !important;
+    font-weight: 600 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    text-align: center !important;
+    cursor: pointer !important;
+}
+
+/* Semaphore cells (td) — equal width, single row */
+#legend table td, table#legend td {
+    flex: 1 1 0% !important;
+    width: auto !important;
+    min-width: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    background: transparent !important;
+}
+
+#legend table td button, table#legend td button {
+    display: block !important;
+    width: 100% !important;
+    font-size: .75rem !important;
+    font-weight: 700 !important;
+    padding: 4px 4px !important;
+    border-radius: 6px !important;
+    border: none !important;
+    color: #000 !important;
+    text-align: center !important;
+    cursor: pointer !important;
+    transition: transform .15s, box-shadow .15s, filter .15s !important;
+}
+
+#legend table td button:hover, table#legend td button:hover {
+    transform: translateY(-1px) !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,.3) !important;
+    filter: brightness(1.1) !important;
+}
+
+/* ==========================================================
+   STATUS BAR
+   ========================================================== */
+
+.status-bar {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    padding: 6px 16px;
+    background: var(--c-surface);
+    border-top: 1px solid var(--c-border);
+    font-size: .75rem;
+    font-family: var(--font-mono);
+    color: var(--c-text-3);
+    flex-shrink: 0;
+}
+
+.status-item { display: flex; align-items: center; gap: 6px; }
+.status-label { font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+#status { color: var(--c-ok); }
+#error { color: var(--c-err); }
+
+/* ==========================================================
+   TABLES
+   ========================================================== */
+
+table { border-collapse: collapse; width: 100%; font-size: .84rem; }
+table td, table th { font-size: .84rem !important; padding: 6px 10px; border-bottom: 1px solid var(--c-border); text-align: left; }
+table th { cursor: pointer; font-weight: 600; color: var(--c-text-2); background: var(--c-elevated); position: sticky; top: 0; z-index: 1; }
+table tr:hover td { background: var(--c-accent-mute); }
+caption { font-size: 1rem; font-weight: 600; color: var(--c-accent); padding: 8px 0; text-align: left; }
+
+table.sortable thead { background-color: var(--c-elevated); color: var(--c-text-2); font-weight: 600; }
+table.sortable th:not(.sorttable_sorted):not(.sorttable_sorted_reverse):not(.sorttable_nosort)::after { content: " \25B4\25BE"; color: var(--c-text-3); font-size: .72em; }
+
+.dataTables_wrapper { color: var(--c-text) !important; font-family: var(--font-ui) !important; }
+.dataTables_wrapper .dataTables_filter input { background: var(--c-control) !important; border: 1px solid var(--c-border) !important; color: var(--c-text) !important; border-radius: var(--r) !important; padding: 4px 8px !important; }
+
+/* ==========================================================
+   SCROLLABLE CONTAINERS
+   ========================================================== */
+
+.sprettom { height: 500px; overflow: auto; scrollbar-width: thin; scrollbar-color: var(--c-control-h) transparent; }
+.sprettopp { height: 300px; overflow: auto; scrollbar-width: thin; scrollbar-color: var(--c-control-h) transparent; }
+.sprettom::-webkit-scrollbar, .sprettopp::-webkit-scrollbar { width: 5px; }
+.sprettom::-webkit-scrollbar-track, .sprettopp::-webkit-scrollbar-track { background: transparent; }
+.sprettom::-webkit-scrollbar-thumb, .sprettopp::-webkit-scrollbar-thumb { background: var(--c-control-h); border-radius: 3px; }
+
+/* ==========================================================
+   JQUERY UI DATEPICKER
+   ========================================================== */
+
+.ui-datepicker {
+    background: var(--c-surface) !important;
+    border: 1px solid var(--c-border) !important;
+    border-radius: var(--r-lg) !important;
+    box-shadow: var(--shadow-lg) !important;
+    padding: 8px !important;
+    font-family: var(--font-ui) !important;
+    z-index: 1000 !important;
+}
+
+.ui-datepicker-header { background: var(--c-elevated) !important; border: none !important; border-radius: var(--r) !important; color: var(--c-text) !important; font-weight: 600 !important; padding: 6px !important; }
+.ui-datepicker-prev, .ui-datepicker-next { cursor: pointer !important; top: 6px !important; }
+.ui-datepicker-prev span, .ui-datepicker-next span { background-image: none !important; text-indent: 0 !important; color: var(--c-text) !important; }
+.ui-datepicker-prev:hover, .ui-datepicker-next:hover { background: var(--c-control-h) !important; border: none !important; border-radius: var(--r) !important; }
+.ui-datepicker th { color: var(--c-text-3) !important; font-weight: 500 !important; font-size: .72rem !important; padding: 4px !important; background: none !important; border: none !important; }
+.ui-datepicker td { padding: 1px !important; border: none !important; }
+.ui-datepicker td a, .ui-datepicker td span { background: none !important; color: var(--c-text) !important; border: none !important; border-radius: var(--r) !important; padding: 4px 8px !important; text-align: center !important; transition: background .1s !important; }
+.ui-datepicker td a:hover { background: var(--c-control-h) !important; }
+.ui-datepicker td .ui-state-active { background: var(--c-accent) !important; color: white !important; font-weight: 600 !important; }
+.ui-datepicker td .ui-state-highlight { background: var(--c-control) !important; border: 1px solid var(--c-accent) !important; }
+
+/* ==========================================================
+   JQUERY UI DIALOG
+   ========================================================== */
+
+.ui-dialog { background: var(--c-surface) !important; border: 1px solid var(--c-border) !important; border-radius: var(--r-lg) !important; box-shadow: var(--shadow-lg) !important; padding: 0 !important; }
+.ui-dialog-titlebar { background: var(--c-elevated) !important; border: none !important; border-radius: var(--r-lg) var(--r-lg) 0 0 !important; color: var(--c-text) !important; padding: 10px 16px !important; }
+.ui-dialog-content { color: var(--c-text) !important; padding: 16px !important; }
+
+/* ==========================================================
+   SIDEBAR COLLAPSED STATE
+   ========================================================== */
+
+.app-layout:has(.sidebar.collapsed) { grid-template-columns: 0 1fr !important; gap: 0 !important; }
+.app-layout:has(.sidebar.collapsed) .main-area { height: 100vh !important; min-height: 100vh !important; width: 100vw !important; }
+.app-layout:has(.sidebar.collapsed) .map-container { flex: 1 !important; height: calc(100vh - 80px) !important; }
+.app-layout:has(.sidebar.collapsed) #mapid { height: 100% !important; min-height: calc(100vh - 120px) !important; }
+
+/* ==========================================================
+   LINK DETAIL PANEL — floating panel on right side of map
+   ========================================================== */
+
+.link-panel {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 400px;
+    height: auto;
+    max-height: calc(100% - 20px);
+    background: var(--c-surface);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-lg);
+    z-index: 1100;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transition: opacity .2s, transform .2s;
+}
+
+.link-panel.hidden {
+    display: none !important;
+}
+
+.link-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--c-border);
+    background: var(--c-elevated);
+    flex-shrink: 0;
+}
+
+.link-panel-title {
+    font-size: .85rem;
+    font-weight: 600;
+    color: var(--c-accent);
+}
+
+.link-panel-close {
+    background: none;
+    border: none;
+    color: var(--c-text-3);
+    font-size: 1.4rem;
+    cursor: pointer;
+    padding: 0 4px;
+    line-height: 1;
+    border-radius: var(--r);
+    transition: color .15s, background .15s;
+}
+
+.link-panel-close:hover {
+    color: var(--c-text);
+    background: var(--c-accent-mute);
+}
+
+.link-panel-body {
+    overflow-y: auto;
+    padding: 14px;
+    font-size: .85rem;
+    color: var(--c-text);
+    scrollbar-width: thin;
+    scrollbar-color: var(--c-control-h) transparent;
+}
+
+.link-panel-body::-webkit-scrollbar { width: 5px; }
+.link-panel-body::-webkit-scrollbar-track { background: transparent; }
+.link-panel-body::-webkit-scrollbar-thumb { background: var(--c-control-h); border-radius: 3px; }
+
+/* From/To header in panel */
+.link-panel-body caption,
+.link-panel-body .sprettom > table:first-child caption {
+    color: var(--c-accent);
+    font-weight: 600;
+    font-size: .9rem;
+    text-align: left;
+    padding: 0 0 10px 0;
+}
+
+/* Table styling inside panel */
+.link-panel-body table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 10px;
+}
+
+.link-panel-body table td {
+    padding: 5px 8px !important;
+    border-bottom: 1px solid var(--c-border) !important;
+    font-size: .82rem !important;
+}
+
+.link-panel-body table td:last-child {
+    text-align: right !important;
+    font-family: var(--font-mono) !important;
+    font-size: .82rem !important;
+}
+
+/* Buttons inside panel */
+.link-panel-body button.knapp,
+.link-panel-body .knapp {
+    font-size: .78rem !important;
+    padding: 5px 10px !important;
+    margin: 3px 4px 3px 0 !important;
+    display: inline-block !important;
+}
+
+.link-panel-body .sprettom {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+}
+
+.link-panel-body .sprettopp {
+    height: auto !important;
+    max-height: 250px !important;
+}
+
+/* From/To endpoint display */
+.link-panel-endpoints {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+    padding: 10px 12px;
+    background: var(--c-elevated);
+    border-radius: var(--r);
+    border: 1px solid var(--c-border);
+}
+/* The two endpoints stack vertically; the swap button sits to their right. */
+.link-endpoint-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.link-endpoint {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: .82rem;
+    color: var(--c-text);
+}
+
+.link-endpoint svg {
+    color: var(--c-accent);
+    flex-shrink: 0;
+}
+
+.link-endpoint span {
+    font-family: var(--font-mono);
+    font-size: .8rem;
+    font-weight: 500;
+    /* Let the host use the full (column-stacked) row width and only wrap when it
+       truly must - never break mid-token. break-all split hostnames like
+       "ytelse-tos.u|ninett.no". min-width:0 lets the flex item shrink so the
+       wrap happens inside the row instead of overflowing. */
+    min-width: 0;
+    word-break: normal;
+    overflow-wrap: anywhere;
+}
+/* Hostnames copy to the clipboard on double-click (the per-host copy buttons
+   were removed to declutter the row). */
+.link-endpoint { min-width: 0; }
+.link-host { cursor: pointer; }
+.link-host:hover { color: var(--c-accent); }
+.link-host.copied { color: var(--c-accent); }
+
+/* Busy overlay for the traceroute topology: parsing/laying out a large trace set
+   takes a while, so it says how far along it is instead of looking frozen (#130).
+   Centred over the graph, big enough to read across the tab. */
+.tracetree-busy {
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    background: color-mix(in srgb, var(--c-surface) 78%, transparent);
+    border-radius: var(--r);
+}
+.spinner-lg {
+    width: 56px;
+    height: 56px;
+    border-width: 5px;
+}
+.tracetree-progress {
+    color: var(--c-text);
+    font-size: 1rem;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+}
+.tracetree-progressbar {
+    width: min(320px, 60%);
+    height: 8px;
+    background: var(--c-control);
+    border: 1px solid var(--c-border);
+    border-radius: 999px;
+    overflow: hidden;
+}
+.tracetree-progressbar > span {
+    display: block;
+    width: 0;
+    height: 100%;
+    background: var(--c-accent);
+    border-radius: 999px;
+    transition: width .15s linear;
+}
+
+/* Shown in the link popup when a (grey topology) link has no event data for the
+   selected period — issue #113. */
+.link-panel-nodata {
+    margin: 10px 2px 0;
+    padding: 10px 12px;
+    color: var(--c-text-2);
+    font-size: .85rem;
+    background: var(--c-elevated);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r);
+}
+
+/* Transient "copied to clipboard" toast (bottom-centre, theme-aware). */
+.copy-toast {
+    position: fixed;
+    left: 50%;
+    bottom: 28px;
+    transform: translateX(-50%) translateY(8px);
+    z-index: 10000;
+    max-width: 80vw;
+    padding: 9px 16px;
+    background: var(--c-elevated);
+    color: var(--c-text);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r);
+    box-shadow: 0 6px 24px rgba(0, 0, 0, .35);
+    font-size: .85rem;
+    font-weight: 500;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .2s ease, transform .2s ease;
+}
+.copy-toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+
+/* Action cards in panel (See / Plot) */
+.panel-card {
+    margin-top: 10px;
+    padding: 10px 12px;
+    background: var(--c-elevated);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r);
+}
+
+.panel-card-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: .68rem;
+    font-weight: 600;
+    color: var(--c-text-3);
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    font-family: var(--font-mono);
+    margin-bottom: 8px;
+}
+
+.panel-card-label svg {
+    color: var(--c-accent);
+    flex-shrink: 0;
+}
+
+.panel-card-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.panel-card-buttons .knapp {
+    font-size: .78rem !important;
+    padding: 6px 12px !important;
+    margin: 0 !important;
+}
+
+.panel-card-buttons .knapp a {
+    color: var(--c-text) !important;
+    text-decoration: none !important;
+}
+
+.panel-card-buttons .sprettopp {
+    width: 100%;
+    margin-top: 8px;
+}
+
+
+/* ==========================================================
+   HEATMAP TABLE
+   ========================================================== */
+
+.heatmap-header {
+    padding: 12px 16px 8px;
+}
+
+.heatmap-title {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--c-text);
+    margin: 0 0 4px;
+}
+
+.heatmap-subtitle {
+    font-size: .82rem;
+    color: var(--c-text-2);
+    margin-bottom: 2px;
+}
+
+.heatmap-range {
+    font-size: .75rem;
+    font-family: var(--font-mono);
+    color: var(--c-text-3);
+}
+
+.heatmap-scroll {
+    overflow-x: auto;
+    padding: 0 16px 16px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--c-control-h) transparent;
+}
+
+.heatmap-scroll::-webkit-scrollbar { height: 6px; }
+.heatmap-scroll::-webkit-scrollbar-track { background: transparent; }
+.heatmap-scroll::-webkit-scrollbar-thumb { background: var(--c-control-h); border-radius: 3px; }
+
+.heatmap-table {
+    border-collapse: separate;
+    border-spacing: 2px;
+    width: max-content;
+}
+
+.heatmap-table thead th,
+.heatmap-table tbody td {
+    font-size: .72rem !important;
+    padding: 0 !important;
+    border: none !important;
+}
+
+.heatmap-corner {
+    position: sticky;
+    left: 0;
+    z-index: 3;
+    background: var(--c-surface) !important;
+    font-size: .68rem !important;
+    font-weight: 600 !important;
+    color: var(--c-text-3) !important;
+    padding: 6px 10px !important;
+    text-align: left !important;
+    white-space: nowrap;
+    font-family: var(--font-mono) !important;
+}
+
+.heatmap-col-header {
+    font-size: .65rem !important;
+    font-weight: 500 !important;
+    color: var(--c-text-2) !important;
+    padding: 8px 4px 10px !important;
+    text-align: center !important;
+    vertical-align: bottom !important;
+    font-family: var(--font-mono) !important;
+    height: 150px;
+    max-height: 150px;
+    overflow: hidden;
+    position: relative;
+}
+
+.heatmap-col-header > span {
+    display: block;
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    transform: rotate(180deg);
+    max-height: 130px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin: 0 auto;
+    padding: 8px 0;
+}
+
+.heatmap-row-header {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    background: var(--c-surface) !important;
+    font-size: .7rem !important;
+    font-weight: 500 !important;
+    color: var(--c-text-2) !important;
+    padding: 4px 12px 4px 8px !important;
+    text-align: left !important;
+    white-space: nowrap;
+    font-family: var(--font-mono) !important;
+}
+
+.heatmap-cell {
+    padding: 1px !important;
+    text-align: center !important;
+}
+
+.heatmap-cell-inner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 46px;
+    min-height: 32px;
+    padding: 3px 6px;
+    border-radius: 4px;
+    font-size: .7rem;
+    font-weight: 600;
+    font-family: var(--font-mono);
+    transition: transform .1s, box-shadow .1s;
+}
+
+.heatmap-cell:hover .heatmap-cell-inner {
+    transform: scale(1.15);
+    box-shadow: 0 2px 8px rgba(0,0,0,.3);
+    z-index: 1;
+    position: relative;
+}
+
+.heatmap-diagonal .heatmap-cell-inner {
+    background: repeating-linear-gradient(
+        45deg,
+        rgba(100,120,150,0.3),
+        rgba(100,120,150,0.3) 3px,
+        transparent 3px,
+        transparent 6px
+    ) !important;
+    color: transparent !important;
+    min-width: 46px !important;
+    min-height: 32px !important;
+    border: 1px dashed rgba(100,120,150,0.4) !important;
+    border-radius: 4px;
+}
+
+.heatmap-nodata .heatmap-cell-inner {
+    background: transparent;
+    color: var(--c-text-3);
+    opacity: 0.3;
+}
+
+/* ==========================================================
+   ARROW DIRECTION MARKERS
+   ========================================================== */
+
+.arrow-marker {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    pointer-events: none !important;
+}
+
+/* ==========================================================
+   TRACETREE TAB — topology, timeline, stats inside a tab
+   ========================================================== */
+
+.tracetree-topo {
+    grid-template-columns: 1fr auto;
+    gap: 24px;
+    background: var(--c-surface);
+    padding: 24px clamp(24px, 5%, 60px);
+    min-height: 500px;
+}
+
+/* Apply grid only when this tab panel is visible (not hidden by jQuery UI).
+   jQuery UI 1.13 marks inactive panels with aria-hidden="true" AND inline
+   display:none. The display:none alone would suffice, but we set display:grid
+   with !important to win over the active panel's inline display:block; that
+   would also defeat display:none on inactive panels — hence the aria-hidden
+   negation to scope the rule to the visible panel only. */
+.tracetree-topo:not([aria-hidden="true"]) {
+    display: grid !important;
+    flex: 1 1 auto;          /* grow past min-height to use the whole tab */
+    min-height: 0;
+    grid-template-rows: 1fr; /* the single row takes the available height */
+}
+
+.tracetree-graph {
+    position: relative;          /* anchor for the absolutely-positioned popup */
+    width: 100%;
+    min-width: 0;
+    height: 100%;                /* fill the row; vis-network follows the box */
+    min-height: 450px;
+    border: 1px solid var(--c-border);
+    border-radius: var(--r);
+    /* Allow popup overlay to slightly escape if needed; vis-network is
+       already self-clipped. */
+    overflow: visible;
+}
+
+/* The vis.network canvas should still be clipped to the graph box so it
+   doesn't paint outside the rounded border. */
+.tracetree-graph div.vis-network {
+    border-radius: var(--r);
+}
+
+.tracetree-graph div.vis-network {
+    background: var(--c-surface) !important;
+}
+
+.tracetree-sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100px;
+}
+
+.topo-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.topo-btn {
+    width: 100% !important;
+    font-size: .72rem !important;
+    padding: 5px 6px !important;
+    text-align: center;
+}
+
+.tracetree-nav {
+    display: flex;
+    gap: 8px;
+    padding: 8px 12px;
+    justify-content: center;
+}
+
+/* vis.js timeline overrides for dark theme */
+.vis-timeline {
+    border: 1px solid var(--c-border) !important;
+    background: var(--c-surface) !important;
+    font-family: var(--font-ui) !important;
+}
+
+.vis-time-axis .vis-text {
+    color: var(--c-text-2) !important;
+    font-size: .72rem !important;
+}
+
+.vis-time-axis .vis-grid.vis-minor { border-color: var(--c-border) !important; }
+.vis-time-axis .vis-grid.vis-major { border-color: var(--c-border-h) !important; }
+.vis-panel.vis-background { background: var(--c-bg) !important; }
+.vis-panel.vis-center { background: var(--c-surface) !important; }
+.vis-custom-time { background-color: var(--c-accent) !important; }
+
+.vis-item.vis-point .vis-item-content {
+    background: var(--c-accent) !important;
+    border-color: var(--c-accent) !important;
+}
+
+.vis-item.vis-dot {
+    border-color: var(--c-accent) !important;
+}
+
+/* Tracetree inner tabs (nested jQuery UI tabs) */
+.graph .ui-tabs {
+    background: none !important;
+}
+
+.graph .ui-tabs .ui-tabs-nav {
+    background: var(--c-elevated) !important;
+    padding: 0 8px !important;
+    min-height: 36px;
+}
+
+.graph .ui-tabs .ui-tabs-nav li a {
+    font-size: .8rem;
+    padding: 6px 14px !important;
+}
+
+/* Tracetree popup overlay — positioned next to the clicked node by JS */
+/* Router-info panel inside the topology view — anchored top-right of the
+   graph container, styled like the main map's "Link Details" panel. */
+.tracetree-popup {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 360px;
+    max-height: calc(100% - 20px);
+    z-index: 100;
+    background: var(--c-surface);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-lg);
+    display: none;             /* JS toggles to display:flex */
+    flex-direction: column;
+    overflow: hidden;
+    color: var(--c-text);
+    font-size: .82rem;
+}
+
+.tracetree-popup-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--c-border);
+    background: var(--c-elevated);
+    flex-shrink: 0;
+}
+
+.tracetree-popup-title {
+    font-size: .85rem;
+    font-weight: 600;
+    color: var(--c-accent);
+}
+
+.tracetree-popup-body {
+    overflow-y: auto;
+    padding: 12px 14px;
+    font-size: .82rem;
+    color: var(--c-text);
+    scrollbar-width: thin;
+    scrollbar-color: var(--c-control-h) transparent;
+}
+
+.tracetree-popup-body::-webkit-scrollbar { width: 5px; }
+.tracetree-popup-body::-webkit-scrollbar-track { background: transparent; }
+.tracetree-popup-body::-webkit-scrollbar-thumb { background: var(--c-control-h); border-radius: 3px; }
+
+/* Color legend inside the topology sidebar — center the values and keep them
+   readable on every cell colour. mix-blend-mode: difference automatically
+   inverts the text against whatever colour is behind it. */
+.tracetree-legend {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0 4px;
+    font-size: .78rem;
+    font-family: var(--font-mono);
+}
+.tracetree-legend td {
+    text-align: center;
+    padding: 6px 8px;
+    border-radius: var(--r);
+    color: #ffffff;
+    mix-blend-mode: normal;
+    text-shadow:
+        0 0 2px rgba(0, 0, 0, .85),
+        0 1px 0 rgba(0, 0, 0, .4);
+    letter-spacing: .02em;
+}
+
+.tracetree-popup-body table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.tracetree-popup-body table td {
+    padding: 5px 8px !important;
+    border-bottom: 1px solid var(--c-border) !important;
+    font-size: .82rem !important;
+}
+
+.tracetree-popup-body table td:first-child {
+    color: var(--c-text-3);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    font-size: .72rem !important;
+    width: 35%;
+}
+
+.tracetree-popup-body table td:last-child {
+    text-align: right !important;
+    font-family: var(--font-mono) !important;
+    font-size: .82rem !important;
+    color: var(--c-text);
+    word-break: break-all;
+}
+
+.tracetree-popup-close {
+    background: none;
+    border: none;
+    color: var(--c-text-3);
+    font-size: 1.4rem;
+    cursor: pointer;
+    padding: 0 4px;
+    line-height: 1;
+    border-radius: var(--r);
+    transition: color .15s, background .15s;
+}
+
+.tracetree-popup-close:hover {
+    color: var(--c-text);
+    background: var(--c-accent-mute);
+}
+
+/* Tracetree time info display */
+.tracetree-time-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 4px 12px;
+    font-size: .75rem;
+    font-family: var(--font-mono);
+    color: var(--c-text-3);
+}
+
+/* Tracetree fullscreen mode */
+.tracetree-fullscreen {
+    position: fixed !important;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 9999;
+    background: var(--c-bg);
+}
+
+/* Curve-chart embedded as an integrated tab (Plot → Queues / Unavailability /
+   property-specific). We strip the .graph tab padding for tabs that contain
+   a curve iframe and make them a flex column so the iframe fills height —
+   but ONLY when the tab is the active one, otherwise display:flex would
+   override jQuery UI's display:none on inactive panels and the curve panel
+   would stay visible everywhere. */
+div.graph:has(> .curve-iframe-wrap):not([aria-hidden="true"]) {
+    padding: 0 !important;
+    display: flex !important;
+    flex-direction: column;
+}
+
+.curve-iframe-wrap {
+    flex: 1 1 auto;
+    min-height: 0;
+    width: 100%;
+    display: flex;
+    background: var(--c-bg);
+}
+
+.curve-iframe {
+    flex: 1 1 auto;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    display: block;
+    background: var(--c-bg);
+}
+
+/* Traceroute variants — responsive grid; cards flow side-by-side */
+.trace-variants-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+    gap: 14px;
+    padding: 18px;
+}
+
+.trace-variant-block {
+    position: relative;
+    padding: 36px 14px 14px;       /* top reserved for checkbox label */
+    background: var(--c-surface);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r);
+    transition: border-color .15s, box-shadow .15s;
+}
+
+.trace-variant-block.selected {
+    border-color: var(--c-accent);
+    box-shadow: 0 0 0 2px var(--c-accent-mute);
+}
+
+/* Compare-checkbox label, top-right corner of each card */
+.trace-variant-select {
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: .7rem;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--c-text-3);
+    cursor: pointer;
+    user-select: none;
+}
+.trace-variant-select input {
+    accent-color: var(--c-accent);
+    cursor: pointer;
+}
+.trace-variant-block.selected .trace-variant-select {
+    color: var(--c-accent);
+}
+
+.trace-variant {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .82rem;
+}
+
+.trace-variant caption {
+    text-align: left;
+    padding: 0 0 10px 0;
+    color: var(--c-text-2);
+    font-size: .85rem;
+}
+
+.trace-variant caption .variant-no {
+    display: inline-block;
+    min-width: 22px;
+    padding: 1px 7px;
+    margin-right: 8px;
+    border-radius: 999px;
+    background: var(--c-accent);
+    color: #fff;
+    font-weight: 700;
+    text-align: center;
+    font-size: .78rem;
+}
+
+.trace-variant caption .variant-count {
+    color: var(--c-text-3);
+    font-family: var(--font-mono);
+    font-size: .78rem;
+    margin-left: 6px;
+}
+
+.trace-variant thead th {
+    text-align: left;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--c-border);
+    color: var(--c-text-3);
+    text-transform: uppercase;
+    font-size: .7rem;
+    letter-spacing: .04em;
+    font-weight: 600;
+}
+
+.trace-variant tbody td {
+    padding: 5px 10px;
+    border-bottom: 1px solid var(--c-border);
+    font-family: var(--font-mono);
+    font-size: .8rem;
+}
+
+.trace-variant tbody td:first-child {
+    width: 40px;
+    color: var(--c-text-3);
+    text-align: right;
+}
+
+.trace-variant tbody td.num {
+    text-align: right;
+    width: 110px;
+    color: var(--c-text-2);
+}
+
+.trace-variant tbody tr:last-child td {
+    border-bottom: none;
+}
+
+/* Collapsible "N more samples" badge under each variant table */
+.trace-repeats {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed var(--c-border);
+}
+
+.trace-repeats-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    background: var(--c-elevated);
+    border: 1px solid var(--c-border);
+    border-radius: 999px;
+    color: var(--c-text-2);
+    font-size: .78rem;
+    cursor: pointer;
+    transition: background .15s, color .15s, border-color .15s;
+}
+
+.trace-repeats-toggle:hover {
+    background: var(--c-accent-mute);
+    border-color: var(--c-accent);
+    color: var(--c-text);
+}
+
+.trace-repeats-toggle.expanded {
+    background: var(--c-accent-mute);
+    border-color: var(--c-accent);
+    color: var(--c-text);
+}
+
+.trace-repeats-chevron {
+    display: inline-block;
+    width: 10px;
+    color: var(--c-accent);
+    font-size: .7rem;
+}
+
+.trace-repeats-list {
+    margin: 8px 0 0;
+    padding: 8px 14px;
+    list-style: none;
+    background: var(--c-bg);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r);
+    max-height: 220px;
+    overflow-y: auto;
+}
+
+.trace-repeats-list li {
+    padding: 3px 0;
+    font-family: var(--font-mono);
+    font-size: .76rem;
+    color: var(--c-text-3);
+    border-bottom: 1px dashed var(--c-border);
+}
+
+.trace-repeats-list li:last-child {
+    border-bottom: none;
+}
+
+.trace-empty {
+    text-align: center;
+    color: var(--c-text-3);
+    padding: 30px 0;
+    font-size: .85rem;
+}
+
+/* Floating compare bar — sticky to bottom of the trace pane */
+.trace-compare-bar {
+    position: sticky;
+    bottom: 14px;
+    margin: 14px 18px;
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--c-elevated);
+    border: 1px solid var(--c-accent);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-lg);
+    z-index: 10;
+}
+.trace-compare-bar[hidden] { display: none; }
+.trace-compare-count {
+    font-size: .8rem;
+    color: var(--c-text);
+    flex: 1;
+}
+.trace-compare-btn { background: var(--c-accent) !important; color: #fff !important; }
+.trace-compare-btn:disabled {
+    opacity: .45;
+    cursor: not-allowed;
+}
+.trace-clear-btn { background: transparent !important; }
+
+/* Comparison modal */
+.trace-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, .55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    padding: 30px;
+}
+.trace-modal-overlay[hidden] { display: none; }
+
+.trace-modal {
+    width: min(900px, 100%);
+    max-height: 90vh;
+    background: var(--c-surface);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-lg);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.trace-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--c-border);
+    background: var(--c-elevated);
+    flex-shrink: 0;
+}
+.trace-modal-title {
+    font-size: .95rem;
+    font-weight: 600;
+    color: var(--c-accent);
+}
+.trace-modal-close {
+    background: none;
+    border: none;
+    color: var(--c-text-3);
+    font-size: 1.6rem;
+    cursor: pointer;
+    padding: 0 6px;
+    line-height: 1;
+    border-radius: var(--r);
+    transition: color .15s, background .15s;
+}
+.trace-modal-close:hover {
+    color: var(--c-text);
+    background: var(--c-accent-mute);
+}
+.trace-modal-body {
+    overflow: auto;
+    padding: 18px;
+}
+
+/* Side-by-side comparison table */
+.trace-compare-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .8rem;
+    font-family: var(--font-mono);
+}
+.trace-compare-table thead th {
+    text-align: left;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--c-border);
+    color: var(--c-text-3);
+    text-transform: uppercase;
+    font-size: .7rem;
+    letter-spacing: .04em;
+    font-weight: 600;
+    background: var(--c-elevated);
+}
+.trace-compare-table thead th.trace-compare-vno {
+    text-align: center;
+    border-bottom: 1px solid var(--c-border);
+    background: var(--c-bg);
+}
+.trace-compare-table thead th.trace-compare-vno .variant-no {
+    display: inline-block;
+    min-width: 22px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--c-accent);
+    color: #fff;
+    font-weight: 700;
+}
+.trace-compare-table tbody td {
+    padding: 5px 10px;
+    border-bottom: 1px solid var(--c-border);
+    font-size: .78rem;
+}
+.trace-compare-table tbody td.hop {
+    text-align: right;
+    color: var(--c-text-3);
+    width: 40px;
+}
+.trace-compare-table tbody td.addr {
+    color: var(--c-text);
+}
+.trace-compare-table tbody td.num {
+    text-align: right;
+    color: var(--c-text-2);
+    width: 70px;
+}
+/* Highlight rows where IPs diverge between selected variants */
+.trace-compare-table tbody tr.diff td.addr {
+    background: rgba(255, 170, 0, .08);
+    color: #f59e0b;
+    font-weight: 600;
+}
+.trace-compare-table tbody tr.diff td.hop {
+    background: rgba(255, 170, 0, .15);
+    color: #f59e0b;
+}
+
+/* === Sticky timeline layout =================================================
+ * The whole chain from the Routes tab pane down to .tracetree-inner is set up
+ * as a vertical flex container so the timeline can be docked at the bottom
+ * while the inner tabs section scrolls.
+ *
+ *   .graph (Routes pane)              ← flex column, overflow hidden
+ *     .ls-tab-inner                    ← flex column, fill height
+ *       .ls-tabs (ul + panels)         ← flex column, fill height
+ *         .ls-pane (active panel)      ← flex: 1, scroll context
+ *           #tab3-trace-inner          ← flex: 1
+ *             .tracetree-inner         ← flex column, fill height
+ *               .tracetree-header      ← fixed top
+ *               .tracetree-tabs-wrap   ← flex 1, scrollable
+ *               .tracetree-timeline-wrap ← fixed bottom
+ * ========================================================================== */
+
+/* Force the LS pane (and its wrappers) into a flex column so children stretch */
+.ls-tab-inner {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+.ls-tabs {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+.ls-tabs > ul {
+    flex: 0 0 auto;
+}
+.ls-pane {
+    flex: 1 1 auto;
+    min-height: 0;
+    /* The Traceroute pane hosts the tracetree, whose own flex:1 only works if
+       its parent is a flex container. */
+    display: flex;
+    flex-direction: column;
+}
+
+/* Wrapper div my code creates around tracetree_tab() also fills */
+.ls-pane > div[id$="-trace-inner"] {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.tracetree-inner {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.tracetree-inner > .tracetree-header {
+    flex: 0 0 auto;
+}
+
+/* Inner tabs (Topology / Hop stats / Traceroute / Docs) get the remaining
+   space and scroll internally; the timeline below stays docked. */
+.tracetree-tabs-wrap {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    /* Flex column so the active tab pane can fill the height. Without this the
+       panes are plain blocks, their flex:1 does nothing and the topology stops
+       at its min-height, leaving the lower part of the tab empty. */
+    display: flex;
+    flex-direction: column;
+}
+.tracetree-tabs-wrap > ul {
+    flex: 0 0 auto;      /* the tab nav keeps its content height */
+}
+
+/* Wrapper that ls_tab() puts the tracetree into: it sits between the flex
+   .ls-pane and .tracetree-inner, so it has to pass the height through. */
+.tracetree-host {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+/* vis-network's navigation buttons are bright green PNGs meant for a light
+   canvas; on the dark topology they glare. Tone them down to the UI's muted
+   grey and light up on hover. (The images ship with vis; we only re-tint.) */
+.tracetree-graph .vis-network .vis-navigation .vis-button {
+    filter: grayscale(1) brightness(1.7) opacity(.45);
+    transition: filter .15s ease;
+}
+.tracetree-graph .vis-network .vis-navigation .vis-button:hover {
+    filter: grayscale(1) brightness(2.2) opacity(.9);
+}
+:root[data-theme="light"] .tracetree-graph .vis-network .vis-navigation .vis-button {
+    filter: grayscale(1) brightness(.75) opacity(.55);
+}
+:root[data-theme="light"] .tracetree-graph .vis-network .vis-navigation .vis-button:hover {
+    filter: grayscale(1) brightness(.55) opacity(.9);
+}
+
+.tracetree-timeline-wrap {
+    flex: 0 0 auto;
+    background: var(--c-surface);
+    border-top: 1px solid var(--c-border);
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, .15);
+    padding: 8px 14px 10px;
+}
+
+.tracetree-timeline-wrap .tracetree-nav {
+    margin-top: 6px;
+    padding: 0;
+}
+
+/* Header showing which traceroute pair is being viewed */
+.tracetree-header {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 10px 16px;
+    background: var(--c-elevated);
+    border-bottom: 1px solid var(--c-border);
+}
+.tracetree-title {
+    font-size: .9rem;
+    font-weight: 600;
+    color: var(--c-text);
+    letter-spacing: .02em;
+}
+.tracetree-peers {
+    font-size: .82rem;
+    color: var(--c-text-2);
+    font-family: var(--font-mono);
+}
+.tracetree-peers strong {
+    color: var(--c-text);
+    font-weight: 600;
+}
+
+/* Docs sub-tab — readable copy with structure */
+.tracetree-docs {
+    padding: 18px 22px;
+    color: var(--c-text);
+    line-height: 1.55;
+    max-width: 860px;
+}
+.tracetree-docs h2 {
+    font-size: 1.15rem;
+    margin: 0 0 10px;
+    color: var(--c-text);
+}
+.tracetree-docs h3 {
+    font-size: .95rem;
+    margin: 18px 0 6px;
+    color: var(--c-text);
+}
+.tracetree-docs p,
+.tracetree-docs dl {
+    font-size: .85rem;
+    color: var(--c-text-2);
+    margin: 6px 0;
+}
+.tracetree-docs dt {
+    font-weight: 600;
+    color: var(--c-text);
+    margin-top: 6px;
+}
+.tracetree-docs dd {
+    margin-left: 18px;
+}
+
+/* ==========================================================
+   LS TAB — Measurement Archives / Peers / Traceroute browser
+   ========================================================== */
+
+.ls-tab-inner {
+    height: 100%;
+}
+
+.ls-tabs {
+    background: none !important;
+    border: none !important;
+}
+
+.ls-pane {
+    padding: 12px 14px;
+    min-height: 400px;
+}
+
+.ls-pane:not([hidden]) {
+    /* jQuery UI sets inline display:block; we keep block as default */
+}
+
+.ls-pane h2.center-text,
+.ls-pane h4.center-text,
+.ls-pane p.center-text {
+    text-align: center;
+    color: var(--c-text-2);
+    margin: 30px 0;
+}
+
+.ls-empty {
+    text-align: center;
+    padding: 30px 12px;
+    color: var(--c-text-2);
+}
+.ls-empty p {
+    margin: 0 0 14px;
+    font-size: .9rem;
+}
+
+.ls-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+    padding: 8px 10px;
+    background: var(--c-elevated);
+    border-radius: var(--r);
+}
+
+.ls-toolbar label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: .8rem;
+    color: var(--c-text-2);
+}
+
+.ls-search-input,
+.ls-date-input {
+    padding: 6px 10px;
+    border: 1px solid var(--c-border);
+    border-radius: var(--r);
+    background: var(--c-surface);
+    color: var(--c-text);
+    font-size: .82rem;
+    font-family: var(--font-ui);
+}
+
+.ls-search-input {
+    flex: 1 1 220px;
+    max-width: 320px;
+}
+
+.ls-search-input:focus,
+.ls-date-input:focus {
+    outline: none;
+    border-color: var(--c-accent);
+    box-shadow: 0 0 0 2px rgba(0, 119, 204, .15);
+}
+
+.ls-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .82rem;
+    background: var(--c-surface);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r);
+    overflow: hidden;
+}
+
+.ls-table thead {
+    background: var(--c-elevated);
+}
+
+.ls-table th {
+    text-align: left;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--c-border);
+    color: var(--c-text);
+    font-weight: 600;
+    cursor: pointer;
+    user-select: none;
+}
+
+.ls-table td {
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--c-border);
+    color: var(--c-text-2);
+    vertical-align: top;
+}
+
+.ls-table tbody tr:hover {
+    background: var(--c-elevated);
+}
+
+.ls-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.ls-pair-btn,
+.ls-table .knapp {
+    padding: 4px 10px !important;
+    font-size: .78rem !important;
+    margin-right: 4px;
+}
+
+/* ==========================================================
+   RESPONSIVE
+   ========================================================== */
+
+
+/* ==========================================================
+   RESPONSIVE — mobile / tablet portrait (≤ 768px)
+   ==========================================================
+   Goal: every microdep-map feature reachable on a phone. Sidebar
+   becomes a slide-in drawer that overlays the map; link details
+   becomes a bottom sheet; tab strip scrolls horizontally; all
+   tappable elements are at least 44×44 (Apple HIG) / 48×48
+   (Material) high. Desktop layout untouched above the breakpoint.
+   ========================================================== */
+
+/* The backdrop element is always in the DOM but invisible on
+   desktop; mobile media query lights it up when body has the
+   .sidebar-open class. */
+.sidebar-backdrop { display: none; }
+
+@media (max-width: 768px) {
+
+    /* --- Layout: collapse the grid into a single column ------ */
+    .app-layout {
+        grid-template-columns: 1fr;
     }
+
+    /* --- Sidebar drawer -------------------------------------- */
+    .sidebar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        height: 100vh;
+        width: 280px;
+        max-width: 88vw;
+        min-width: 0;
+        z-index: 1500;
+        box-shadow: 4px 0 24px rgba(0, 0, 0, .35);
+        transform: translateX(0);
+        transition: transform .25s cubic-bezier(.4, 0, .2, 1);
+    }
+    .sidebar.collapsed {
+        transform: translateX(-100%);
+        /* Override the desktop "width: 0" rule so the drawer can
+           slide back in at full width — translateX hides it instead. */
+        width: 280px !important;
+        min-width: 0 !important;
+        max-width: 88vw;
+        border-right: 1px solid var(--c-border) !important;
+    }
+
+    /* --- Backdrop -------------------------------------------- */
+    .sidebar-backdrop {
+        display: block;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, .5);
+        z-index: 1490;       /* below sidebar (1500), above everything else */
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity .25s;
+    }
+    body.sidebar-open .sidebar-backdrop {
+        opacity: 1;
+        pointer-events: auto;
+    }
+
+    /* --- Touch target sizing --------------------------------- */
+    /* Apple HIG → 44px min; we go 44 to keep visual density. */
+    .knapp,
+    button.knapp,
+    .sidebar button,
+    .sidebar .knapp,
+    select,
+    input[type="text"],
+    input[type="search"],
+    input[type="number"] {
+        min-height: 44px;
+        font-size: .92rem !important;
+    }
+    .sidebar-toggle-btn,
+    .link-panel-close {
+        min-width: 44px;
+        min-height: 44px;
+    }
+
+    /* --- Link Details panel as bottom sheet ------------------ */
+    .link-panel {
+        top: auto;
+        right: 0;
+        left: 0;
+        bottom: 0;
+        width: 100%;
+        max-width: 100%;
+        max-height: 75vh;
+        border-radius: var(--r-lg) var(--r-lg) 0 0;
+        border-bottom: none;
+        border-left: none;
+        border-right: none;
+        box-shadow: 0 -8px 24px rgba(0, 0, 0, .3);
+        /* slide up from bottom — mirrors the desktop right-edge slide */
+        animation: linkPanelSlideUp .25s cubic-bezier(.4, 0, .2, 1);
+    }
+    @keyframes linkPanelSlideUp {
+        from { transform: translateY(100%); }
+        to   { transform: translateY(0);    }
+    }
+    .link-panel-header {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        /* Drag-handle hint: a small grey pill above the title bar */
+    }
+    .link-panel-header::before {
+        content: '';
+        position: absolute;
+        top: 6px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 36px;
+        height: 4px;
+        border-radius: 2px;
+        background: var(--c-border-h);
+    }
+    .link-panel-header { padding-top: 16px; }
+
+    /* --- Tab strip horizontal scroll ------------------------- */
+    .ui-tabs-nav {
+        flex-wrap: nowrap !important;
+        overflow-x: auto;
+        overflow-y: hidden;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+    }
+    .ui-tabs-nav::-webkit-scrollbar { display: none; }
+    .ui-tabs-nav > li {
+        flex-shrink: 0;
+    }
+
+    /* --- Status bar: single line + ellipsis on overflow ------ */
+    .status-bar {
+        flex-wrap: nowrap;
+        overflow: hidden;
+    }
+    .status-bar > * {
+        flex-shrink: 0;
+        white-space: nowrap;
+    }
+    .status-message {
+        flex-shrink: 1 !important;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    /* --- Map controls: bigger zoom buttons for fingers ------- */
+    .leaflet-control-zoom a {
+        width: 36px !important;
+        height: 36px !important;
+        line-height: 36px !important;
+        font-size: 18px !important;
+    }
+
+    /* --- Heatmap title row stacks on narrow screens ---------- */
+    .tab-header-row {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .export-csv-btn {
+        align-self: flex-end;
+    }
+
+    /* --- Map legend: shrink fixed 280px width + button padding so
+           the legend doesn't dominate the map on small phones. The
+           desktop legend is fixed width because of equal-column flex
+           math for semaphore cells; we override it with a flexible
+           max-width and tighter typography. */
+    table#legend {
+        width: auto !important;
+        min-width: 0 !important;
+        max-width: 240px !important;
+        padding: 4px 6px !important;
+    }
+    /* The "N links" count chip docks below the legend table and has
+       its own hardcoded 280px width on desktop — match it to the
+       table width on mobile so it doesn't poke out. */
+    .legend-count {
+        width: auto !important;
+        max-width: 240px !important;
+        padding: 3px 8px 4px !important;
+        font-size: .65rem !important;
+    }
+    #legend table th button,
+    table#legend th button,
+    #legend #farge0,
+    table#legend #farge0 {
+        font-size: .72rem !important;
+        line-height: 1.15 !important;
+    }
+    #legend table td button,
+    table#legend td button {
+        font-size: .65rem !important;
+        padding: 3px 3px !important;
+        min-height: 0 !important;
+    }
+    #legend table tr,
+    table#legend tr {
+        gap: 2px !important;
+    }
+
+    /* --- Compare modal: full screen on mobile ---------------- */
+    .compare-modal-content {
+        width: 96vw;
+        max-width: 96vw;
+        max-height: 92vh;
+    }
+
+    /* --- Keyboard-shortcuts overlay: tighter padding --------- */
+    .kbd-help-content {
+        max-width: 92vw;
+        padding: 16px;
+    }
+}
+
+/* ----------------------------------------------------------
+   Very small phones (<= 380px) — squeeze sidebar tighter so
+   the backdrop is still visible behind it (helps users
+   discover that tapping outside dismisses).
+   ---------------------------------------------------------- */
+@media (max-width: 380px) {
+    .sidebar,
+    .sidebar.collapsed {
+        width: 260px !important;
+    }
+}
+
+
+/* ==========================================================
+   CSV EXPORT BUTTON (Summary / Asymmetry / Missing tabs)
+   ========================================================== */
+
+.tab-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.tab-header-row > h2 {
+    margin: 0;
+    flex: 1 1 auto;
+}
+
+.export-csv-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: var(--c-elevated);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r);
+    color: var(--c-text-2);
+    font-size: .78rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background .15s, border-color .15s, color .15s;
+    flex-shrink: 0;
+    line-height: 1;
+}
+
+.export-csv-btn:hover {
+    background: var(--c-control);
+    border-color: var(--c-border-h);
+    color: var(--c-text);
+}
+
+.export-csv-btn:active {
+    transform: translateY(1px);
+}
+
+.export-csv-btn svg {
+    flex-shrink: 0;
+    color: var(--c-accent);
+}
+
+.export-csv-btn .export-csv-done-label { display: none; }
+.export-csv-btn.exported {
+    background: var(--c-success-bg, #1f6f3a);
+    border-color: var(--c-success, #2ea043);
+    color: var(--c-text);
+}
+.export-csv-btn.exported svg     { color: var(--c-success, #2ea043); }
+.export-csv-btn.exported .export-csv-label      { display: none; }
+.export-csv-btn.exported .export-csv-done-label { display: inline; }
+
+/* ----- Per-link RTT sparkline (Trend card) ----- */
+.link-sparkline-card .link-sparkline-prop {
+    color: var(--c-text-2);
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: 0;
+    font-family: inherit;
+}
+
+.link-sparkline-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 10px;
+    margin: 2px 0 6px;
+    font-family: var(--font-mono);
+    font-size: .72rem;
+}
+
+.link-sparkline-stats .lss-item {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+}
+
+.link-sparkline-stats .lss-k {
+    color: var(--c-text-3);
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    font-size: .62rem;
+}
+
+.link-sparkline-stats .lss-v {
+    color: var(--c-text);
+    font-weight: 600;
+}
+
+.link-sparkline-stats .lss-n .lss-v {
+    color: var(--c-text-2);
+    font-weight: 400;
+}
+
+.link-sparkline-wrap {
+    position: relative;
+    width: 100%;
+    height: 110px;
+}
+
+.link-sparkline {
+    display: block;
+}
+
+
+
+
+/* ----- Compare-mode floating link chips ----------------
+   When compare mode is on, every link gets a small "+12%" /
+   "-7%" pill hovering at its geographic midpoint. Implemented
+   as a Leaflet divIcon so it follows the map's pan/zoom
+   automatically. We translate -50%/-50% to centre the chip on
+   the marker's latLng (Leaflet anchors top-left by default).
+*/
+.compare-pct-marker {
+    pointer-events: none !important;
+    background: transparent !important;
+    border: none !important;
+}
+.compare-pct-chip {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 11px;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    text-shadow: 0 1px 1px rgba(0, 0, 0, .5);
+    white-space: nowrap;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, .45);
+    border: 1px solid rgba(255, 255, 255, .25);
+    transform: translate(-50%, -50%);   /* centre on midpoint */
+    pointer-events: none;
+    line-height: 14px;
+    font-family: var(--font-mono, monospace);
+}
+@media (max-width: 768px) {
+    .compare-pct-chip {
+        font-size: 10px;
+        padding: 1px 6px;
+    }
+}
+
+/* ----- Compare-mode legend ------------------------------
+   In compare mode we replace the threshold semaphore with a
+   fixed-bucket diff palette. We MATCH the threshold legend's
+   outer dimensions (280px wide, same title-row + bucket-row
+   heights) so flipping compare on/off doesn't make the legend
+   "jump" between sizes. The 5 diff buckets fit by shrinking the
+   bucket-button font versus the threshold legend's typical 4
+   buckets — but `line-height` is pinned to the same value as the
+   regular bucket so the row height stays identical regardless of
+   font size. Buttons are inert (no hover-lift, no click).
+*/
+table#legend.compare-legend {
+    width: 280px !important;
+    min-width: 280px !important;
+    max-width: 280px !important;
+}
+table#legend.compare-legend td {
+    padding-left: 1px !important;
+    padding-right: 1px !important;
+}
+table#legend.compare-legend td button {
+    /* .58rem fits "+10..+30" in 280/5 ≈ 55px cells without wrapping. */
+    font-size: .58rem !important;
+    /* Pin row height to the regular legend's natural height (≈26px =
+       4px top + 18px content + 4px bottom). line-height: 18px keeps
+       the smaller font centered in the same vertical box. */
+    line-height: 18px !important;
+    min-height: 26px !important;
+    padding: 4px 1px !important;
+    box-sizing: border-box !important;
+    white-space: nowrap !important;
+    cursor: default !important;
+    color: #fff !important;
+    text-shadow: 0 1px 1px rgba(0, 0, 0, .4);
+}
+table#legend.compare-legend td button:hover {
+    transform: none !important;
+    box-shadow: none !important;
+    filter: none !important;
+}
+/* Title row — pin to the same height as the regular legend's title.
+   Slightly smaller font so "Property (unit) vs yesterday" fits the
+   280px row without wrapping; line-height keeps vertical box equal. */
+table#legend.compare-legend th button {
+    font-size: .78rem !important;
+    line-height: 20px !important;
+    min-height: 22px !important;
+    box-sizing: border-box !important;
+}
+
+
+/* ===== Compare-modal RTT-per-hop chart (tracetree) ===== */
+.trace-compare-chart-wrap {
+    position: relative;
+    width: 100%;
+    height: 240px;
+    margin-bottom: 16px;
+}
+.trace-compare-chart {
+    display: block;
+}
+
+
+/* ===== Copy-hostname buttons in the link panel ===== */
+.link-endpoint { display: flex; align-items: center; }
+.link-copy-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-left: auto;       /* push to the right edge of the endpoint row */
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--c-text-3);
+    padding: 2px 5px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: color .12s, background .12s, border-color .12s;
+}
+.link-copy-btn:hover {
+    color: var(--c-text);
+    background: var(--c-control);
+    border-color: var(--c-border);
+}
+.link-copy-btn.copied,
+.link-copy-btn.copied:hover {
+    color: var(--c-ok, #059669);
+    border-color: var(--c-ok, #059669);
+    background: transparent;
+}
+
+/* ===== Ported from work-snapshot: tab-nav tool button (#16) + empty-state
+   overlay (#11) ========================================================== */
+
+/* Tool buttons (e.g. Clear-all-tabs) live in the ui-tabs-nav <ul> as
+   <li class="tabnav-tool-li">; strip the inherited "tab" styling and present
+   a flat icon-only square matching the other tool buttons. */
+.ui-tabs .ui-tabs-nav li.tabnav-tool-li {
+    background: none !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+}
+.tabnav-tool-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    background: var(--c-control);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r);
+    color: var(--c-text-2);
+    cursor: pointer;
+    margin-right: 8px;
+    transition: all .15s;
+}
+.tabnav-tool-btn:hover { background: var(--c-control-h); color: var(--c-text); }
+
+/* Empty-state overlay shown over the map when no links are present. */
+/* A compact notice card, not a full-map curtain: the map (topology, markers)
+   stays visible and usable around it — issue #113. */
+.map-empty-overlay {
+    position: absolute;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    max-width: min(420px, calc(100% - 32px));
+    padding: 12px 18px;
+    background: color-mix(in srgb, var(--c-elevated) 94%, transparent);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r);
+    box-shadow: 0 6px 24px rgba(0, 0, 0, .28);
+    color: var(--c-text-2);
+    pointer-events: none;
+}
+.map-empty-overlay h3 { font-size: .95rem; margin: 0 0 4px; }
+.map-empty-overlay p  { font-size: .82rem; margin: 0; }
+/* The hint list is useful but bulky — keep the card small. */
+.map-empty-overlay ul { display: none; }
+.map-empty-overlay .map-empty-icon svg { width: 22px; height: 22px; }
+.map-empty-overlay[hidden] { display: none; }
+.map-empty-overlay h3 {
+    margin: 12px 0 4px;
+    color: var(--c-text);
+    font-size: 1.05rem;
+}
+.map-empty-overlay p {
+    margin: 0 0 12px;
+    max-width: 480px;
+    font-size: .85rem;
+}
+.map-empty-overlay ul {
+    margin: 0;
+    padding-left: 18px;
+    text-align: left;
+    font-size: .82rem;
+    line-height: 1.6;
+    color: var(--c-text-3);
+}
+.map-empty-icon {
+    color: var(--c-text-3);
+    opacity: .7;
+}
+
+/* ===== Ported from work-snapshot: stale-data banner (#8) =============== */
+.stale-data-banner {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 14px;
+    background: var(--c-warn, #d97706);
+    color: #1a1a1a;
+    font-size: .85rem;
+    font-weight: 500;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, .25);
+    cursor: pointer;
+}
+.stale-data-banner[hidden] { display: none; }
+.stale-data-icon { display: inline-flex; align-items: center; }
+.stale-data-text { flex: 1; }
+.stale-data-refresh {
+    background: rgba(0, 0, 0, .15);
+    color: inherit;
+    border: 1px solid rgba(0, 0, 0, .25);
+    border-radius: 4px;
+    padding: 4px 10px;
+    cursor: pointer;
+    font-size: .8rem;
+    font-weight: 600;
+}
+.stale-data-refresh:hover { background: rgba(0, 0, 0, .25); }
+.stale-data-close {
+    background: transparent;
+    color: inherit;
+    border: none;
+    font-size: 1.4rem;
+    line-height: 1;
+    padding: 0 4px;
+    cursor: pointer;
+    opacity: .6;
+}
+.stale-data-close:hover { opacity: 1; }
+
+/* ===== Ported from work-snapshot: Real-locations hop labels (#TIER1) === */
+.leaflet-tooltip.real-hop-label {
+    background: rgba(0, 0, 0, 0.55) !important;
+    color: #fff !important;
+    border: none !important;
+    box-shadow: none !important;
+    font-size: .68rem !important;
+    padding: 1px 5px !important;
+    border-radius: 3px !important;
+    font-weight: 500;
+    pointer-events: none;
+    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.5);
+    opacity: 0 !important;
+    visibility: hidden;
+    transition: opacity .12s ease-out;
+}
+.leaflet-tooltip.real-hop-label.visible {
+    opacity: 1 !important;
+    visibility: visible;
+}
+/* Approximate-position hops (no geo data, placed by GC slerp between known
+   neighbours). Italic + faded to show these positions are guesses. */
+.leaflet-tooltip.real-hop-label-approx {
+    font-style: italic;
+    background: rgba(0, 0, 0, 0.4) !important;
+}
+.leaflet-tooltip.real-hop-label-approx.visible {
+    opacity: 0.85 !important;
+}
+
+/* ===== Spinner + Real-locations loading overlay (#TIER1) ============== */
+/* The JS uses <div class="spinner"> in several places (restored route tabs,
+   traceroute panes, the geo-loading overlay) but only #busy was styled — give
+   .spinner the same rotating-ring treatment so they're all visible. */
+.spinner {
+    width: 28px;
+    height: 28px;
+    margin: 0 auto;
+    border: 3px solid var(--c-border-h);
+    border-top-color: var(--c-accent);
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+}
+.map-loading-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 6;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    background: color-mix(in srgb, var(--c-bg) 70%, transparent);
+    color: var(--c-text-2);
+}
+.map-loading-overlay[hidden] { display: none; }
+.map-loading-overlay p { margin: 0; font-size: .9rem; }
+
+/* ===== Ported from work-snapshot: HTML heatmap (#TIER1) ============== */
+.ui-tabs .ui-tabs-panel.ui-widget-content.graph:has(.heatmap-header) {
+    padding: 12px 16px !important;
+}
+
+.heatmap-header {
+    padding: 12px 16px 8px;
+}
+
+/* Title-row layout — pushes the [Export CSV] button to the right edge
+   of the title bar across all data tabs (Heatmap, Summary, Asymmetry,
+   Missing). The :first-child h2 keeps its existing sizing. */
+.tab-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.tab-header-row > h2 {
+    margin: 0;
+    flex: 1 1 auto;
+}
+
+.export-csv-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: var(--c-elevated);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r);
+    color: var(--c-text-2);
+    font-size: .78rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background .15s, border-color .15s, color .15s;
+    flex-shrink: 0;
+    line-height: 1;
+}
+
+.export-csv-btn:hover {
+    background: var(--c-control);
+    border-color: var(--c-border-h);
+    color: var(--c-text);
+}
+
+.export-csv-btn:active {
+    transform: translateY(1px);
+}
+
+.export-csv-btn svg {
+    flex-shrink: 0;
+    color: var(--c-accent);
+}
+
+.export-csv-btn .export-csv-done-label { display: none; }
+.export-csv-btn.exported {
+    background: var(--c-success-bg, #1f6f3a);
+    border-color: var(--c-success, #2ea043);
+    color: var(--c-text);
+}
+.export-csv-btn.exported svg     { color: var(--c-success, #2ea043); }
+.export-csv-btn.exported .export-csv-label      { display: none; }
+.export-csv-btn.exported .export-csv-done-label { display: inline; }
+
+.heatmap-title {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--c-text);
+    margin: 0 0 4px;
+}
+
+.heatmap-subtitle {
+    font-size: .82rem;
+    color: var(--c-text-2);
+    margin-bottom: 2px;
+}
+
+.heatmap-range {
+    font-size: .75rem;
+    font-family: var(--font-mono);
+    color: var(--c-text-3);
+}
+
+.heatmap-scroll {
+    overflow-x: auto;
+    padding: 0 16px 16px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--c-control-h) transparent;
+}
+
+.heatmap-scroll::-webkit-scrollbar { height: 6px; }
+.heatmap-scroll::-webkit-scrollbar-track { background: transparent; }
+.heatmap-scroll::-webkit-scrollbar-thumb { background: var(--c-control-h); border-radius: 3px; }
+
+.heatmap-table {
+    border-collapse: separate;
+    border-spacing: 2px;
+    width: max-content;
+}
+
+.heatmap-table thead th,
+.heatmap-table tbody td {
+    font-size: .72rem !important;
+    padding: 0 !important;
+    border: none !important;
+}
+
+.heatmap-corner {
+    position: sticky;
+    left: 0;
+    z-index: 3;
+    background: var(--c-surface) !important;
+    font-size: .68rem !important;
+    font-weight: 600 !important;
+    color: var(--c-text-3) !important;
+    padding: 6px 10px !important;
+    text-align: left !important;
+    white-space: nowrap;
+    font-family: var(--font-mono) !important;
+}
+
+.heatmap-col-header {
+    font-size: .65rem !important;
+    font-weight: 500 !important;
+    color: var(--c-text-2) !important;
+    padding: 8px 4px 10px !important;
+    text-align: center !important;
+    vertical-align: bottom !important;
+    font-family: var(--font-mono) !important;
+    height: 150px;
+    max-height: 150px;
+    overflow: hidden;
+    position: relative;
+}
+
+.heatmap-col-header > span {
+    display: block;
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    transform: rotate(180deg);
+    max-height: 130px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin: 0 auto;
+    padding: 8px 0;
+}
+
+.heatmap-row-header {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    background: var(--c-surface) !important;
+    font-size: .7rem !important;
+    font-weight: 500 !important;
+    color: var(--c-text-2) !important;
+    padding: 4px 12px 4px 8px !important;
+    text-align: left !important;
+    white-space: nowrap;
+    font-family: var(--font-mono) !important;
+}
+
+.heatmap-cell {
+    padding: 1px !important;
+    text-align: center !important;
+}
+
+.heatmap-cell-inner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 46px;
+    min-height: 32px;
+    padding: 3px 6px;
+    border-radius: 4px;
+    font-size: .7rem;
+    font-weight: 600;
+    font-family: var(--font-mono);
+    transition: transform .1s, box-shadow .1s;
+}
+
+/* Cell link wraps the coloured square. Strip default <button> chrome so the
+   element looks identical whether rendered as <a> (new-window mode) or
+   <button> (integrated-tab mode). */
+.heatmap-cell-link {
+    display: block;
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+    text-decoration: none;
+}
+.heatmap-cell-link:focus { outline: none; }
+.heatmap-cell-link:focus-visible .heatmap-cell-inner {
+    box-shadow: 0 0 0 2px var(--c-accent);
+}
+
+.heatmap-cell:hover .heatmap-cell-inner {
+    transform: scale(1.15);
+    box-shadow: 0 2px 8px rgba(0,0,0,.3);
+    z-index: 1;
+    position: relative;
+}
+
+.heatmap-diagonal .heatmap-cell-inner {
+    background: repeating-linear-gradient(
+        45deg,
+        rgba(100,120,150,0.3),
+        rgba(100,120,150,0.3) 3px,
+        transparent 3px,
+        transparent 6px
+    ) !important;
+    color: transparent !important;
+    min-width: 46px !important;
+    min-height: 32px !important;
+    border: 1px dashed rgba(100,120,150,0.4) !important;
+    border-radius: 4px;
+}
+
+.heatmap-nodata .heatmap-cell-inner {
+    background: transparent;
+    color: var(--c-text-3);
+    opacity: 0.3;
+}
+
+/* Curve report canvas (chart_curve, Chart.js scatter) */
+.report-canvas { display: block; margin: 8px auto; max-width: 100%; }
+
+/* ===== Ported from work-snapshot: TIER3 (legend count, swap-dir, shortcuts) ===== */
+.legend-count {
+    display: block;
+    width: 280px;
+    box-sizing: border-box;
+    margin: -1px auto 0;
+    padding: 4px 12px 6px;
+    /* Pin the chip to a single line at a fixed height — otherwise the
+       compare-mode chip ("6 worse · 2 better · …") can wrap and make
+       the total legend height differ from the threshold-mode chip. */
+    height: 24px;
+    line-height: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: .72rem;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.78);
+    background: rgba(30, 40, 55, 0.88);
+    border: 1px solid rgba(148, 163, 184, 0.15);
+    border-top: none;
+    border-radius: 0 0 10px 10px;
+}
+.legend-count strong {
+    color: var(--c-accent);
+    font-weight: 600;
+}
+/* When the count chip is present, flatten the legend table's bottom
+   corners so the chip docks cleanly. We rely on the chip's existence
+   in the DOM via :has() — supported in all current browsers. */
+div#legend:has(.legend-count) table#legend {
+    border-bottom-left-radius: 0 !important;
+    border-bottom-right-radius: 0 !important;
+}
+
+.link-swap-btn {
+    flex: 0 0 auto;
+    background: var(--c-control);
+    color: var(--c-text-2);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r);
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: color .15s, background .15s, border-color .15s, transform .2s;
+}
+.link-swap-btn:hover {
+    color: var(--c-accent);
+    background: var(--c-accent-mute);
+    border-color: var(--c-accent);
+    transform: rotate(180deg);
+}
+.link-swap-btn svg { width: 16px; height: 16px; }
+.link-swap-btn:focus { outline: none; box-shadow: 0 0 0 2px var(--c-accent-mute); }
+
+.keyboard-shortcuts-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, .55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 99999;
+    padding: 30px;
+}
+.keyboard-shortcuts-overlay[hidden] { display: none; }
+.keyboard-shortcuts-modal {
+    width: min(520px, 100%);
+    max-height: 80vh;
+    overflow-y: auto;
+    background: var(--c-surface);
+    color: var(--c-text);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-lg);
+}
+.keyboard-shortcuts-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--c-border);
+    background: var(--c-elevated);
+}
+.keyboard-shortcuts-header h3 {
+    margin: 0;
+    font-size: .95rem;
+    font-weight: 600;
+    color: var(--c-accent);
+}
+.keyboard-shortcuts-close {
+    background: none;
+    border: none;
+    color: var(--c-text-3);
+    font-size: 1.6rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 6px;
+}
+.keyboard-shortcuts-close:hover { color: var(--c-text); }
+.keyboard-shortcuts-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .88rem;
+}
+.keyboard-shortcuts-table tr td { padding: 8px 18px; border-top: 1px solid var(--c-border); }
+.keyboard-shortcuts-table tr:first-child td { border-top: none; }
+.keyboard-shortcuts-table td:first-child { width: 90px; text-align: center; }
+.keyboard-shortcuts-table kbd {
+    display: inline-block;
+    min-width: 24px;
+    padding: 3px 8px;
+    background: var(--c-control);
+    border: 1px solid var(--c-border);
+    border-bottom-width: 2px;
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    font-size: .82rem;
+    color: var(--c-text);
+}

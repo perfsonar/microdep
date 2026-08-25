@@ -10,6 +10,10 @@ FORCE=no
 
 default: dist
 
+missing-from-manifest:
+# List files not listed in MANIFEST.
+	@find . -type f | while read f; do grep -q $${f#*/} MANIFEST || echo $${f#*/} | grep -v -e unibuild -e MANIFEST; done
+
 dist: MANIFEST
 	@echo "Creating tar-package of project..."
 	mkdir /tmp/$(PACKAGE)-$(VERSION)

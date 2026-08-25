@@ -1,0 +1,17 @@
+[Unit]
+Description=perfSONAR Microdep hourly gap-summary aggregator
+After=network.target opensearch.service
+# Don't fail boot if opensearch happens to be slow to start — the script
+# will simply log a warning and exit; the next timer fire will catch up.
+Wants=opensearch.service
+
+[Service]
+Type=oneshot
+User=perfsonar
+Group=perfsonar
+ExecStart=/usr/lib/perfsonar/bin/microdep_commands/microdep-hourly-aggregator.pl --backfill 1
+# If the service slot is missed (e.g., box was off for a couple of hours),
+# the timer's Persistent=true will still fire it once on next boot; pass
+# --backfill=N on the cmdline to fill in N preceding windows in one pass.
+StandardOutput=journal
+StandardError=journal

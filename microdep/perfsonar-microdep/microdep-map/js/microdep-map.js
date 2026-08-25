@@ -4,15 +4,195 @@ import LatLon from "./latlon-spherical.js";
 import {parms, conffile, prop_sum, update_url, stats_on, net_names, net_desc, net_long_desc, net_ip_version,
 	event_names, event_desc, event_long_desc, event_index, event_sum_type,
 	prop_names, prop_desc, prop_long_desc, prop_aggr,
-	colors, get_color, make_palette, threshes, get_thresholds, 
+	colors, get_color, make_palette, threshes, get_thresholds, escapeHtml,
 	get_parms,removeParam, parse_hhmm, hhmm , adjust_to_timezone,
 	get_config, update_props, make_prop_select, add_tab,
 	round_number, zero_fill, selected_date_is_today_or_future, selected_hour_is_future }
 from "./map-lib.js" ;
-import { heatmap } from "./graph.js";
+import { heatmap, chart_curve } from "./graph.js";
+import { ls_tab } from "./ls-tab.js";
 
   var start, end;  // startend time for current period
- 
+
+// Shrink Leaflet's default marker icon. The defaults (25x41 / 41x41
+// shadow) read heavy at our zoom levels where pairs sit close and pins
+// overlap. Setting these BEFORE any L.marker() runs propagates to every
+// marker. (CSS transform: scale() can't be used — Leaflet positions
+// markers via transform: translate3d() and the two would compete.)
+if (typeof L !== 'undefined' && L.Icon && L.Icon.Default) {
+    L.Icon.Default.mergeOptions({
+        iconSize:    [16, 27],
+        iconAnchor:  [ 8, 27],
+        popupAnchor: [ 0, -22],
+        shadowSize:  [27, 27],
+        shadowAnchor:[ 8, 27]
+    });
+}
+
+// =============================================================================
+// Tab persistence — remembers which tabs (Routes, Queues, Heatmap, ...) were
+// open across page reloads. Specs are stored in localStorage; on init we wait
+// for the network/parms to settle, then recreate each tab by replaying the
+// same code paths the user would trigger by clicking.
+// =============================================================================
+const TAB_STORE_KEY = 'microdep-open-tabs';
+const tabSpecs = new Map();        // divid -> spec (in-memory mirror of storage)
+let restoringTabs = false;         // suppress persistence while we replay specs
+
+function persistTab(divid, spec) {
+    if (restoringTabs) return;     // avoid feedback loops during restore
+    tabSpecs.set(divid, spec);
+    syncTabsToStorage();
+}
+function unpersistTab(divid) {
+    if (!tabSpecs.has(divid)) return;
+    tabSpecs.delete(divid);
+    syncTabsToStorage();
+}
+function syncTabsToStorage() {
+    try { localStorage.setItem(TAB_STORE_KEY, JSON.stringify(Array.from(tabSpecs.values()))); }
+    catch (_) { /* private mode, quota etc. */ }
+}
+function loadStoredTabSpecs() {
+    try { return JSON.parse(localStorage.getItem(TAB_STORE_KEY) || '[]'); }
+    catch (_) { return []; }
+}
+document.addEventListener('microdep-tab-closed', function (e) {
+    unpersistTab(e.detail.divid);
+});
+
+// =============================================================================
+// Active-tab persistence — remembers which tab was visible before reload.
+// We store a *spec identity* rather than the divid, since divids change
+// session-to-session as add_tab assigns sequential numbers. `null` means the
+// Map tab (which has no spec, just the static <a href="#mapid">).
+// =============================================================================
+const ACTIVE_TAB_KEY = 'microdep-active-tab';
+
+function specIdentity(spec) {
+    if (!spec) return null;
+    if (spec.kind === 'routes')  return 'routes|' + spec.from + '|' + spec.to;
+    if (spec.kind === 'curve')   return 'curve|' + spec.url;
+    if (spec.kind === 'check')   return 'check|' + spec.report_type;
+    return null;
+}
+
+function saveActiveTab() {
+    try {
+        const idx = $('main#tabs').tabs('option', 'active');
+        const $a = $('main#tabs > ul > li > a').eq(idx);
+        const panelId = $a.attr('href') ? $a.attr('href').replace('#', '') : 'mapid';
+        if (panelId === 'mapid') {
+            localStorage.setItem(ACTIVE_TAB_KEY, 'map');
+        } else {
+            const spec = tabSpecs.get(panelId);
+            const ident = specIdentity(spec);
+            if (ident) localStorage.setItem(ACTIVE_TAB_KEY, ident);
+        }
+    } catch (_) { /* ignore */ }
+}
+
+function loadActiveTabIdent() {
+    try { return localStorage.getItem(ACTIVE_TAB_KEY) || 'map'; }
+    catch (_) { return 'map'; }
+}
+
+function applyActiveAfterRestore() {
+    const target = loadActiveTabIdent();
+    let activeIdx = 0;
+    if (target !== 'map') {
+        for (const [divid, spec] of tabSpecs.entries()) {
+            if (specIdentity(spec) === target) {
+                const allTabs = $('main#tabs > ul > li > a').toArray();
+                const a = document.querySelector('a[href="#' + divid + '"]');
+                const idx = a ? allTabs.indexOf(a) : -1;
+                if (idx >= 0) { activeIdx = idx; break; }
+            }
+        }
+    }
+    $('main#tabs').tabs('option', 'active', activeIdx);
+
+    // Force correct map-container/legend visibility regardless of whether
+    // tabsactivate fires reliably after the programmatic activation above
+    // (jQuery UI sometimes skips the event when the new active index equals
+    // the just-set value, which is what we observed in restore flow).
+    const isMap = activeIdx === 0;
+    const mapContainer = document.querySelector('.map-container');
+    const legend = document.getElementById('legend');
+    if (mapContainer) mapContainer.style.display = isMap ? '' : 'none';
+    if (legend)       legend.style.display       = isMap ? '' : 'none';
+
+    // Leaflet may have been hidden during restoration; if the map is the
+    // active panel, ask Leaflet to recompute its size so the tiles redraw.
+    if (isMap && window.mymap && typeof window.mymap.invalidateSize === 'function') {
+        setTimeout(function () { window.mymap.invalidateSize(); }, 80);
+    }
+}
+
+// Replays stored specs to recreate the tabs after a page reload. Called once
+// from the init flow (see end of get_config().then or similar). Wrapped in
+// `restoringTabs` so the persistence hooks inside the tab openers don't
+// double-write while we're rebuilding state.
+function restoreSavedTabs() {
+    const specs = loadStoredTabSpecs();
+    if (!specs.length) return;
+
+    // Pre-flight sanity: if microdep-map didn't finish wiring up the
+    // primary handlers we'd just create broken tabs, so skip and try later.
+    if (typeof event_index === 'undefined' || jQuery.isEmptyObject(event_index)) {
+        console.log('Tab restore deferred — config not ready yet, retrying in 2s');
+        setTimeout(restoreSavedTabs, 2000);
+        return;
+    }
+
+    restoringTabs = true;
+    try {
+        for (const spec of specs) {
+            try { restoreOneTab(spec); }
+            catch (err) { console.warn('Tab restore skipped:', spec, err); }
+        }
+    } finally {
+        restoringTabs = false;
+        syncTabsToStorage();   // write back with the new (this session's) divids
+        // Restore which tab was visible before the reload. The handlers
+        // inside add_tab activated each new tab as it was created (so the
+        // last restored is currently active and the map-container is
+        // hidden); applyActiveAfterRestore() flips that back to the right
+        // panel and the tabsactivate listener (in index.html) re-shows the
+        // map-container if needed.
+        applyActiveAfterRestore();
+    }
+}
+
+function restoreOneTab(spec) {
+    const before = $("main#tabs > ul > li").length;
+    if (spec.kind === 'routes') {
+        add_tab('div', spec.title, before,
+            '<div class="center-text" style="padding:40px">' +
+              '<div class="spinner"></div><p>Restoring routes…</p>' +
+            '</div>');
+        const tab_id = 'tab' + before;
+        ls_tab(tab_id, spec.from, spec.to, spec.startEpoch, spec.endEpoch, spec.options || {});
+        tabSpecs.set(tab_id, spec);
+    } else if (spec.kind === 'curve') {
+        const sep = spec.url.indexOf('?') >= 0 ? '&' : '?';
+        const bustedUrl = spec.url + sep + '_t=' + Date.now();
+        const iframe_html =
+            '<div class="curve-iframe-wrap">' +
+                '<iframe class="curve-iframe" src="' + bustedUrl + '" frameborder="0" sandbox="allow-scripts allow-same-origin"></iframe>' +
+            '</div>';
+        add_tab('div', spec.title, before, iframe_html);
+        tabSpecs.set('tab' + before, spec);
+    } else if (spec.kind === 'check') {
+        // Simulate user picking the option from the #check dropdown — the
+        // existing change-handler does all the work; we just need to
+        // remember the divid afterwards.
+        $('#check').val(spec.report_type).trigger('change');
+        const after = $("main#tabs > ul > li").length;
+        if (after > before) tabSpecs.set('tab' + before, spec);
+    }
+}
+
 var point_distance_min = 50;  // meters between
 var point_distance_stretch = 0.001;  // delta degrees
 var period_length = 86400; // a day - to be replaced by dynamic length
@@ -33,10 +213,15 @@ var ends=[];
 var last_hits=[]; // last query detail data (gaps)
 var summary=[]; // last summary of query data (gapsum, gaps)
 var aggregates=[]; // last aggregate data (jitter)
+// Snapshot compare — baseline (prior-period) values keyed "from,to";
+// re-fetched when the composite key (event/prop/period/offset) changes.
+var baselineSummary = {};
+var baselineCompareKey = '';
 var focus_node="";
 var middle_point=[],
     line_bearing=[],
-    line_utslag=[];
+    line_utslag=[],
+    line_offset=[];   // bearing_offset shared between A→B / B→A halves so tangents at cp1 align
 var n_excluded=0;
 
 var current_parm="down_ppm";
@@ -59,7 +244,231 @@ var lat, lng;
 var loads=0; // number of loaded point series
 var duplines=[];
 var points_cache=[];
-  
+var arrowMarkers=[]; // store arrow direction markers by link name
+var extendedLinks=[]; // track links extended to full length
+
+// --- Arrow direction marker helpers ---
+
+function getPointOnQuadBezier(t, p0, p1, p2) {
+    var mt = 1 - t;
+    return [
+        mt * mt * p0[0] + 2 * mt * t * p1[0] + t * t * p2[0],
+        mt * mt * p0[1] + 2 * mt * t * p1[1] + t * t * p2[1]
+    ];
+}
+
+function getBezierAngle(t, p0, p1, p2) {
+    var mt = 1 - t;
+    var dlat = 2 * mt * (p1[0] - p0[0]) + 2 * t * (p2[0] - p1[0]);
+    var dlng = 2 * mt * (p1[1] - p0[1]) + 2 * t * (p2[1] - p1[1]);
+    var angle = Math.atan2(dlng, dlat) * 180 / Math.PI;
+    if (angle < 0) angle += 360;
+    return angle;
+}
+
+function makeArrowSvg(color, angle) {
+    return '<svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">' +
+        '<polygon points="18,12 6,4 6,20" fill="' + color + '" ' +
+        'transform="rotate(' + angle.toFixed(1) + ' 12 12)"/></svg>';
+}
+
+function createArrowMarker(latlng, angle, color) {
+    var svgAngle = angle - 90;
+    var icon = L.divIcon({
+        html: makeArrowSvg(color, svgAngle),
+        className: 'arrow-marker',
+        iconSize: [24, 24],
+        iconAnchor: [12, 12]
+    });
+    return L.marker(latlng, { icon: icon, interactive: false, zIndexOffset: -100 });
+}
+
+function addArrowsToLine(lineName, p0, p1, p2, color) {
+    removeArrowMarkers(lineName);
+    var markers = [];
+    var positions = [0.33, 0.66];
+
+    var zoom = mymap.getZoom();
+    var px0 = mymap.project(p0, zoom);
+    var px1 = mymap.project(p1, zoom);
+    var px2 = mymap.project(p2, zoom);
+
+    for (var i = 0; i < positions.length; i++) {
+        var t = positions[i];
+        var mt = 1 - t;
+        var px = mt * mt * px0.x + 2 * mt * t * px1.x + t * t * px2.x;
+        var py = mt * mt * px0.y + 2 * mt * t * px1.y + t * t * px2.y;
+        var latlng = mymap.unproject([px, py], zoom);
+
+        var dx = 2 * mt * (px1.x - px0.x) + 2 * t * (px2.x - px1.x);
+        var dy = 2 * mt * (px1.y - px0.y) + 2 * t * (px2.y - px1.y);
+        // Flip 180° so the arrow tip points from "to" → "from" along the curve
+        // direction, matching how the tooltip ("from X to Y") reads the link.
+        var angle = Math.atan2(dx, -dy) * 180 / Math.PI + 180;
+        if (angle >= 360) angle -= 360;
+        if (angle < 0)    angle += 360;
+
+        var m = createArrowMarker([latlng.lat, latlng.lng], angle, color);
+        m.addTo(mymap);
+        markers.push(m);
+    }
+    arrowMarkers[lineName] = markers;
+}
+
+function removeArrowMarkers(lineName) {
+    if (arrowMarkers[lineName]) {
+        for (var i = 0; i < arrowMarkers[lineName].length; i++) {
+            arrowMarkers[lineName][i].remove();
+        }
+        delete arrowMarkers[lineName];
+    }
+}
+
+function addArrowsToCubicLine(lineName, p0, c1, c2, p3, color) {
+    removeArrowMarkers(lineName);
+    var markers = [];
+    var positions = [0.25, 0.5, 0.75];
+
+    var zoom = mymap.getZoom();
+    var px0 = mymap.project(p0, zoom);
+    var pxC1 = mymap.project(c1, zoom);
+    var pxC2 = mymap.project(c2, zoom);
+    var px3 = mymap.project(p3, zoom);
+
+    for (var i = 0; i < positions.length; i++) {
+        var t = positions[i];
+        var mt = 1 - t;
+        var px = mt*mt*mt*px0.x + 3*mt*mt*t*pxC1.x + 3*mt*t*t*pxC2.x + t*t*t*px3.x;
+        var py = mt*mt*mt*px0.y + 3*mt*mt*t*pxC1.y + 3*mt*t*t*pxC2.y + t*t*t*px3.y;
+        var latlng = mymap.unproject([px, py], zoom);
+
+        var dx = 3*mt*mt*(pxC1.x-px0.x) + 6*mt*t*(pxC2.x-pxC1.x) + 3*t*t*(px3.x-pxC2.x);
+        var dy = 3*mt*mt*(pxC1.y-px0.y) + 6*mt*t*(pxC2.y-pxC1.y) + 3*t*t*(px3.y-pxC2.y);
+        var angle = Math.atan2(dx, -dy) * 180 / Math.PI;
+        if (angle < 0) angle += 360;
+
+        var m = createArrowMarker([latlng.lat, latlng.lng], angle, color);
+        m.addTo(mymap);
+        markers.push(m);
+    }
+    arrowMarkers[lineName] = markers;
+}
+
+function updateArrowColors(lineName, color) {
+    if (arrowMarkers[lineName]) {
+        for (var i = 0; i < arrowMarkers[lineName].length; i++) {
+            var m = arrowMarkers[lineName][i];
+            var html = m.getIcon().options.html;
+            var match = html.match(/rotate\(([-\d.]+)/);
+            var svgAngle = match ? parseFloat(match[1]) : 0;
+            var newIcon = L.divIcon({
+                html: makeArrowSvg(color, svgAngle),
+                className: 'arrow-marker',
+                iconSize: [24, 24],
+                iconAnchor: [12, 12]
+            });
+            m.setIcon(newIcon);
+        }
+    }
+}
+
+var currentPanelLink = null; // track which link source is shown in panel
+var highlightedLink = null; // track which leaflet line is highlighted for open panel
+
+function openLinkPanel(content, linkSource) {
+    var panel = document.getElementById('link-panel');
+    var body = document.getElementById('linkPanelBody');
+    if (panel && body) {
+        if (linkSource) currentPanelLink = linkSource;
+        body.innerHTML = '';
+        if (typeof content === 'string') {
+            body.innerHTML = content;
+        } else if (content instanceof HTMLElement) {
+            body.appendChild(content);
+        }
+        panel.classList.remove('hidden');
+        // Wire the swap-direction button (rendered fresh by make_tooltip_v2 on
+        // every open, so it needs re-binding each time).
+        var swapBtn = body.querySelector('#linkSwapBtn');
+        if (swapBtn) swapBtn.addEventListener('click', swap_panel_direction);
+        // Sparkline render at CLICK time (not in link_popup, which runs at
+        // link-draw time against detached canvases). The render fn itself
+        // waits via rAF for the panel to settle to a non-zero size before
+        // instantiating Chart.js.
+        var sparkCanvas = body.querySelector('.link-sparkline');
+        if (sparkCanvas && currentPanelLink) {
+            var lk = currentPanelLink;
+            var go = function () {
+                _render_link_sparkline(sparkCanvas, lk, parms.event, parms.property,
+                                       $("#datepicker").val(), parms.period);
+            };
+            if (typeof requestAnimationFrame === 'function') {
+                requestAnimationFrame(function () { requestAnimationFrame(go); });
+            } else {
+                setTimeout(go, 32);
+            }
+        }
+    }
+}
+
+function setHighlightedLink(leafletLine) {
+    // Remove highlight from previous link
+    if (highlightedLink && highlightedLink !== leafletLine) {
+        var prevColor = highlightedLink._baseColor || color_store[L.stamp(highlightedLink)] || highlightedLink._originalColor || empty_color;
+        highlightedLink.setStyle({"color": prevColor});
+        // Restore arrow colors on previous link
+        for (var abs in linkByName) {
+            if (linkByName[abs] === highlightedLink) {
+                updateArrowColors(abs, prevColor);
+                break;
+            }
+        }
+        // Close tooltip on previous link
+        if (highlightedLink.getTooltip && highlightedLink.getTooltip()) {
+            highlightedLink.closeTooltip();
+        }
+    }
+    // Highlight current link
+    if (leafletLine) {
+        if (!leafletLine._originalColor || leafletLine._originalColor === "blue") {
+            leafletLine._originalColor = color_store[L.stamp(leafletLine)] || leafletLine.options.color;
+        }
+        leafletLine.setStyle({"color": "blue"});
+        leafletLine.bringToFront();
+        // Update arrow colors to blue
+        for (var abs in linkByName) {
+            if (linkByName[abs] === leafletLine) {
+                updateArrowColors(abs, "blue");
+                break;
+            }
+        }
+    }
+    highlightedLink = leafletLine;
+}
+
+function clearHighlightedLink() {
+    if (highlightedLink) {
+        var prevColor = highlightedLink._baseColor || color_store[L.stamp(highlightedLink)] || highlightedLink._originalColor || empty_color;
+        highlightedLink.setStyle({"color": prevColor});
+        // Restore arrow colors
+        for (var abs in linkByName) {
+            if (linkByName[abs] === highlightedLink) {
+                updateArrowColors(abs, prevColor);
+                break;
+            }
+        }
+        highlightedLink = null;
+    }
+}
+window.clearHighlightedLink = clearHighlightedLink;
+
+function refreshLinkPanel() {
+    if (currentPanelLink && !document.getElementById('link-panel').classList.contains('hidden')) {
+        var newContent = link_popup(currentPanelLink);
+        openLinkPanel(newContent);
+    }
+}
+
   // sorting table
   function comparer(index) {
       return function(a, b) {
@@ -81,11 +490,23 @@ function show_map (network) {
     console.log ("Showing map");
     if ( ! mymap ){
 	mymap = L.map('mapid');
+	window.mymap = mymap;     // expose for invalidateSize() from index.html
 	myRenderer = L.canvas({ padding: 0.5, tolerance: 20 });
-	// create the tile layer with correct attribution
 	var osmUrl='https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
 	var osmAttrib='Map data © <a href="http://openstreetmap.org">OpenStreetMap</a> contributors';
-	var osm = new L.TileLayer(osmUrl, {minZoom: 1, maxZoom: 20, attribution: osmAttrib});		
+	// noWrap: don't repeat the world tiles east-west — otherwise NZ at
+	// lon=175 also shows at -185/+535 etc. as the map repeats in adjacent
+	// world copies (the "two New Zealands" effect, very visible with
+	// trans-Pacific routes). bounds: cap tile requests to the real world
+	// so fitBounds across the antimeridian doesn't request out-of-range
+	// tiles (which OSM 400s on).
+	var osm = new L.TileLayer(osmUrl, {
+	    minZoom: 1,
+	    maxZoom: 20,
+	    attribution: osmAttrib,
+	    noWrap: true,
+	    bounds: [[-90, -180], [90, 180]]
+	});
 	mymap.addLayer(osm);
 
 	mymap.addEventListener('mousemove', function(ev) {
@@ -95,7 +516,7 @@ function show_map (network) {
 
 	$(window).on("resize", function () {
 	    $("#mapid").height( $(window).height()-250 );
-	}).trigger("resize"); 
+	}).trigger("resize");
     }
 
     if ( active_cluster){
@@ -108,17 +529,13 @@ function show_map (network) {
     active_cluster = clustergroup[network];
     mymap.addLayer( active_cluster);
     points_cache[network]=points;
-
 }
 
 function remove_markers(){
     clustergroup.eachLayer(function(m) {
 	clustergroup.removeLayer(m);
-	// console.log('marker', m._tooltip.options._content + " " + m);
     });
 }
-
-// spread points that share position
 
 function spread_points(points){
     var locations=[];
@@ -137,55 +554,57 @@ function spread_points(points){
 
 function make_markers ( network, points, focus) {
     var i;
-    
     var bounds = new L.LatLngBounds();
-
     spread_points(points);
 
     for (i=0; i < points.length; i++){
 	var id=points[i].id;
 	var marker = L.marker ([points[i].lat, points[i].lon]).addTo(clustergroup[network]);
-
 	bounds.extend(marker.getLatLng());
 	marker.bindTooltip( points[i].name, {permanent: false, className: "my-label", offset: [0, 0] });
-	// var nodeurl= window.location.origin + window.location.pathname+ "?net=" + parms.net + "&;
-	// var nodeurl = fix_url( window.location.href, "node", id );
-	// var html = '<br><a href="' + nodeurl + '">Focus on</a>';
-	// var html = '<br><button id="' + id + '" class="trigger">Focus on</button>';
 	var html = '<br><a href="#" class=trigger id="' + id + '">Focus on</a>';
 	var url;
 	if (points[i].url){
 	    url = points[i].url;
-	} else { 
+	} else {
 	    url = "http://" + id;
 	}
 	marker.bindPopup("<b><a href=\"" + url + "\">" + "Home for " + id + "</a></b>"+html);
 	$("#" + id ).on('click', "a.trigger", function(e){
 	    focus_links( e.id, 'flip' );
 	});
-
     }
 
     if ( points.length == 0 ){
-	// No markers to focus on. Show the whole world (repeated as many times as necessary)
         bounds =  [[-90,-180],   [90,180]];
     }
-    
-    if ( focus ){
-	mymap.fitBounds(bounds);
+    // Only set the initial view on the FIRST show per network — _hubCenteredNets
+    // is set by draw_topology once it has hub-centred. Gating on it here means a
+    // date / event / data change does NOT reposition the map, so the user's
+    // pan/zoom (and chosen view) are preserved. (show_map's own focus gate is
+    // unreliable — it rebuilds the cluster on every reload — so we gate here.)
+    if ( focus && !_hubCenteredNets[parms.net] ){
+	// COVER the map area (fill the screen, no empty grey borders) rather
+	// than contain-with-padding. getBoundsZoom(b, true) returns the lowest
+	// zoom at which the viewport fits INSIDE the data bounds — i.e. the
+	// bounds cover the whole view (the longer axis is cropped instead of
+	// leaving margins). Capped at 6 so a single tightly-clustered pair
+	// doesn't slam to street level. draw_topology then refines this to the
+	// hub host and marks the network done.
+	var b = L.latLngBounds(bounds);
+	mymap.setView(b.getCenter(), Math.min(mymap.getBoundsZoom(b, true), 6));
     }
 }
-
-//function draw_net(){
-//}
-
 
 function remove_links(){
     var i;
     for ( i=0; i<links.length; i++ ){
-	// mymap.removeLayer(links[i]);
 	if ( links[i] ) links[i].remove();
     }
+    for (var name in arrowMarkers) {
+        removeArrowMarkers(name);
+    }
+    arrowMarkers=[];
     links=[];
     linkByName=[];
     ends=[];
@@ -194,14 +613,28 @@ function remove_links(){
 function remove_link(ab){
     if ( linkByName[ab] ){
 	linkByName[ab].remove();
+	removeArrowMarkers(ab);
 	delete linkByName[ab];
 	ends.splice( ends, ends.indexOf(ab), 1);
+    }
+}
+
+function showArrows(ab) {
+    if (arrowMarkers[ab]) {
+        for (var i = 0; i < arrowMarkers[ab].length; i++) { arrowMarkers[ab][i].addTo(mymap); }
+    }
+}
+
+function hideArrows(ab) {
+    if (arrowMarkers[ab]) {
+        for (var i = 0; i < arrowMarkers[ab].length; i++) { arrowMarkers[ab][i].remove(); }
     }
 }
 
 function show_links(){
     for ( var ab in linkByName ){
 	linkByName[ab].addTo(mymap);
+	showArrows(ab);
     }
 }
 
@@ -209,13 +642,14 @@ function hide_links_by_color(color){
     for ( var ab in linkByName ){
 	var link=linkByName[ab];
 	if ( link.options.color === color){
-	    link.remove(); // remove from map
+	    link.remove();
+	    hideArrows(ab);
 	    linkHidden[ab]=true;
 	} else if (linkHidden[ab]) {
-	    link.addTo(mymap);	    
+	    link.addTo(mymap);
+	    showArrows(ab);
 	    linkHidden[ab]=false;
 	}
-	    
     }
 }
 
@@ -223,14 +657,14 @@ function show_links_by_color(color){
     for ( var ab in linkByName ){
 	var link=linkByName[ab];
 	if ( link.options.color === color){
-	    link.addTo(mymap); // add to map
+	    link.addTo(mymap);
+	    showArrows(ab);
 	    linkHidden[ab]=false;
 	}
     }
 }
 
 function refresh_links_by_color(){
-
     if ( links_on ){
 	show_links_by_color(empty_color);
     } else {
@@ -241,20 +675,24 @@ function refresh_links_by_color(){
 function only_links_by_color(color){
     if ( color_on[color] ){
 	for ( var ab in linkByName ){
-	    if ( linkHidden[ab] )
-		linkByName[ab].addTo(mymap); // add to map
+	    if ( linkHidden[ab] ) {
+		linkByName[ab].addTo(mymap);
+		showArrows(ab);
+	    }
 	}
 	color_on[color]=false;
     } else {
-	
 	for ( var ab in linkByName ){
 	    var link=linkByName[ab];
 	    if ( link.options.color === color){
-		if ( linkHidden[ab] )
-		    link.addTo(mymap); // add to map
+		if ( linkHidden[ab] ) {
+		    link.addTo(mymap);
+		    showArrows(ab);
+		}
 		link.bringToFront();
 	    } else {
-		link.remove(); // remove from map
+		link.remove();
+		hideArrows(ab);
 		linkHidden[ab]=true;
 	    }
 	}
@@ -264,16 +702,14 @@ function only_links_by_color(color){
     }
 }
 
-
   function focus_links( node, mode ){
-    if ( mode === 'flip' && focus_node === node ){ // flip back
+    if ( mode === 'flip' && focus_node === node ){
 	focus_node = "";
 	links_on=true;
 	show_links();
 	removeParam("node");
     } else {
-
-	if ( focus_node !== "" && node !== focus_node ) { // redraw first
+	if ( focus_node !== "" && node !== focus_node ) {
 	    focus_node="";
 	    links_on=true;
 	    show_links();
@@ -286,23 +722,25 @@ function only_links_by_color(color){
 	}
 	var asn_search=false;
 	if (node.indexOf("@") >= 0){
-	    // Search for AS numbers specified
 	    asn_search=true;
 	    search=node.substr(1,node.length);
 	}
-	
 	for ( var ab in linkByName ){
 	    if (asn_search) {
 		if ( ! linkByName[ab].asn_search || linkByName[ab].asn_search.indexOf(search) < 0) {
-		    // AS num not available or not found
 		    linkByName[ab].remove();
+		    hideArrows(ab);
 		}
-	    } else if ( ab.indexOf(search) < 0 ){ // string not found
-		if ( ! inverse )
+	    } else if ( ab.indexOf(search) < 0 ){
+		if ( ! inverse ) {
 		    linkByName[ab].remove();
-	    } else { // string found
-		if ( inverse )
+		    hideArrows(ab);
+		}
+	    } else {
+		if ( inverse ) {
 		    linkByName[ab].remove();
+		    hideArrows(ab);
+		}
 	    }
 	}
 	links_on=false;
@@ -312,8 +750,6 @@ function only_links_by_color(color){
     }
 }
 
- 
-
 function update_legend(title, threshes){
     var html="<table border=1 align=center id=legend> ";
     html+="<tr align=center>";
@@ -322,28 +758,20 @@ function update_legend(title, threshes){
     var lower=threshes.slice();
     lower.unshift(0);
     for ( i in lower ){
+	// Trim binary-rounding noise (e.g. 0.30000000000004) to 2 decimals.
+	var _v = lower[i];
+	if (typeof _v === 'number' && !isNaN(_v)) _v = Math.round(_v * 100) / 100;
 	html += "<td width=200>" +
 	    "<button class=knapp title='Push to hide/show other links' style=width:100%" + " id=legend" + i + " bgcolor="
-	    + colors[i] + ">" + lower[i] + "</button></td>";
+	    + colors[i] + ">" + _v + "</button></td>";
     }
-
-    // Add dashboard button if configured
     if (! jQuery.isEmptyObject(conffile[parms.net].dashboardURL)) {
 	html += '<td><button class=knapp title="Database dashboard" onclick=\'window.open("' + conffile[parms.net].dashboardURL + '", "_blank");\'>Dashboard</button>';
     }
     html +=  "</tr></table>";
     $("#legend").html(html);
-    
+
     $("#farge0").click(  function () {
-	// only_links_by_color(empty_color);
-	/* better to see only grey
-	if ( links_on ){
-	    hide_links_by_color(empty_color);
-	    links_on=false;
-	} else {
-	    links_on=true;
-	    show_links_by_color(empty_color);
-	} */
 	only_links_by_color(empty_color);
     });
     for ( i in lower ){
@@ -351,23 +779,22 @@ function update_legend(title, threshes){
 	$("#legend" + i).click( function(e){
 	    only_links_by_color(this.attributes.bgcolor.value);
 	    $("#tabs").tabs("option", "active", 0);
-
-	    //hide_links_by_color(this.attributes.bgcolor.value);
 	});
 	$("#legend" + i).css( "background-color", colors[i] );
 	color_on[colors[i]]=false;
     }
-    
 }
 
-function gap_popup( div, link){
+function gap_popup( containerDiv, link){
     const button = document.createElement("button");
+    button.className = "knapp";
     let etype = parms.event;
-    button.innerHTML = "Top " + etype + "s";
+    let etypeLabel = (event_desc[etype] || etype);
+    button.innerHTML = "Top " + etypeLabel;
     button.onclick = function(event) {
 	let idiv;
-	let etag = 'event ' + parms.event + ' ' + parms.date + ' ' + parms.period; // mark with tag to reuse data
-	if ( this[etag]){ // cycle through top, all, hide
+	let etag = 'event ' + parms.event + ' ' + parms.date + ' ' + parms.period;
+	if ( this[etag]){
 	    idiv = this[etag];
 	    if ( this.innerText.substr(0,4) == 'Hide'){
 		idiv.style.display = "none";
@@ -377,37 +804,589 @@ function gap_popup( div, link){
 		if ( this.innerText.substr(0,3) == 'All'){
 		    idiv.innerHTML=gap_list( link.from, link.to, idiv['hits'+parms.event] );
 		    this.innerText='Hide';
-		} else { // top
+		} else {
 		    idiv.innerHTML=gap_list( link.from, link.to, idiv['hits'+parms.event], 10, 'num_desc');
 		    this.innerText='All';
 		}
 	    }
-	    this.innerText += ' ' + etype + 's'; 
-	    sorttable.makeSortable( div.getElementsByClassName('sortable')[0] );
-	    mymap._popup.update();
+	    this.innerText += ' ' + etypeLabel;
+	    var sortables = idiv.getElementsByClassName('sortable');
+	    if (sortables.length > 0) sorttable.makeSortable( sortables[0] );
 	} else {
 	    idiv = document.createElement("div");
 	    idiv.classList.add("sprettopp");
-	    //idiv.classList.add("popupList");
-	    button.classList.add("knapp");
-	    div.appendChild(idiv);
-	    this[etag]=idiv; // store reference
+	    // Append results div to the parent card, not the button container
+	    var parentCard = containerDiv.closest ? containerDiv.closest('.panel-card') : containerDiv.parentElement;
+	    if (parentCard) parentCard.appendChild(idiv);
+	    else containerDiv.appendChild(idiv);
+	    this[etag]=idiv;
 	    get_peer_data( link.from, link.to, idiv);
-	    this.innerText='All ' + etype +'s';
+	    this.innerText='All ' + etypeLabel;
 	}
     }
-    div.appendChild(button);
+    containerDiv.appendChild(button);
 }
 
+// In-flight AJAX + Chart.js instance for the link-details sparkline,
+// tracked at module level so we can abort / destroy when the user
+// clicks a different link before the previous fetch returns.
+var _linkSparkXhr = null;
+var _linkSparkChart = null;
+var _linkSparkRAF  = null;  // rAF id for deferred-until-sized rendering
+function _render_link_sparkline(canvas, link, etype, prop, dato, period, forceEtype) {
+    if (!canvas || typeof Chart === 'undefined') return;
+    // Abort the previous fetch — we don't want a stale response to
+    // overwrite the freshly-clicked link's chart.
+    if (_linkSparkXhr && _linkSparkXhr.abort) try { _linkSparkXhr.abort(); } catch (_) {}
+    if (_linkSparkChart) try { _linkSparkChart.destroy(); } catch (_) {}
+    if (_linkSparkRAF) try { cancelAnimationFrame(_linkSparkRAF); } catch (_) {}
+    _linkSparkXhr = null;
+    _linkSparkChart = null;
+    _linkSparkRAF   = null;
+
+    if (!link || !link.from || !link.to || !etype || !prop) return;
+    if (!event_index || !event_index[etype]) return;
+
+    // Wait for the panel layout to settle before kicking off the fetch
+    // + Chart.js instantiation. On the very first link click the panel
+    // is going from display:none (the .hidden class) to display:flex,
+    // and a CSS transform transition runs for ~200ms — Chart.js often
+    // measures the canvas while it's still 0×0 (or mid-transition), so
+    // we get a chart with no visible drawing on the first open. We poll
+    // via rAF for up to ~16 frames looking for a stable, non-zero size
+    // for two consecutive frames before proceeding. The canvas.offsetWidth
+    // read inside the loop force-flushes any pending layout.
+    var attempt = 0, lastW = -1, lastH = -1;
+    function _waitForSize() {
+        var w = canvas.clientWidth;
+        var h = canvas.clientHeight;
+        var _ = canvas.offsetWidth; // force layout flush
+        attempt++;
+        if (w > 0 && h > 0 && w === lastW && h === lastH) {
+            console.log('sparkline: canvas settled at', w + 'x' + h, 'after', attempt, 'frame(s)');
+            _linkSparkRAF = null;
+            _render_link_sparkline_inner(canvas, link, etype, prop, dato, period, forceEtype);
+            return;
+        }
+        lastW = w; lastH = h;
+        if (attempt > 16) {
+            console.log('sparkline: gave up waiting at', w + 'x' + h, 'frame=', attempt, '— rendering anyway');
+            _linkSparkRAF = null;
+            _render_link_sparkline_inner(canvas, link, etype, prop, dato, period, forceEtype);
+            return;
+        }
+        _linkSparkRAF = requestAnimationFrame(_waitForSize);
+    }
+    _linkSparkRAF = requestAnimationFrame(_waitForSize);
+}
+
+// Body of the sparkline render — extracted so the public entry point can
+// defer until the canvas is properly sized (see _render_link_sparkline
+// for the rAF-based stable-size wait).
+function _render_link_sparkline_inner(canvas, link, etype, prop, dato, period, forceEtype) {
+
+    // Mirror get_connections() window logic so the sparkline asks for
+    // EXACTLY the same time range the rest of the map is painted from
+    // — including the sub-24h period_input offset.
+    var dstart = new Date(dato);
+    var msstart = dstart.getTime();
+    if (isNaN(msstart)) return;
+    var tz = dstart.getTimezoneOffset() / 60;
+    var per = parseInt($("#period").val(), 10);
+    if (isNaN(per)) per = (period || 24);
+    var start_iso, end_iso;
+    if (per < 24) {
+        var hour = parse_hhmm($("#period_input").val()) + tz;
+        var ds   = new Date(msstart + hour * 3600 * 1000);
+        start_iso = ds.toISOString();
+        end_iso   = new Date(ds.getTime() + 3600 * 1000).toISOString();
+    } else {
+        start_iso = new Date(msstart).toISOString();
+        end_iso   = new Date(msstart + per * 3600 * 1000).toISOString();
+    }
+
+    // Pick the event type. Strategy: try raw FIRST (one record per
+    // measurement → densest series). If the raw query returns 0 usable
+    // points (typical when the property only exists on summary records
+    // — e.g. gap.down_ppm — the config can claim it's on raw too but
+    // the actual elastic docs don't carry it), the .done callback below
+    // recurses with `forceEtype = sumEtype` to fall back. Data-driven,
+    // not config-driven, because prop_desc and reality disagree.
+    var sumEtype = (event_sum_type && event_sum_type[etype]) || '';
+    var queryEtype = forceEtype || etype;
+
+    // Match the existing call pattern in get_peer_data / get_connections:
+    // raw concatenation (no encodeURIComponent — colons in ISO stamps
+    // and the IPv6-style addresses are passed through literally), and
+    // include ip_version when the network requires it.
+    // net= is REQUIRED: elastic-get-date-type.pl resolves the archive URL from
+    // config[net].archive — without it the CGI falls back to http://localhost:9200
+    // and the query dies with curl-code 52 (empty reply). (index= sets the OS
+    // index path; net= picks the archive.)
+    var url = 'elastic-get-date-type.pl?net=' + parms.net +
+              '&index=' + event_index[etype] +
+              '&event_type=' + queryEtype +
+              '&start=' + adjust_to_timezone(start_iso) +
+              '&end='   + adjust_to_timezone(end_iso) +
+              '&from='  + link.from +
+              '&to='    + link.to;
+    if (net_ip_version && net_ip_version[parms.net]) {
+        url += '&ip_version=' + net_ip_version[parms.net];
+    }
+
+    // Ask the server for time-bucketed averages via the date_histogram
+    // path (interval+prop in elastic-get-date-type.pl, ~line 274). The
+    // server runs the aggregation against the matching raw records —
+    // bypasses the hardcoded size:10000 limit for very long periods AND
+    // gives evenly-distributed buckets independent of raw measurement
+    // timing. Bucket width targets ~500 points across the period so the
+    // chart is dense without overwhelming Chart.js. The Perl-side regex
+    // accepts /^\d+[smhd]$/ so we pick the smallest unit that keeps the
+    // count integer.
+    function _spark_interval(perH) {
+        var totalMin = Math.max(1, Math.round(perH * 60));
+        var bMin = Math.max(1, Math.ceil(totalMin / 500));
+        if (bMin >= 1440) return Math.ceil(bMin / 1440) + 'd';
+        if (bMin >= 60)   return Math.ceil(bMin / 60)   + 'h';
+        return bMin + 'm';
+    }
+    var bucketInterval = _spark_interval(per);
+    url += '&interval=' + bucketInterval + '&prop=' + prop;
+    if (parms && parms.debug) console.log('sparkline url:', url);
+
+    _linkSparkXhr = $.getJSON(url).done(function (resp) {
+        var hits = (resp && resp.hits && resp.hits.hits) || [];
+        var buckets = (resp && resp.aggregations && resp.aggregations.by_time &&
+                       resp.aggregations.by_time.buckets) || [];
+        var totalVal = (resp && resp.hits && resp.hits.total && (resp.hits.total.value || resp.hits.total)) || 0;
+        console.log('sparkline: hits =', hits.length, 'buckets =', buckets.length,
+                    'total =', totalVal, 'prop =', prop, 'event =', etype, 'queried =', queryEtype,
+                    'interval =', bucketInterval || 'none');
+        if (!hits.length && !buckets.length) {
+            // Two-step auto-fallback: raw → "<sum>_h" (hourly aggregator's
+            // gapsum_h / routesum_h / ... — finer rezolution than the
+            // daily summary records qstream-gap-ana etc. emit on restart)
+            // → "<sum>" (the daily summary, last resort).
+            //
+            // This lets the sparkline pick up the densest available
+            // pre-aggregated data for properties that don't live on raw
+            // events (e.g. gap.down_ppm). If microdep-hourly-aggregator
+            // hasn't been deployed yet, the gapsum_h query simply returns
+            // 0 records and we transparently slide down to gapsum.
+            var nextFallback = null;
+            if (!forceEtype && sumEtype) {
+                nextFallback = sumEtype + '_h';   // try hourly first
+            } else if (forceEtype && /_h$/.test(forceEtype)) {
+                // We just tried hourly summary; drop the suffix and try
+                // the daily summary as a final fallback.
+                nextFallback = forceEtype.replace(/_h$/, '');
+            }
+            if (nextFallback && nextFallback !== queryEtype) {
+                console.log('sparkline: "' + queryEtype + '" returned 0 hits/buckets; falling back to "' + nextFallback + '"');
+                _render_link_sparkline(canvas, link, etype, prop, dato, period, nextFallback);
+                return;
+            }
+            _draw_sparkline_empty(canvas);
+            return;
+        }
+        // Build {t, y} pairs from either the date_histogram buckets
+        // (preferred when interval was requested) or raw record hits.
+        // For buckets: `key` is already epoch ms, `value.value` is the
+        // computed average for that interval (null when the slot has
+        // records but the property field is absent on all of them).
+        var pts = [];
+        var rawSample = null;
+        if (buckets.length) {
+            for (var bi = 0; bi < buckets.length; bi++) {
+                var b = buckets[bi];
+                if (!b) continue;
+                if (!rawSample) rawSample = { _bucket: true, key: b.key, value: b.value };
+                var bts = Number(b.key);
+                if (!bts || isNaN(bts)) continue;
+                var bv = b.value && (b.value.value !== null && b.value.value !== undefined ? b.value.value : null);
+                if (bv === null) continue;
+                bv = Number(bv);
+                if (isNaN(bv)) continue;
+                pts.push({ t: bts, y: bv });
+            }
+        } else {
+            // Mirror chart_curve's lenient parsing — server returns
+            // timestamp as epoch seconds (sometimes as a string) and
+            // property as a number-ish value. Coerce both via Number().
+            for (var i = 0; i < hits.length; i++) {
+                var s = hits[i] && hits[i]._source;
+                if (!s) continue;
+                if (!rawSample) rawSample = s;
+                var ts = Number(s.timestamp) * 1000;
+                if (!ts || isNaN(ts)) {
+                    if (s['@timestamp']) ts = Date.parse(s['@timestamp']);
+                }
+                if (!ts || isNaN(ts)) continue;
+                var v = s[prop];
+                if (v === null || v === undefined) continue;
+                v = Number(v);
+                if (isNaN(v)) continue;
+                pts.push({ t: ts, y: v });
+            }
+        }
+        if (!pts.length) {
+            // Same two-step fallback as the no-hits/no-buckets branch
+            // above: raw → "<sum>_h" (hourly aggregator) → "<sum>" (daily
+            // summary). Triggers when the response had records but none
+            // of them carried the property (e.g. raw `gap` records have
+            // tloss/jitter/delay-ish fields but no `down_ppm`).
+            var nextFallback2 = null;
+            if (!forceEtype && sumEtype) {
+                nextFallback2 = sumEtype + '_h';
+            } else if (forceEtype && /_h$/.test(forceEtype)) {
+                nextFallback2 = forceEtype.replace(/_h$/, '');
+            }
+            if (nextFallback2 && nextFallback2 !== queryEtype) {
+                console.log('sparkline: "' + queryEtype + '" had no usable points for "' + prop +
+                            '"; falling back to "' + nextFallback2 + '"');
+                _render_link_sparkline(canvas, link, etype, prop, dato, period, nextFallback2);
+                return;
+            }
+            // Help the user (and us) figure out why nothing rendered:
+            // dump the first record so we can see actual field names,
+            // plus the keys list as a plain string (objects don't survive
+            // a copy-paste from DevTools the way primitives do).
+            if (rawSample) {
+                console.log('sparkline: no usable points; sample _source =', rawSample,
+                            'looking for prop =', prop);
+                try {
+                    console.log('sparkline: sample keys =', Object.keys(rawSample).join(', '));
+                    console.log('sparkline: sample[' + prop + '] =', rawSample[prop],
+                                ' typeof =', typeof rawSample[prop]);
+                    console.log('sparkline: sample.timestamp =', rawSample.timestamp,
+                                ' typeof =', typeof rawSample.timestamp);
+                } catch (_) {}
+            }
+            _draw_sparkline_empty(canvas);
+            return;
+        }
+        pts.sort(function (a, b) { return a.t - b.t; });
+
+        // Downsample for display when raw events return a flood of points
+        // (e.g., 4 weeks × 5-min delay measurements ≈ 8000 records).
+        // Drawing 8k points on a ~270px-wide canvas is wasted work and
+        // slows the panel open noticeably; ~500 points is plenty for
+        // sparkline visual fidelity. Take every Nth — a simple even
+        // stride preserves the overall shape; we keep the LAST point
+        // explicitly so the highlighted endpoint always reflects the
+        // most-recent reading and not a stride artefact.
+        var MAX_PTS = 500;
+        var rawPtsLen = pts.length;
+        if (pts.length > MAX_PTS) {
+            var step = Math.ceil(pts.length / MAX_PTS);
+            var sampled = [];
+            for (var s = 0; s < pts.length; s += step) sampled.push(pts[s]);
+            if (sampled[sampled.length - 1] !== pts[pts.length - 1]) {
+                sampled.push(pts[pts.length - 1]);
+            }
+            pts = sampled;
+        }
+
+        console.log('sparkline: rendering', pts.length, 'points (raw =', rawPtsLen, ');',
+                    'first =', pts[0], 'last =', pts[pts.length - 1],
+                    'canvas size =', canvas.clientWidth + 'x' + canvas.clientHeight);
+
+        // Render — labels are date-strings rather than Date objects so
+        // we don't need a time-scale adapter (chart.umd.js alone, no
+        // moment dep). Label granularity tracks the period: HH:MM for
+        // <24h windows (date is implicit), "DD MMM" for multi-day
+        // periods where repeating "12:00" labels would be ambiguous.
+        var monthsShort = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        var labelMode = (per <= 24) ? 'time' : 'date';
+        var labels = pts.map(function (p) {
+            var d = new Date(p.t);
+            if (labelMode === 'time') {
+                return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+            }
+            return d.getDate() + ' ' + monthsShort[d.getMonth()];
+        });
+        var values = pts.map(function (p) { return p.y; });
+        var tsArr  = pts.map(function (p) { return p.t; });
+
+        // Full "DD MMM YYYY, HH:MM" formatter for the tooltip title —
+        // always shows the absolute moment regardless of x-axis scale.
+        function fmtFull(ms) {
+            var d = new Date(ms);
+            var hh = ('0' + d.getHours()).slice(-2);
+            var mm = ('0' + d.getMinutes()).slice(-2);
+            return d.getDate() + ' ' + monthsShort[d.getMonth()] + ' ' + d.getFullYear() +
+                   ', ' + hh + ':' + mm;
+        }
+
+        // Resolve theme tokens at render time so dark/light switch
+        // applies on the next-clicked link.
+        var cs = getComputedStyle(document.documentElement);
+        function tk(name, fb) { var v = cs.getPropertyValue(name).trim(); return v || fb; }
+        var accent = tk('--c-accent',  '#2f81f7');
+        var text   = tk('--c-text',    '#e6e9ee');
+        var text2  = tk('--c-text-2',  '#b1b8c2');
+        var text3  = tk('--c-text-3',  '#7e8794');
+        var border = tk('--c-border',  '#2a313a');
+        var elev   = tk('--c-elevated','#1c2229');
+
+        // Property description for tooltip body — same lookup precedence
+        // as the card label (sum-type takes priority since for past
+        // periods we're querying gapsum/routesum etc.).
+        var propDesc = (prop_desc[event_sum_type[etype]] && prop_desc[event_sum_type[etype]][prop])
+                    || (prop_desc[etype] && prop_desc[etype][prop])
+                    || prop
+                    || 'value';
+
+        // Min / avg / max — populate the badges sitting above the chart
+        // (built up-front in link_popup) so the user gets exact numbers
+        // alongside the visual trend. Without these the chart looks
+        // anemic when the data is sparse (e.g. 3 points for raw `gap`),
+        // because Chart.js interpolates a near-flat line and the human
+        // eye has nothing to anchor to.
+        var minV = values[0], maxV = values[0], sumV = 0;
+        for (var k = 0; k < values.length; k++) {
+            if (values[k] < minV) minV = values[k];
+            if (values[k] > maxV) maxV = values[k];
+            sumV += values[k];
+        }
+        var avgV  = sumV / values.length;
+        var lastV = values[values.length - 1];
+        var fmt = function (n) {
+            if (!isFinite(n)) return '–';
+            if (Math.abs(n) >= 100) return Math.round(n).toString();
+            if (Math.abs(n) >= 1)   return (Math.round(n * 10) / 10).toString();
+            return (Math.round(n * 100) / 100).toString();
+        };
+        var statsHost = canvas.parentNode && canvas.parentNode.parentNode &&
+                        canvas.parentNode.parentNode.querySelector('.link-sparkline-stats');
+        if (statsHost) {
+            statsHost.innerHTML =
+                '<span class="lss-item"><span class="lss-k">last</span> <span class="lss-v">' + fmt(lastV) + '</span></span>' +
+                '<span class="lss-item"><span class="lss-k">min</span> <span class="lss-v">'  + fmt(minV)  + '</span></span>' +
+                '<span class="lss-item"><span class="lss-k">avg</span> <span class="lss-v">'  + fmt(avgV)  + '</span></span>' +
+                '<span class="lss-item"><span class="lss-k">max</span> <span class="lss-v">'  + fmt(maxV)  + '</span></span>' +
+                '<span class="lss-item lss-n"><span class="lss-k">n</span> <span class="lss-v">' + values.length + '</span></span>';
+        }
+
+        // Sparse data → show points so the user sees something even when
+        // the line is short (Chart.js draws nothing visible for a single
+        // segment between two near-equal values when pointRadius=0).
+        var sparse = pts.length < 30;
+
+        // Threshold-based colour: tie the sparkline to the SAME palette
+        // logic that paints the link on the map. We use the LATEST value
+        // (most recent reading is what the link is "currently" showing)
+        // so the user sees green/yellow/red at-a-glance status.
+        var zoneColor = accent;
+        if (typeof get_color === 'function' && Array.isArray(threshes) && threshes.length) {
+            zoneColor = get_color(lastV, threshes) || accent;
+        }
+
+        // Build a vertical area-fill gradient so the chart reads as
+        // shape-with-volume rather than a hairline.
+        var ctx2 = canvas.getContext('2d');
+        var grad = ctx2.createLinearGradient(0, 0, 0, canvas.clientHeight || 110);
+        grad.addColorStop(0, zoneColor + '66');
+        grad.addColorStop(1, zoneColor + '0a');
+
+        // Per-point arrays — the LAST point is always rendered as a big
+        // highlighted dot (with a contrasting border) so the user's eye
+        // lands on the most recent value first.
+        var lastIx = values.length - 1;
+        var ptRadius     = values.map(function (_, i) { return i === lastIx ? 5 : (sparse ? 3 : 0); });
+        var ptBg         = values.map(function (_, i) { return i === lastIx ? zoneColor : zoneColor; });
+        var ptBorder     = values.map(function (_, i) { return i === lastIx ? '#fff'    : elev; });
+        var ptBorderW    = values.map(function (_, i) { return i === lastIx ? 2         : 1; });
+
+        // Belt-and-braces: force a re-measure on the next frame after
+        // instantiation. If the panel was mid-transition when Chart.js
+        // initially measured the canvas (and got a smaller box than the
+        // settled size), this catches up to the final layout.
+        function _kickResize(c) {
+            if (!c) return;
+            requestAnimationFrame(function () {
+                try { c.resize(); } catch (_) {}
+            });
+        }
+        _linkSparkChart = new Chart(canvas, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: values,
+                    borderColor: zoneColor,
+                    backgroundColor: grad,
+                    borderWidth: 2,
+                    pointRadius:        ptRadius,
+                    pointBackgroundColor: ptBg,
+                    pointBorderColor:   ptBorder,
+                    pointBorderWidth:   ptBorderW,
+                    pointHoverRadius: 6,
+                    pointHoverBackgroundColor: zoneColor,
+                    pointHoverBorderColor: '#fff',
+                    pointHoverBorderWidth: 2,
+                    fill: true,
+                    tension: 0.3
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'nearest', intersect: false, axis: 'x' },
+                animation: { duration: 200 },
+                // Right-pad layout so the highlighted last point isn't
+                // clipped at the canvas edge.
+                layout: { padding: { top: 4, right: 8, bottom: 0, left: 4 } },
+                // Pad y-axis 8% above/below so the line doesn't lick
+                // the chart edges; a flat-line dataset gets a synthetic
+                // band so it reads as "stable around X" not "vanished".
+                // Y-axis labels are HIDDEN — exact min/avg/max numbers
+                // already sit in the stats badge above, so the labels
+                // were just visual noise eating ~30px of chart width.
+                scales: {
+                    x: {
+                        ticks: { color: text3, font: { size: 10 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 6 },
+                        grid:  { display: false },
+                        border: { display: false }
+                    },
+                    y: (function () {
+                        var range = maxV - minV;
+                        var pad   = range > 0 ? range * 0.08 : Math.max(Math.abs(maxV) * 0.1, 1);
+                        return {
+                            min: minV - pad,
+                            max: maxV + pad,
+                            ticks: { display: false },
+                            grid:  { color: border, drawBorder: false, drawTicks: false },
+                            border: { display: false }
+                        };
+                    })()
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: elev,
+                        titleColor: text,
+                        bodyColor:  text2,
+                        borderColor: border,
+                        borderWidth: 1,
+                        padding: 8,
+                        cornerRadius: 6,
+                        displayColors: false,
+                        callbacks: {
+                            // Title: full "DD MMM YYYY, HH:MM" so the
+                            // tooltip stays unambiguous on multi-day
+                            // periods where the x-axis only shows dates.
+                            title: function (items) {
+                                if (!items || !items.length) return '';
+                                var i = items[0].dataIndex;
+                                return (typeof tsArr[i] === 'number') ? fmtFull(tsArr[i]) : items[0].label;
+                            },
+                            // Body: "<propDesc>: <value>" — gives the
+                            // tooltip more semantic weight than a bare
+                            // number floating next to a timestamp.
+                            label: function (ctx) {
+                                var v = ctx.parsed && ctx.parsed.y;
+                                return (typeof v === 'number') ? (propDesc + ': ' + fmt(v)) : propDesc;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        _kickResize(_linkSparkChart);
+    }).fail(function (xhr, textStatus, error) {
+        // Aborted requests (we explicitly abort when a new link is clicked)
+        // are not failures from the user's perspective — silence them.
+        if (textStatus === 'abort') return;
+        console.log('sparkline failed:', textStatus, error, 'url:', url);
+        _draw_sparkline_empty(canvas, 'Failed to load');
+    });
+}
+function _draw_sparkline_empty(canvas, msg) {
+    var ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    var w = canvas.width || canvas.clientWidth || 200;
+    var h = canvas.height || canvas.clientHeight || 80;
+    ctx.clearRect(0, 0, w, h);
+    var cs = getComputedStyle(document.documentElement);
+    ctx.fillStyle = cs.getPropertyValue('--c-text-3').trim() || '#7e8794';
+    ctx.font = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(msg || 'No data for this period', w / 2, h / 2);
+}
 
 function link_popup(link){
-    // Prepare HTML content for popup windows to appera when clicking on links
-      
     var dato = $("#datepicker").val();
-    var html = make_tooltip_v2(link.from + ' to ' + link.to, link);
+    var html = make_tooltip_v2(link.from, link.to, link);
+
+    const div = document.createElement("div");
+    div.classList.add("sprettom");
+    div.innerHTML = html;
+
+    // The "See" card (Routes button) is built here so it can be used both for
+    // links with event data and for topology-only ones - traceroute data is
+    // usually available even when no events are yet (issue #123).
+    function build_see_card() {
+	var seeCard = document.createElement("div");
+	seeCard.className = "panel-card";
+	var seeLabel = document.createElement("label");
+	seeLabel.className = "panel-card-label";
+	seeLabel.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> See';
+	seeCard.appendChild(seeLabel);
+	var seeBtns = document.createElement("div");
+	seeBtns.className = "panel-card-buttons";
+	var routesBtn = document.createElement("button");
+	routesBtn.className = "knapp";
+	routesBtn.title = "See the routes graph and stats in this period";
+	routesBtn.innerHTML = 'Routes';
+	routesBtn.onclick = function(){
+	    let num_tabs = $("main#tabs > ul > li").length;
+	    let fromShort = link.from.split('.').slice(0,2).join('.');
+	    let toShort = link.to.split('.').slice(0,2).join('.');
+	    let title = 'Routes: ' + fromShort + ' \u2192 ' + toShort;
+	    add_tab('div', title, num_tabs, '<div class="center-text" style="padding:40px"><div class="spinner"></div><p>Loading traceroute data\u2026</p></div>');
+	    let tab_id = 'tab' + num_tabs;
+	    let start_epoch = new Date(dato).getTime() / 1000;
+	    let end_epoch = start_epoch + parms.period * 3600;
+	    var routesOpts = {
+		net: parms.net,
+		mahost: 'https://localhost:9200/',
+		verify_SSL: 0,
+		api: 'opensearch',
+		// Follow the selected network's IP version, so Net-6 shows v6
+		// traceroutes instead of always falling back to v4 (issue #127).
+		ip_version: net_ip_version[parms.net]
+	    };
+	    if(! jQuery.isEmptyObject(conffile[parms.net].archive) ) {
+		routesOpts.mahost = conffile[parms.net].archive;
+	    }
+	    ls_tab(tab_id, link.from, link.to, start_epoch, end_epoch, routesOpts);
+	    persistTab(tab_id, {
+		kind: 'routes',
+		title: title,
+		from: link.from,
+		to: link.to,
+		startEpoch: start_epoch,
+		endEpoch: end_epoch,
+		options: routesOpts
+	    });
+	    // Ensure the newly added Routes tab is actually the active one
+	    // (add_tab() counts ALL <li> children including non-tab ones, so
+	    // its active-index can be off-by-one for our header layout).
+	    const tab_count = $('main#tabs > ul > li > a').length;
+	    if (tab_count > 0) {
+		$('main#tabs').tabs('option', 'active', tab_count - 1);
+	    }
+	};
+	seeBtns.appendChild(routesBtn);
+	seeCard.appendChild(seeBtns);
+	return { card: seeCard, btns: seeBtns };
+    }
 
     if (Object.keys(link).length > 2) {
-	// Link object has more than just "from" and "to" properties. Add buttons for routes and graphs. 
+	/* IRRELEVANT CODE
+	// Link object has more than just "from" and "to" properties.
 	var to_adr=link.to; // aggregations don't have *_adr.
 	var from_adr=link.from; // aggregations don't have *_adr.
 	if (link.to_adr)
@@ -418,156 +1397,297 @@ function link_popup(link){
 	    from_adr=link.from_adr;
 	else if ( name_to_ip[link.from] )
 	    from_adr = name_to_ip[link.from];
+	*/
 	
-	
-	//    var url = 'tracetree.html?topo=/' + parms.net + '/mp/' + link.from + '/' +  dato
-	//	+ '/trace/' + to_adr + '1.json' + '&to=' + link.to;
-	//    if (! jQuery.isEmptyObject(conffile[parms.net].event_type[parms.event].popup.see_routes)) {
-	//	// Add traceroute type prefix
-	//	url += "&prefix=" + conffile[parms.net].event_type[parms.event].popup.see_routes;
-	//    }
-	var url = '/pstracetree/ls.html?mahost=localhost:443&verify_SSL=0&api=opensearch&from=' + link.from + '&from_adr=' + from_adr + '&to=' + link.to +'&to_adr=' + to_adr +'&time-start=' + dato;
-	if (net_ip_version[parms.net]) {
-	    // Add filtering on ip version
-	    url += "&ip-version=" + net_ip_version[parms.net];
+	// --- "Trend" sparkline card ---
+	// Compact Chart.js line graph showing the currently-selected
+	// property over the active period for THIS link, so the user can
+	// see at a glance whether the value is trending up / down /
+	// stable without opening a full Plot tab. Card is built up-front
+	// here (so it's in DOM by the time openLinkPanel attaches it),
+	// and then _render_link_sparkline kicks off the AJAX fetch +
+	// Chart.js instantiation on next tick.
+	var sparkCard = document.createElement('div');
+	sparkCard.className = 'panel-card link-sparkline-card';
+	var sparkLabel = document.createElement('label');
+	sparkLabel.className = 'panel-card-label';
+	var sparkPropDesc = (prop_desc[event_sum_type[parms.event]] && prop_desc[event_sum_type[parms.event]][parms.property])
+	    || (prop_desc[parms.event] && prop_desc[parms.event][parms.property])
+	    || parms.property
+	    || 'Trend';
+	sparkLabel.innerHTML =
+	    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+	      '<path d="M3 18 L9 12 L13 16 L21 6"/>' +
+	    '</svg> Trend — <span class="link-sparkline-prop">' + escapeHtml(String(sparkPropDesc)) + '</span>';
+	sparkCard.appendChild(sparkLabel);
+	var sparkStats = document.createElement('div');
+	sparkStats.className = 'link-sparkline-stats';
+	sparkCard.appendChild(sparkStats);
+	var sparkWrap = document.createElement('div');
+	sparkWrap.className = 'link-sparkline-wrap';
+	var sparkCanvas = document.createElement('canvas');
+	sparkCanvas.className = 'link-sparkline';
+	sparkWrap.appendChild(sparkCanvas);
+	sparkCard.appendChild(sparkWrap);
+	div.appendChild(sparkCard);
+
+	// NOTE: we do NOT kick off the sparkline render here. link_popup()
+	// is called at link-DRAW time (from get_connections / draw_links),
+	// not at click time — the resulting div is stashed on the bezier
+	// as _panelPopup and re-used. If we deferred the render here, it
+	// would fire for every link on the map (hundreds of times) against
+	// detached canvases, AND would capture stale parms.event/property/
+	// dato from draw time. Instead, openLinkPanel() finds the canvas
+	// and renders at CLICK time with fresh parms.
+
+	// --- "See" card ---
+	var see = build_see_card();
+	div.appendChild(see.card);
+
+	// Add "Top events" button via gap_popup (appends to seeCard buttons)
+	gap_popup( see.btns, link);
+
+	// --- "Plot" card ---
+	var plotCard = document.createElement("div");
+	plotCard.className = "panel-card";
+	var plotLabel = document.createElement("label");
+	plotLabel.className = "panel-card-label";
+	plotLabel.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10M12 20V4M6 20v-6"/></svg> Plot';
+	plotCard.appendChild(plotLabel);
+
+	var plotBtns = document.createElement("div");
+	plotBtns.className = "panel-card-buttons";
+
+	// Helper — open a curve-chart URL as an integrated tab (iframe-embedded)
+	// instead of a new browser window, mirroring the Routes flow.
+	var fromShortPlot = link.from.split('.').slice(0, 2).join('.');
+	var toShortPlot   = link.to.split('.').slice(0, 2).join('.');
+	function open_curve_tab(label, url) {
+	    var num_tabs = $("main#tabs > ul > li").length;
+	    var title = label + ': ' + fromShortPlot + ' → ' + toShortPlot;
+	    // Cache-buster — iframes get cached aggressively and the Queues view
+	    // is small/static, so fresh load each click is cheap and avoids
+	    // showing stale HTML/CSS after deploys.
+	    var sep = url.indexOf('?') >= 0 ? '&' : '?';
+	    var bustedUrl = url + sep + '_t=' + Date.now();
+	    var iframe_html =
+		'<div class="curve-iframe-wrap">' +
+		    '<iframe class="curve-iframe" src="' + bustedUrl + '" frameborder="0" sandbox="allow-scripts allow-same-origin"></iframe>' +
+		'</div>';
+	    add_tab('div', title, num_tabs, iframe_html);
+	    var divid = 'tab' + num_tabs;
+	    persistTab(divid, {
+		kind: 'curve',
+		title: title,
+		label: label,
+		url: url    // store the *uncached* URL — restore will re-add a fresh _t
+	    });
+	    var tab_count = $('main#tabs > ul > li > a').length;
+	    if (tab_count > 0) {
+		$('main#tabs').tabs('option', 'active', tab_count - 1);
+	    }
 	}
 
-	html +='\nSee ';
-	html += '\n<button class=knapp onclick="window.open(\'' + url +'\');" title="See the routes graph and stats in this period">Routes'  + '</button>' + "\n";
+	// --- Queues (jitter / h_ddelay) ---
+	// Use the configured jitter index (e.g. dragonlab_jitter, shared by both
+	// nets) - NOT parms.net + '_jitter', which becomes dragonlab_6_jitter on
+	// Net-6 and reports "No jitter data" (issue #100).
+	var queuesIndex = (event_index && event_index['jitter']) ? event_index['jitter'] : (parms.net + '_jitter');
+	var queuesUrl = 'curve-chart.html?net=' + parms.net + '&index=' + queuesIndex + '&from=' + link.from + '&to=' + link.to + '&event=jitter&property=h_ddelay&start=' + start + '&end=' + end + "&title=From " + link.from + " to " + link.to;
+	var queuesBtn = document.createElement("button");
+	queuesBtn.className = "knapp";
+	queuesBtn.title = "Curve over queues in this period";
+	queuesBtn.textContent = 'Queues';
+	queuesBtn.onclick = function () { open_curve_tab('Queues', queuesUrl); };
+	plotBtns.appendChild(queuesBtn);
+
+	// --- Unavailability (gap / down_ppm) ---
+	var unavailIndex = (event_index && event_index['gap']) ? event_index['gap'] : (parms.net + '_gap');
+	var unavailUrl = 'curve-chart.html?net=' + parms.net + '&index=' + unavailIndex + '&from=' + link.from + '&to=' + link.to + '&event=gap&property=down_ppm&start=' + start + '&end=' + end + '&title=Unavailability ' + link.from + ' to ' + link.to;
+	var unavailBtn = document.createElement("button");
+	unavailBtn.className = "knapp";
+	unavailBtn.title = "Unavailability over this period";
+	unavailBtn.textContent = 'Unavailability';
+	unavailBtn.onclick = function () { open_curve_tab('Unavailability', unavailUrl); };
+	plotBtns.appendChild(unavailBtn);
+
+	// --- Current property (dynamic, depends on currently-selected event/property) ---
+	// Skip this button when it would duplicate Queues or Unavailability — the
+	// dynamic prop selection happens to match those fixed buttons sometimes.
+	var isQueuesDup     = (parms.event === 'jitter' && parms.property === 'h_ddelay');
+	var isUnavailDup    = (parms.event === 'gap'    && parms.property === 'down_ppm');
+	if (!isQueuesDup && !isUnavailDup) {
+	    var propUrl = 'curve-chart.html?net=' + parms.net + '&index=' + event_index[parms.event] + '&from=' + link.from + '&to=' + link.to + '&event=' + parms.event + '&property=' + parms.property + '&start=' + start + '&end=' + end + '&title="From ' + link.from + ' to ' + link.to + ' for ' + parms.property + '"';
+	    var propBtn = document.createElement("button");
+	    propBtn.className = "knapp";
+	    propBtn.title = "Detailed report for the currently selected metric";
+	    var propLabel = (prop_desc[parms.event] && prop_desc[parms.event][parms.property]) ? prop_desc[parms.event][parms.property] : (prop_desc[event_sum_type[parms.event]] && prop_desc[event_sum_type[parms.event]][parms.property]) ? prop_desc[event_sum_type[parms.event]][parms.property] : parms.property;
+	    propBtn.textContent = propLabel;
+	    propBtn.onclick = function () { open_curve_tab(propLabel, propUrl); };
+	    plotBtns.appendChild(propBtn);
+	}
+
+	plotCard.appendChild(plotBtns);
+	div.appendChild(plotCard);
+    } else {
+	// Topology-only link (grey): no event data, but traceroutes usually
+	// exist - offer Routes anyway (issue #123).
+	div.appendChild(build_see_card().card);
     }
-    
-    const div = document.createElement("div");
-    div.classList.add("sprettom");
-    div.innerHTML = html;
-    
-    
-    if (Object.keys(link).length > 2) {
-	// Link object has more than just "from" and "to" properties. Add top-10 list. 
-	gap_popup( div, link);
-	
-	url = 'curve-chart.html?net=' + parms.net + '&index=' + parms.net + '_jitter&from=' + link.from + '&to=' + link.to + '&event=jitter&property=h_ddelay&start=' + start + '&end=' + end + "&title=From " + link.from + " to " + link.to ;
-	html = 'Plot <button class=knapp><a title="Curve over queues in this period" target="_blank" href="' + url + '">Queues</a></button>' + "\n";
-	
-	url='curve-chart.html?net=' + parms.net + '&index=' + event_index[parms.event] + '&from=' + link.from + '&to=' + link.to + '&event=' + parms.event + '&property=' + parms.property + '&start=' + start + '&end=' + end + '&title="From ' + link.from + ' to ' + link.to + ' for ' + parms.property + '"';
-	html += '\n<button class=knapp><a title="Detailed report for report" target="_blank" href="' + url + '">' + prop_desc[parms.event][parms.property] + '</a></button>' + "\n";
-     
-	let tail=document.createElement("div");
-	tail.innerHTML = html;
-	div.appendChild(tail);
-    }
-   
-
-    // if( parms.debug) console.log(knapp);
-    // html += knapp;
-
-    // html += '<p>' + gap_list(link.from, link.to);
-    // html += ' <button class=knapp onclick=console.log(window.parent.name);console.log(window.name);window.parent.gap_list("' + link.from + '","' + link.to + '");' + '>Gap list</button>';
-
-    /*
-    html += '\n<p>Focus on: ';
-    var abs=[link.from,link.to].join();
-    // html += '<button class=knapp id="' + abs + '-from">' + link.from + '</button>';
-    // html += '<button class=knapp id="' + abs + '-to">' + link.to   + '</button>';
-    html += '<button class=knapp><a href=' + fix_url( document.location.href, "node", link.from ) + '>' + link.from + '</a></button>';
-    html += ', <button class=knapp><a href=' + fix_url( document.location.href, "node", link.to ) + '>' + link.to + '</a></button>';
-    */
-    // html+='</body>';
     return div;
 }
 
-function make_tooltip_v2(title, link){
-    // Create summary table (based on config file) intended for top part of popup windows
+// Copy a hostname to the clipboard on double-click of its name in the link
+// panel (replaces the old per-host copy buttons, which crowded the row). One
+// delegated handler serves the .link-host spans (dblclick); it still also
+// accepts any .link-copy-btn (click) for backward compatibility.
+function _link_copy_delegate(e) {
+    var btn = e.target && e.target.closest && e.target.closest('.link-copy-btn, .link-host');
+    if (!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    var value = btn.dataset.copyValue || btn.textContent || '';
+    if (!value) return;
+    function _flash() {
+        btn.classList.add('copied');
+        setTimeout(function () { btn.classList.remove('copied'); }, 1100);
+        _show_copy_toast('Hostname copied to clipboard');
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(value).then(_flash, function () { _link_copy_fallback(value, _flash); });
+    } else {
+        _link_copy_fallback(value, _flash);
+    }
+}
+function _link_copy_fallback(text, onDone) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus(); ta.select();
+    try { document.execCommand('copy'); onDone && onDone(); } catch (_) {}
+    document.body.removeChild(ta);
+}
+// Small transient toast (bottom-centre) confirming a copy. Singleton element,
+// reused so rapid copies don't stack; each call restarts the show/hide cycle.
+var _copyToastTimer = null;
+function _show_copy_toast(msg) {
+    var t = document.getElementById('copy-toast');
+    if (!t) {
+        t = document.createElement('div');
+        t.id = 'copy-toast';
+        t.className = 'copy-toast';
+        t.setAttribute('role', 'status');
+        t.setAttribute('aria-live', 'polite');
+        document.body.appendChild(t);
+    }
+    t.textContent = msg;
+    if (_copyToastTimer) clearTimeout(_copyToastTimer);
+    requestAnimationFrame(function () { t.classList.add('show'); });
+    _copyToastTimer = setTimeout(function () { t.classList.remove('show'); }, 1600);
+}
+$(document).on('click', '.link-copy-btn', _link_copy_delegate);
+$(document).on('dblclick', '.link-host', _link_copy_delegate);
+
+// Reverse the link panel: show the opposite-direction pair (to→from). Uses the
+// reverse summary record if the archive has one, else just relabels. Moves the
+// blue map highlight to the reverse line (bezier, or the geo polyline in real-
+// locations mode). Wired to #linkSwapBtn in openLinkPanel. Ported from work-snapshot.
+function swap_panel_direction() {
+    if (!currentPanelLink) return;
+    var fromOld = currentPanelLink.from;
+    var toOld   = currentPanelLink.to;
+    var reversed = null;
+    if (typeof summary !== 'undefined' && summary && summary.length) {
+        for (var i = 0; i < summary.length; i++) {
+            var s = summary[i] && summary[i]._source;
+            if (s && s.from === toOld && s.to === fromOld) { reversed = s; break; }
+        }
+    }
+    if (!reversed) {
+        reversed = Object.assign({}, currentPanelLink, { from: toOld, to: fromOld });
+    }
+    currentPanelLink = reversed;
+    openLinkPanel(link_popup(reversed), reversed);
+
+    var reverseKey = [reversed.from, reversed.to].join();
+    var reverseLine = null;
+    if (realLocationsMode && realPathLines[reverseKey] && realPathLines[reverseKey].line) {
+        reverseLine = realPathLines[reverseKey].line;
+    } else if (typeof linkByName !== 'undefined') {
+        reverseLine = linkByName[reverseKey];
+    }
+    if (reverseLine) setHighlightedLink(reverseLine);
+}
+
+function make_tooltip_v2(fromHost, toHost, link){
     if (! jQuery.isEmptyObject(conffile)) {
 	var nrows=0;
-//	var tip = "<h3>" + title + "</h3>";
-//	var tip="<table width=100%><caption><b>" + title + '</b></caption>';
-	var tip="<table width=100%><caption>" + title + "</caption>";
+	var tip='<div class="link-panel-endpoints">';
+	tip += '<div class="link-endpoint-list">';
+	tip += '<div class="link-endpoint"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg> <span class="link-host" data-copy-value="' + escapeHtml(fromHost) + '" title="Double-click to copy">' + fromHost + '</span></div>';
+	tip += '<div class="link-endpoint"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg> <span class="link-host" data-copy-value="' + escapeHtml(toHost) + '" title="Double-click to copy">' + toHost + '</span></div>';
+	tip += '</div>';
+	// Swap-direction button — only when the archive actually has the reverse
+	// pair to show (otherwise the swap would just relabel the same numbers).
+	var hasReverse = false;
+	if (typeof summary !== 'undefined' && summary && summary.length) {
+	    for (var si = 0; si < summary.length; si++) {
+		var rs = summary[si] && summary[si]._source;
+		if (rs && rs.from === toHost && rs.to === fromHost) { hasReverse = true; break; }
+	    }
+	}
+	if (hasReverse) {
+	    tip += '<button type="button" class="link-swap-btn" id="linkSwapBtn" title="Reverse direction">' +
+		     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+		       '<path d="M7 16V4M4 7l3-3 3 3"/><path d="M17 8v12M14 17l3 3 3-3"/>' +
+		     '</svg></button>';
+	}
+	tip += '</div>';
 	tip += "<table width=100%>";
 	if ( selected_date_is_today_or_future() ) {
-	    // Only digested summary of none-summary properties is available.
 	    for (const sum_var in conffile[parms.net].event_type[parms.event].field) {
 		if ( typeof link[sum_var] != 'undefined' ) {
-		    var prop_value = Math.round((link[sum_var] + Number.EPSILON) * 100) / 100;  // Round off to (max) 2 decimals
-		    tip+= '<tr><td>' + prop_desc[parms.event][sum_var] + '<td align=right>' + prop_value; 
+		    var prop_value = Math.round((link[sum_var] + Number.EPSILON) * 100) / 100;
+		    // Config `descr` as a mouse-over help text on the row (issue #108).
+		    var help1 = (prop_long_desc[parms.event] && prop_long_desc[parms.event][sum_var])
+			? ' title="' + escapeHtml(prop_long_desc[parms.event][sum_var]) + '"' : '';
+		    tip+= '<tr' + help1 + '><td>' + prop_desc[parms.event][sum_var] + '<td align=right>' + prop_value;
 		    nrows++;
 		}
 	    }
 	} else {
 	    for (const sum_var of conffile[parms.net].event_type[parms.event].popup.summary) {
-		//ok var sum_var = conffile[parms.net].event_type[parms.event].popup.summary[s];
 		if ( typeof link[sum_var] != 'undefined' ) {
-		    var prop_value = Math.round((link[sum_var] + Number.EPSILON) * 100) / 100;  // Round off to (max) 2 decimals
-		    tip+= '<tr><td>' + prop_desc[conffile[parms.net].event_type[parms.event].summary_event_type][sum_var] + '<td align=right>' + prop_value; 
+		    var prop_value = Math.round((link[sum_var] + Number.EPSILON) * 100) / 100;
+		    // Config `descr` as a mouse-over help text on the row (issue #108).
+		    var sum_key = conffile[parms.net].event_type[parms.event].summary_event_type;
+		    var help2 = (prop_long_desc[sum_key] && prop_long_desc[sum_key][sum_var])
+			? ' title="' + escapeHtml(prop_long_desc[sum_key][sum_var]) + '"' : '';
+		    tip+= '<tr' + help2 + '><td>' + prop_desc[sum_key][sum_var] + '<td align=right>' + prop_value;
 		    nrows++;
 		}
 	    }
 	}
-//	if ( nrows > 0 ){
-	    tip+="</table>";
-//	} else {
-//	    tip="<b>" + title + "</b>";
-//	}
+	tip+="</table>";
+	if (nrows === 0) {
+	    // Topology-only link (grey): no event data for this period. Surface it
+	    // here in the popup instead of a map-covering overlay (issue #113).
+	    tip += '<p class="link-panel-nodata">No event-data available for this period.</p>';
+	}
 	return tip;
-	
     } else {
 	console.log('Error: No config loaded. Not able to prepare tooltips.');
 	return;
-	//	  // Return default (legacy) summary content 
-	//	  return make_tooltip(title, link)
     }
 }
-
-/* OBSOLETE
-function make_tooltip(title, link){
-    var nrows=0;
-    var tip="<table width=100%><caption><b>" + title + '</b></caption>';
-    if ( link.big_time){
-	tip+= '<tr><td>Sum downtime(s)<td align=right>' + ( link.big_time + link.small_time ).toFixed(1) 
-    	    + '<tr><td>Sum gaps(#)<td align=right>' + ( parseInt( link.small_gaps) + parseInt( link.big_gaps) );
-    }
-    for ( var prop of prop_names){
-	if ( prop in link ){
-	    var desc=prop_desc[prop] != null ? prop_desc[prop] : "no description";
-	    // var val=  ! isNaN(link[prop]) ? link[prop].toFixed(1) : 'no data';
-	    var val = link[prop];
-
-	    if ( isNaN(link[prop]) ){
-		 ; // som text value
-	    } else {
-		let pname = prop;
-		// if ( prop_sum.indexOf(prop) >= 0 && link[prop + "_sum"] )
-		//    pname=prop + "_sum";
-		try {val = parseFloat( link[pname] ).toFixed(1) ; }
-		catch(e) {
-		    console.log('Invalid value of "' + title + '" prop:' + pname + ' val:' + link[pname] );
-		}
-		nrows++;
-	    }
-	    tip+= "<tr><td>" + desc +  '<td align=right>' + val + "\n";
-
-	    if ( prop === "down_ppm" && typeof link[prop] == 'number' ){
-		tip+= "<tr><td>" + "Unavail (sec/day)" +  '<td align=right>' +
-		    ( link[prop] * 86400 / 10**6 ).toFixed(1) + "\n";
-	    }
-	} else {
-	    console.log('Invalid property ' + prop + ' of ' + title );
-	}
-    }
-    if ( nrows > 0 ){
-	tip+="</table>";
-    } else {
-	tip="<b>" + title + "</b>";
-    }
-    return tip;
-}
-*/
 
 function link_tooltip( title, link, prop){
     if ( prop in link ){
 	var val=link[prop];
 	var event = event_sum_type[parms.event]
 	if ( selected_date_is_today_or_future() ) {
-	    // (No sum-data available)
 	    event = parms.event
 	}
 	var tip='<b>' + title + '</b>' + "<p>" + prop_desc[event][prop] + ": " ;
@@ -579,38 +1699,31 @@ function link_tooltip( title, link, prop){
 	}
     } else {
 	tip += "undef";
-    }	
-    return tip  ;
+    }
+    return tip;
 }
-
 
 function gap_list( from, to, hits, lines, sort_type){
     var etype, html;
-    var n=0; //  line number
-
-    // sort descending on tloss
+    var n=0;
     if ( sort_type){
-	// let sort_col = conffile[parms.net].event_type[parms.event].popup.table[0];
 	let sort_col = conffile[parms.net].event_type[parms.event].default_field;
 	hits.sort( function(a,b){
 	    if ( sort_type === 'num_desc')
 		return b._source[sort_col] - a._source[sort_col];
-	    else // num_asc
+	    else
 		return a._source[sort_col] - a._source[sort_col];
 	} );
     }
-
     for ( var hit of hits){
 	var gap = hit._source;
-	if ( ! etype) { // take first record as defining
+	if ( ! etype) {
 	    etype = gap.event_type;
 	    var amount_head = etype === "gap" ? "Queue(ms)" : "Cause";
 	    html="<table class=sortable><thead><td>Day Time<td>Lost(s)<td>" + amount_head + "</thead>";
 	    if (! jQuery.isEmptyObject(prop_desc)) {
-		// Config from file available. Build table header row.
 		html="<table class=sortable><thead title=\"Click to sort on column\"><th>Day Time";
 		for (const col in conffile[parms.net].event_type[etype].popup.table) {
-		    // Prepare colum heading with popup title text.
 		    var title_text = "";
 		    if (typeof prop_long_desc[etype][conffile[parms.net].event_type[etype].popup.table[col]] != "undefined") {
 			title_text = prop_long_desc[etype][conffile[parms.net].event_type[etype].popup.table[col]];
@@ -622,56 +1735,41 @@ function gap_list( from, to, hits, lines, sort_type){
 	}
 	if ( gap.from === from && gap.to === to ){
 	    var d = new Date( Number(gap.timestamp * 1000) );
-	    var tid = zero_fill( d.getDate() ) + " " + zero_fill( d.getHours() ) + ":" + zero_fill( d.getMinutes() ); // ddhh
-
+	    var tid = zero_fill( d.getDate() ) + " " + zero_fill( d.getHours() ) + ":" + zero_fill( d.getMinutes() );
 	    var syslog_url = 'https://iou2.uninett.no/es-syslog-lookup/es-syslog-lookup.cgi?syslogwindow=3600&epoch=1&redirect=1'
-		+ '&timestamp=' + gap.timestamp 
-		+ '&from=' + gap.from_adr + '&to=' + gap.to_adr + '&ip=1';
+		+ '&timestamp=' + gap.timestamp + '&from=' + gap.from_adr + '&to=' + gap.to_adr + '&ip=1';
 	    var telemetry_url = 'https://telemetri.uninett.no/telemetri-lookup/telemetri-lookup.cgi?telemetrywindow=60'
-                  + '&redirect=1&timestamp=' + gap.timestamp
-		  + '&from=' + gap.from_adr + '&to=' + gap.to_adr + '&ip=1';
+                  + '&redirect=1&timestamp=' + gap.timestamp + '&from=' + gap.from_adr + '&to=' + gap.to_adr + '&ip=1';
 	    var telemetry_href = tid;
 	    var sec;
-	    if ( etype === "gap"){
-		sec = ( gap.tloss / 1000 ).toFixed(1);
-	    } else if ( etype === "routeerr" )
-		sec = ( gap.duration ).toFixed(1);
+	    if ( etype === "gap"){ sec = ( gap.tloss / 1000 ).toFixed(1); }
+	    else if ( etype === "routeerr" ) sec = ( gap.duration ).toFixed(1);
 	    var syslog_href= sec;
 	    var tail="";
 	    if ( $("#network").val() === "uninett" ){
 	        syslog_href = '<a title="See router logs" href="' + syslog_url + '" target=_blank>' + "Log" + '</a>';
 	        telemetry_href = '<a title="See telemetry data" href="' + telemetry_url + '" target=_blank>' + "Mon" + '</a>';
-		tail =  "<td><button class=knapp>" + syslog_href + "</button>"
-		    + "<td><button class=knapp>" + telemetry_href + "</button>";
+		tail =  "<td><button class=knapp>" + syslog_href + "</button>" + "<td><button class=knapp>" + telemetry_href + "</button>";
 	    }
 	    var amount;
 	    if ( etype === "gap"){
 		amount = gap.h_ddelay;
 		if ( typeof amount == "number") amount = amount.toFixed(1) ;
 	    } else if ( etype === "routeerr" ){
-		//amount = typeof gap.icmp_errors === "undefined" ? "" : JSON.stringify( gap.icmp_errors );
-		amount = gap.cause + " " + gap.last_reply_from; 
+		amount = gap.cause + " " + gap.last_reply_from;
 	    }
-
 	    if (! jQuery.isEmptyObject(event_desc)){
-		// Config from file available. Add table row.
 		html += "<tr><td>" + tid;
 		for (const col in conffile[parms.net].event_type[etype].popup.table) {
 		    if (typeof gap[conffile[parms.net].event_type[etype].popup.table[col]] != "undefined" ) {
 			var value_tooltip_field = conffile[parms.net].event_type[etype].field[ conffile[parms.net].event_type[etype].popup.table[col] ].mouseover;
 			var value_tooltip = "";
-			if (typeof value_tooltip_field != "undefined" ) {
-			    // Get value of other field for mouse-over tooltip in current field.
-			    value_tooltip = gap[ value_tooltip_field ];
-			}
+			if (typeof value_tooltip_field != "undefined" ) { value_tooltip = gap[ value_tooltip_field ]; }
 			html += "<td align=right title='" + value_tooltip + "' >" + gap[conffile[parms.net].event_type[etype].popup.table[col]];
-		    } else {
-			html += "<td align=right>-";
-		    }
+		    } else { html += "<td align=right>-"; }
 		}
 		html += "<td>" + tail + "\n";
 	    } else {
-		//html += "<tr><td>" + syslog_href + "<td>" + telemetry_href + "<td>" + gap.h_ddelay.toFixed(1) + "<td>" + "\n";
 		html += "<tr><td>" + tid +  "<td align=right>" + sec + "<td align=right>" + amount + "<td>" + tail + "\n";
 	    }
 	    if ( lines &&  n >= lines) break;
@@ -679,97 +1777,52 @@ function gap_list( from, to, hits, lines, sort_type){
 	}
     }
     html += "</table>";
-    if (n>0)
-	return(html);
-    else
-	return("No events.");
-    /* not reached :
-    $("#dialog").html(html);
-    $("#dialog").dialog("open");
-    */
-
+    if (n>0) return(html);
+    else return("No events.");
 }
+
 // summarize gap and jitter records into gapsum format
   function digest_es_data(etype, hits){
-      var stat=[]; // numeric stats
-      var msg=[];  // text lists
-    var digest=[];
-
+      var stat=[]; var msg=[]; var digest=[];
     for (var i=0; i < hits.length; i++){
 	var event = hits[i]._source;
 	if ( event.event_type === etype){
 	    var ab = event.from + "," + event.to;
-	    
-	    if ( ! (ab in stat) ){ // first record for event
-		stat[ab]=[];
-		stat[ab].from = event.from;
-		stat[ab].to = event.to;
-		for ( const prop of prop_names[etype]){
-		    stat[ab][prop]=new stats();
-		}
-		msg[ab]=[];
-		msg[ab].from = event.from;
-		msg[ab].to = event.to;
-		for ( const prop of prop_names[etype]){
-		    msg[ab][prop]=[];
-		}
+	    if ( ! (ab in stat) ){
+		stat[ab]=[]; stat[ab].from = event.from; stat[ab].to = event.to;
+		for ( const prop of prop_names[etype]){ stat[ab][prop]=new stats(); }
+		msg[ab]=[]; msg[ab].from = event.from; msg[ab].to = event.to;
+		for ( const prop of prop_names[etype]){ msg[ab][prop]=[]; }
 	    }
-	    // accumulate values
 	    for ( const prop of prop_names[etype] ){
 		let value=event[prop];
-		if ( typeof(value) === "undefined" )
-		    value="";
-		else if ( typeof value === "object" )
-		    value = JSON.stringify(value);
+		if ( typeof(value) === "undefined" ) value="";
+		else if ( typeof value === "object" ) value = JSON.stringify(value);
 		if ( typeof value === "string"){
-		    if ( msg[ab][prop].indexOf( value) < 0 )
-			msg[ab][prop].push(value);
-		} else {
-		    stat[ab][prop].add( value );
-		}
+		    if ( msg[ab][prop].indexOf( value) < 0 ) msg[ab][prop].push(value);
+		} else { stat[ab][prop].add( value ); }
 	    }
 	}
     }
-    // make stats
     for ( const ab in stat ){
 	var rec={ from: stat[ab].from, to: stat[ab].to};
 	for ( const prop of prop_names[etype] ){
 	    if ( stat[ab][prop].n > 0 ){
-//		if ( prop_sum.indexOf(prop) >= 0 )
-		//		    rec[prop]=stat[ab][prop].sum;
 		if ( prop in prop_aggr[etype] ) {
-		    // Variable (property) has aggregation method specified
 		    switch (prop_aggr[etype][prop]) {
-		    case "sum":
-			rec[prop]=stat[ab][prop].sum
-			break;
-		    case "avg":
-			rec[prop]=stat[ab][prop].average()
-		    case "max":
-			rec[prop]=stat[ab][prop].max();
-			break;
-		    case "min":
-			rec[prop]=stat[ab][prop].min();
-			break;
-		    default:
-			console.log("Unsupported aggregation method " + prop_aggr[prop] + ". Applying average.");
-			rec[prop]=stat[ab][prop].average()
+		    case "sum": rec[prop]=stat[ab][prop].sum; break;
+		    case "avg": rec[prop]=stat[ab][prop].average()
+		    case "max": rec[prop]=stat[ab][prop].max(); break;
+		    case "min": rec[prop]=stat[ab][prop].min(); break;
+		    default: rec[prop]=stat[ab][prop].average()
 		    }
-		} else {
-		    console.log("Aggregation method unspecified. Applying average.");
-		    rec[prop]=stat[ab][prop].average()
-		}
-		rec[prop]=Math.round((rec[prop] + Number.EPSILON) * 100) / 100;  // Round off to (max) 2 decimals
+		} else { rec[prop]=stat[ab][prop].average() }
+		rec[prop]=Math.round((rec[prop] + Number.EPSILON) * 100) / 100;
 		rec[prop + "_max"] = stat[ab][prop].max();
-		rec[prop + "_sum"] = stat[ab][prop].sum; 
-	    } else {
-		rec[prop] = msg[ab][prop].join();
-	    }
+		rec[prop + "_sum"] = stat[ab][prop].sum;
+	    } else { rec[prop] = msg[ab][prop].join(); }
 	}
-	if ( stat[ab].tloss ){
-	    rec.down_ppm = ( stat[ab].tloss.sum * 1000000 / 1000 / period_length );
-	}
-	
+	if ( stat[ab].tloss ){ rec.down_ppm = ( stat[ab].tloss.sum * 1000000 / 1000 / period_length ); }
 	digest.push( {_source: rec} );
     }
     return digest;
@@ -778,121 +1831,65 @@ function gap_list( from, to, hits, lines, sort_type){
 function count_aggregates(aggs){
     var n = 0;
     var from_buckets=aggs.from.buckets;
-    for (var i=0; i < from_buckets.length; i++){
-    	n += from_buckets[i].doc_count;
-    }
+    for (var i=0; i < from_buckets.length; i++){ n += from_buckets[i].doc_count; }
     return ("" + n + ", skipped " + aggs.from.sum_other_doc_count);
 }
 
 function digest_aggregates(aggs, stats_type){
     var digest=[];
     var from_buckets=aggs.from.buckets;
-
     for (var i=0; i < from_buckets.length; i++){
 	var fra = from_buckets[i].key;
 	var to_buckets= from_buckets[i].to.buckets;
-	
 	for (var j=0; j < to_buckets.length; j++){
 	    var til=to_buckets[j].key;
 	    if (parms.debug) console.log(fra + " - " + til + " = " + to_buckets[j].h_ddelay.avg );
 	    var rec={ from: fra, to: til};
-
-	    for ( const prop in to_buckets[j] ){ // go through names
-		if ( typeof( to_buckets[j][prop] ) === 'object' ) { // stats record
-		    rec[prop]= to_buckets[j][prop]['values'][stats_type];
-		    //rec[prop + "_max"]=to_buckets[j][prop].max;
-		}
+	    for ( const prop in to_buckets[j] ){
+		if ( typeof( to_buckets[j][prop] ) === 'object' ) { rec[prop]= to_buckets[j][prop]['values'][stats_type]; }
 	    }
 	    digest.push( {_source: rec} );
-	}	
+	}
     }
     return digest;
 }
 
-
-/* function to draw links from stats data */
-
-
 function draw_links(hits, prop){
-    // remove_links(links);
     get_thresholds(hits, prop);
     update_legend(prop_desc[event_sum_type[parms.event]][prop],threshes);
-    hits.sort(sort_hits); // sort by from, to
+    hits.sort(sort_hits);
     var new_ends=[];
-
     for (var i=0; i < hits.length; i++){
-	var link=hits[i];
-	var ab=[link._source.from, link._source.to];
-	var abs=ab.join();
-	if(!new_ends[abs]) new_ends.length++; // Ensure updated array length
-	new_ends[abs]=1;
-
-	// if ( ! ( parms.node && ! (ab.indexOf( parms.node) >= 0) ) ){ // only with node
+	var link=hits[i]; var ab=[link._source.from, link._source.to]; var abs=ab.join();
+	if(!new_ends[abs]) new_ends.length++; new_ends[abs]=1;
 	if ( focus_node === "" || ab.indexOf(focus_node) >= 0 ){
-	    var color=get_color( link._source[prop], threshes);
-
-	    if ( ! linkByName[abs]){ // draw line
+	    var color=get_color( link._source[prop], threshes) || empty_color;
+	    if ( ! linkByName[abs]){
 		var tooltip= link_tooltip( link._source.from + " to " + link._source.to , link._source, prop );
-
 		var l=draw_link(ab, color, tooltip, link_popup(link._source) );
 		if (l){
 		    links.push(l);
-		    if(!linkByName[abs]) linkByName.length++;  // Ensure updated array length
- 		    linkByName[abs]=l;
-		    ends.push(abs);
+		    if(!linkByName[abs]) linkByName.length++;
+ 		    linkByName[abs]=l; ends.push(abs);
 		    l.on("mouseover", function(e){
-			if (! mouseover) {
-                            mouseover = true;  // Flag required since mouseover is retriggered as long as the mouse hovers over a link
- 			    color_store[e.target.leaflet_id]=e.target.options.color;
-			    e.target.bringToFront();
-			    taint_link(e.target,"blue");
-			}
+			if (! mouseover) { mouseover = true; color_store[L.stamp(e.target)]=e.target.options.color; e.target.bringToFront(); taint_link(e.target,"blue"); }
 		    });
-		    l.on("mouseout", function(e){
-			taint_link(e.target, color_store[e.target.leaflet_id]);
-			mouseover=false;
-		    });
+		    l.on("mouseout", function(e){ taint_link(e.target, e.target._baseColor || color_store[L.stamp(e.target)]); mouseover=false; });
 		}
-	    } /* else { // no need to redraw
-		taint_link(linkByName[ab], color);
-	    } */
-	} else {
-	    // console.log('### draw_link: excluded ' + ab);
-	    n_excluded++;
-	    remove_link(ab);		
-	}
+	    }
+	} else { n_excluded++; remove_link(ab); }
     }
-    // Find stale links
     var stale_link=[];
-    for (var i=0; i < ends.length; i++){
-	if ( ! new_ends[ ends[i]] ) {
-	    stale_link.push(ends[i]);
-	}
-    }
-    // Remove stale links 
-    for (var i=0; i < stale_link.length; i++){
-	    remove_link(stale_link[i]);
-    }
-    // refocus map 
-    /* if (mymap){
-	var group = new L.featureGroup(links);
-	mymap.fitBounds(group.getBounds());
-    } // else alert("undefined map");
-    */
-    
+    for (var i=0; i < ends.length; i++){ if ( ! new_ends[ ends[i]] ) { stale_link.push(ends[i]); } }
+    for (var i=0; i < stale_link.length; i++){ remove_link(stale_link[i]); }
     taint_links(hits, prop);
 }
 
 function get_topology(source = "archive"){
-    // Fetch topology data from relevant source
-    // and initiate drawing of topology
-
     if (points.length == 0) {
-	// No nodes loaded yet. Do that first.
-	load_coords_from_all_sources(network); // NOTE: This function call get_topology() again on success.
+	load_coords_from_all_sources(network);
 	return;
     }
-    
     let start = new Date($("#datepicker").val() + " 00:00:00").getTime()/1000;
     let start_iso = new Date($("#datepicker").val() + " 00:00:00").toISOString();
     let end= new Date($("#datepicker").val() + " 23:59:59").getTime()/1000;
@@ -900,230 +1897,466 @@ function get_topology(source = "archive"){
     var network=parms.net;
 
     switch (source) {
-	
     case "sqlite-db":
-	// SQLite DB for topology info is not supported in perfSONAR Microdep
-	console.log("Info: Local db for topology info is not supported in perfSONAR Microdep.");
-
-	/*** CODE BELOW IS NOT APPLIED IN perfSONAR Microdep
-	// Ask for topology-info from (legacy) sqllite db 
-	var url="microdep-config.cgi?secret=\"" + conffile[parms.net].database_secret + "\"&variant=mp-" + network + "&start=" + start + "&end=" + end;
-	$.getJSON( url,
-		   function(topology){
-		       if (topology.length == 0) {
-			   $("#error").html(hhmmss(new Date()) + " : No topology data found for " + parms.event + " events on " + $("#datepicker").val() + " " + $("#period_input").val() + ";;");
-			   // Empty topology. Remove all links.
-			   remove_links(links);
-			   console.log("No topology data found.");
-		       } else {
-			   if (points.length == 0) {
-			       // No nodes loaded yet. Do that first.
-			       load_coords_from_all_sources(network); // NOTE: This function call get_topology() again on success.
-			       return;
-			   }
-			   draw_topology( topology );
-			   get_connections();
-			   // draw_topology( duplex_topology( topology) );
-		       }
-		   }).fail( function( jqxhr, textStatus, error ) {
-		       var err = textStatus + ", " + error;
-		       console.log( "Request" + url + " Failed: " + err );
-		       });
-	** CODE ABOVE IS NOT APPLIED IN perfSONAR Microdep ***/
-
+	//var url="microdep-config.cgi?secret=\"" + conffile[parms.net].database_secret + "\"&variant=mp-" + network + "&start=" + start + "&end=" + end;
+	var url="microdep-config.cgi?net=" + network + "&start=" + start + "&end=" + end;
+	$.getJSON( url, function(topology){
+	    if (topology.length == 0) {
+		$("#error").html(hhmmss(new Date()) + " : No topology data found for " + parms.event + " events on " + $("#datepicker").val() + " " + $("#period_input").val() + ";;");
+		remove_links(links);
+		_set_map_empty_state(true);
+	    } else {
+		if (points.length == 0) { load_coords_from_all_sources(network); return; }
+		draw_topology( topology ); get_connections();
+	    }
+	}).fail( function( jqxhr, textStatus, error ) { console.log( "Request" + url + " Failed: " + textStatus + ", " + error ); });
 	break;
-	
-    case "archive": 
-	// Fetch all unique from-to peers (flows) for time period from Opensearch archive
+    case "archive":
 	var query_index = event_index[parms.event];
-	if ( conffile[parms.net].event_type.topology.index ) {
-	    // Override with index from config
-	    query_index = conffile[parms.net].event_type.topology.index;
-	} else if (conffile[parms.net].event_type[parms.event].topology_index) {
-	    // Override with index from config
-	    query_index = conffile[parms.net].event_type[parms.event].topology_index ;
-	}	    
-
+	if ( conffile[parms.net].event_type.topology.index ) { query_index = conffile[parms.net].event_type.topology.index; }
+	else if (conffile[parms.net].event_type[parms.event].topology_index) { query_index = conffile[parms.net].event_type[parms.event].topology_index ; }
 	var url="elastic-get-date-type.pl?net=" + parms.net + "&index=" + query_index + "&start=" + start_iso + "&end=" + end_iso;
-	if (net_ip_version[parms.net]) {
-	    // Add filtering on ip version
-	    url += "&ip_version=" + net_ip_version[parms.net];
-	}
-    
-	$.getJSON( url,
-		   function(result){
-		     var topology = [];
-		     if (! result.aggregations.peer.buckets.length) {
-			 console.log("No topology data returned from archive for time period " + start + " to " + end + ". Trying sqlite db ...");
-			 // No topology data returned. Try sqlite-db instead.
-			 get_topology("sqlite-db");
-		     } else {
-			 for (var p=0; p < result.aggregations.peer.buckets.length; p++) {
-			     topology.push(result.aggregations.peer.buckets[p].key.split("_"));
-			 }
-			 draw_topology( topology );
-			 get_connections();
-			 // draw_topology( duplex_topology( topology) );
-		     }
-		   }).fail( function(e, textStatus, error ) {
-		       //remove_links(links);
-		       console.log("failed to get data from server :" + textStatus + ", " + error);
-		   });
-
+	if (net_ip_version[parms.net]) { url += "&ip_version=" + net_ip_version[parms.net]; }
+	$.getJSON( url, function(result){
+	    if (jQuery.isEmptyObject(result.aggregations)) {
+		// Something went wrong. Log failure.
+		console.log("Warning: Failed to fetch data from archive. Check archive url in mapconfig.yml.");
+		if (!jQuery.isEmptyObject(result.error)) {
+		    console.log("        (\"" + result.error.msg  + "\")");
+		}
+		// No topology data returned. Try sqlite-db instead.
+		get_topology("sqlite-db");
+		return;
+	    }
+	    var topology = [];
+	    if (! result.aggregations.peer.buckets.length) {
+		console.log("No topology data returned from archive. Trying sqlite db ...");
+		get_topology("sqlite-db");
+	    } else {
+		for (var p=0; p < result.aggregations.peer.buckets.length; p++) { topology.push(result.aggregations.peer.buckets[p].key.split("_")); }
+		draw_topology( topology ); get_connections();
+	    }
+	}).fail( function(e, textStatus, error ) { console.log("failed to get data from server :" + textStatus + ", " + error); });
 	break;
     }
 }
 
-// done by api
 function duplex_topology(topo){
-    var dup=[];
-    for ( var link of topo ){
-	dup.push( [ link[1], link[0] ] );
-    }
-    return topo.concat(dup);
+    var dup=[]; for ( var link of topo ){ dup.push( [ link[1], link[0] ] ); } return topo.concat(dup);
 }
 
-var mouseover=false; 
+var mouseover=false;
+
+// Networks whose initial view has already been centred on their hub host, so
+// later topology refreshes don't yank the map back from where the user panned.
+var _hubCenteredNets = {};
+
+// The "hub" host = the node that appears in the most links (in a star topology
+// like dragonlab that's the monitoring host every pair shares). Returns its
+// point ({id,lat,lon}) or null.
+function _hub_point() {
+    var counts = {};
+    for (var abs in linkByName) {
+        var parts = abs.split(',');
+        if (parts.length !== 2) continue;
+        counts[parts[0]] = (counts[parts[0]] || 0) + 1;
+        counts[parts[1]] = (counts[parts[1]] || 0) + 1;
+    }
+    var hubId = null, max = -1;
+    for (var id in counts) { if (counts[id] > max) { max = counts[id]; hubId = id; } }
+    if (hubId === null) return null;
+    for (var i = 0; i < points.length; i++) {
+        if (points[i].id === hubId && points[i].lat != null) return points[i];
+    }
+    return null;
+}
 
 function draw_topology(topo){
-    if (topo.length == 0) {
-	// Empty topology. Remove all links.
-	remove_links(links);
-	return;
-    }
+    if (topo.length == 0) { remove_links(links); _set_map_empty_state(true); return; }
     var new_ends=[];
-
     for (var i=0; i < topo.length; i++){
-        var ab=topo[i];
-	var abs= ab.join();
-	if (! new_ends[abs]) new_ends.length++;  // Ensure correct length.
-	new_ends[abs]=1;
-
-	if ( ! linkByName[abs]){ // draw line
-
+        var ab=topo[i]; var abs= ab.join();
+	if (! new_ends[abs]) new_ends.length++; new_ends[abs]=1;
+	if ( ! linkByName[abs]){
 	    var l=draw_link(ab, empty_color, ab, ab );
 	    if (l){
-		links.push(l);
-		linkByName[abs]=l;
-		ends.push(abs);
-		l.on("mouseover", function(e){
-		    if (! mouseover) {
-			mouseover = true;  // Flag required since mouseover is retriggered as long as the mouse hovers over a link
-			color_store[e.target.leaflet_id]=e.target.options.color;
-			e.target.bringToFront();
-			taint_link(e.target,"blue");
-		    }
-		});
-		l.on("mouseout", function(e){
-		    taint_link(e.target, color_store[e.target.leaflet_id]);
-		    mouseover=false;
-		});
+		links.push(l); linkByName[abs]=l; ends.push(abs);
+		l.on("mouseover", function(e){ if (! mouseover) { mouseover = true; color_store[L.stamp(e.target)]=e.target.options.color; e.target.bringToFront(); taint_link(e.target,"blue"); } });
+		l.on("mouseout", function(e){ taint_link(e.target, e.target._baseColor || color_store[L.stamp(e.target)]); mouseover=false; });
 	    }
-	}  else { // no need to redraw
-	    // console.log("link already there : " + abs);
-	    taint_link(linkByName[abs], empty_color);
-	} 
+	} else { taint_link(linkByName[abs], empty_color); }
     }
-    // Find stale links
     var stale_link=[];
-    for (var i=0; i < ends.length; i++){
-	if ( ! new_ends[ ends[i]] ) {
-	    stale_link.push(ends[i]);
-	}
-    }
-    // Remove stale links 
-    for (var i=0; i < stale_link.length; i++){
-	    remove_link(stale_link[i]);
-    }
-    
-//    ends=new_ends;
+    for (var i=0; i < ends.length; i++){ if ( ! new_ends[ ends[i]] ) { stale_link.push(ends[i]); } }
+    for (var i=0; i < stale_link.length; i++){ remove_link(stale_link[i]); }
     links_on=true;
-    
-    // refocus map 
-    /* if (mymap){
-	var group = new L.featureGroup(links);
-	mymap.fitBounds(group.getBounds());
-    } // else alert("undefined map");
-    */
-    
-    //taint_links(hits, prop);
+    // Centre the initial view on the hub host (most-connected node) rather than
+    // the bbox centre, keeping the cover-zoom so the map still fills the screen.
+    // First show per network only — don't fight the user's later pan/zoom.
+    if (mymap && !_hubCenteredNets[parms.net]) {
+        var hub = _hub_point();
+        if (hub) {
+            var hb = new L.LatLngBounds();
+            for (var hi = 0; hi < points.length; hi++) {
+                if (points[hi].lat != null) hb.extend([points[hi].lat, points[hi].lon]);
+            }
+            var z = (points.length > 1 && hb.isValid())
+                  ? Math.min(mymap.getBoundsZoom(hb, true), 6) : 6;
+            mymap.setView([hub.lat, hub.lon], z);
+            _hubCenteredNets[parms.net] = true;
+        }
+    }
 }
 
 function taint_topology( topo, prop){
     get_thresholds(topo, prop);
     update_legend(prop_desc[event_sum_type[parms.event]][prop],threshes);
-
     for (var i=0; i < topo.length; i++){
-	var link=topo[i];
-	var ab=[link._source.from, link._source.to];
-	var abs = ab.join();
+	var link=topo[i]; var ab=[link._source.from, link._source.to]; var abs = ab.join();
 	if ( linkByName[abs] ){
-	    var color=get_color( link._source[prop], threshes);
+	    var color=get_color( link._source[prop], threshes) || empty_color;
 	    taint_link( linkByName[abs], color );
-
 	    var popup=link_popup(link._source);
 	    var tooltip= link_tooltip( link._source.from + " to " + link._source.to , link._source, prop );
-	    annotate_link( abs, linkByName[abs], tooltip, popup );
+	    annotate_link( abs, linkByName[abs], tooltip, popup, link._source );
 	}
     }
+}
 
+// ============================================================
+// SNAPSHOT COMPARE — diff palette + baseline fetch helpers
+// ============================================================
+// Compare-mode color palette. When the user picks "Compare with
+// yesterday/last week/4 weeks ago", the link is coloured by the SIGNED
+// percentage change rather than its absolute value. Negative pct =
+// improvement (green), positive = degradation (red), near-zero = grey.
+// Polarity assumes "lower is better" for the property — true for
+// every microdep summary metric we care about (delay, loss,
+// down_ppm, jitter, asymmetry, ...).
+var COMPARE_COLORS = {
+    bigGreen: '#00a854',   // ≤ -30%   → much better
+    smallGreen: '#5cb85c', // -30…-10% → mildly better
+    grey: '#888888',       // -10…+10% → unchanged
+    smallRed: '#d9534f',   // +10…+30% → mildly worse
+    bigRed: '#c11919',     // ≥ +30%   → much worse
+    noBaseline: '#9aa3ad'  // no baseline value — paler grey, distinct from "unchanged"
+};
+
+function _compare_color_for_pct(pct) {
+    if (pct === null || pct === undefined || isNaN(pct)) return COMPARE_COLORS.noBaseline;
+    if (pct <= -30) return COMPARE_COLORS.bigGreen;
+    if (pct <= -10) return COMPARE_COLORS.smallGreen;
+    if (pct >=  30) return COMPARE_COLORS.bigRed;
+    if (pct >=  10) return COMPARE_COLORS.smallRed;
+    return COMPARE_COLORS.grey;
+}
+
+// Translate the dropdown value to a millisecond offset to subtract
+// from the current window's start/end. Returns 0 for "off".
+function _compare_offset_ms(mode) {
+    switch (mode) {
+        case 'day':   return 24 * 3600 * 1000;
+        case 'week':  return 7 * 24 * 3600 * 1000;
+        case 'month': return 28 * 24 * 3600 * 1000;
+        default:      return 0;
+    }
+}
+
+function _compare_label(mode) {
+    switch (mode) {
+        case 'day':   return 'yesterday';
+        case 'week':  return 'last week';
+        case 'month': return '4 weeks ago';
+        default:      return '';
+    }
+}
+
+// Fetch the baseline series for the same query as get_connections, but
+// shifted backwards by the compare offset. Calls cb(success) — true if
+// the baselineSummary map got populated, false on any error / empty.
+function _fetch_baseline_summary(currStart, currEnd, etype, prop, cb) {
+    var mode = parms.compare || 'off';
+    if (mode === 'off') { baselineSummary = {}; cb && cb(false); return; }
+    var offsetMs = _compare_offset_ms(mode);
+    if (!offsetMs) { baselineSummary = {}; cb && cb(false); return; }
+
+    // Cache key — skip refetch if event/prop/period/compare/start match
+    var key = [etype, prop, currStart, currEnd, mode].join('|');
+    if (key === baselineCompareKey && Object.keys(baselineSummary).length) {
+        cb && cb(true);
+        return;
+    }
+
+    var bStartMs = new Date(currStart).getTime() - offsetMs;
+    var bEndMs   = new Date(currEnd).getTime()   - offsetMs;
+    var bStart   = new Date(bStartMs).toISOString();
+    var bEnd     = new Date(bEndMs).toISOString();
+
+    var index   = (event_index && event_index[etype]) || parms.net + '_' + etype;
+    var sumType = (event_sum_type && event_sum_type[etype]) || etype;
+    // Mirror get_connections's logic for past-period queries: prefer summary
+    // when one exists (we're always in past for compare mode). The baseline
+    // is by definition older than now.
+    var queryEtype = sumType || etype;
+
+    // net= is REQUIRED so the CGI resolves the archive URL (config[net].archive);
+    // without it it falls back to http://localhost:9200 → curl-52 empty reply.
+    var url = 'elastic-get-date-type.pl?net=' + parms.net +
+              '&index=' + index +
+              '&event_type=' + queryEtype +
+              '&start=' + adjust_to_timezone(bStart) +
+              '&end='   + adjust_to_timezone(bEnd);
+    if (net_ip_version && net_ip_version[parms.net]) {
+        url += '&ip_version=' + net_ip_version[parms.net];
+    }
+    if (parms.debug) console.log('compare: baseline url:', url);
+
+    $.getJSON(url).done(function (resp) {
+        var hits = (resp && resp.hits && resp.hits.hits) || [];
+        baselineSummary = {};
+        for (var i = 0; i < hits.length; i++) {
+            var s = hits[i] && hits[i]._source;
+            if (!s || !s.from || !s.to) continue;
+            var v = s[prop];
+            if (typeof v !== 'number' || isNaN(v)) continue;
+            baselineSummary[s.from + ',' + s.to] = v;
+        }
+        baselineCompareKey = key;
+        console.log('compare: baseline loaded —', Object.keys(baselineSummary).length, 'pairs');
+        cb && cb(true);
+    }).fail(function (e, ts, err) {
+        console.log('compare: baseline fetch failed —', ts, err);
+        baselineSummary = {};
+        baselineCompareKey = '';
+        cb && cb(false);
+    });
+}
+
+// Layer group holding the floating "+12%" / "-7%" chips that hover
+// next to each link in compare mode. Created lazily, attached to the
+// Leaflet map, and cleared (not destroyed) on each repaint so we
+// don't leak L.divIcon DOM nodes across toggles.
+var _compare_label_layer = null;
+
+function _ensure_compare_layer() {
+    if (!_compare_label_layer) {
+        _compare_label_layer = L.layerGroup();
+    }
+    if (typeof mymap !== 'undefined' && mymap && !mymap.hasLayer(_compare_label_layer)) {
+        _compare_label_layer.addTo(mymap);
+    }
+    return _compare_label_layer;
+}
+
+function _clear_compare_labels() {
+    if (_compare_label_layer) _compare_label_layer.clearLayers();
+}
+
+// Threshold below which a chip is suppressed. Matches the legend's
+// "same" bucket — if the value is essentially unchanged from baseline
+// the chip would just clutter the map without telling the user
+// anything new. They can still hover the link for the exact value.
+var COMPARE_LABEL_MIN_PCT = 10;
+
+// Build a single floating chip at the link's geographic centre.
+// pct comes from _compare_pct_for_link — null means we have no
+// baseline for that pair, in which case we skip the chip entirely
+// (cluttering the map with "?" badges helps no one).
+function _add_compare_label(link, pct) {
+    if (!link || pct === null || pct === undefined || isNaN(pct)) return;
+    // Hide chips for the "same" bucket — they all read "0%" / "±2%"
+    // and just clutter the map without communicating anything useful.
+    if (Math.abs(pct) < COMPARE_LABEL_MIN_PCT) return;
+    // Real-path mode splits a single A→B route into N hop-segment
+    // polylines (annotated with _isRealPathLine = true). All segments
+    // share the same end-to-end pct value, so labeling each one
+    // creates a vertical stack of identical chips. Skip them — the
+    // main bezier (no _isRealPathLine flag) gets the only label.
+    if (link._isRealPathLine) return;
+    // Use the polyline's actual midpoint by vertex count — for curved
+    // / great-circle lines (Norway→NZ, etc.) the bounds rectangle's
+    // centre falls way off the rendered line. Walking to vertices/2
+    // gives a point that's actually ON the curve.
+    //
+    // Defensive: getLatLngs() returns wildly different shapes
+    // depending on which Leaflet primitive backs the link:
+    //   • L.polyline       → flat [LatLng, LatLng, ...]
+    //   • L.polygon        → nested [[LatLng, ...]]
+    //   • L.curve (plugin) → SVG-path commands: ['M', [lat,lon], 'L', [lat,lon], 'Q', [c1], [end], ...]
+    // We collect every coordinate-shaped element regardless of nesting
+    // / command letters, then pick the middle one.
+    var center = null;
+    try {
+        var raw = link.getLatLngs ? link.getLatLngs() : [];
+        var coords = [];
+        var _walk = function (x) {
+            if (!x) return;
+            if (typeof x.lat === 'number' && typeof x.lng === 'number') {
+                coords.push(x);
+                return;
+            }
+            if (Array.isArray(x)) {
+                // [lat, lon] tuple of plain numbers (L.curve commands use these)
+                if (x.length >= 2 && typeof x[0] === 'number' && typeof x[1] === 'number') {
+                    coords.push(L.latLng(x[0], x[1]));
+                    return;
+                }
+                for (var i = 0; i < x.length; i++) _walk(x[i]);
+            }
+            // strings ('M' / 'L' / 'Q' / 'C') and anything else: skip
+        };
+        _walk(raw);
+        if (coords.length === 1) center = coords[0];
+        else if (coords.length >= 2) center = coords[Math.floor(coords.length / 2)];
+    } catch (_) {}
+    // Fallback to bounds-center if for some reason the link has no
+    // introspectable vertices (e.g. fully custom renderer).
+    if (!center && link.getBounds) {
+        try {
+            var b = link.getBounds();
+            if (b && b.isValid && b.isValid()) center = b.getCenter();
+        } catch (_) {}
+    }
+    if (!center || typeof center.lat !== 'number') return;
+
+    // Format: arrow + sign + rounded percent. Round to 1 decimal under
+    // 10%, integer otherwise — matches the at-a-glance feel of the
+    // legend buckets and keeps the chip narrow.
+    var abs = Math.abs(pct);
+    var rounded = abs >= 10 ? Math.round(pct) : Math.round(pct * 10) / 10;
+    var sign = pct > 0 ? '+' : '';                  // negative already prints '-'
+    var arrow = pct > 5 ? '▲' : pct < -5 ? '▼' : '·';
+    var color = _compare_color_for_pct(pct);
+    var label = arrow + ' ' + sign + rounded + '%';
+
+    var html = '<div class="compare-pct-chip" style="background:' + color + '">' +
+               escapeHtml(label) + '</div>';
+
+    var marker = L.marker(center, {
+        icon: L.divIcon({
+            className: 'compare-pct-marker',
+            html: html,
+            iconSize: null
+        }),
+        interactive: false,        // chip doesn't capture clicks — link below stays clickable
+        keyboard:    false,
+        zIndexOffset: 100          // above link lines so the chip doesn't get hidden
+    });
+    _ensure_compare_layer().addLayer(marker);
+}
+
+// Compute pct change for a (from, to) pair. Returns null when no
+// baseline value exists for that pair.
+function _compare_pct_for_link(from, to, currVal) {
+    if (typeof currVal !== 'number' || isNaN(currVal)) return null;
+    var bv = baselineSummary[from + ',' + to];
+    if (typeof bv !== 'number' || isNaN(bv)) return null;
+    if (bv === 0) {
+        // Avoid div-by-zero: any nonzero change from 0 reads as ∞%; cap at
+        // ±100 so the legend stays sensible. Treat 0→0 as no change.
+        return currVal === 0 ? 0 : (currVal > 0 ? 100 : -100);
+    }
+    return ((currVal - bv) / bv) * 100;
+}
+
+// Wrapper around taint_links/draw_links that fetches the baseline
+// first when compare mode is on. Acts as a drop-in replacement at all
+// the existing taint_links call sites inside get_connections so the
+// compare flow can wait for baseline data before painting.
+function _paint_with_compare(summary, etype, prop, start_iso, end_iso) {
+    var paint = function () {
+        if (!parms.connections) taint_links(summary, prop);
+        else                    draw_links(summary, prop);
+    };
+    if (parms.compare && parms.compare !== 'off') {
+        _fetch_baseline_summary(start_iso, end_iso, etype, prop, function () {
+            paint();
+        });
+    } else {
+        // Compare turned off → wipe any stale baseline so a later toggle
+        // back ON actually refetches with current params.
+        baselineSummary = {};
+        baselineCompareKey = '';
+        paint();
+    }
+}
+
+// Compare-mode legend — replaces the threshold semaphore with five
+// fixed buckets (much better / mildly better / unchanged / mildly
+// worse / much worse + no-baseline). Reuses the same #legend table
+// the threshold legend lives in so positioning/styling carry over.
+function update_compare_legend(propTitle, baselineLabel) {
+    var $leg = $('#legend').empty();
+    var rows = [
+        { col: COMPARE_COLORS.bigGreen,   label: '≤-30%'    },
+        { col: COMPARE_COLORS.smallGreen, label: '-10..-30' },
+        { col: COMPARE_COLORS.grey,       label: '±10%'     },
+        { col: COMPARE_COLORS.smallRed,   label: '+10..+30' },
+        { col: COMPARE_COLORS.bigRed,     label: '≥+30%'    }
+    ];
+    // Mirror update_legend()'s exact structure — ONE <tr> with the
+    // title <th> as first child and bucket <td>s as siblings. Flex CSS
+    // (#legend tr { display: flex; flex-wrap: wrap; }) makes the th
+    // (flex 0 0 100%) wrap to its own line above the bucket row, but
+    // because it's the same <tr>, the row gap and overall height
+    // calculation matches the threshold legend exactly.
+    var html = '<table id="legend" class="compare-legend"><tr align=center>';
+    html += '<th><button class="knapp" id="farge0" type="button" ' +
+            'title="Compare-mode legend (negative = improved, positive = degraded)">' +
+            escapeHtml(propTitle || '') + ' vs ' + escapeHtml(baselineLabel || 'baseline') +
+            '</button></th>';
+    for (var i = 0; i < rows.length; i++) {
+        html += '<td><button class="knapp" type="button" ' +
+                'style="background:' + rows[i].col + ';color:#fff;width:100%" ' +
+                'disabled>' + escapeHtml(rows[i].label) + '</button></td>';
+    }
+    html += '</tr></table>';
+    $leg.html(html);
 }
 
 function taint_links( hits, prop){
     var done=[];
-
+    var compareMode = parms.compare && parms.compare !== 'off';
     if ( hits.length > 0){
         get_thresholds(hits, prop);
-	update_legend(prop_desc[event_sum_type[parms.event]][prop],threshes);
-
+	if (compareMode) {
+	    update_compare_legend(prop_desc[event_sum_type[parms.event]][prop], _compare_label(parms.compare));
+	    _clear_compare_labels();
+	} else {
+	    update_legend(prop_desc[event_sum_type[parms.event]][prop],threshes);
+	    _clear_compare_labels();
+	}
 	for (var i=0; i < hits.length; i++){
-	    var link=hits[i];
-	    var ab=[link._source.from, link._source.to];
-	    // if ( link._source.from_adr === "185.71.209.4" ) ab[0]="runar-mp";
-	    // if ( link._source.to_adr === "185.71.209.4" ) ab[1]="runar-mp";
-	    var abs = ab.join();
-
+	    var link=hits[i]; var ab=[link._source.from, link._source.to]; var abs = ab.join();
 	    done[abs]=1;
 	    if ( linkByName[abs] ){
-		var color=get_color( link._source[prop], threshes);
+		var color, compPct = null;
+		if (compareMode) {
+		    compPct = _compare_pct_for_link(link._source.from, link._source.to, link._source[prop]);
+		    color = _compare_color_for_pct(compPct);
+		} else {
+		    color = get_color( link._source[prop], threshes) || empty_color;
+		}
 		taint_link( linkByName[abs], color );
-//		dash_link(linkByName[abs], false); // Remove dashed-mode link if set
-		
+		if (compareMode) _add_compare_label(linkByName[abs], compPct);
 		var popup=link_popup(link._source);
 		var tooltip= link_tooltip( link._source.from + " to " + link._source.to , link._source, prop );
-		annotate_link( abs, linkByName[abs], tooltip, popup );
+		annotate_link( abs, linkByName[abs], tooltip, popup, link._source );
 	    } else {
-		console.log("Property " + prop + " reported on unexpected link " + abs + ". Adopting and presenting it anyway.");
-	        // Draw missing link 
+		console.log("Property " + prop + " reported on unexpected link " + abs + ". Adopting.");
 		var color=get_color( link._source[prop], threshes);
 		var tooltip= link_tooltip( link._source.from + " to " + link._source.to , link._source, prop );
-		    
 		var l=draw_link(ab, color, tooltip, link_popup(link._source) );
-
 		if (l){
-		    //		    dash_link(l);        // Turn out to be complicated to toggle correctly !
-		    linkByName[abs]=l;
-		    links.push(l);
-		    ends.push(abs);
-		    l.on("mouseover", function(e){
-			if (! mouseover) {
-			    mouseover = true;
-			    color_store[e.target.leaflet_id]=e.target.options.color;
-			    e.target.bringToFront();
-			    taint_link(e.target,"blue");
-			}
-		    });
-		    l.on("mouseout", function(e){
-			taint_link(e.target, color_store[e.target.leaflet_id]);
-			mouseover = false;
-		    });
+		    linkByName[abs]=l; links.push(l); ends.push(abs);
+		    l.on("mouseover", function(e){ if (! mouseover) { mouseover = true; color_store[L.stamp(e.target)]=e.target.options.color; e.target.bringToFront(); taint_link(e.target,"blue"); } });
+		    l.on("mouseout", function(e){ taint_link(e.target, e.target._baseColor || color_store[L.stamp(e.target)]); mouseover = false; });
 		}
 	    }
 	}
     }
-
-    for ( var abs of ends ){ 
-	if ( ! done[abs]){ // links without data
+    for ( var abs of ends ){
+	if ( ! done[abs]){
 	    if ( linkByName[abs] ){
 		var ft = abs.split(",");
 		taint_link( linkByName[abs], empty_color );
@@ -1132,41 +2365,1246 @@ function taint_links( hits, prop){
 	}
     }
     refresh_links_by_color();
-    /* filter links */
+    extend_unidirectional_links();
+    refreshLinkPanel();
     if ( $("#search_input").val() !== "" )
-	focus_links( $("#search_input").val(), 'noflip' ); 
+	focus_links( $("#search_input").val(), 'noflip' );
+    _resync_real_path_colors();   // keep geo-view colours in sync in real-loc mode
+    _update_legend_count(hits, prop);
+    _set_map_empty_state(_is_map_visually_empty());
+    // Status-bar "Updated" label + stale-banner re-check (#8, #10). The
+    // handler lives in index.html; guard so it's a no-op if absent.
+    if (typeof window._microdep_mark_refreshed === 'function') window._microdep_mark_refreshed();
+}
+
+// --- Empty-state overlay (#11) -------------------------------------------
+// Show a "no links for this period" overlay when the map has no coloured
+// links, so navigating to an empty date isn't just a blank map. Also hides
+// the threshold legend (which describes a scale that doesn't apply to
+// "no data"). Ported from work-snapshot.
+function _is_map_visually_empty() {
+    if (typeof mymap === 'undefined' || !mymap) return false;
+    // Real-locations mode hides the normal links and draws hop-path polylines
+    // instead — judge emptiness by those so a repaint (e.g. the CBF toggle, a
+    // property change or an auto-refresh) doesn't flash the "No links" overlay
+    // over a perfectly populated geo view.
+    if (typeof realLocationsMode !== 'undefined' && realLocationsMode) {
+        return !(typeof realPathLines !== 'undefined' && realPathLines
+                 && Object.keys(realPathLines).length > 0);
+    }
+    var anyColoured = false;
+    for (var k in linkByName) {
+        var l = linkByName[k];
+        if (!l || typeof l !== 'object') continue;
+        if (mymap.hasLayer && !mymap.hasLayer(l)) continue;
+        var c = l.options && l.options.color;
+        if (c && c !== empty_color) { anyColoured = true; break; }
+    }
+    return !anyColoured;   // true when no layer OR every layer is grey
+}
+// Whether the map currently has ANY link layer (coloured OR grey topology).
+function _has_any_links() {
+    if (typeof mymap === 'undefined' || !mymap) return false;
+    if (typeof realLocationsMode !== 'undefined' && realLocationsMode) {
+        return !!(typeof realPathLines !== 'undefined' && realPathLines
+                  && Object.keys(realPathLines).length > 0);
+    }
+    for (var k in linkByName) {
+        var l = linkByName[k];
+        if (!l || typeof l !== 'object') continue;
+        if (mymap.hasLayer && !mymap.hasLayer(l)) continue;
+        return true;
+    }
+    return false;
+}
+function _set_map_empty_state(empty) {
+    // Hide the threshold legend when there's no coloured event data — it
+    // describes a scale that doesn't apply. (tabsactivate restores it.)
+    var lg = document.getElementById('legend');
+    if (lg) lg.style.display = empty ? 'none' : '';
+    // Only cover the map with the overlay when there's literally nothing to show
+    // (no links at all). When topology links are present (grey, no event data)
+    // keep the map visible + clickable — the "no event data" note lives in the
+    // link popup instead (issue #113).
+    var el = document.getElementById('map_empty_overlay');
+    if (!el) return;
+    el.hidden = !(empty && !_has_any_links());
+}
+
+// --- Clear-all-tabs (#16) ------------------------------------------------
+// Close every tab except the Map and forget them across reloads (the
+// microdep-tab-closed listener calls unpersistTab). Ported from work-snapshot.
+function clear_all_tabs() {
+    var divIds = [];
+    $('main#tabs > ul > li').each(function () {
+        var divId = $(this).attr('aria-controls');
+        if (divId && divId !== 'mapid') divIds.push(divId);
+    });
+    if (!divIds.length) return;
+    divIds.forEach(function (divId) {
+        $('main#tabs > ul > li[aria-controls="' + divId + '"]').remove();
+        $('#' + divId).remove();
+        document.dispatchEvent(new CustomEvent('microdep-tab-closed', {
+            detail: { divid: divId }
+        }));
+    });
+    try { $('main#tabs').tabs('refresh'); $('main#tabs').tabs('option', 'active', 0); } catch (_) {}
+}
+
+// ===================================================================
+//  REAL LOCATIONS (#TIER1) — ported from work-snapshot.
+//  Toggle that replaces each straight bezier link with a hop-by-hop
+//  polyline drawn through the *real* geographic location of every
+//  traceroute hop (resolved server-side by hopgeo.pl against GeoLite2).
+//  Endpoints come from get_coords(); unknown hops are great-circle
+//  interpolated between located neighbours.
+// ===================================================================
+// localStorage write helper with quota-eviction-retry + the node-geo cache it
+// guards. These sit BEFORE the extracted real-locations block in work-snapshot
+// so they were missed in the first port — geo_cache_get/hopgeo_cache_persist
+// then threw "_ls_set / host_geo_cache is not defined" inside the hopgeo Promise
+// chain, which never resolved, so the geo view hid every link and never redrew.
+function _ls_set(key, value) {
+    try { localStorage.setItem(key, value); return true; }
+    catch (e) {
+        const isQuota = e && (
+            e.name === 'QuotaExceededError' ||
+            e.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
+            e.code === 22 || e.code === 1014
+        );
+        if (!isQuota) return false;
+        const evictors = [
+            function () {
+                if (typeof hop_geo_cache !== 'undefined') {
+                    Object.keys(hop_geo_cache).forEach(function (k) { delete hop_geo_cache[k]; });
+                }
+                try { localStorage.removeItem('microdep-hop-geo'); } catch (_) {}
+            },
+            function () {
+                if (typeof host_geo_cache !== 'undefined') {
+                    Object.keys(host_geo_cache).forEach(function (k) { delete host_geo_cache[k]; });
+                }
+                try { localStorage.removeItem('microdep-host-geo'); } catch (_) {}
+            },
+            function () { try { localStorage.removeItem('microdep-active-tab'); } catch (_) {} }
+        ];
+        for (var ei = 0; ei < evictors.length; ei++) {
+            try { evictors[ei](); } catch (_) {}
+            try {
+                localStorage.setItem(key, value);
+                console.warn('localStorage: evicted a cache to free space for ' + key);
+                return true;
+            } catch (_) { /* still over quota — try next evictor */ }
+        }
+        console.warn('localStorage: out of space — dropped write of ' + key);
+        return false;
+    }
+}
+const HOST_GEO_CACHE_KEY = 'microdep-host-geo';
+var host_geo_cache = {}; // { network: { host_id: {lat, lon, name} } }
+
+function geo_cache_get(network, host_id, ip) {
+    const netCache = host_geo_cache[network];
+    if (!netCache || !host_id) return null;
+    // 1) exact host_id match
+    if (netCache[host_id]) return netCache[host_id];
+    // 2) IP cross-reference — same physical host can appear under entirely
+    //    different FQDNs (legacy LS registration, old hostname template,
+    //    DNS-search artifacts). If the caller knows the host's IP, find any
+    //    cached entry that shared that IP.
+    if (ip) {
+        for (const k in netCache) {
+            if (netCache[k].ip === ip) {
+                netCache[host_id] = netCache[k];   // promote under this name
+                return netCache[k];
+            }
+        }
+    }
+    // 3) Same first DNS label — covers the common case where the same
+    //    physical host shows up under FQDN variants (e.g. ps-branko.foo.org
+    //    vs ps-branko.foo.org.local-domain). Within one network the first
+    //    label is generally unique enough.
+    const head = host_id.split('.')[0].toLowerCase();
+    if (head) {
+        for (const k in netCache) {
+            if (k.split('.')[0].toLowerCase() === head) {
+                netCache[host_id] = netCache[k];   // promote
+                return netCache[k];
+            }
+        }
+    }
+    return null;
+}
+function geo_cache_put(network, host_id, geo) {
+    if (!host_geo_cache[network]) host_geo_cache[network] = {};
+    host_geo_cache[network][host_id] = geo;
+    _ls_set(HOST_GEO_CACHE_KEY, JSON.stringify(host_geo_cache));
+}
+
+// Pick the most-trustworthy value out of an Elasticsearch terms-agg
+// `buckets` array. Default sort is doc_count DESC, so the first bucket is
+// the dominant value — but we still skip null/0/NaN keys in case the geo
+// pipeline left an empty record at the top.
+function _pick_geo_bucket_value(buckets) {
+    if (!buckets || !buckets.length) return null;
+    for (const b of buckets) {
+        const k = b.key;
+        if (k === null || k === undefined) continue;
+        if (typeof k === 'number' && (k === 0 || isNaN(k))) continue;
+        return k;
+    }
+    return null;
+}
+
+// =============================================================================
+// Hop-IP geo cache — small persistent map keyed by IP, populated from
+// hopgeo.pl (server-side RIPE IPmap / DB-IP lookup). Separate from
+// host_geo_cache (which is keyed by FQDN/host_id from the topology pipeline)
+// because traceroute hops are mostly transit routers without a host_id.
+// =============================================================================
+const HOP_GEO_CACHE_KEY = 'microdep-hop-geo';
+var hop_geo_cache = {};   // { ip: {lat, lon, city?, country_code?} | null }
+// Expose on window so the cache can be inspected from DevTools console
+// without having to dig into the module scope. We keep the SAME object
+// reference throughout the session (use Object.assign instead of
+// reassignment) so the window mirror stays in sync after we mutate.
+window.hop_geo_cache = hop_geo_cache;
+try {
+    const raw = localStorage.getItem(HOP_GEO_CACHE_KEY);
+    if (raw) Object.assign(hop_geo_cache, JSON.parse(raw));
+} catch (_) { /* corrupt / private mode — start fresh */ }
+
+function hopgeo_cache_persist() {
+    // Persist ONLY positive entries to localStorage. Null entries (private
+    // IPs, geo-db misses, transient hopgeo errors) stay in-memory for the
+    // session so we don't retry them on every redraw, but they're dropped
+    // on reload so the next session has a fresh chance — useful when
+    // hopgeo.pl was misconfigured at the time the cache was written.
+    var positive = {};
+    for (var ip in hop_geo_cache) {
+        if (hop_geo_cache[ip]) positive[ip] = hop_geo_cache[ip];
+    }
+    _ls_set(HOP_GEO_CACHE_KEY, JSON.stringify(positive));
+}
+
+// Single batch request — pulls geo for any IPs we haven't seen yet, merges
+// into the cache, returns a Promise that resolves once everything is in
+// cache. Idempotent: calling with a fully-cached list short-circuits to
+// Promise.resolve().
+function hopgeo_lookup_batch(ips) {
+    var fresh = [];
+    for (var i = 0; i < ips.length; i++) {
+        var ip = ips[i];
+        if (!ip) continue;
+        if (Object.prototype.hasOwnProperty.call(hop_geo_cache, ip)) continue;
+        fresh.push(ip);
+    }
+    if (!fresh.length) return Promise.resolve();
+
+    // Server caps at 500/req; chunk to be safe with very large topologies.
+    var CHUNK = 400;
+    var chunks = [];
+    for (var c = 0; c < fresh.length; c += CHUNK) chunks.push(fresh.slice(c, c + CHUNK));
+
+    return Promise.all(chunks.map(function (chunk) {
+        return new Promise(function (resolve) {
+            var url = '/microdep/hopgeo.pl?ips=' + encodeURIComponent(chunk.join(','));
+            $.getJSON(url).done(function (resp) {
+                if (resp && !resp.error) {
+                    for (var i = 0; i < chunk.length; i++) {
+                        var ip = chunk[i];
+                        // Server returns null for unknown / private IPs;
+                        // store the null sentinel so we don't re-query.
+                        hop_geo_cache[ip] = (resp.hasOwnProperty(ip) ? resp[ip] : null);
+                    }
+                    hopgeo_cache_persist();
+                } else {
+                    console.log('hopgeo: server error: ' + (resp && resp.error));
+                }
+                resolve();
+            }).fail(function (_, textStatus, error) {
+                console.log('hopgeo: ' + textStatus + ': ' + error);
+                resolve();   // continue without this chunk
+            });
+        });
+    }));
+}
+
+// =============================================================================
+// "Real locations" mode (MVP probe)
+//
+// When enabled, fetch the latest traceroute per visible link from the local
+// pscheduler MA, look up geo for each hop using the existing host_geo_cache,
+// linearly interpolate hops with no known geo between their nearest located
+// neighbours, and draw a polyline through the result. The original bezier
+// curves are dimmed to opacity 0 (kept in DOM so toggling back is instant).
+//
+// This is a probe — accuracy depends entirely on how many hop IPs we can
+// resolve. Transit / internal routers are usually unknown and just land on a
+// straight segment between the previous and next known hops.
+// =============================================================================
+var realLocationsMode = false;
+var realPathLines = {};       // abs → { line: L.polyline, markers: [L.circleMarker, ...] }
+var realLocationsBusy = false;
+// Layers that we removed from the map when entering real-locations mode —
+// kept so disable_real_locations can re-attach them. We can't just hide via
+// opacity because (a) L.curve / canvas paths can still intercept clicks
+// while invisible, and (b) opacity-only-hide leaves stale stroke pixels
+// from the old draw cycle on canvas in certain renderer state changes.
+var _hiddenForRealMode = [];
+var _realModeHookSet = false;
+
+function _hide_layer_for_real(layer) {
+    if (!layer || !mymap || !mymap.hasLayer(layer)) return;
+    try { mymap.removeLayer(layer); } catch (_) { return; }
+    _hiddenForRealMode.push(layer);
+}
+
+// Detect whether a freshly-added layer is "old-style map content" (a bezier
+// link or its arrow markers) vs our own real-locations rendering or
+// unrelated map decoration we should leave alone.
+function _is_real_path_layer(layer) {
+    return layer && (layer._isRealPathLine || layer._isRealPathMarker);
+}
+function _is_bezier_or_arrow(layer) {
+    if (!layer) return false;
+    for (var k in linkByName) {
+        if (linkByName[k] === layer) return true;
+    }
+    for (var n in arrowMarkers) {
+        var arr = arrowMarkers[n];
+        if (arr && arr.indexOf && arr.indexOf(layer) >= 0) return true;
+    }
+    return false;
+}
+
+// Hook fires every time *any* layer is added to the map. While real-mode is
+// on we use it to catch the new bezier / arrow that taint_links rebuilds on
+// auto-refresh and immediately remove it again, so the user doesn't see the
+// approximation flicker back in.
+function _ensure_layeradd_hook() {
+    if (_realModeHookSet || !mymap) return;
+    _realModeHookSet = true;
+    mymap.on('layeradd', function (e) {
+        if (!realLocationsMode) return;
+        var layer = e.layer;
+        if (_is_real_path_layer(layer)) return;
+        if (layer instanceof L.TileLayer) return;
+        // linkByName gets reassigned *after* addTo() in the bezier creation
+        // paths, so the lookup may not yet match at the moment of the
+        // event. Defer one tick and re-check.
+        setTimeout(function () {
+            if (realLocationsMode && mymap.hasLayer(layer) && _is_bezier_or_arrow(layer)) {
+                _hide_layer_for_real(layer);
+            }
+        }, 0);
+    });
+}
+
+// Tear down all real-path polylines + hop markers and put the bezier curves
+// (and their arrows) back on the map. Safe to call repeatedly.
+// Toggle the "Resolving real locations…" overlay shown while
+// enable_real_locations fetches traceroutes + geolocates hops (several seconds,
+// during which the beziers are already hidden so the map would otherwise look
+// empty with no feedback).
+function _set_real_loc_loading(on) {
+    var el = document.getElementById('real_loc_loading');
+    if (el) el.hidden = !on;
+}
+
+function disable_real_locations() {
+    // Clear any active highlight first — if a polyline was the highlighted
+    // line, removing it leaves `highlightedLink` referencing a detached
+    // layer, which then can't be properly un-highlighted on the next click.
+    clearHighlightedLink();
+    _set_real_loc_loading(false);
+    for (var abs in realPathLines) {
+        var entry = realPathLines[abs];
+        if (!entry) continue;
+        try { entry.line.remove(); } catch (_) {}
+        for (var i = 0; i < entry.markers.length; i++) {
+            try { entry.markers[i].remove(); } catch (_) {}
+        }
+    }
+    realPathLines = {};
+    // Re-attach every layer we hid on enable. Order matters less than you'd
+    // think — Leaflet figures out z-ordering by pane, not by attach order.
+    for (var i = 0; i < _hiddenForRealMode.length; i++) {
+        var layer = _hiddenForRealMode[i];
+        if (layer && mymap && !mymap.hasLayer(layer)) {
+            try { layer.addTo(mymap); } catch (_) {}
+        }
+    }
+    _hiddenForRealMode = [];
+    realLocationsMode = false;
+}
+
+// Walk every link currently on the map, fetch its latest traceroute in
+// parallel, then BEFORE drawing fire a single batch geo lookup for every
+// hop IP we haven't seen yet. Doing the geo lookup as one batch (instead of
+// per-hop or per-pair) keeps the round-trip count to ~1 even on networks
+// with hundreds of pairs.
+function enable_real_locations() {
+    // Drop any pre-existing highlight before swapping renderers, otherwise
+    // the bezier we're about to hide is still "blue" in options.color and
+    // the new polyline would inherit blue as its base — every later click
+    // would just toggle blue→blue and the user sees every clicked link
+    // stuck blue forever.
+    clearHighlightedLink();
+
+    realLocationsMode = true;
+    realLocationsBusy = true;
+    _set_real_loc_loading(true);
+    _hiddenForRealMode = [];
+    _ensure_layeradd_hook();
+
+    var network = parms.net;
+    var dato = $("#datepicker").val();
+    var period = parseFloat($("#period").val()) || 24;
+    var start_epoch = Math.floor(new Date(dato + 'T00:00:00').getTime() / 1000);
+    var end_epoch = start_epoch + period * 3600;
+
+    // Detach beziers and their arrow markers from the map. Removing > opacity
+    // here because (a) some L.curve / canvas paths still intercept clicks at
+    // opacity 0, hijacking the new polyline's click handler, and (b) for
+    // unidirectional event types (Routes failed/errors) the cubic L.curve
+    // lines built by extend_unidirectional_links seemed to ignore opacity in
+    // the visible pane on some browsers — strict remove() is the only sure
+    // way to make them disappear.
+    for (var k in linkByName) {
+        _hide_layer_for_real(linkByName[k]);
+    }
+    for (var name in arrowMarkers) {
+        var arr = arrowMarkers[name];
+        if (!arr) continue;
+        for (var i = 0; i < arr.length; i++) {
+            _hide_layer_for_real(arr[i]);
+        }
+    }
+
+    var pairs = [];
+    for (var abs in linkByName) {
+        var parts = abs.split(',');
+        if (parts.length === 2) pairs.push({ abs: abs, from: parts[0], to: parts[1] });
+    }
+
+    if (pairs.length === 0) { realLocationsBusy = false; _set_real_loc_loading(false); return; }
+
+    // Phase 1 — fetch every trace in parallel. allSettled: a broken pair
+    // shouldn't poison the whole layer.
+    var traceFetches = pairs.map(function (p) {
+        return fetch_real_path(p.from, p.to, start_epoch, end_epoch)
+            .then(function (hops) { return { pair: p, hops: hops }; })
+            .catch(function (err) {
+                console.log('real-loc: fetch failed for ' + p.abs + ': ' + err);
+                return { pair: p, hops: [] };
+            });
+    });
+
+    Promise.all(traceFetches).then(function (results) {
+        if (!realLocationsMode) { realLocationsBusy = false; return; }
+
+        // Phase 2 — collect every unique hop IP across all traces and batch
+        // their geo lookup. Cache hits are filtered server-side.
+        var allIps = {};
+        for (var i = 0; i < results.length; i++) {
+            var hops = results[i].hops || [];
+            for (var h = 0; h < hops.length; h++) if (hops[h].ip) allIps[hops[h].ip] = 1;
+        }
+        var ipList = Object.keys(allIps);
+        return hopgeo_lookup_batch(ipList).then(function () { return results; });
+    }).then(function (results) {
+        if (!realLocationsMode) { realLocationsBusy = false; return; }
+
+        // Phase 3 — every hop now has a (possibly null) cache entry; build
+        // each polyline using the resolved + interpolated coordinates.
+        var n_drawn = 0, n_dots = 0, n_approx = 0;
+        for (var i = 0; i < results.length; i++) {
+            try {
+                var p = results[i].pair;
+                var entries = build_hop_path(results[i].hops, network, p.from, p.to);
+                if (entries && entries.length >= 2) {
+                    draw_real_path(p.abs, entries);
+                    n_drawn++;
+                    for (var ei = 0; ei < entries.length; ei++) {
+                        if (entries[ei].src === 'cache')        n_dots++;
+                        else if (entries[ei].src === 'interpolated') n_approx++;
+                    }
+                }
+            } catch (e) {
+                // One bad pair must not blank the whole geo view — log + skip.
+                console.log('real-loc: draw failed for ' + (results[i] && results[i].pair && results[i].pair.abs) + ': ' + e);
+            }
+        }
+        console.log('real-loc: drew ' + n_drawn + ' / ' + results.length + ' polylines, ' + n_dots + ' located hops, ' + n_approx + ' approx hops');
+        realLocationsBusy = false;
+        _set_real_loc_loading(false);
+    }).catch(function (err) {
+        console.log('real-loc: aborted: ' + err);
+        realLocationsBusy = false;
+        _set_real_loc_loading(false);
+    });
+}
+
+// Hit the local pscheduler MA via the existing get-tracetests.pl proxy and
+// return the hop list of the most recent trace for this pair, or [] if there
+// are no traces in the window.
+function fetch_real_path(from, to, start_epoch, end_epoch) {
+    var start_iso = new Date(start_epoch * 1000).toISOString();
+    var end_iso   = new Date(end_epoch   * 1000).toISOString();
+    // The map identifies a node by its topology name, but pscheduler records
+    // test.spec.source/dest as an IP on one side and a hostname on the other.
+    // Send BOTH the name and its IP (from name_to_ip) as candidates so
+    // get-tracetests can match either form — and it matches either direction,
+    // since traces usually exist only one way.
+    var fromList = name_to_ip[from] ? (from + ',' + name_to_ip[from]) : from;
+    var toList   = name_to_ip[to]   ? (to   + ',' + name_to_ip[to])   : to;
+    var url = 'get-tracetests.pl' +
+              '?mahost=' + encodeURIComponent((conffile[parms.net] && conffile[parms.net].archive) || 'https://localhost/opensearch') +
+              '&verify_SSL=0' +
+              '&from='  + encodeURIComponent(fromList) +
+              '&to='    + encodeURIComponent(toList) +
+              '&start=' + encodeURIComponent(start_iso) +
+              '&end='   + encodeURIComponent(end_iso);
+    return new Promise(function (resolve, reject) {
+        $.getJSON(url).done(function (resp) {
+            try {
+                var hits = (resp && resp.hits && resp.hits.hits) || [];
+                if (!hits.length) { resolve([]); return; }
+                // Pick the most recent trace by @timestamp.
+                var best = hits[0];
+                for (var i = 1; i < hits.length; i++) {
+                    if (hits[i]._source['@timestamp'] > best._source['@timestamp']) best = hits[i];
+                }
+                var raw = best._source && best._source.result && best._source.result.json;
+                // pscheduler/OS can serve `result.json` in three shapes
+                // depending on archiver version:
+                //   1) JSON string (early archivers — needs JSON.parse)
+                //   2) Object with .paths (raw pscheduler trace tool output)
+                //   3) Array of arrays of hops (nested by retry, common)
+                //   4) Flat array of hop objects (single retry, post-flatten)
+                // We unwrap (1) and (2) up front, then detect (3) vs (4) and
+                // pick the longest path for (3) so we never silently drop the
+                // body of a 12-hop trace just because we read [0] expecting
+                // nesting that wasn't there.
+                if (typeof raw === 'string') {
+                    try { raw = JSON.parse(raw); } catch (_) { raw = null; }
+                }
+                if (raw && raw.paths && Array.isArray(raw.paths)) raw = raw.paths;
+                if (!raw || !Array.isArray(raw) || !raw.length) { resolve([]); return; }
+
+                var hopList;
+                if (Array.isArray(raw[0])) {
+                    // Nested — pick longest sub-array
+                    hopList = raw[0];
+                    for (var ri = 1; ri < raw.length; ri++) {
+                        if (Array.isArray(raw[ri]) && raw[ri].length > hopList.length) hopList = raw[ri];
+                    }
+                } else {
+                    hopList = raw;   // flat
+                }
+
+                var hops = [];
+                for (var h = 0; h < hopList.length; h++) {
+                    var hop = hopList[h];
+                    if (!hop) continue;
+                    // Keep all hops, including non-responding ones (no ip).
+                    // They'll be marked interpolated and placed along the GC
+                    // arc between known neighbours so the user can still see
+                    // there's a router there.
+                    hops.push({ ip: hop.ip || null, hostname: hop.hostname || null });
+                }
+                resolve(hops);
+            } catch (e) { reject(e); }
+        }).fail(function (jqxhr, textStatus, error) {
+            reject(textStatus + ': ' + error);
+        });
+    });
+}
+
+// Convert raw hop list → rich array of hop entries
+//   { lat, lon, src, ip?, hostname?, city?, country_code? }
+// where `src` is one of:
+//   'endpoint'     — anchored from get_coords (always have geo)
+//   'cache'        — geo resolved via hopgeo.pl (RIPE IPmap / DB-IP) / topology cache
+//   'interpolated' — was unknown; lat/lon filled in linearly between neighbours
+// Used by draw_real_path to know which hops deserve a marker (resolved ones).
+function build_hop_path(hops, network, fromHost, toHost) {
+    var fromCoord = get_coords(fromHost);
+    var toCoord   = get_coords(toHost);
+    if (!fromCoord || !toCoord) return null;
+
+    var entries = [{ lat: fromCoord.lat, lon: fromCoord.lon, src: 'endpoint' }];
+    for (var i = 0; i < hops.length; i++) {
+        var hop = hops[i];
+        // Drop "* * *" no-response hops (no ip, no hostname). They're
+        // common after the last responding router on the path (destination
+        // blocking ICMP) — including them as interpolated markers
+        // packs the tail of the trace with "~?" labels stacked between
+        // the last known router and the destination, which is just visual
+        // noise: there's nothing useful to look up or display for them.
+        if (!hop.ip && !hop.hostname) continue;
+        var geo = null;
+        // 1. hopgeo result for the hop IP (covers transit / public hops).
+        if (hop.ip && Object.prototype.hasOwnProperty.call(hop_geo_cache, hop.ip)) {
+            geo = hop_geo_cache[hop.ip];
+        }
+        // 2. Topology cache by IP / hostname (covers known endpoint hosts
+        //    that happen to appear as transit hops in someone else's trace).
+        if (!geo && hop.ip)       geo = geo_cache_get(network, hop.ip, hop.ip);
+        if (!geo && hop.hostname) geo = geo_cache_get(network, hop.hostname, hop.ip);
+
+        if (geo && typeof geo.lat === 'number' && typeof geo.lon === 'number') {
+            entries.push({
+                lat: geo.lat, lon: geo.lon, src: 'cache',
+                ip: hop.ip || null,
+                hostname: hop.hostname || null,
+                city: geo.city || null,
+                country_code: geo.country_code || null
+            });
+        } else {
+            entries.push({
+                lat: null, lon: null, src: 'interpolated',
+                ip: hop.ip || null,
+                hostname: hop.hostname || null
+            });
+        }
+    }
+    entries.push({ lat: toCoord.lat, lon: toCoord.lon, src: 'endpoint' });
+
+    // Collapse consecutive duplicate-coordinate entries: many geo-resolved hops in
+    // the same metro area resolve to identical lat/lon (e.g. a /24 of routers
+    // all coded to the same city centre), and drawing them all just bunches
+    // segments on top of each other.
+    var dedup = [entries[0]];
+    for (var i = 1; i < entries.length; i++) {
+        var prev = dedup[dedup.length - 1];
+        if (entries[i].lat !== null && prev.lat !== null
+            && Math.abs(entries[i].lat - prev.lat) < 1e-4
+            && Math.abs(entries[i].lon - prev.lon) < 1e-4) continue;
+        dedup.push(entries[i]);
+    }
+
+    // Great-circle interpolation for unknown hops — using cartesian linear
+    // interpolation here puts a hop between Hawaii(-150) and NZ(+175) at
+    // lon=12.5 (somewhere in Africa) because the math goes the long way
+    // around. Slerping along the GC instead correctly places it in the
+    // Pacific, which is what the actual route goes through.
+    for (var i = 0; i < dedup.length; i++) {
+        if (dedup[i].lat !== null) continue;
+        var prev = i - 1;
+        while (prev >= 0 && dedup[prev].lat === null) prev--;
+        var next = i + 1;
+        while (next < dedup.length && dedup[next].lat === null) next++;
+        if (prev < 0 || next >= dedup.length) continue;
+        var f = (i - prev) / (next - prev);
+        var slerped = gc_slerp(dedup[prev].lat, dedup[prev].lon, dedup[next].lat, dedup[next].lon, f);
+        dedup[i].lat = slerped[0];
+        dedup[i].lon = slerped[1];
+    }
+    return dedup;
+}
+
+// Slerp ONE point at fraction `f` (0..1) along the great-circle between
+// (lat1,lon1) and (lat2,lon2). Used to position interpolated (unknown) hops
+// on the actual short-way arc rather than on a cartesian midpoint, which
+// would otherwise dump trans-Pacific hops into the middle of Africa.
+function gc_slerp(lat1, lon1, lat2, lon2, f) {
+    var f1 = lat1 * Math.PI / 180;
+    var f2 = lat2 * Math.PI / 180;
+    var l1 = lon1 * Math.PI / 180;
+    var l2 = lon2 * Math.PI / 180;
+    var df = f2 - f1;
+    var dl = l2 - l1;
+    var a = Math.sin(df/2) * Math.sin(df/2) + Math.cos(f1) * Math.cos(f2) * Math.sin(dl/2) * Math.sin(dl/2);
+    var d = 2 * Math.asin(Math.min(1, Math.sqrt(a)));
+    if (d < 1e-9) return [lat1, lon1];
+    var A = Math.sin((1 - f) * d) / Math.sin(d);
+    var B = Math.sin(f * d) / Math.sin(d);
+    var x = A * Math.cos(f1) * Math.cos(l1) + B * Math.cos(f2) * Math.cos(l2);
+    var y = A * Math.cos(f1) * Math.sin(l1) + B * Math.cos(f2) * Math.sin(l2);
+    var z = A * Math.sin(f1) + B * Math.sin(f2);
+    return [
+        Math.atan2(z, Math.sqrt(x * x + y * y)) * 180 / Math.PI,
+        Math.atan2(y, x) * 180 / Math.PI
+    ];
+}
+
+// Slerp interpolation between two lat/lon points along the great-circle. n
+// gives the number of intermediate steps (return array has n+1 entries
+// including both endpoints). Uses spherical law of cosines variant; for
+// d=0 returns endpoints unchanged to dodge a div-by-zero on identical
+// coords.
+function gc_interpolate(lat1, lon1, lat2, lon2, n) {
+    var f1 = lat1 * Math.PI / 180;
+    var f2 = lat2 * Math.PI / 180;
+    var l1 = lon1 * Math.PI / 180;
+    var l2 = lon2 * Math.PI / 180;
+    var df = f2 - f1;
+    var dl = l2 - l1;
+    var a = Math.sin(df/2) * Math.sin(df/2) + Math.cos(f1) * Math.cos(f2) * Math.sin(dl/2) * Math.sin(dl/2);
+    var d = 2 * Math.asin(Math.min(1, Math.sqrt(a)));
+    if (d < 1e-9) return [[lat1, lon1], [lat2, lon2]];
+    var pts = [];
+    for (var i = 0; i <= n; i++) {
+        var f = i / n;
+        var A = Math.sin((1 - f) * d) / Math.sin(d);
+        var B = Math.sin(f * d) / Math.sin(d);
+        var x = A * Math.cos(f1) * Math.cos(l1) + B * Math.cos(f2) * Math.cos(l2);
+        var y = A * Math.cos(f1) * Math.sin(l1) + B * Math.cos(f2) * Math.sin(l2);
+        var z = A * Math.sin(f1) + B * Math.sin(f2);
+        var lat = Math.atan2(z, Math.sqrt(x * x + y * y)) * 180 / Math.PI;
+        var lon = Math.atan2(y, x) * 180 / Math.PI;
+        pts.push([lat, lon]);
+    }
+    return pts;
+}
+
+// Same as gc_interpolate, but bends each waypoint perpendicular to the
+// segment with a parabolic profile that peaks at the midpoint (f=0.5) and
+// tapers to zero at the endpoints. `bend` is the peak offset as a fraction
+// of segment length — 0 gives a flat GC arc, 0.15 gives a clearly curved
+// look without distorting the geographic positioning at the hop endpoints.
+// On Mercator the resulting line looks like a soft arc, similar to the
+// classic shipping/route-map aesthetic.
+function gc_arc_with_bend(lat1, lon1, lat2, lon2, n, bend) {
+    var pts = gc_interpolate(lat1, lon1, lat2, lon2, n);
+    if (!bend || bend < 1e-6) return pts;
+    var dlat = lat2 - lat1;
+    var dlon = lon2 - lon1;
+    if (Math.abs(dlat) + Math.abs(dlon) < 1e-9) return pts;
+    for (var i = 1; i < pts.length - 1; i++) {
+        var f = i / (pts.length - 1);
+        var w = 4 * f * (1 - f) * bend;       // peaks at f=0.5
+        // Perpendicular CCW from segment direction (-dlon, +dlat). Offset
+        // is intentionally one-sided so all curves bend the same way and
+        // remain visually consistent across pairs going in either
+        // direction.
+        pts[i] = [
+            pts[i][0] - dlon * w,
+            pts[i][1] + dlat * w
+        ];
+    }
+    return pts;
+}
+
+// Stitch GC arcs across all hop entries, returning a multi-line latlng
+// array (array of arrays) so we can pass it straight into L.polyline as a
+// MultiPolyline. Antimeridian crossings get split into separate sub-lines:
+// the first piece terminates at ±180, the second resumes at ∓180. Without
+// this split, two trace directions for the same trans-Pacific pair
+// "unwrap" their endpoint to opposite sides of the Mercator panel and the
+// user sees two ghost copies of NZ on the map.
+function path_through_hops_gc(entries) {
+    if (entries.length < 2) return [entries.map(function (e) { return [e.lat, e.lon]; })];
+    var STEPS = 40;
+    var BEND  = 0.13;   // peak perpendicular offset as fraction of segment
+    var pts = [];
+    for (var i = 0; i + 1 < entries.length; i++) {
+        var seg = gc_arc_with_bend(entries[i].lat, entries[i].lon, entries[i+1].lat, entries[i+1].lon, STEPS, BEND);
+        // For all but the first segment, drop the first point (shared with
+        // the previous segment's last point).
+        if (i > 0) seg = seg.slice(1);
+        for (var k = 0; k < seg.length; k++) pts.push(seg[k]);
+    }
+
+    var lines = [[pts[0]]];
+    for (var j = 1; j < pts.length; j++) {
+        var prev = pts[j - 1];
+        var curr = pts[j];
+        var dlon = curr[1] - prev[1];
+        if (Math.abs(dlon) > 180) {
+            // |dlon|>180 means the GC curve crossed the antimeridian: shorter
+            // way wraps the other side. We figure out which border (+180 vs
+            // -180) the previous point was approaching, drop a synthetic point
+            // there to terminate the visible segment, and open a new sub-line
+            // from the opposite border.
+            var sign = (dlon > 180) ? -1 : 1;       // first sub-line ends at sign*180
+            var currUnwrapped = curr[1] + sign * 360;
+            var t = (sign * 180 - prev[1]) / (currUnwrapped - prev[1]);
+            var crossLat = prev[0] + t * (curr[0] - prev[0]);
+            lines[lines.length - 1].push([crossLat,  sign * 180]);
+            lines.push([[crossLat, -sign * 180], curr]);
+        } else {
+            lines[lines.length - 1].push(curr);
+        }
+    }
+    return lines;
+}
+
+// Draw the great-circle polyline + hop dots for one pair. Picks up the
+// bezier's current colour so the threshold colour category (red/yellow/green)
+// carries over to the real-path render.
+function draw_real_path(abs, entries) {
+    if (realPathLines[abs]) {
+        try { realPathLines[abs].line.remove(); } catch (_) {}
+        for (var im = 0; im < realPathLines[abs].markers.length; im++) {
+            try { realPathLines[abs].markers[im].remove(); } catch (_) {}
+        }
+    }
+    var color = '#3388ff';
+    var bezier = linkByName[abs];
+    // Pull threshold colour from the bezier we're replacing — but reject
+    // "blue", which would mean the bezier is in highlighted state from a
+    // user click before Real-Locations mode was toggled on. Falling back
+    // to the bezier's own _originalColor (set by setHighlightedLink) or
+    // the default keeps the new polyline starting from a clean colour
+    // state.
+    var bezColor = bezier && bezier.options && bezier.options.color;
+    var bezOrig  = bezier && bezier._originalColor;
+    if (bezColor && bezColor !== 'blue')      color = bezColor;
+    else if (bezOrig && bezOrig !== 'blue')   color = bezOrig;
+
+    // The "curve" appearance comes for free from the great-circle math:
+    // ~30 GC waypoints per segment + Mercator projection = visually smooth
+    // arcs that bend toward the poles for long-distance legs (and follow the
+    // shortest path across the antimeridian rather than the long way round).
+    var pts = path_through_hops_gc(entries);
+    // Canvas renderer (myRenderer) gives a hover halo around the stroke
+    // controlled by `tolerance` — much more forgiving than SVG's
+    // pixel-exact stroke hit detection, which made it nearly impossible
+    // to grab a 3px line cleanly.
+    var line = L.polyline(pts, {
+        color: color,
+        weight: 4,
+        opacity: 0.9,
+        smoothFactor: 1.5,
+        renderer: (typeof myRenderer !== 'undefined' && myRenderer) ? myRenderer : undefined
+    });
+    line._isRealPathLine = true;   // tag for the layeradd hook so it doesn't try to hide our own polyline
+    line._originalColor = color;   // pin so setHighlightedLink can restore correctly even if options.color drifts
+    line.addTo(mymap);
+
+    // Reuse the popup/source the bezier already has (annotate_link stashed
+    // them there in this branch's earlier fixes). Without this the polyline
+    // would be click-dead.
+    var popup = bezier && bezier._panelPopup ? bezier._panelPopup : null;
+    var source = bezier && bezier._panelSource ? bezier._panelSource : null;
+    if (popup) {
+        line._panelPopup = popup;
+        line._panelSource = source;
+        line.on('click', (function (p, s) {
+            return function (e) { setHighlightedLink(e.target); openLinkPanel(p, s); };
+        })(popup, source));
+    }
+    var tt = bezier && bezier.getTooltip && bezier.getTooltip();
+    if (tt) line.bindTooltip(tt.getContent(), { sticky: true });
+
+    // Dots for both LOCATED hops (cache) and INTERPOLATED ones (no geo, but
+    // we still want the user to see "yes, there are routers here even if we
+    // don't know exactly where"). Endpoints are skipped — they already have
+    // their own city markers from the topology pipeline.
+    //   cache       → solid filled circle, city/country label
+    //   interpolated→ smaller hollow circle, hostname/IP label with "~"
+    //                  prefix to make the approximate nature obvious
+    var markers = [];
+    for (var i = 0; i < entries.length; i++) {
+        var e = entries[i];
+        if (e.src === 'endpoint') continue;
+
+        var approx = (e.src === 'interpolated');
+        var marker = L.circleMarker([e.lat, e.lon], approx ? {
+            radius: 3,
+            color: color,
+            weight: 1.5,
+            fillColor: '#fff',
+            fillOpacity: 0.6
+        } : {
+            radius: 4,
+            color: '#fff',
+            weight: 1.5,
+            fillColor: color,
+            fillOpacity: 0.95
+        });
+
+        // Label text: cache hops show city / country; interpolated hops show
+        // hostname's first DNS label (or IP / "?") with a "~" prefix so the
+        // user can tell at a glance which positions are guesses.
+        var labelText = '';
+        if (e.city) labelText = e.city;
+        else if (e.country_code) labelText = e.country_code;
+        else if (e.hostname)     labelText = e.hostname.split('.')[0];
+        else if (e.ip)           labelText = e.ip;
+        else if (approx)         labelText = '?';
+        if (labelText && approx) labelText = '~ ' + labelText;
+        if (labelText) {
+            marker.bindTooltip(escapeHtml(labelText), {
+                permanent: true,
+                direction: 'right',
+                offset: [6, 0],
+                className: approx ? 'real-hop-label real-hop-label-approx' : 'real-hop-label'
+            });
+        }
+
+        marker._isRealPathMarker = true;   // tag so the layeradd hook leaves it alone
+        marker.addTo(mymap);
+        markers.push(marker);
+    }
+
+    realPathLines[abs] = { line: line, markers: markers, entries: entries };
+}
+
+// Re-sync the visible hop-path polylines after a repaint while real-locations
+// mode is on. taint_links re-colours the (hidden) linkByName layers for the new
+// palette / property / data, but the real-path lines were drawn from the old
+// colours — redraw each from its cached entries so draw_real_path re-reads the
+// current link colour. Geometry is unchanged (same hops), so this is cheap and
+// needs no re-fetch.
+function _resync_real_path_colors() {
+    if (typeof realLocationsMode === 'undefined' || !realLocationsMode) return;
+    for (var abs in realPathLines) {
+        var rp = realPathLines[abs];
+        if (rp && rp.entries) draw_real_path(abs, rp.entries);
+    }
+}
+
+var empty_color="LightGray";
+
+var stats_types = { "1.0": "1%", "50.0": "50%", "95.0": "95%", "99.0": "99%" };
+  
+
+var a=1;
+var lat, lng;
+var loads=0; // number of loaded point series
+var duplines=[];
+var points_cache=[];
+var arrowMarkers=[]; // store arrow direction markers by link name
+var extendedLinks=[]; // track links extended to full length
+
+// --- Arrow direction marker helpers ---
+
+
+function _toggle_real_hop_labels(activeLine) {
+    for (var abs in realPathLines) {
+        var entry = realPathLines[abs];
+        if (!entry) continue;
+        var visible = (entry.line === activeLine);
+        for (var i = 0; i < entry.markers.length; i++) {
+            var tt = entry.markers[i].getTooltip && entry.markers[i].getTooltip();
+            var el = tt && tt.getElement && tt.getElement();
+            if (!el) continue;
+            if (visible) el.classList.add('visible');
+            else         el.classList.remove('visible');
+        }
+    }
+}
+
+
+// ===== end REAL LOCATIONS =====
+
+// Open a curve-chart.html (or heatmap-cell curve) URL in a new iframe tab,
+// persisted across reloads (kind 'curve' → restoreOneTab). Ported from
+// work-snapshot; used by the HTML heatmap's clickable cells (open_heatmap_cell).
+function open_curve_in_tab(title, label, url) {
+    const num_tabs = $("main#tabs > ul > li").length;
+    const sep = url.indexOf('?') >= 0 ? '&' : '?';
+    const bustedUrl = url + sep + '_t=' + Date.now();
+    const loader_id = 'curve-loader-' + num_tabs;
+    const iframe_html =
+        '<div class="curve-iframe-wrap">' +
+            '<div class="curve-iframe-loader" id="' + loader_id + '">' +
+              '<div class="spinner"></div>' +
+              '<p>Loading ' + label + '…</p>' +
+            '</div>' +
+            '<iframe class="curve-iframe" src="' + bustedUrl + '" frameborder="0" sandbox="allow-scripts allow-same-origin"></iframe>' +
+        '</div>';
+    add_tab('div', title, num_tabs, iframe_html);
+    const divid = 'tab' + num_tabs;
+    persistTab(divid, { kind: 'curve', title: title, label: label, url: url });
+    const iframe = document.querySelector('#' + divid + ' .curve-iframe');
+    if (iframe) {
+        iframe.addEventListener('load', function () {
+            const loader = document.getElementById(loader_id);
+            if (loader) loader.style.display = 'none';
+        });
+    }
+    const tab_count = $('main#tabs > ul > li > a').length;
+    if (tab_count > 0) $('main#tabs').tabs('option', 'active', tab_count - 1);
+}
+
+// Heatmap cell click → open that from/to pair's curve in a tab.
+function open_heatmap_cell(url, from_host, to_host) {
+    const fromShort = (from_host || '').split('.').slice(0, 2).join('.');
+    const toShort   = (to_host   || '').split('.').slice(0, 2).join('.');
+    const title = 'Heatmap: ' + fromShort + ' → ' + toShort;
+    open_curve_in_tab(title, 'Heatmap', url);
+}
+
+// ===================================================================
+//  Keyboard shortcuts (#TIER3) — ported from work-snapshot. A "?" help
+//  overlay (built on demand) + a global keydown handler mapping keys to the
+//  existing controls. Ignores typing targets and Ctrl/Cmd/Alt combos.
+// ===================================================================
+const _shortcuts = [
+    { key: '?',   desc: 'Show this help' },
+    { key: 'Esc', desc: 'Close any open modal or overlay' },
+    { key: '←',   desc: 'Previous period' },
+    { key: '→',   desc: 'Next period' },
+    { key: 'T',   desc: 'Jump to today' },
+    { key: 'R',   desc: 'Toggle auto-refresh' },
+    { key: 'L',   desc: 'Toggle Real Locations' },
+    { key: 'H',   desc: 'Toggle sidebar' },
+    { key: 'D',   desc: 'Cycle theme (light · dark · auto)' },
+    { key: '/',   desc: 'Focus search' }
+];
+function _is_typing_target(el) {
+    if (!el) return false;
+    var tag = (el.tagName || '').toUpperCase();
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+    if (el.isContentEditable) return true;
+    return false;
+}
+function _show_shortcuts_overlay() {
+    var existing = document.getElementById('keyboard-shortcuts-overlay');
+    if (existing) { existing.hidden = false; return; }
+    var overlay = document.createElement('div');
+    overlay.id = 'keyboard-shortcuts-overlay';
+    overlay.className = 'keyboard-shortcuts-overlay';
+    var html = '<div class="keyboard-shortcuts-modal">';
+    html += '<div class="keyboard-shortcuts-header"><h3>Keyboard shortcuts</h3>';
+    html += '<button class="keyboard-shortcuts-close" type="button" title="Close">&times;</button></div>';
+    html += '<table class="keyboard-shortcuts-table">';
+    for (var i = 0; i < _shortcuts.length; i++) {
+        html += '<tr><td><kbd>' + escapeHtml(_shortcuts[i].key) + '</kbd></td><td>' + escapeHtml(_shortcuts[i].desc) + '</td></tr>';
+    }
+    html += '</table></div>';
+    overlay.innerHTML = html;
+    document.body.appendChild(overlay);
+    overlay.querySelector('.keyboard-shortcuts-close').addEventListener('click', _hide_shortcuts_overlay);
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) _hide_shortcuts_overlay(); });
+}
+function _hide_shortcuts_overlay() {
+    var el = document.getElementById('keyboard-shortcuts-overlay');
+    if (el) el.hidden = true;
+}
+document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') { _hide_shortcuts_overlay(); }
+    if (_is_typing_target(e.target)) return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;   // don't fight Ctrl+R, Cmd+S, etc.
+    switch (e.key) {
+        case '?': _show_shortcuts_overlay(); e.preventDefault(); break;
+        case 'ArrowLeft': $('#prev').trigger('click'); e.preventDefault(); break;
+        case 'ArrowRight': if (!$('#next').prop('disabled')) $('#next').trigger('click'); e.preventDefault(); break;
+        case 't': case 'T': $('#today').trigger('click'); break;
+        case 'r': case 'R': $('#autorefresh_checkbox').trigger('click'); break;
+        case 'l': case 'L': $('#reallocs_checkbox').trigger('click'); break;
+        case 'h': case 'H': {
+            var sb = document.getElementById('sidebar');
+            if (sb && sb.classList.contains('collapsed')) {
+                var ob = document.getElementById('openSidebarBtn'); if (ob) ob.click();
+            } else {
+                var tb = document.getElementById('sidebarToggle'); if (tb) tb.click();
+            }
+            break;
+        }
+        case '/': { var si = document.getElementById('search_input'); if (si) { si.focus(); e.preventDefault(); } break; }
+        case 'd': case 'D': {
+            var btns = document.querySelectorAll('.theme-btn');
+            if (!btns.length) break;
+            var current = document.documentElement.getAttribute('data-theme') || 'auto';
+            var order = ['light', 'dark', 'auto'];
+            var next = order[(order.indexOf(current) + 1) % order.length];
+            for (var bi = 0; bi < btns.length; bi++) {
+                if (btns[bi].dataset.theme === next) { btns[bi].click(); break; }
+            }
+            break;
+        }
+    }
+});
+
+// Legend footer chip: "<N> links · <M> over threshold" (or, in compare mode,
+// "<N> links · <w> worse · <b> better · …"). Counts only links currently on the
+// map; "over threshold" compares the property VALUE to the top threshold so it
+// stays correct across palette (CBF) toggles. Ported from work-snapshot.
+function _update_legend_count(hits, prop) {
+    var el = document.getElementById('legend');
+    if (!el || !el.firstChild) return;
+    var hitByPair = {};
+    if (Array.isArray(hits)) {
+        for (var i = 0; i < hits.length; i++) {
+            var s = hits[i] && hits[i]._source;
+            if (s && s.from !== undefined && s.to !== undefined) {
+                var pkey = s.from + ',' + s.to;
+                if (!hitByPair[pkey]) hitByPair[pkey] = s;
+            }
+        }
+    }
+    var compareMode = parms.compare && parms.compare !== 'off';
+    var topT      = (Array.isArray(threshes) && threshes.length) ? threshes[threshes.length - 1] : null;
+    var reversed  = (Array.isArray(threshes) && threshes.length >= 2) ? threshes[0] > threshes[1] : false;
+    var total = 0, bad = 0, worse = 0, better = 0, same = 0, noBase = 0;
+    for (var k in linkByName) {
+        var l = linkByName[k];
+        if (!l || !mymap || !mymap.hasLayer(l)) continue;
+        total++;
+        var hit = hitByPair[k];
+        if (!hit) continue;
+        var v = hit[prop];
+        if (typeof v !== 'number') continue;
+        if (compareMode) {
+            var pct = _compare_pct_for_link(hit.from, hit.to, v);
+            if (pct === null) noBase++;
+            else if (pct <= -10) better++;
+            else if (pct >= 10)  worse++;
+            else                 same++;
+        } else if (topT !== null) {
+            if (reversed ? v < topT : v >= topT) bad++;
+        }
+    }
+    var html;
+    if (compareMode) {
+        var bits = [];
+        if (worse)  bits.push('<strong style="color:#e57373">' + worse  + '</strong> worse');
+        if (better) bits.push('<strong style="color:#7fcc8b">' + better + '</strong> better');
+        if (same)   bits.push(same + ' same');
+        if (noBase) bits.push('<span style="opacity:.7">' + noBase + ' new</span>');
+        html = total + ' link' + (total === 1 ? '' : 's')
+             + (bits.length ? ' · ' + bits.join(' · ') : '');
+    } else {
+        html = total + ' link' + (total === 1 ? '' : 's')
+             + (bad ? ' · <strong>' + bad + '</strong> over threshold' : '');
+    }
+    var existing = el.querySelector('.legend-count');
+    if (existing) {
+        existing.innerHTML = html;
+    } else {
+        var span = document.createElement('span');
+        span.className = 'legend-count';
+        span.innerHTML = html;
+        el.appendChild(span);
+    }
 }
 
 function taint_link( link, color ){
     if (link){
+	// Never apply an undefined/null colour: setStyle({color: undefined})
+	// renders stroke="undefined" and the line (and its arrows) vanish.
+	// The hover restore path can pass undefined when a link's stored
+	// colour was lost, so guard here as a safety net — worst case a link
+	// falls back to the no-data colour instead of disappearing.
+	if (color === undefined || color === null || color === '') color = empty_color;
+	// Remember the last REAL (non-highlight) colour so every un-highlight /
+	// hover-out restores to it — never to "blue" or undefined. Single source
+	// of truth for restores; fixes links that occasionally stayed stuck blue.
+	if (color !== 'blue') link._baseColor = color;
 	link.setStyle( {"color": color} );
+        for (var abs in linkByName) {
+            if (linkByName[abs] === link) {
+                updateArrowColors(abs, color);
+                break;
+            }
+        }
+    }
+}
+
+function extend_unidirectional_links() {
+    for (var abs in extendedLinks) {
+        if (linkByName[abs] && extendedLinks[abs]) {
+            var orig = extendedLinks[abs];
+            var live = linkByName[abs];
+            // Geometry (bezier points) comes from the cache - it doesn't change -
+            // but the DISPLAY content (colour/tooltip/popup/source/base colour)
+            // must be read from the LIVE link, which annotate_link refreshes on
+            // every repaint. Reading the stale cached tooltip/popup here left the
+            // mouse-over tooltip showing the previous property/event (issue #98)
+            // even though the colour (read live) did update.
+            var currentColor = live.options.color;
+            var liveTip = (live.getTooltip && live.getTooltip()) ? live.getTooltip().getContent() : orig.tooltip;
+            var livePopup = (live._panelPopup != null) ? live._panelPopup : orig.popup;
+            var liveSource = (live._panelSource !== undefined) ? live._panelSource : orig.source;
+            var liveBase = live._baseColor || orig.baseColor;
+            live.remove();
+            var halfLine = L.curve(['M', orig.bp0, 'Q', orig.bp1, orig.bp2], { color: currentColor, fill: false, weight: 6 });
+            halfLine._bezierP0 = orig.bp0; halfLine._bezierP1 = orig.bp1; halfLine._bezierP2 = orig.bp2;
+            halfLine._fullStart = orig.fullStart; halfLine._fullEnd = orig.fullEnd; halfLine._fullControl = orig.fullControl;
+            halfLine._panelPopup = livePopup; halfLine._panelSource = liveSource;
+            if (liveBase) halfLine._baseColor = liveBase;
+            halfLine.addTo(mymap);
+            if (liveTip) halfLine.bindTooltip(liveTip, {"sticky":true});
+            if (livePopup) halfLine.on('click', function(e){ setHighlightedLink(e.target); openLinkPanel(e.target._panelPopup, e.target._panelSource); });
+            halfLine.on("mouseover", function(e){ if (!mouseover) { mouseover = true; color_store[L.stamp(e.target)] = e.target.options.color; e.target.bringToFront(); taint_link(e.target, "blue"); } });
+            halfLine.on("mouseout", function(e){ taint_link(e.target, e.target._baseColor || color_store[L.stamp(e.target)]); mouseover = false; });
+            linkByName[abs] = halfLine;
+            removeArrowMarkers(abs);
+            addArrowsToLine(abs, orig.bp0, orig.bp1, orig.bp2, currentColor);
+        }
+    }
+    extendedLinks = [];
+    for (var abs in linkByName) {
+        var parts = abs.split(","); var inverse = parts[1] + "," + parts[0];
+        if (!linkByName[inverse] && linkByName[abs]) {
+            var link = linkByName[abs];
+            if (link._fullStart && link._fullEnd && link._fullControl) {
+                var color = link.options.color;
+                var tooltipContent = link.getTooltip() ? link.getTooltip().getContent() : null;
+                // Preserve the click->details-panel popup (+ source data and base
+                // colour) that annotate_link stashed on the layer. The old code
+                // hardcoded this to null, so rebuilt one-way links lost their click
+                // handler entirely (issue #93: no popup on TCP trace error / route
+                // change flows, which are drawn one-way).
+                var popupContent = link._panelPopup;
+                var sourceData = link._panelSource;
+                var baseColor = link._baseColor;
+                extendedLinks[abs] = { bp0: link._bezierP0, bp1: link._bezierP1, bp2: link._bezierP2, fullStart: link._fullStart, fullEnd: link._fullEnd, fullControl: link._fullControl, tooltip: tooltipContent, popup: popupContent, source: sourceData, baseColor: baseColor };
+                link.remove();
+                var newBP0 = link._fullStart; var newBP2 = link._fullEnd;
+                var cubicC1 = link._fullControl; var cubicC2 = link._bezierP1 || link._fullControl;
+                var newLine = L.curve(['M', newBP0, 'C', cubicC1, cubicC2, newBP2], { color: color, fill: false, weight: 6 });
+                newLine._bezierP0 = link._bezierP0; newLine._bezierP1 = link._bezierP1; newLine._bezierP2 = link._bezierP2;
+                newLine._fullStart = link._fullStart; newLine._fullEnd = link._fullEnd; newLine._fullControl = link._fullControl;
+                newLine._panelPopup = popupContent; newLine._panelSource = sourceData;
+                if (baseColor) newLine._baseColor = baseColor;
+                newLine.addTo(mymap);
+                if (tooltipContent) newLine.bindTooltip(tooltipContent, {"sticky":true});
+                // Read the popup off the clicked layer (not the loop-scoped var) so
+                // each one-way link opens its own panel, not the last link's.
+                if (popupContent) newLine.on('click', function(e){ setHighlightedLink(e.target); openLinkPanel(e.target._panelPopup, e.target._panelSource); });
+                newLine.on("mouseover", function(e){ if (!mouseover) { mouseover = true; color_store[L.stamp(e.target)] = e.target.options.color; e.target.bringToFront(); taint_link(e.target, "blue"); } });
+                newLine.on("mouseout", function(e){ taint_link(e.target, e.target._baseColor || color_store[L.stamp(e.target)]); mouseover = false; });
+                linkByName[abs] = newLine;
+                removeArrowMarkers(abs);
+                addArrowsToCubicLine(abs, newBP0, cubicC1, cubicC2, newBP2, color);
+            }
+        }
     }
 }
 
 function dash_link( link, dash=true){
-    // Make a link dashed 
-    if (link){
-	if (dash) {
-	    link.setStyle( { "dashArray": "10 10" });
-	} else {
-	    link.setStyle( { "dashArray": "" });
-	} 
-    }
-}
-  
-function annotate_link(abs,link, tooltip, popup){
-    if (link){
-	link.bindTooltip( tooltip, {"sticky":true} );
-	link.bindPopup( popup );
-    }
-    $("#" + abs + '-from' ).on('click', "button.knapp" , function( e){
-	focus_links(e.id, 'flip');
-    });
-    $("#" + abs + '-to' ).on('click', "button.knapp" , function( e){
-	focus_links(e.id, 'flip');
-    });
+    if (link){ if (dash) { link.setStyle( { "dashArray": "10 10" }); } else { link.setStyle( { "dashArray": "" }); } }
 }
 
+function annotate_link(abs,link, tooltip, popup, linkSourceData){
+    if (link){
+	// Stash popup/source on the layer so draw_real_path (real-locations mode)
+	// can reuse them to keep the hop-path polyline clickable.
+	link._panelPopup = popup;
+	if (linkSourceData) link._panelSource = linkSourceData;
+	link.bindTooltip( tooltip, {"sticky":true} );
+	link.off('click');
+	link.off('mouseout');
+	if (linkSourceData) {
+	    link._panelSource = linkSourceData;
+	    link.on('click', function(e){ setHighlightedLink(e.target); openLinkPanel(popup, linkSourceData); });
+	} else {
+	    link.on('click', function(e){ setHighlightedLink(e.target); openLinkPanel(popup); });
+	}
+	link.on("mouseout", function(e){
+	    mouseover = false;
+	    e.target.closeTooltip();
+	    // Don't restore color if this link is highlighted (panel open).
+	    // Always restore to the real base colour (never leave it stuck blue).
+	    if (highlightedLink !== e.target) {
+	        var bc = e.target._baseColor || color_store[L.stamp(e.target)] || empty_color;
+	        e.target.setStyle({"color": bc});
+	        for (var k in linkByName) {
+	            if (linkByName[k] === e.target) { updateArrowColors(k, bc); break; }
+	        }
+	    }
+	});
+    }
+    $("#" + abs + '-from' ).on('click', "button.knapp" , function( e){ focus_links(e.id, 'flip'); });
+    $("#" + abs + '-to' ).on('click', "button.knapp" , function( e){ focus_links(e.id, 'flip'); });
+}
 
 function draw_link( ends, color, tooltip, popup){
     var line_name=ends.join("-");
@@ -1176,103 +3614,70 @@ function draw_link( ends, color, tooltip, popup){
     var cp1, cp2, mp1, bear2, utslag;
     if ( parms.debug) console.log(ends + latlon1);
     if ( latlon1 && latlon2 && latlon1.lat && latlon1.lon && latlon2.lat && latlon2.lon ){
-
         let distance = (0+(latlon1.distanceTo(latlon2)));
-	if ( distance < 5000000) { // 500 mil
-	    mp1 = latlon1.midpointTo(latlon2);
-	} else {
-	    mp1 = new LatLon ( latlon1.lat + (latlon2.lat - latlon1.lat) / 2,
-			       latlon1.lon + (latlon2.lon - latlon1.lon) / 2 );
-	}
+	if ( distance < 5000000) { mp1 = latlon1.midpointTo(latlon2); }
+	else { mp1 = new LatLon ( latlon1.lat + (latlon2.lat - latlon1.lat) / 2, latlon1.lon + (latlon2.lon - latlon1.lon) / 2 ); }
         let bearing = mp1.initialBearingTo(latlon2);
         if ( typeof bearing === "undefined" || isNaN(bearing) ) {
 	    console.log( "No bearing for ends " + ends + " : latlon1: "+latlon1,", latlon2: ",latlon2);
             return(0);
         }
-
-	let sign=1;
-	if (! duplines[line_name] ) {
-	    duplines[line_name]=0;
+	// Bearing offset controls how far the bezier control point cp2 sits off
+	// the direct line — randomised to spread out duplicate links visually.
+	// For the SECOND direction of an already-drawn pair we reuse the same
+	// offset so cp2_AB and cp2_BA are antiparallel through cp1; that makes
+	// the two half-curves share a tangent there and visually appear as one
+	// continuous link (no zig-zag at the meeting point on short links).
+	let bearing_offset;
+	if (line_offset[inverse_line] !== undefined) {
+	    bearing_offset = line_offset[inverse_line];
 	} else {
-	    if (duplines[line_name] % 2 ){
-		sign=1;
-	    }
+	    let sign=1;
+	    if (! duplines[line_name] ) { duplines[line_name]=0; } else { if (duplines[line_name] % 2 ){ sign=1; } }
+	    bearing_offset = sign * ( 5 * ( 1+ ++duplines[line_name]) + ( 5 * Math.random())*10 );
 	}
-
-	let bearing_offset = sign * ( 5 * ( 1+ ++duplines[line_name]) + ( 5 * Math.random())*10 );
+	line_offset[line_name] = bearing_offset;
 	if ( middle_point[inverse_line]){
-	    cp1 = middle_point[inverse_line];
-	    utslag = line_utslag[inverse_line];
+	    cp1 = middle_point[inverse_line]; utslag = line_utslag[inverse_line];
 	} else {
 	    utslag= ( Math.random() - 0.5 )/ 10 ;
-	    if ( distance < 5000000 ){
-		cp1 = latlon1.destinationPoint((distance/2), bearing + bearing_offset);
-	    } else {
-		cp1 =new LatLon( mp1.lat + (latlon2.lat - latlon1.lat) * utslag,
-				 mp1.lon + (latlon2.lon - latlon1.lon) * utslag );
-	    }
-	    if (parms.debug){
-		var m=L.circle([cp1.lat,cp1.lon], {weight:6, radius:100, color:"blue"})
-		    .addTo(mymap).bindTooltip('cp1 '+line_name);
-	    }
+	    if ( distance < 5000000 ){ cp1 = latlon1.destinationPoint((distance/2), bearing + bearing_offset); }
+	    else { cp1 =new LatLon( mp1.lat + (latlon2.lat - latlon1.lat) * utslag, mp1.lon + (latlon2.lon - latlon1.lon) * utslag ); }
+	    if (parms.debug){ var m=L.circle([cp1.lat,cp1.lon], {weight:6, radius:100, color:"blue"}).addTo(mymap).bindTooltip('cp1 '+line_name); }
 	}
-	middle_point[line_name]=cp1;
-	line_utslag[line_name]=utslag;
-	
-	var mid = cp1.midpointTo(latlon2);
-	var dist2=(0+(cp1.distanceTo(latlon2)));
-
-	if ( line_bearing[inverse_line]){
-	    bear2 = 360 - line_bearing[inverse_line] % 360;
-	} else {
-	    bear2 = bearing;
-	    // bear2 = cp1.initialBearingTo(latlon2);
-	}
+	middle_point[line_name]=cp1; line_utslag[line_name]=utslag;
+	var mid = cp1.midpointTo(latlon2); var dist2=(0+(cp1.distanceTo(latlon2)));
+	if ( line_bearing[inverse_line]){ bear2 = 360 - line_bearing[inverse_line] % 360; }
+	else { bear2 = bearing; }
 	line_bearing[line_name]=bear2;
-	
-	if ( distance < 50000000 ){
-	    cp2 = cp1.destinationPoint((dist2/2), bearing + bearing_offset);
-	} else {
-	    cp2 =new LatLon( mp1.lat + (latlon2.lat - mp1.lat) * utslag,
-				 mp1.lon + (latlon2.lon - mp1.lon) * utslag );
-
-	}
-
-
+	if ( distance < 50000000 ){ cp2 = cp1.destinationPoint((dist2/2), bearing + bearing_offset); }
+	else { cp2 =new LatLon( mp1.lat + (latlon2.lat - mp1.lat) * utslag, mp1.lon + (latlon2.lon - mp1.lon) * utslag ); }
 	if (parms.debug){
 	    console.log(ends + [[cp2.lat, cp2.lon], [latlon2.lat, latlon2.lon]] + ' dist: ' + distance);
 	    var m=L.circle([cp2.lat,cp2.lon], {weight:6, radius:100, color:"red"}).addTo(mymap).bindTooltip('cp2 '+line_name);
 	    var m=L.circle([mp1.lat,mp1.lon], {weight:6, radius:100, color:"violet"}).addTo(mymap).bindTooltip('mp1 '+line_name);
 	}
 	var line;
-	if (parms.curve === 'line' )
+	var bezierP0, bezierP1, bezierP2;
+	if (parms.curve === 'line' ) {
 	    line =L.polyline( [mid, latlon2], {color: color, weight:6, renderer: myRenderer});
-	else
-	    line = L.curve(['M', [cp1.lat, cp1.lon], 'Q', [cp2.lat, cp2.lon], [latlon2.lat, latlon2.lon] ],
-			   { color: color, fill: false, weight:6 /*, renderer: myRenderer */ });
-	if (line)
-	    line.addTo(mymap);
-	else
-	    console.log('Line draw failed ' + line_name);
-	
+	} else {
+	    bezierP0 = [cp1.lat, cp1.lon]; bezierP1 = [cp2.lat, cp2.lon]; bezierP2 = [latlon2.lat, latlon2.lon];
+	    line = L.curve(['M', bezierP0, 'Q', bezierP1, bezierP2 ], { color: color, fill: false, weight:6 });
+	}
+	line._bezierP0 = bezierP0; line._bezierP1 = bezierP1; line._bezierP2 = bezierP2;
+	line._fullStart = [latlon1.lat, latlon1.lon]; line._fullEnd = [latlon2.lat, latlon2.lon]; line._fullControl = [cp1.lat, cp1.lon];
+	if (line) line.addTo(mymap);
+	else console.log('Line draw failed ' + line_name);
+	if (bezierP0 && bezierP1 && bezierP2) { addArrowsToLine(ends.slice().reverse().join(","), bezierP0, bezierP1, bezierP2, color); }
 	line.bindTooltip(tooltip, {"sticky":true});
-	line.bindPopup(popup,{ maxHeight: "800", maxWidth:"800", keepInView: true, autoClose: true      });
-    } else {
-	console.log("no coords for ends" + ends.length + ' ends ' + ends + ' coords ' + latlon1 + ' - ' + latlon2);
-    }
+	line.on('click', function(){ openLinkPanel(popup); });
+    } else { console.log("no coords for ends" + ends.length + ' ends ' + ends + ' coords ' + latlon1 + ' - ' + latlon2); }
     return(line);
 }
 
-function get_node_query(tofrom, start, end) {
-    // Produce a JSON string for querying node info from Opensearch
-    return JSON.stringify( { "query": { "bool": { "filter": [ { "term": { "event_type": "topology" } }, { "range": { "@date": { "gte": start, "lt": end } } } ] } }, "size": 0, "aggs": { "nodes": { "terms": { "field": tofrom + ".keyword", "size" : 10000  }, "aggs": { "ip": { "terms": { "field": tofrom + "_adr.keyword"}}, "city": { "terms": { "field": tofrom + "_geo.city_name.keyword"}}, "lat": { "terms":  { "field": tofrom + "_geo.latitude" } },  "lon": { "terms":  { "field": tofrom + "_geo.longitude" } } } } } } );
-}
-
 function load_coords(network, service, goal){
-    // Load global coordinate for nodes in topology
-
     if ( service === "topoevents" ) {
-	// Extract and load coordinates from topology-events fetched from archive db (Opensearch)
 	var start_iso = new Date($("#datepicker").val() + " 00:00:00").toISOString();
 	var end_iso = new Date($("#datepicker").val() + " 23:59:59").toISOString();
 	// Query for both source (from) nodes and destination (to) nodes
@@ -1291,388 +3696,333 @@ function load_coords(network, service, goal){
 	    url += "&ip_version=" + net_ip_version[parms.net];
 	}
     
-	$.getJSON( url,
-
-	function(result){
-		       for (var r = 0; r < result.responses.length; r++) {
-			   if (typeof result.responses[r].aggregations != "undefined" ) {
-			       // Aggregated results are available
-			       for (var n=0; n < result.responses[r].aggregations.nodes.buckets.length; n++) {
-				   // Add node info to points structure
-				   var p={ id: "", name: "Unknown", lat: 0, lon: 0, ip: "n/a"};
-				   p.id = result.responses[r].aggregations.nodes.buckets[n].key;
-				   if (typeof result.responses[r].aggregations.nodes.buckets[n].city.buckets[0] != "undefined" ) {
-				       p.name = result.responses[r].aggregations.nodes.buckets[n].city.buckets.at(-1).key;  // Grab last city in list
-				   } else {
-				       p.name = p.id;
-				   }			       
-				   if (typeof result.responses[r].aggregations.nodes.buckets[n].lat.buckets[0] != "undefined")
-				       p.lat = result.responses[r].aggregations.nodes.buckets[n].lat.buckets.at(-1).key ?? 0 ; // Get last value seen
-				   if (typeof result.responses[r].aggregations.nodes.buckets[n].lon.buckets[0] != "undefined") 
-				       p.lon = result.responses[r].aggregations.nodes.buckets[n].lon.buckets.at(-1).key ?? 0 ; // Get last value seen
-				   if (typeof result.responses[r].aggregations.nodes.buckets[n].ip.buckets[0] != "undefined") { 
-				       reg_ip_adr(p.id, result.responses[r].aggregations.nodes.buckets[n].ip.buckets.at(-1).key );  // Register last ip in list
-				       p.ip = result.responses[r].aggregations.nodes.buckets[n].ip.buckets.at(-1).key;
-				   }
-				   let point_already_loaded = points.find(o => o.id === p.id);
-				   if (! point_already_loaded) {
-				       points.push( p);
-				   } else {
-				       console.log( "Duplicate node info for node " + p.id );
-				   }
-			       }
-			   } else if (typeof result.responses[r].error.reason != "undefined" ) {
-			       // Something is "suboptimal"
-			       console.log("Failed to access data from Opensearch: " + result.responses[r].error.reason + ".");
-			   }
-		       }
-		       if ( ! result.responses.length ) {
-			   console.log("No node data returned from archive for time period " + start_iso + " to " + end_iso + ".");
-		       }
-		       loads++;
-		       if (loads >= goal) {
-			   // All other calls to load_coords() have completed.
-			   loads=0;
-			   show_map(network);
-			   if (points.length > 0)
-			       // Some nodes are available. Plot the links too.
-			       get_topology();
-		       }
-
-	}).fail( function(e, textStatus, error ) {
-	    var err = textStatus + ", " + error;
-	    console.log( "Request" + url + " Failed: " + err );
-	    loads++;
-	    });
-
+	$.getJSON( url,function(result){
+	    if (jQuery.isEmptyObject(result.responses)) {
+		// Something went wrong. Log failure.
+		console.log("Warning: Failed to fetch data from archive. Check archive url inn mapconfig.yml.");
+		if (!jQuery.isEmptyObject(result.error)) { console.log("        (\"" + result.error.msg  + "\")");}
+	    } else {
+		for (var r = 0; r < result.responses.length; r++) {
+		    if (typeof result.responses[r].aggregations != "undefined" ) {
+			// Aggregated results are available
+			for (var n=0; n < result.responses[r].aggregations.nodes.buckets.length; n++) {
+			    // Add node info to points structure
+			    var p={ id: "", name: "Unknown", lat: 0, lon: 0, ip: "n/a"};
+			    p.id = result.responses[r].aggregations.nodes.buckets[n].key;
+			    if (typeof result.responses[r].aggregations.nodes.buckets[n].city.buckets[0] != "undefined" ) {
+				p.name = result.responses[r].aggregations.nodes.buckets[n].city.buckets.at(-1).key;  // Grab last city in list
+			    } else { p.name = p.id; }			       
+			    if (typeof result.responses[r].aggregations.nodes.buckets[n].lat.buckets[0] != "undefined")
+				p.lat = result.responses[r].aggregations.nodes.buckets[n].lat.buckets.at(-1).key ?? 0 ; // Get last value seen
+			    if (typeof result.responses[r].aggregations.nodes.buckets[n].lon.buckets[0] != "undefined") 
+				p.lon = result.responses[r].aggregations.nodes.buckets[n].lon.buckets.at(-1).key ?? 0 ; // Get last value seen
+			    if (typeof result.responses[r].aggregations.nodes.buckets[n].ip.buckets[0] != "undefined") { 
+				reg_ip_adr(p.id, result.responses[r].aggregations.nodes.buckets[n].ip.buckets.at(-1).key );  // Register last ip in list
+				p.ip = result.responses[r].aggregations.nodes.buckets[n].ip.buckets.at(-1).key;
+			    }
+			    let point_already_loaded = points.find(o => o.id === p.id);
+			    if (! point_already_loaded) { points.push( p); }
+			}
+		    } else if (typeof result.responses[r].error.reason != "undefined" ) {
+			// Something is "suboptimal"
+			console.log("Failed to access data from Opensearch: " + result.responses[r].error.reason + ". Check if Microdep analytics is operational.");
+		    }
+		}
+		if ( ! result.responses.length ) { console.log("No node data returned from archive for time period " + start_iso + " to " + end_iso + "."); }
+	    }
+	    _coords_load_done(network, goal);
+	}).fail( function(e, textStatus, error ) { console.log( "Request" + url + " Failed: " + textStatus + ", " + error ); _coords_load_done(network, goal); });
 	return;
-    } 
-
-    console.log( "Warning: Unsupported service '" + service +"' for loading node info." );
-    return;
-
-    /*** CODE BELOW IS NOT APPLIED IN perfSONAR Microdep
+    }
     if ( service === "db" ) {
-	// Load coordinates from config db
 	start = new Date($("#datepicker").val() + " 00:00:00").getTime()/1000;
 	end= new Date($("#datepicker").val() + " 23:59:59").getTime()/1000;
 	var network=parms.net;
-	var url="microdep-config.cgi?mode=nodes&secret=virre-virre-vapp&variant=mp-" + network + "&start=" + start + "&end=" + end;
-	$.getJSON( url,
-		   function(nodes){
-		       for ( var n=0; n < nodes.length; n++) {
-			   // Add node info to points structure
-			   var p={};
-			   p.id = nodes[n][0];
-			   p.name = nodes[n][1];
-			   p.lat = nodes[n][2];
-			   p.lon = nodes[n][3];
-			   reg_ip_adr(p.name, nodes[n][4]);
-			   let point_already_loaded = points.find(o => o.id === p.id);
-			   if (! point_already_loaded) {
-			       points.push( p);
-			   } else {
-			       console.log( "Duplicate node info for node " + p.id );
-			   }
-		       }
-		       loads++;
-		       if (loads >= goal) { // i.e. wait until data loaded
-			   loads=0;
-			   show_map(network);
-			   if (points.length > 0)
-			       // Some nodes are available. Plot the links too.
-			       get_topology();
-		       }  
-		   }).fail( function( jqxhr, textStatus, error ) {
-		       var err = textStatus + ", " + error;
-		       console.log( "Request" + url + " Failed: " + err );
-		       loads++;
-		       });
-	return;
-    } 
-
-    // Load nodes and coordinates from json-file
-    var url= "./" + network + "/" + network + "-" + service + "-geo.json";
-    $.getJSON( url,
-	function(tjenester){
-	    if ( "_meta" in tjenester ){
-		$.each(tjenester._meta.hostvars, function(id, host){
-		    if( host.utm){
-		      var utm=host.utm.split(" ");
-		      var utm_o = L.utm( { x:utm[2], y:utm[1], zone: utm[0], band:"N" } );
-		      var latlon = utm_o.latLng();
-
-		      var ytid=id; 
-		      if ( id.indexOf("ytelse") >= 0){ // kutt uninett.no pga db
-			  ytid = id.substr(0, id.indexOf(".uninett.no") );
-		      }
-			points.push( {id:ytid, name:host.nettinstallasjon, lat:latlon.lat, lon:latlon.lng });
-		    }
-		  });
-	    } else { // assume array of points
-//		points = points.concat(tjenester);
-		for (var t=0; t<tjenester.length; t++) {
-		    let point_already_loaded = points.find(o => o.id === tjenester[t].id);
-		    if (! point_already_loaded) {
-			// Add new point (node / vertex)
-			points.push( tjenester[t]);
-		    } else {
-			console.log( "Duplicate node info for node " + t.id );
-		    }
-		}
+	var url="microdep-config.cgi?mode=nodes&net=" + network + "&start=" + start + "&end=" + end;
+	$.getJSON( url, function(nodes){
+	    for ( var n=0; n < nodes.length; n++) {
+		var p={}; p.id = nodes[n][0]; p.name = nodes[n][1]; p.lat = nodes[n][2]; p.lon = nodes[n][3];
+		reg_ip_adr(p.name, nodes[n][4]);
+		let point_already_loaded = points.find(o => o.id === p.id);
+		if (! point_already_loaded) { points.push( p); } else { console.log( "Duplicate node info for node " + p.id ); }
 	    }
-	    loads++;
-	    if (loads >= goal) { // i.e. wait until data loaded
-		loads=0;
-		show_map(network);
-		if (points.length > 0)
-		    // Some nodes are available. Plot the links too.
-		    get_topology();
-	    }  
+	    _coords_load_done(network, goal);
+	}).fail( function( jqxhr, textStatus, error ) { console.log( "Request" + url + " Failed: " + textStatus + ", " + error ); _coords_load_done(network, goal); });
+	return;
+    }
+    var url= "./" + network + "/" + network + "-" + service + "-geo.json";
+    $.getJSON( url, function(tjenester){
+	if ( "_meta" in tjenester ){
+	    $.each(tjenester._meta.hostvars, function(id, host){
+		if( host.utm){
+		    var utm=host.utm.split(" "); var utm_o = L.utm( { x:utm[2], y:utm[1], zone: utm[0], band:"N" } ); var latlon = utm_o.latLng();
+		    var ytid=id; if ( id.indexOf("ytelse") >= 0){ ytid = id.substr(0, id.indexOf(".uninett.no") ); }
+		    points.push( {id:ytid, name:host.nettinstallasjon, lat:latlon.lat, lon:latlon.lng });
+		}
+	    });
+	} else {
+	    for (var t=0; t<tjenester.length; t++) {
+		let point_already_loaded = points.find(o => o.id === tjenester[t].id);
+		if (! point_already_loaded) { points.push( tjenester[t]); } else { console.log( "Duplicate node info for node " + t.id ); }
+	    }
+	}
+	_coords_load_done(network, goal);
+    }).fail( function( jqxhr, textStatus, error ) { console.log( "Request" + url + " Failed: " + textStatus + ", " + error ); _coords_load_done(network, goal); });
+}
 
-	}).fail( function( jqxhr, textStatus, error ) {
-	    var err = textStatus + ", " + error;
-	    console.log( "Request" + url + " Failed: " + err );
-	    loads++;
-	});
-    CODE ABOVE NOT APPLIED IN perfSONAR Microdep.*/
-
+// Called when ONE load_coords() source finishes — success or failure. Once all
+// sources are done, show the map and either plot the topology or, when no nodes
+// were found at all, show the empty-period notice. Every completion path must go
+// through here: previously the "topoevents" branch had no else and the .fail()
+// handlers never re-checked the counter, so a date with no nodes (or a failed
+// request) left a silently blank map with no explanation (issue #113).
+function _coords_load_done(network, goal) {
+    loads++;
+    if (loads < goal) return;
+    loads = 0;
+    show_map(network);
+    if (points.length > 0) get_topology();
+    else _set_map_empty_state(true);
 }
 
 function load_coords_from_all_sources(network){
-    // Load topology nodes with coordinates from all available sources
-
-    // Exctract node coordinates from topology events
     load_coords(network, "topoevents", 2);
-    // Load node coordinates from config db
-//    load_coords(network, "db", 2);
-    // Load node coordinates from json files
-//    load_coords(network, "base", 5);
-//    load_coords(network, "extra", 5);
-//    load_coords(network, "cnaas", 5);
-    // NOTE: Last arg (int) must equal no of consequtive calls to 'load_coords'
- }
-/*    
-function show_network(network){
-    points=[];
-    if ( network in points_cache){
-	points=points_cache[network];
-	show_map(network);
-	if (points.length > 0)
-	    // Some nodes are available. Plot the links too.
-	    get_topology();
-    } else {
-	// Fetch nodes and coordinates
-	load_coords_from_all_sources(network);
-    }
-}
-*/
-function show_network(network){
-    points=[];
-    if ( network in points_cache){
-	// Get nodes from cache
-	points=points_cache[network];
-    }
-    if (points.length == 0) {
-	// Cache is empty. Attempt to load nodes and coordinates 
-	load_coords_from_all_sources(network);  // ... calls show_map and get_topology
-    } else {
-	show_map(network);
-	get_topology();
-    }
+    load_coords(network, "db", 2);
 }
 
-			 
+function show_network(network){
+    points=[];
+    if ( network in points_cache){ points=points_cache[network]; }
+    if (points.length == 0) { load_coords_from_all_sources(network); }
+    else { show_map(network); get_topology(); }
+}
+
 function get_coords(end){
     var coords, i;
-
     for (i=0; i < points.length; i++){
 	var p=points[i];
-	if ( p.id === end ){
-	    coords=new LatLon(p.lat,p.lon);
-	    return coords;
-	}
+	if ( p.id === end ){ coords=new LatLon(p.lat,p.lon); return coords; }
     }
-    // if not found . make fake location
     var p={id:end, name:end, lat:no_coords.lat, lon:no_coords.lon};
-    points.push( p);
-    make_markers( $("#network").val(), [p], false);
-    return no_coords;  // find fake location
+    points.push( p); make_markers( $("#network").val(), [p], false);
+    return no_coords;
 }
 
 function sort_missing(a ,b){
-    var aa=a.split(" ");
-    var bb=b.split(" ");
-    if ( aa[0] === bb[0]){
-	return aa[1].localeCompare( bb[1] );
-    } else {
-	return aa[0].localeCompare( bb[0] );	
-    }
+    var aa=a.split(" "); var bb=b.split(" ");
+    if ( aa[0] === bb[0]){ return aa[1].localeCompare( bb[1] ); } else { return aa[0].localeCompare( bb[0] ); }
 }
 
 function check_ends(){
-    var html= '<h2>Missing flows in dataset? </h2>';
-    html += '<table><tr><th>From<th>To';
-    var ab=[], i;
-    var nok=0, nmiss=0, missing=[];
-
-    for (i=0;i<ends.length;i++){
-	a=ends[i][0] + ' ' + ends[i][1];
-	ab[a]=true;
-    }
-    for (i=0;i<ends.length;i++){
-	var b=ends[i][1] + ' ' + ends[i][0];
-	if (ab[b]){
-	    nok++;
-	} else {
-	    // console.log( "Missing link : " + b);
-	    missing.push(b);
-	    nmiss++;
-	}
-    }
+    var html= '<h2>Missing flows in dataset? </h2>'; html += '<table><tr><th>From<th>To';
+    var ab=[], i; var nok=0, nmiss=0, missing=[];
+    for (i=0;i<ends.length;i++){ a=ends[i][0] + ' ' + ends[i][1]; ab[a]=true; }
+    for (i=0;i<ends.length;i++){ var b=ends[i][1] + ' ' + ends[i][0]; if (ab[b]){ nok++; } else { missing.push(b); nmiss++; } }
     missing.sort(sort_missing);
-    for (i=0; i< missing.length; i++){
-	var ft=missing[i].split(" ");
-	html+='<tr><td>' +ft[0] + '<td>'+ ft[1];
-
-    }
-    // console.log("Ok " + nok + " Missing " + nmiss );
-    html+='</table>';
-    html+='<p>' + "Ok " + nok + " Missing " + nmiss;
-    $("#missing").html(html);
-    $("#missing").dialog("open");
-    // alert(html);
-
+    for (i=0; i< missing.length; i++){ var ft=missing[i].split(" "); html+='<tr><td>' +ft[0] + '<td>'+ ft[1]; }
+    html+='</table>'; html+='<p>' + "Ok " + nok + " Missing " + nmiss;
+    $("#missing").html(html); $("#missing").dialog("open");
 }
 
 function sort_diff(a , b){
-    //  return
-    var aa=a.split(" ");
-    var bb=b.split(" ");
-    if ( aa[0] === bb[0]){
-	return aa[1].localeCompare( bb[1] );
-    } else {
-	return aa[0].localeCompare( bb[0] );	
-    }
+    var aa=a.split(" "); var bb=b.split(" ");
+    if ( aa[0] === bb[0]){ return aa[1].localeCompare( bb[1] ); } else { return aa[0].localeCompare( bb[0] ); }
 }
 
+// ============================================================
+// CSV export — Summary / Asymmetry / Missing report tables
+// ============================================================
+// Table -> RFC 4180-ish CSV. Cells with the From/To link-stack expand
+// into two columns; cells carrying a `data-csv` attribute export that
+// raw value instead of their rendered text.
+function _csv_escape(s) {
+    if (s === null || s === undefined) return '';
+    s = String(s);
+    if (/[",\r\n]/.test(s)) {
+        s = '"' + s.replace(/"/g, '""') + '"';
+    }
+    return s;
+}
+
+function _table_to_csv(table) {
+    if (!table) return '';
+    var lines = [];
+    var rows = table.rows;
+    for (var r = 0; r < rows.length; r++) {
+        var cells = rows[r].cells;
+        var fields = [];
+        for (var c = 0; c < cells.length; c++) {
+            var cell = cells[c];
+            // Header & body cells with the linked-pair stack become two CSV cols
+            if (cell.classList && cell.classList.contains('summary-link-header')) {
+                fields.push(_csv_escape('From'));
+                fields.push(_csv_escape('To'));
+                continue;
+            }
+            if (cell.classList && cell.classList.contains('summary-link-cell')) {
+                var fromEl = cell.querySelector('.summary-from span, .summary-from');
+                var toEl   = cell.querySelector('.summary-to span,   .summary-to');
+                fields.push(_csv_escape(fromEl ? fromEl.textContent.trim() : ''));
+                fields.push(_csv_escape(toEl   ? toEl.textContent.trim()   : ''));
+                continue;
+            }
+            if (cell.dataset && cell.dataset.csv !== undefined) {
+                fields.push(_csv_escape(cell.dataset.csv));
+                continue;
+            }
+            var txt = cell.textContent || '';
+            txt = txt.replace(/\s+/g, ' ').trim();
+            fields.push(_csv_escape(txt));
+        }
+        lines.push(fields.join(','));
+    }
+    return lines.join('\r\n') + '\r\n';
+}
+
+function _csv_filename(prefix) {
+    var date = ($('#datepicker').val() || new Date().toISOString().slice(0, 10));
+    var d = new Date(date);
+    if (!isNaN(d.getTime())) {
+        date = d.getFullYear() + '-' +
+               String(d.getMonth() + 1).padStart(2, '0') + '-' +
+               String(d.getDate()).padStart(2, '0');
+    }
+    var net  = (parms && parms.net)      || 'unknown';
+    var ev   = (parms && parms.event)    || 'unknown';
+    var prop = (parms && parms.property) || '';
+    var bits = ['microdep', prefix, date, net, ev];
+    if (prop) bits.push(prop);
+    return bits.map(function (b) { return String(b).replace(/[^A-Za-z0-9._-]/g, '_'); }).join('-') + '.csv';
+}
+
+function _csv_download(filename, csv) {
+    // BOM helps Excel detect UTF-8 on Windows; harmless elsewhere.
+    var blob = new Blob(['﻿', csv], { type: 'text/csv;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }, 0);
+}
+
+// One delegated handler for every <button class="export-csv-btn">.
+$(document).on('click', '.export-csv-btn', function (e) {
+    e.preventDefault();
+    e.stopPropagation();
+    var btn = e.currentTarget;
+    var sel = btn.getAttribute('data-csv-table');
+    var name = btn.getAttribute('data-csv-name') || 'export';
+    var table = sel ? document.getElementById(sel) : null;
+    if (!table) {
+        var pane = btn.closest('.ui-tabs-panel, [role="tabpanel"], .tab-pane') || btn.parentNode;
+        table = pane ? pane.querySelector('table') : null;
+    }
+    if (!table) {
+        console.warn('export-csv: no table found (data-csv-table=' + sel + ')');
+        return;
+    }
+    _csv_download(_csv_filename(name), _table_to_csv(table));
+    btn.classList.add('exported');
+    setTimeout(function () { btn.classList.remove('exported'); }, 900);
+});
+
+// Reusable button markup; drops in next to a report <h2>.
+function _csv_button_html(tableId, namePrefix) {
+    return '<button type="button" class="export-csv-btn" ' +
+           'data-csv-table="' + tableId + '" ' +
+           'data-csv-name="' + namePrefix + '" ' +
+           'title="Download this table as CSV">' +
+             '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+               '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>' +
+               '<path d="M7 10l5 5 5-5"/>' +
+               '<path d="M12 15V3"/>' +
+             '</svg>' +
+             '<span class="export-csv-label">Export CSV</span>' +
+             '<span class="export-csv-done-label">Downloaded</span>' +
+           '</button>';
+}
 
 function check_asymmetry(report, div_id){
-    var ab=[], down=[], diff=[], pair=[], i;
-    var nok=0, nmiss=0, missing=[];
-    
-    for (i=0;i< summary.length;i++){
-	var entry=summary[i]._source;
-	var a=entry.from + " " + entry.to;
-	down[a]= entry[ parms.property ];
-	ab[a]=true;
-    }
+    var ab=[], down=[], diff=[], pair=[], i; var nok=0, nmiss=0, missing=[];
+    for (i=0;i< summary.length;i++){ var entry=summary[i]._source; var a=entry.from + " " + entry.to; down[a]= entry[ parms.property ]; ab[a]=true; }
     for (i=0;i<summary.length;i++){
-	var entry=summary[i]._source;
-	var a=entry.from + " " + entry.to;
-	var b=entry.to + " " + entry.from;
-	
-	if ( ! ( b in pair ) ){
-	    var delta=0;
-	    if ( typeof(down[b]) === "number" && typeof(down[a]) === "number" )
-		delta= down[b] - down[a];
-	    diff.push( {id: a, val: Math.abs( delta ) } );
-	}
-	pair[a] = b;
-	pair[b] = a;
-	
-	if (ab[b]){
-	    nok++;
-	} else {
-	    // console.log( "Missing link : " + b);
-	    missing.push(b);
-	    nmiss++;
-	}
+	var entry=summary[i]._source; var a=entry.from + " " + entry.to; var b=entry.to + " " + entry.from;
+	if ( ! ( b in pair ) ){ var delta=0; if ( typeof(down[b]) === "number" && typeof(down[a]) === "number" ) delta= down[b] - down[a]; diff.push( {id: a, val: Math.abs( delta ) } ); }
+	pair[a] = b; pair[b] = a;
+	if (ab[b]){ nok++; } else { missing.push(b); nmiss++; }
     }
-    
     let html='';
-    
     if ( report === 'missing' ){
 	if (nmiss > 0) {
-	    html+= '<h2>Missing opposite flows for ' +  title_state() + '</h2>';
+	    html+= '<div class="tab-header-row"><h2>Missing opposite flows for ' + title_state() + '</h2>' + _csv_button_html(div_id + '_miss_table', 'missing') + '</div>';
 	    html+='<p>The below ' + nmiss + ' (out of ' + summary.length + ") flows might be missing";
 	    html += '<table id=' + div_id + '_miss_table title="Missing opposite flows?" class=sortable>';
-//	    html+='<caption>Missing opposite end ' + title_state() + '</caption>';
-	    html += '<tr><th>From<th>To';
+	    html += '<thead><tr><th class="summary-link-header">' + fromIcon + 'From<br>' + toIcon + 'To</th></tr></thead>';
 	    missing.sort(sort_missing);
 	    for (i=0; i< missing.length; i++){
 		var ft=missing[i].split(" ");
-		html+='<tr><td>' +ft[0] + '<td>'+ ft[1];
+		html+='<tr><td class="summary-link-cell">';
+		html+='<div class="summary-from">' + fromIcon + '<span>' + ft[0] + '</span></div>';
+		html+='<div class="summary-to">' + toIcon + '<span>' + ft[1] + '</span></div>';
+		html+='</td>';
 	    }
 	    html+='</table>';
 	    html += "<p>The above analysis is based on " + prop_desc[event_sum_type[parms.event]][ parms.property ] + " data sets.</p>";
-	} else {
-	    html+= '<h2>No missing flows for ' +  title_state() + '</h2>';
-	}
+	} else { html+= '<h2>No missing flows for ' + title_state() + '</h2>'; }
     } else {
 	if (diff.length > 0) {
-	    html+='<h2>Asymmetry in ' + prop_desc[event_sum_type[parms.event]][parms.property] + ' for ' + title_state() + '</h2>';
-	    html += '<table id=' + div_id + '_table border=1 class=sortable ><thead title="Click to sort on column"><tr><th>From<th>To<th>From-To<th>To-From<th>Diff</thead>';
-	    
-	    diff.sort( function(a,b){
-		if ( typeof(a.val) === "number" && typeof(b.val) === "number" )
-		    return b.val - a.val;
-		return 0;
-	    });
+	    html+='<div class="tab-header-row"><h2>Asymmetry in ' + prop_desc[event_sum_type[parms.event]][parms.property] + ' for ' + title_state() + '</h2>' + _csv_button_html(div_id + '_table', 'asymmetry') + '</div>';
+	    html += '<table id=' + div_id + '_table border=1 class=sortable><thead title="Click to sort on column"><tr>';
+	    html += '<th class="summary-link-header">' + fromIcon + 'From<br>' + toIcon + 'To';
+	    html += '<th align=right>From→To<th align=right>To→From<th align=right>Diff</tr></thead>';
+	    diff.sort( function(a,b){ if ( typeof(a.val) === "number" && typeof(b.val) === "number" ) return b.val - a.val; return 0; });
 	    for (i=0; i< diff.length; i++){
-		let a = diff[i].id;
-		let ft=a.split(" ");
-		let aval= down[a] ? down[a].toFixed(1) : down[a];
-		let bval= down[pair[a]] ? down[pair[a]].toFixed(1) : down[pair[a]];
-		let diffval = diff[i].val  ? diff[i].val.toFixed(1) : 0 ;
-		html+='<tr><td>' +ft[0] + '<td>'+ ft[1] +
-		    '<td align=right>' + aval + '<td align=right>' + bval + '<td align=right>' + diffval;
-
+		let a = diff[i].id; let ft=a.split(" ");
+		let aval= down[a] ? down[a].toFixed(1) : down[a]; let bval= down[pair[a]] ? down[pair[a]].toFixed(1) : down[pair[a]];
+		let diffval = diff[i].val ? diff[i].val.toFixed(1) : 0 ;
+		html+='<tr><td class="summary-link-cell">';
+		html+='<div class="summary-from">' + fromIcon + '<span>' + ft[0] + '</span></div>';
+		html+='<div class="summary-to">' + toIcon + '<span>' + ft[1] + '</span></div>';
+		html+='</td>';
+		html+='<td align=right>' + aval + '<td align=right>' + bval + '<td align=right>' + diffval;
 	    }
 	    html+='</table>';
-	} else {
-	    html+= '<h2>No asymmetry found in ' + prop_desc[event_sum_type[parms.event]][parms.property] + ' for ' + title_state() + '</h2>';
-	}
+	} else { html+= '<h2>No asymmetry found in ' + prop_desc[event_sum_type[parms.event]][parms.property] + ' for ' + title_state() + '</h2>'; }
     }
     return(html);
-    // $("#missing").html(html);
-    // $("#missing").dialog("open");
-    // alert(html);
-
 }
 
+var fromIcon = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:4px;color:var(--c-accent)"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>';
+var toIcon = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:4px;color:var(--c-accent)"><path d="M5 12h14M12 5l7 7-7 7"/></svg>';
+
 function report_summary(div_id){
-    //let html='<input type="text" id="' + div_id + '_input" onkeyup="filter_table(\'' + div_id + '\')" placeholder="Search for names..">';
     let html='';
-    html+='<h2>Summary for ' + title_state() + '</h2>';
+    html+='<div class="tab-header-row"><h2>Summary for ' + title_state() + '</h2>' + _csv_button_html(div_id + '_table', 'summary') + '</div>';
     html+='<table border=1 id=' + div_id + '_table class=sortable>\n';
     var header_missing=true;
-    //var sel_prop= $("#prop_select").val();
-
     for (let i=0;i< summary.length;i++){
 	var entry=summary[i]._source;
-	var a=entry.from + " " + entry.to;
-
 	if (header_missing){
-	    // Compose table header row
-	    html += '<thead title="Click to sort"><th>From<th>To';
+	    html += '<thead title="Click to sort"><tr><th class="summary-link-header">' + fromIcon + 'From<br>' + toIcon + 'To';
 	    for ( const prop of prop_names[event_sum_type[parms.event]]){
-		html+='<th align=right title="' + prop_long_desc[event_sum_type[parms.event]][prop] + ' - Click to sort">' + prop_desc[event_sum_type[parms.event]][prop];
-		    + " (" + prop_aggr[event_sum_type[parms.event]][prop] + ")";
+		var desc = prop_desc[event_sum_type[parms.event]][prop] || prop;
+		var longDesc = prop_long_desc[event_sum_type[parms.event]][prop] || '';
+		html+='<th align=right title="' + longDesc + ' - Click to sort" class="summary-prop-header">' + desc;
 	    }
-	    html+='</thead><tbody>';
-	    header_missing=false;
+	    html+='</tr></thead><tbody>'; header_missing=false;
 	}
-	// Compose table rows
-	html+='<tr><td>' + entry['from'] + '<td>' + entry['to'];
+	html+='<tr><td class="summary-link-cell">';
+	html+='<div class="summary-from">' + fromIcon + '<span>' + entry['from'] + '</span></div>';
+	html+='<div class="summary-to">' + toIcon + '<span>' + entry['to'] + '</span></div>';
+	html+='</td>';
 	for ( const prop of prop_names[event_sum_type[parms.event]]){
 	    let val= entry[prop];
-	    if ( typeof val === 'number' && ! val.isInteger){
-		if ( val < 100 )
-		    val = val.toFixed(1);
-		else
-		    val = val.toFixed(0);
-	    }
+	    if ( typeof val === 'number' && ! val.isInteger){ if ( val < 100 ) val = val.toFixed(1); else val = val.toFixed(0); }
 	    html+='<td align=right>' + val;
 	}
     }
@@ -1680,604 +4030,253 @@ function report_summary(div_id){
     return(html);
 }
 
-
 function change_date(delta){
-    var p= $("#datepicker").datepicker("getDate"); // .getMilliseconds() + 86400*1000*delta;
-    //$("#datepicker").datepicker('setDate', $("#datepicker").datepicker("getDate").getDate() + delta );
-    var increment=$("#period").val(); // hours
-    var hour=0;
-    if (  increment === "now" || increment < 24 ){ // hour navigation
-	increment = 1;
-	var period_input=$("#period_input").val();
-	hour=parse_hhmm(period_input);
+    var p= $("#datepicker").datepicker("getDate");
+    var increment=$("#period").val(); var hour=0;
+    if ( increment === "now" || increment < 24 ){
+	increment = 1; var period_input=$("#period_input").val(); hour=parse_hhmm(period_input);
 	p.setHours(p.getHours() + hour + increment * delta);
-    } else {
-	var days = Math.round(increment / 24);
-	p.setDate( p.getDate() + days * delta );
-    }
-
-    $("#period_input").val(hhmm(p));
-    $("#datepicker").datepicker('setDate', p);
-    //$("#draw").click();
-    update_url();
-    show_network(parms.net); // ... calls get_topology()
-    // get_topology(); // ... calls get_connections()
-    // get_connections();
-    update_url();
- 
-    // var curd = $("#datepicker").datepicker('GetDate');
-    // $("#datepicker").datepicker('SetDate', curd+delta)
-    
+    } else { var days = Math.round(increment / 24); p.setDate( p.getDate() + days * delta ); }
+    $("#period_input").val(hhmm(p)); $("#datepicker").datepicker('setDate', p);
+    update_url(); show_network(parms.net); update_url();
 }
 
-
 function reg_ip_adr(name, adr){
-    if ( name && adr ){
-	if ( ! ip_to_name[adr] )
-		ip_to_name[adr] = name;
-	if ( ! name_to_ip[name] )
-		name_to_ip[name] = adr;
-    }	
+    if ( name && adr ){ if ( ! ip_to_name[adr] ) ip_to_name[adr] = name; if ( ! name_to_ip[name] ) name_to_ip[name] = adr; }
 }
 
 function harvest_ip_name(summary){
-    for (var link_obj of summary){
-	var link=link_obj._source;
-	reg_ip_adr( link.from, link.from_adr);
-	reg_ip_adr( link.to, link.to_adr);
-    }
+    for (var link_obj of summary){ var link=link_obj._source; reg_ip_adr( link.from, link.from_adr); reg_ip_adr( link.to, link.to_adr); }
 }
 
-/** NOT APPLIED IN perfSONAR Microdep
-function load_name_to_address(){
-    var network=$("#network").val();
-    if ( ! name_loaded[network] ){
-	
-	var config_url='microdep-config.cgi';
-	var url= config_url + "?secret=virre-virre-vapp&variant=mp-" + network + "&file=mp-address.txt";
-	$.get( url, function( lines ){ 
-	    for ( var line of lines.split(/\n/) ){
-		var l=line.split(/\s+/);
-		if ( ! name_to_ip[ l[0] ] )
-		    name_to_ip[ l[0] ] = l[1];
-	    }
-	    name_loaded[network]=true;
-	}).fail( function( jqxhr, textStatus, error ) {
-	    var err = textStatus + ", " + error;
-	    console.log( "Request" + url + " Failed: " + err );
-	});
-    }
+function log_summary(summary){ for (let i=0; i<summary.length; i++){ console.log( summary[i]._source.from + "-" + summary[i]._source.to ); } }
+function present_table( parameters, div, data){}
 
-}
-**/
-
-// log query data for debug
-
-function log_summary(summary){
-
-    for (let i=0; i<summary.length; i++){
-	console.log(  summary[i]._source.from + "-" + summary[i]._source.to );
-    }
-}
-
-
-// fill html table with parameters
-
-function present_table( parameters, div, data){
-}
-
-
-// get peer data
 function get_peer_data(from, to, div){
     var data=[];
-    // adjust time from UTC to experiment timezone
-    let tz_start = adjust_to_timezone(start);
-    let tz_end = adjust_to_timezone(end);
-
-    var url="elastic-get-date-type.pl?net=" + parms.net + "&index=" + event_index[parms.event] + "&event_type=" + parms.event
-	+ "&start=" + tz_start + "&end=" + tz_end
-	+ "&from=" + from + "&to=" + to;
-    if (net_ip_version[parms.net]) {
-	// Add filtering on ip version
-	url += "&ip_version=" + net_ip_version[parms.net];
-    }
-    
-    $.getJSON( url,
-               function(resp){
-                   if (resp.hits && resp.hits.total.value > 0){
-                       // present_table( parameters, div, resp.hits.hits);
-                       let html=gap_list( from, to, resp.hits.hits, 10, 'num_desc');
-                       div.innerHTML = html;
-                       div['hits'+parms.event] =  resp.hits.hits;
-                       sorttable.makeSortable( div.getElementsByClassName('sortable')[0] );
-                       mymap._popup.update();
-                   } else {
-                       $("#error").html(hhmmss(new Date()) + " : No " + parms.event + " data for " + $("#datepicker").val() + " " + $("#period_input").val() + ";;");
-                   }
-
-	       })
-	.fail( function(e, textStatus, error ) {
-            //remove_links(links);
-            console.log("failed to get data from server :" + textStatus + ", " + error);
-        });
+    let tz_start = adjust_to_timezone(start); let tz_end = adjust_to_timezone(end);
+    var url="elastic-get-date-type.pl?net=" + parms.net + "&index=" + event_index[parms.event] + "&event_type=" + parms.event + "&start=" + tz_start + "&end=" + tz_end + "&from=" + from + "&to=" + to;
+    if (net_ip_version[parms.net]) { url += "&ip_version=" + net_ip_version[parms.net]; }
+    $.getJSON( url, function(resp){
+	if (jQuery.isEmptyObject(resp.hits)) {
+	    console.log("Warning: Failed to fetch data from archive. Check archive url inn mapconfig.yml.");
+	    if (!jQuery.isEmptyObject(resp.error)) { console.log("        (\"" + resp.error.msg  + "\")");}
+	    // No topology data returned. Try sqlite-db instead.
+	    get_topology("sqlite-db");
+	    return;
+	}
+        if (resp.hits && resp.hits.total.value > 0){
+            let html=gap_list( from, to, resp.hits.hits, 10, 'num_desc');
+            div.innerHTML = html; div['hits'+parms.event] = resp.hits.hits;
+            sorttable.makeSortable( div.getElementsByClassName('sortable')[0] );
+            // panel auto-updates, no need for popup update
+        } else { $("#error").html(hhmmss(new Date()) + " : No " + parms.event + " data for " + $("#datepicker").val() + " " + $("#period_input").val() + ";;"); }
+    }).fail( function(e, textStatus, error ) { console.log("failed to get data from server :" + textStatus + ", " + error); });
 }
 
-// get measurement data
-  var links_on = false;
-  const index_extension={};
+var links_on = false;
+const index_extension={};
 
+// Expose get_connections on window so inline handlers in index.html
+// (auto-refresh, "Refresh now" on the stale-data banner) can call it —
+// ES module top-level declarations don't leak to the global object.
+window.get_connections = function () { return get_connections.apply(this, arguments); };
 function get_connections(){
-    //links=[];
-    var index=parms.net;
-//    var etype= $("#event_type").val();
-    var etype= parms.event;
-    var sum_etype="";
-    var sum_index="";
-    if ( ! jQuery.isEmptyObject(event_index)) {
-	// Apply ES indexnames from config file
-	index = event_index[parms.event];
-//	if ( parms.event === 'jitter')
-//	    sum_etype = event_index['gap']; // i.e. 
-//	else
-	sum_etype = event_sum_type[parms.event];
-//    } else if ( etype === "gap" || etype === "gapsum" ) {
-//	sum_etype = "gapsum";
-//    } else if ( etype === "routeerr" || etype === "routesum" ) {
-//	index = index + "_" + "routemon";
-//	sum_etype = "routesum";
-    } else {
-	index = index + "_" + etype;
-	console.log("Warning: No index specified. Missing config file? Applying '", + index + "'");
-    }
-    
-    var hour=0;
-    var period=$("#period").val();
-    var now=new Date();
-
-    if ( refresh_active){
-	$("#datepicker").datepicker('setDate', now);
-	if ( period < 24 ){
-	    var startd= new Date(now - 3600*1000);
-	    $("#period_input").val( hhmm(startd ) );
-	}
-    }
-    start = $("#datepicker").val();
-    var dstart=new Date(start);
-    var msstart=dstart.getTime();
-    var tz= dstart.getTimezoneOffset() / 60;
+    var index=parms.net; var etype= parms.event; var sum_etype=""; var sum_index="";
+    if ( ! jQuery.isEmptyObject(event_index)) { index = event_index[parms.event]; sum_etype = event_sum_type[parms.event]; }
+    else { index = index + "_" + etype; console.log("Warning: No index specified. Missing config file? Applying '", + index + "'"); }
+    var hour=0; var period=$("#period").val(); var now=new Date();
+    if ( refresh_active){ $("#datepicker").datepicker('setDate', now); if ( period < 24 ){ var startd= new Date(now - 3600*1000); $("#period_input").val( hhmm(startd ) ); } }
+    start = $("#datepicker").val(); var dstart=new Date(start); var msstart=dstart.getTime(); var tz= dstart.getTimezoneOffset() / 60;
     let tloss;
     if ( period < 24 ){
-	var period_input= $("#period_input").val();
-	hour=parse_hhmm( period_input ) + tz;
-	period=1;
-	dstart= new Date( msstart + hour * 3600*1000 );
-	start = dstart.toISOString();
-	end = new Date(dstart.getTime() + 3600*1000).toISOString();
-	tloss=0;
+	var period_input= $("#period_input").val(); hour=parse_hhmm( period_input ) + tz; period=1;
+	dstart= new Date( msstart + hour * 3600*1000 ); start = dstart.toISOString(); end = new Date(dstart.getTime() + 3600*1000).toISOString(); tloss=0;
     } else {
-	var msperiod=period * 3600*1000;
-	var msend= msstart + msperiod;
-	if ( (msend - now) > (msperiod/2) ){
-	    if ( period > 24 ){
-		dstart=new Date(msstart);
-		var cd = dstart.getDate() - dstart.getDay();
-		var sow = new Date(dstart.setDate(cd + 1));
-		msstart=sow.getTime();
-		$("#datepicker").datepicker('setDate', new Date(msstart));
-	    } 
-	}
-	
-	if ( etype === "gapsum" )
-	    msend += 5 * 60 * 1000; // add 5 min to get yesterdays summary records past midnight
-	
-	start= new Date(msstart).toISOString();	
-	end= new Date(msend).toISOString();
-
-	if ( period < 2*24 ){ // uke
-	    tloss=1000; // ms
-	} else if ( period <= 7*24 ){ // uke
-	    tloss=5000; // ms
-	} else {
-	    tloss=60000;
-	}
-    }	  
-    
-    // Clear current dataset (details and summary)
-    last_hits=[];
-    summary=[];
-
-    var now = new Date();
-    
-//    if ( etype === 'jitter' || start.substr(0,10) === now.toISOString().substr(0,10) ){ // read todays details
+	var msperiod=period * 3600*1000; var msend= msstart + msperiod;
+	if ( (msend - now) > (msperiod/2) ){ if ( period > 24 ){ dstart=new Date(msstart); var cd = dstart.getDate() - dstart.getDay(); var sow = new Date(dstart.setDate(cd + 1)); msstart=sow.getTime(); $("#datepicker").datepicker('setDate', new Date(msstart)); } }
+	if ( etype === "gapsum" ) msend += 5 * 60 * 1000;
+	start= new Date(msstart).toISOString(); end= new Date(msend).toISOString();
+	if ( period < 2*24 ){ tloss=1000; } else if ( period <= 7*24 ){ tloss=5000; } else { tloss=60000; }
+    }
+    // Publish the viewed window's end so the inline stale-data banner can tell
+    // live from historic views: a window ending in the past is historic, so the
+    // "data is N old / refresh now" nag is suppressed there (issue #95).
+    window._microdep_view_end = end;
+    last_hits=[]; summary=[]; var now = new Date();
     if ( ! sum_etype || typeof sum_etype == 'undefined' || start.substr(0,10) === now.toISOString().substr(0,10) || period < 24){
-	// No summary events are available and/or it's todays date and/or time scale on hourly basis is set. Fetch and summarize "normal" event details.
 	var url="elastic-get-date-type.pl?net=" + parms.net + "&index=" + index + "&event_type=" + etype + "&start=" + start + "&end=" + end ;
-	if (net_ip_version[parms.net]) {
-	    // Add filtering on ip version
-	    url += "&ip_version=" + net_ip_version[parms.net];
-	}
-	if ( tloss > 0 && etype === "gap" )
-	    url += "&tloss=" + tloss;
-
+	if (net_ip_version[parms.net]) { url += "&ip_version=" + net_ip_version[parms.net]; }
+	if ( tloss > 0 && etype === "gap" ) url += "&tloss=" + tloss;
 	if (parms.debug) console.log(url);
+	$.getJSON( url, function(resp){
+	    if (jQuery.isEmptyObject(resp.hits)) {
+		console.log("Warning: Failed to fetch data from archive. Check archive url in mapconfig.yml.");
+		if (!jQuery.isEmptyObject(resp.error)) { console.log("        (\"" + resp.error.msg  + "\")"); }
+		// No topology data returned. Try sqlite-db instead.
+		get_topology("sqlite-db"); return;
+	    }
+	    if (resp.hits && resp.hits.total.value > 0){
+		var nrecs=resp.hits.total.value.toString();
+		if ( etype === "gapsum" || etype === "routesum" ){ summary=resp.hits.hits; }
+		else if ( resp.aggregations){ aggregates=resp.aggregations; summary=digest_aggregates(aggregates, $("#stats_type").val()); nrecs = count_aggregates( aggregates ); }
+		else { if (! sum_etype || start.substr(0,10) === now.toISOString().substr(0,10)) { summary=digest_es_data(etype, resp.hits.hits); } last_hits=resp.hits.hits; }
+		harvest_ip_name(summary);
+		var msg = hhmmss(new Date()) + " Found " + nrecs + " " + etype + " records for " + $("#datepicker").val() + " " + $("#period_input").val() + " ;;";
+		$("#status").html( msg );
+		if (! jQuery.isEmptyObject(conffile) && conffile[parms.net].event_type[parms.event].asn_source ) {
+		    for (const h in last_hits) { var ab = last_hits[h]._source.from + ',' + last_hits[h]._source.to; if (linkByName[ab] && last_hits[h]._source.routechange_asn ) { linkByName[ab].asn_search += last_hits[h]._source[conffile[parms.net].event_type[parms.event].asn_source] + " "; } }
+		}
+		_paint_with_compare(summary, etype, $("#prop_select").val(), start, end);
+	    } else { taint_links([], "empty"); $("#error").html(hhmmss(new Date()) + " : No " + $("#event_type").val() + " data for " + $("#datepicker").val() + " " + $("#period_input").val() + ";;"); }
+	}).fail( function(e, textStatus, error ) { console.log("### Failed to get data from server :" + textStatus + ", " + error + " url: " + url); });
+    } else if ( sum_etype) {
 
-	$.getJSON( url,
-		   function(resp){
-		       if (resp.hits && resp.hits.total.value > 0){
-			   var nrecs=resp.hits.total.value.toString();
-			   
-			   if ( etype === "gapsum" || etype === "routesum" ){
-			       console.log("Warning: Unexpected summary events found (in legacy code). Using anyway.")
-			       summary=resp.hits.hits;
-			   } else if ( resp.aggregations){
-			       aggregates=resp.aggregations;
-			       summary=digest_aggregates(aggregates, $("#stats_type").val());
-			       nrecs = count_aggregates( aggregates );
-			   } else { // gap records
-			       if (! sum_etype || start.substr(0,10) === now.toISOString().substr(0,10)) {
-				   // No event type for summaries given or it's today's date
-				   summary=digest_es_data(etype, resp.hits.hits);
-			       }
-			       last_hits=resp.hits.hits;
-			   }
-			   harvest_ip_name(summary);
-			   
-			   var msg = hhmmss(new Date()) + " Found " + nrecs + " " + etype + " records for " + $("#datepicker").val() + " " + $("#period_input").val()  + " ;;";
-			   $("#status").html( msg );
-
-			   if (! jQuery.isEmptyObject(conffile) && conffile[parms.net].event_type[parms.event].asn_source ) {
-			       // Extract and add relevant as-numbers to each connection
-			       for (const h in last_hits) {
-				   var ab = last_hits[h]._source.from + ',' + last_hits[h]._source.to;
-				   if (linkByName[ab] && last_hits[h]._source.routechange_asn ) {
-				       linkByName[ab].asn_search += last_hits[h]._source[conffile[parms.net].event_type[parms.event].asn_source] + " ";
-				   }
-			       }
-			   }
-			   // Refresh all links 
-			   if ( ! parms.connections)
-			       taint_links(summary, $("#prop_select").val() );
-			   else
-			       draw_links(summary, $("#prop_select").val() );
-		       } else {
-			   taint_links([], "empty");
-			   $("#error").html(hhmmss(new Date()) + " : No " + $("#event_type").val() + " data for " + $("#datepicker").val() + " " + $("#period_input").val() + ";;");
-		       }
-
-
-		   })
-	    .fail( function(e, textStatus, error ) {
-		//remove_links(links);
-		console.log("### Failed to get data from server :" + textStatus + ", " + error + " url: " + url);
-	    });
-
-    } else if ( sum_etype) { // get the summary records
-	// if ( sum_etype && start.substr(0,10) != now.toISOString().substr(0,10)) {
-	// Event type for summary info is set and it's not todays date...
-
-	// BEGIN: LEGACY CODE
-	if ( etype === 'jitter'){
-	    console.log("Warning: jitter data do no have sum records. This should not happen.");	    
-	    index = parms.net; // conffile in error
-	    sum_etype = 'gapsum';
-	}
-	// END: LEGACY CODE
+	//if ( etype === 'jitter'){ console.log("Warning: jitter data do no have sum records."); index = parms.net; sum_etype = 'gapsum'; }   THIS IS MANAGE IN mapconfig.yml
 	
-	// Prepare to fetch summary info
 	var sum_url="elastic-get-date-type.pl?net=" + parms.net + "&index=" + index + "&event_type=" + sum_etype + "&start=" + start + "&end=" + end;
-	if (net_ip_version[parms.net]) {
-	    // Add filtering on ip version
-	    sum_url += "&ip_version=" + net_ip_version[parms.net];
-	}
-
+	if (net_ip_version[parms.net]) { sum_url += "&ip_version=" + net_ip_version[parms.net]; }
 	if (parms.debug) console.log(sum_url);
-
-	$.getJSON( sum_url,
-		   function(resp){
-		       if (resp.hits && resp.hits.total.value > 0){
-			   var nrecs=resp.hits.total.value.toString();
-			   summary=resp.hits.hits;
-			   harvest_ip_name(summary);
-			   
-			   var msg = hhmmss(new Date()) + " Got " + nrecs + " " + sum_etype + " records for "  + $("#datepicker").val() + " " + $("#period_input").val()  + " ;;";
-			   $("#status").html( msg );
-			   
-			   // Refresh all links  
-			   if ( ! parms.connections)
-			       taint_links(summary, $("#prop_select").val() );
-			   else
-			       draw_links(summary, $("#prop_select").val() );
-		       } else {
-			   taint_links([], "empty");
-			   $("#error").html(hhmmss(new Date()) + " : No " + sum_etype + " data for " + $("#datepicker").val() + " " + $("#period_input").val() + ";;");
-		       }
-		       
-		   })
-	    .fail( function(e, textStatus, error ) {
-		//remove_links(links);
-		console.log("failed to get data from server :" + textStatus + ", " + error);
-	    });
+	$.getJSON( sum_url, function(resp){
+	    if (resp.hits && resp.hits.total.value > 0){
+		var nrecs=resp.hits.total.value.toString(); summary=resp.hits.hits; harvest_ip_name(summary);
+		var msg = hhmmss(new Date()) + " Got " + nrecs + " " + sum_etype + " records for " + $("#datepicker").val() + " " + $("#period_input").val() + " ;;";
+		$("#status").html( msg );
+		_paint_with_compare(summary, etype, $("#prop_select").val(), start, end);
+	    } else { taint_links([], "empty"); $("#error").html(hhmmss(new Date()) + " : No " + sum_etype + " data for " + $("#datepicker").val() + " " + $("#period_input").val() + ";;"); }
+	}).fail( function(e, textStatus, error ) { console.log("failed to get data from server :" + textStatus + ", " + error); });
     }
-    
-    if (parms.report) {
-	// Prepare specified report (next to the map)
-	$("#check").val(parms.report).trigger('change');
-	delete parms.report;  // ... but only first time when page is loaded
-    }
-
+    if (parms.report) { $("#check").val(parms.report).trigger('change'); delete parms.report; }
     $("#tabs").tabs("option", "active", 0);
-
 };
 
-function pad(d){
-    return ("0"+d).slice(-2) ;
-}
-function hhmmss(d){
-    return( pad( d.getHours() ) + ":" + pad( d.getMinutes()) + ":" + pad( d.getSeconds() ) );
-}
+function pad(d){ return ("0"+d).slice(-2) ; }
+function hhmmss(d){ return( pad( d.getHours() ) + ":" + pad( d.getMinutes()) + ":" + pad( d.getSeconds() ) ); }
 
-/*
 function title_state(){
-    let state = $("#network").val() + ', ' + conffile[parms.net].event_type[$("#event_type").val()].title
-	+ ' from ' + $("#datepicker").val() + ' for ' + $("#period").val() + ' hours';
+    let state = event_desc[parms.event] + ' in ' + net_desc[parms.net] + ' from ' + $("#datepicker").val() + ' for ' + $("#period").val() + ' hours';
     return state;
 }
-*/
 
-function title_state(){
-      let state =  event_desc[parms.event] + ' in ' + net_desc[parms.net]  
-	  + ' from ' + $("#datepicker").val() + ' for ' + $("#period").val() + ' hours';
-      return state;
-  }
+function init_map(){
+    if ( parms.net){ $("#network").val(parms.net); } else { parms.net = $("#network").val(); }
+    update_props();
+    // Colour-blind-safe palette (#5): persisted across sessions in localStorage.
+    var _cbfOn = false;
+    try { _cbfOn = localStorage.getItem('microdep-cbf') === '1'; } catch (_) {}
+    make_palette( _cbfOn ? 'cbf' : parms.palette );
+    $('#cbf_checkbox').prop('checked', _cbfOn);
+    var busy_no=0;
+    $.ajaxSetup({ beforeSend:function(){ $("#busy").show(); busy_no++; }, complete:function(){ busy_no--; if ( busy_no <= 0) $("#busy").hide(); } });
+    $("#busy").height( $("#network").height() );
+    $("#tabs").tabs();
+    $( "#datepicker" ).datepicker({dateFormat: "yy-mm-dd", "defaultDate": -1, "firstDay": 1, "maxDate": 0 });
+    var dato; if ( parms.date) dato=parms.date; else dato="-1d";
+    $("#datepicker").datepicker('setDate', dato).on("change", function() {
+	$("#next").prop('dsabled', selected_hour_is_future() ); update_url(); show_network(parms.net);
+    });
+    $("#period").change( function(){ parms.period = $("#period").val(); update_props(); update_url(); get_topology(); $("#period_input").val('00:00'); });
+    $("#period_input").change( function(){ parms.period_input = $("#period").val(); $("#period").val(1); parms.period = $("#period").val(); update_url(); get_topology(); });
+    $("#prev").click( function(){ change_date(-1); $("#next").prop('disabled', selected_hour_is_future() ); } );
+    $("#next").click( function(){ change_date(+1); $("#next").prop('disabled', selected_hour_is_future() ); } );
+    $("#live").click( function(){
+	if ( refresh_active){ clearInterval(); refresh_active=false; $(this).css("background-color", active_color); }
+	else { refresh_active=true; $("#datepicker").datepicker('setDate', new Date()); get_topology(); active_color=$(this).css("background-color"); $(this).css("background-color", refresh_color); setInterval( function(){ get_topology(); }, refresh_period ); }
+    } );
+    $("#search_input").keyup( function(){ var str = $("#search_input").val(); focus_links( str, 'flip' ); } );
+    $("#network").change( async function(){ parms.net= $("#network").val(); update_props(); remove_links(links); show_network(parms.net); update_url(); $("#tabs").tabs("option", "active", 0); });
+    $("#event_type").change( function(){ parms.event = $("#event_type").val(); update_props(); load_coords_from_all_sources(network); update_url(); $("#tabs").tabs("option", "active", 0); });
+    $("#prop_select").change( function(){ parms.property = $("#prop_select").val(); baselineCompareKey=''; _paint_with_compare(summary, parms.event, $("#prop_select").val(), start, end); update_url(); $("#tabs").tabs("option", "active", 0); });
+    // Snapshot compare dropdown — flips threshold vs diff-vs-baseline palette.
+    $("#compare_select").change( function(){ parms.compare = $("#compare_select").val(); baselineCompareKey=''; _paint_with_compare(summary, parms.event, $("#prop_select").val(), start, end); update_url(); });
+    // Real-locations toggle (#TIER1): replace straight links with hop-by-hop
+    // geo-paths (enable/disable_real_locations live in the REAL LOCATIONS block).
+    $("#reallocs_checkbox").change( function(){
+        if (this.checked) enable_real_locations();
+        else              disable_real_locations();
+    });
+    // Colour-blind-safe palette toggle (#5): swap colors[] via make_palette
+    // then repaint the current summary (respecting compare mode) so links +
+    // legend reflect the new palette immediately. Ported from work-snapshot.
+    $("#cbf_checkbox").change( function(){
+        var on = this.checked;
+        try { localStorage.setItem('microdep-cbf', on ? '1' : '0'); } catch (_) {}
+        make_palette(on ? 'cbf' : (parms.palette || ''));
+        _paint_with_compare(summary, parms.event, $("#prop_select").val(), start, end);
+        update_url();
+    });
+    fill_select( "stats_type", stats_types );
+    $("#stats_type").change( function(){ summary=digest_aggregates(aggregates, $("#stats_type").val()); _paint_with_compare(summary, parms.event, $("#prop_select").val(), start, end); update_url(); $("#tabs").tabs("option", "active", 0); });
+    if ( parms.node){ focus_node=parms.node; get_topology(); links_on=true; }
+    $("#check").change( function(){
+	var report_type = $("#check").val(); var title = $("#check").find(":selected").text();
+	let num_tabs = $("main#tabs > ul > li").length ; let tab_id = 'tab' + num_tabs;
+	switch(report_type ){
+	case 'missing': add_tab( 'div', title, num_tabs, check_asymmetry(report_type, tab_id) ); break;
+	case 'asymmetry': add_tab( 'div', title, num_tabs, check_asymmetry(report_type, tab_id) ); break;
+	case 'summary': add_tab( 'div', title, num_tabs, report_summary(tab_id) ); break;
+	case 'routes': {
+	    // Traceroute browser for the whole topology: launched without a peer
+	    // pair, so ls_tab opens on its Peers list for the selected period
+	    // (issue #124). Same archive/options as the link popup's Routes button.
+	    add_tab( 'div', title, num_tabs,
+		     '<div class="center-text" style="padding:40px"><div class="spinner"></div><p>Loading traceroute peers\u2026</p></div>' );
+	    var routes_start = new Date($("#datepicker").val()).getTime() / 1000;
+	    var routes_end   = routes_start + parms.period * 3600;
+	    var menuRoutesOpts = {
+		net: parms.net,
+		mahost: 'https://localhost:9200/',
+		verify_SSL: 0,
+		api: 'opensearch',
+		ip_version: net_ip_version[parms.net]
+	    };
+	    if (! jQuery.isEmptyObject(conffile[parms.net].archive) ) {
+		menuRoutesOpts.mahost = conffile[parms.net].archive;
+	    }
+	    ls_tab( tab_id, '', '', routes_start, routes_end, menuRoutesOpts );
+	    break;
+	}
+	case 'heatmap':
+	    let template_url='curve-chart.html?net=' + parms.net + '&index=' + event_index[parms.event] + '&from={0}&to={1}&event=' + parms.event + '&property=h_ddelay&start=' + start + '&end=' + end + "&title=\"From {2} to {3}\"";
+	    add_tab( 'div', title, num_tabs, 'This will be graph soon'); heatmap(tab_id, summary, $("#prop_select").val(), get_color, threshes, title_state(), template_url, open_heatmap_cell ); break;
+	case 'curve': {
+	    // Chart.js scatter of the current property across all measurements over
+	    // time (chart_curve — the legacy graph.js curve() was D3 + never imported).
+	    var curve_canvas = 'curve-canvas-' + num_tabs;
+	    add_tab( 'div', title, num_tabs, '<canvas id="' + curve_canvas + '" class="report-canvas"></canvas>');
+	    chart_curve( curve_canvas, last_hits, $("#prop_select").val(), title_state() );
+	    break;
+	}
+	}
+	if (report_type !== 'choose') {
+	    persistTab(tab_id, { kind: 'check', report_type: report_type, title: title });
+	}
+	// add_tab() focuses the new tab itself; the old activate-by-num_tabs here
+	// counted the non-tab <li> items too and selected a non-existent index,
+	// which left the map active (issue #117).
+	$("#check").val('choose');
+    });
+    // (Right-click coordinate alert intentionally removed — it was a leftover
+    // debug helper. Do not re-add: it pops an alert(lat,lng) on every
+    // right-click over the map.)
+    $( "#missing" ).dialog({ autoOpen: false, minWidth: 800 });
+    $("#clearAllTabsBtn").click(function () { clear_all_tabs(); });
+    $("#mapid").on('click', "a.trigger", function(e){ var node=e.target.id; focus_links( node, 'flip' ) });
+    if (parms.compare) { $("#compare_select").val(parms.compare); }
+    $("#network").trigger("change");
 
-  function init_map(){
-      if ( parms.net){
-	  $("#network").val(parms.net);
-      } else {
-	  parms.net =  $("#network").val();
-      }
-      // Update properties according to selected measurement network variant
-      update_props();	
+    // Whenever the user switches tabs, remember the active one so we can
+    // restore it after a page reload. (Skipped while restoring, since we'd
+    // otherwise overwrite the saved value with the temporarily-active
+    // last-restored tab.)
+    $('main#tabs').on('tabsactivate', function () {
+        if (!restoringTabs) saveActiveTab();
+    });
 
-      make_palette( parms.palette);
+    // After the initial network/topology load settles, replay any persisted
+    // tabs from the previous session. 1.5s is enough for the AJAX chain
+    // triggered by the network change above (config + topology + summary).
+    setTimeout(restoreSavedTabs, 1500);
+}
 
-      var busy_no=0;	
-      $.ajaxSetup({
-	  beforeSend:function(){
-              // show image here
-              $("#busy").show();
-	      busy_no++;
-	  },
-	  complete:function(){
-              // hide image here
-	      busy_no--;
-              if ( busy_no <= 0)
-		  $("#busy").hide();
-	  }
-      });
-      $("#busy").height( $("#network").height() );
-
-      $("#tabs").tabs();
-      
-      // draw inital network
-      /* just just use trigger
-       show_network(parms.net);
-       get_connections();
-       links_on=true;
-      */
-
-      // establish date picker
-      $( "#datepicker" ).datepicker({dateFormat: "yy-mm-dd", "defaultDate": -1, "firstDay": 1, "maxDate": 0 });
-
-      var dato;
-      if ( parms.date)
-	  dato=parms.date;
-      else
-	  dato="-1d";
-      $("#datepicker").datepicker('setDate', dato)
-	  .on("change", function() {
-	      $("#next").prop('dsabled', selected_hour_is_future() ); // Make next-button available if relevant
-	      //ok update_props();
-	      update_url();
-	      show_network(parms.net); //... calls get_topology()
-	      //get_topology();  // ... calls get_connections()
-	      //get_connections();
-	  });
-
-      //$("#period").select2();	
-      $("#period").change( function(){
-	  parms.period = $("#period").val();
-	  update_props();
-	  update_url();
-	  get_topology(); // ... calls get_connections()
-	  //get_connections();
-	  $("#period_input").val('00:00');
-      });
-      
-      $("#period_input").change( function(){
-	  parms.period_input = $("#period").val();
-	  $("#period").val(1); // hour
-	  parms.period = $("#period").val();
-	  update_url();
-	  get_topology(); // ... calls get_connections()
-	  //get_connections();
-      });
-
-      /* does not work 
-       $("#period_input").on('mousewheel', function(e, delta){
-       console.log( "delta " + delta);
-       });
-      */
-      //$("#period_input").hide();
-      
-      // buttons to navigate days
-      $("#prev").click( function(){
-	  change_date(-1);
-	  //ok update_props();
-	  $("#next").prop('disabled', selected_hour_is_future() ); // Enable next-button if relevant
-      } );
-      $("#next").click( function(){
-	  change_date(+1);
-	  //ok update_props();
-	  $("#next").prop('disabled', selected_hour_is_future() ); // Disable next-button if relevant
-      } );
-      
-      $("#live").click( function(){
-	  if ( refresh_active){
-	      clearInterval();
-	      refresh_active=false;
-	      $(this).css("background-color", active_color);
-	  } else {
-	      refresh_active=true;
-	      $("#datepicker").datepicker('setDate', new Date());
-	      get_topology(); // .. calls  get_connections();
-	      //get_connections();
-	      
-	      active_color=$(this).css("background-color");
-	      $(this).css("background-color", refresh_color);
-	      
-	      setInterval( function(){
-		  get_topology(); // .. calls  get_connections();
-		  //get_connections();
-	      }, refresh_period );
-	  }
-      } );
-      $("#search_input").keyup( function(){
-	  var str =  $("#search_input").val();
-	  focus_links( str, 'flip' );
-      } );
-
-      // mechanism to flip network drawing
-//      $("#draw").click(  function () {
-//	  if ( links_on ){
-//	      remove_links(links);
-//	      links_on=false;
-//	  } else {
-//	      links_on=true;
-//	      focus_node="";
-//	      make_prop_select("prop_select", prop_names[event_sum_type[parms.event]], prop_desc[event_sum_type[parms.event]], prop_long_desc[event_sum_type[parms.event]]);
-//	      get_connections();
-//	      // document.location.href =
-//	      removeParam( 'node');
-//	  }
-//      });
-
-      // network change
-      $("#network").change( async function(){
-	  parms.net= $("#network").val();
-	  update_props();
-	  remove_links(links);
-	  // load_name_to_address();
-	  show_network(parms.net); // ... calls get_topology()
-	  // await new Promise(r => setTimeout(r, 5000)); // Sleep 5 sec for loading of node-data to complete. WARNING! THIS DESPERATELY NEEDS REDESIGN.
-	  //get_topology();
-	  update_url();
-	  $("#tabs").tabs("option", "active", 0);
-      });
-      
-      // event_type parameter change
-      $("#event_type").change( function(){
-	  parms.event = $("#event_type").val()    
-	  update_props();
-	  //remove_links();
-	  load_coords_from_all_sources(network); // ... calls get_topology() which again call get_connetions()
-	  //get_topology();           // ... calls get_connetions()
-	  //get_connections();
-	  update_url();
-	  $("#tabs").tabs("option", "active", 0);
-      });
-
-      // select parameter change
-      $("#prop_select").change( function(){
-	  parms.property = $("#prop_select").val();
-	  // remove_links(links);
-	  // links=[];
-	  //draw_links(summary, $("#prop_select").val() );
-
-	  taint_links(summary, $("#prop_select").val() );
-	  update_url();
-	  $("#tabs").tabs("option", "active", 0);
-      });
-
-      // select parameter change
-      fill_select( "stats_type", stats_types );
-      $("#stats_type").change( function(){
-	  summary=digest_aggregates(aggregates, $("#stats_type").val());
-	  taint_links(summary, $("#prop_select").val() );
-	  update_url();
-	  $("#tabs").tabs("option", "active", 0);
-      });
-      
-
-      // draw network at startup if focus on node    
-      if ( parms.node){
-	  focus_node=parms.node;
-	  get_topology(); // .. calls  get_connections();
-	  //get_connections();
-	  // draw_links(summary, $("#prop_select").val() );
-	  links_on=true;
-      }
-
-      //$("#check").click( function(){check_asymmetry()} );
-      $("#check").change( function(){
-	  var report_type = $("#check").val();
-	  var title = $("#check").find(":selected").text();
-	  let num_tabs = $("main#tabs ul li").length ;
-	  let tab_id = 'tab' + num_tabs;
-	  switch(report_type ){
-	  case 'missing':
-	      add_tab( 'div', title, num_tabs, check_asymmetry(report_type, tab_id) );
-	      break;
-	  case 'asymmetry':
-	      add_tab( 'div', title, num_tabs, check_asymmetry(report_type, tab_id) );
-	      break;
-	  case 'summary':
-	      add_tab( 'div', title, num_tabs, report_summary(tab_id) );
-	      break;
-	  case 'heatmap':
-	      let template_url='curve-chart.html?net=' + parms.net + '&index=' + event_index[parms.event] + '&from={0}&to={1}&event=' + parms.event + '&property=h_ddelay&start=' + start + '&end=' + end + "&title=\"From {2} to {3}\"";
-	      add_tab( 'div', title, num_tabs, 'This will be graph soon');
-	      heatmap(tab_id, summary, $("#prop_select").val(), get_color, threshes, title_state(), template_url );
-	      break;
-	  case 'curve':
-	      add_tab( 'div', title, num_tabs, 'This will be graph soon');
-	      curve(tab_id, last_hits, $("#prop_select").val(), title_state() );
-	      break;
-	  }
-	  $("#check").val('choose');
-    	  $("#tabs").tabs("option", "active", num_tabs);
-
-      });
-
-      // read coordinates
-      document.getElementById("mapid").addEventListener("contextmenu", function (event) {
-	  // Prevent the browser's context menu from appearing
-	  event.preventDefault();
-	  
-	  // Add marker
-	  // L.marker([lat, lng], ....).addTo(map);
-	  alert(lat.toFixed(5) + ', ' + lng.toFixed(5));
-	  
-	  return false; // To disable default popup.
-      }); 
-
-      $( "#missing" ).dialog({ autoOpen: false,  minWidth: 800 });
-
-      // catch focus on
-      $("#mapid").on('click', "a.trigger", function(e){
-	  var node=e.target.id;
-	  focus_links( node, 'flip' )
-      });
-      
-
-      $("#network").trigger("change");  // draw the map
-  }
-  
-$(document).ready ( function(){
-
-    get_parms( );
-
-    get_config( parms.conffile, init_map );
-
-
-});
+$(document).ready ( function(){ get_parms( ); get_config( parms.conffile, init_map ); });

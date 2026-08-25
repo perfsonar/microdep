@@ -6,36 +6,44 @@
 # - Created by Olav Kvittem
 # - 2024-04-17 Otto J Wittner: Added credentials from config file
 # - 2026-02-27 Otto J Wittner: Added fetching of list of flows (for topology plotting)
-# - 2026-04-30 Otto J Wittner: Replaced source of config with mapconfig.yml and mapconfig.d/*
+# - 2026-05-20 Otto J Wittner: Added mapconfig.yml as config source
 
 use CGI;
 #use CGI qw/:standard -debug/;
 #use WWW::Curl::Easy
-use JSON::PP;
-use YAML;
+use JSON;
+#use YAML;
 
+# Prepare CGI agent
 my $q = CGI->new;
 
-# Fetch config file
-my $config = YAML::LoadFile("/etc/perfsonar/microdep/microdep-config.yml");
-# Fetch config from mapconfig.yml and mapconfig.d/*
-my $mapconfig_str = `/usr/lib/perfsonar/bin/microdep_commands/get-mapconfig.cgi  | tail +2`;
-my $mapconfig = decode_json($mapconfig_str);
-
-my $esurl='http://localhost:9200';   # Default archive source 
-$esurl = $config->{opensearch_url} if $config->{opensearch_url}; # General (legacy) config file
-$esurl = $mapconfig->{'config'}->{parm('net')}->{'archive'} if $mapconfig->{'config'}->{parm('net')}->{'archive'}; # Map config source
-
+# Fetch config data (and remove html header)
+$config = decode_json(`/usr/lib/perfsonar/bin/microdep_commands/get-mapconfig.cgi | tail -n +2`);
+    
+my $esurl=  $config->{'config'}->{parm('net')}->{'archive'} || 'http://localhost:9200';
+    
 my $yesterday= `date --date yesterday "+%Y-%m-%d"`;
 chomp($yesterday);
 my $start = parm('start') || $yesterday;
-my $ip_version = parm('ip_version');
-#my $type = parm('event_type') || "gapsum";
+my $ip_version = parm('ip_version') || $config->{'config'}->{parm('net')}->{'ip_version'};
 my $type = parm('event_type');          # No event_type results in list of unique flows for time period
 my $end = parm('end') || $start;
 my $from = parm('from');
 my $to = parm('to');
 my $min_delay = parm('min_delay');
+
+# Sparkline support — when `interval` and `prop` arrive alongside `from`,
+# the script returns per-bucket averages via a date_histogram aggregation
+# rather than raw records. This gives the client sub-summary granularity
+# for long periods (e.g. 4 weeks with interval=1d → up to 28 daily buckets
+# instead of 4 weekly summary records). The histogram bins on @timestamp
+# (per-second resolution); @date is day-only so it would collapse all
+# sub-day intervals back to 1-day. Both parameters are regex-validated
+# against narrow whitelists to keep the inlined JSON injection-safe.
+my $interval = parm('interval');
+my $prop_field = parm('prop');
+$interval = undef unless ( $interval && $interval =~ /^\d+[smhd]$/ );
+$prop_field = undef unless ( $prop_field && $prop_field =~ /^\w+$/ );
 my ($stats_type, $stats_field ) = split( ",", parm('stats') );
 my $path_addr=parm('path_addr'); # list of ips 
 my $date_field='@date';
@@ -49,7 +57,7 @@ if ( $q->param("debug")){
     $debug = parm("debug");
 }
 # my 
-my $index= parm('index') || "microdep";
+my $index= parm('index') || $config->{'config'}->{parm('net')}->{'event_type'}->{parm('event_type')}->{'index'} || "missing-index";
 if ( $debug > 0 ){
     print $q->header('text/html');
 } else {
@@ -264,6 +272,26 @@ if (! $type) {
 } elsif ( $type eq "jitter" && ! $from ){ # no aggregation if pair
     # $search =  '{ "size":0, ' . $query_jit . ", " . $aggr . '}';
     $search =  '{ "size":0, ' . $query_head . $query_tail . ", " . $perc . '}';
+} elsif ( $from && $interval && $prop_field ) {
+    # Sparkline path: bucket the matching records into fixed-width time
+    # slots and compute the average of $prop_field per slot. Skips empty
+    # buckets via min_doc_count: 1.
+    my $hist_aggr = '
+      "aggs": {
+        "by_time": {
+          "date_histogram": {
+            "field": "@timestamp",
+            "fixed_interval": "' . $interval . '",
+            "min_doc_count": 1,
+            "time_zone": "Europe/Oslo"
+          },
+          "aggs": {
+            "value": { "avg": { "field": "' . $prop_field . '" } }
+          }
+        }
+      }
+    ';
+    $search = '{ "size":0, ' . $query_head . $query_tail . ', ' . $hist_aggr . '}';
 } elsif ( $from ){
     $search =  '{ "size":10000, ' . $query_head . $query_tail . ', ' . $sort_time . '}';
 } else {
@@ -294,10 +322,20 @@ if ($type eq "topology") {
 #    print("An error happened: $retcode ".$curl->strerror($retcode)." ".$curl->errbuf."\n");
 #}
 
-my $cmd='curl -X POST --insecure -H "Content-Type: application/json" "' . $url . '"  -d \'' . $search . '\' 2>/dev/null';
+#my $cmd='curl -f -X POST --insecure -H "Content-Type: application/json" "' . $url . '"  -d \'' . $search . '\' 2>/dev/null';
+#print `$cmd`;
+my $cmd='curl -f -X POST --insecure --no-progress-meter -H "Content-Type: application/json" "' . $url . '"  -d \'' . $search . '\' 2>&1 ';
 print "<p>$cmd</p>\n" if $debug > 0;
-print `$cmd`;
-
+my $results = `$cmd`;
+my $curl_status = $? >> 8;
+if ( $curl_status > 0 ) {
+    # Something went wrong running curl command. Output error in json structure
+    chomp($results);
+    print "{ \"error\": { \"curl-code\" : $curl_status, \"msg\" : \"$results\" } }\n";
+} else {
+    # Return results
+    print $results;
+}
 
 # weed out special shell chars
 sub parm{ 

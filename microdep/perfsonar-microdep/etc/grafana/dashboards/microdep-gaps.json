@@ -1,0 +1,164 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": { "type": "grafana-opensearch-datasource", "uid": "microdep-dragonlab" },
+      "description": "Total number of gap events in the selected time range.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 1 } ] },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 7, "w": 6, "x": 0, "y": 0 },
+      "id": 1,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": [ "sum" ], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "pluginVersion": "11.6.10",
+      "targets": [
+        {
+          "datasource": { "type": "grafana-opensearch-datasource", "uid": "microdep-dragonlab" },
+          "query": "event_type:gap",
+          "queryType": "lucene",
+          "alias": "",
+          "metrics": [ { "id": "1", "type": "count" } ],
+          "bucketAggs": [ { "id": "2", "type": "date_histogram", "field": "@timestamp", "settings": { "interval": "auto", "min_doc_count": "0" } } ],
+          "timeField": "@timestamp",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ],
+      "title": "Total gap events",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "grafana-opensearch-datasource", "uid": "microdep-dragonlab" },
+      "description": "Gap events per time bucket.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null } ] },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 7, "w": 18, "x": 6, "y": 0 },
+      "id": 2,
+      "options": {
+        "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": false },
+        "tooltip": { "mode": "single", "sort": "none" }
+      },
+      "pluginVersion": "11.6.10",
+      "targets": [
+        {
+          "datasource": { "type": "grafana-opensearch-datasource", "uid": "microdep-dragonlab" },
+          "query": "event_type:gap",
+          "queryType": "lucene",
+          "alias": "gaps",
+          "metrics": [ { "id": "1", "type": "count" } ],
+          "bucketAggs": [ { "id": "2", "type": "date_histogram", "field": "@timestamp", "settings": { "interval": "auto", "min_doc_count": "0" } } ],
+          "timeField": "@timestamp",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ],
+      "title": "Gap events over time",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "grafana-opensearch-datasource", "uid": "microdep-dragonlab" },
+      "description": "Source hosts with the most gap events in the selected range. Click 'Open Microdep map' for the geographic view.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "align": "auto", "cellOptions": { "type": "auto" }, "filterable": true, "inspect": false },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null } ] }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 11, "w": 16, "x": 0, "y": 7 },
+      "id": 3,
+      "options": {
+        "cellHeight": "sm",
+        "footer": { "countRows": false, "fields": "", "reducer": [ "sum" ], "show": false },
+        "showHeader": true,
+        "sortBy": [ { "desc": true, "displayName": "Count" } ]
+      },
+      "pluginVersion": "11.6.10",
+      "targets": [
+        {
+          "datasource": { "type": "grafana-opensearch-datasource", "uid": "microdep-dragonlab" },
+          "query": "event_type:gap",
+          "queryType": "lucene",
+          "alias": "",
+          "metrics": [ { "id": "1", "type": "count" } ],
+          "bucketAggs": [ { "id": "2", "type": "terms", "field": "from.keyword", "settings": { "order": "desc", "orderBy": "_count", "size": "10", "min_doc_count": "1" } } ],
+          "timeField": "@timestamp",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "title": "Top 10 source hosts by gap events",
+      "type": "table"
+    },
+    {
+      "description": "Link to the full geographic Microdep map (curved directional links, real-locations, etc.) which stays a custom view.",
+      "gridPos": { "h": 5, "w": 8, "x": 16, "y": 7 },
+      "id": 4,
+      "options": {
+        "code": { "language": "plaintext", "showLineNumbers": false, "showMiniMap": false },
+        "content": "<div class=\"nav-div\">\n<a class=\"simple-button\" target=\"_blank\" href=\"/microdep/\">Open Microdep map</a>\n</div>\n\n<style>\n  .nav-div { margin:18px 10px; text-align:center; }\n  .simple-button { display:inline-block; padding:10px 18px; border-radius:6px; background:#3274d9; color:#fff; text-decoration:none; font-weight:600; }\n</style>",
+        "mode": "html"
+      },
+      "pluginVersion": "11.6.10",
+      "title": "Microdep map",
+      "type": "text"
+    }
+  ],
+  "refresh": "",
+  "schemaVersion": 39,
+  "tags": [ "microdep" ],
+  "templating": { "list": [] },
+  "time": { "from": "now-7d", "to": "now" },
+  "timepicker": {},
+  "timezone": "",
+  "title": "Microdep — Gaps overview",
+  "uid": "microdep-gaps",
+  "version": 1,
+  "weekStart": ""
+}

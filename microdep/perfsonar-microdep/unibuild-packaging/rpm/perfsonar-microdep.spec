@@ -3,6 +3,8 @@
 %define command_base        %{microdep_bin_base}/microdep_commands
 %define config_base         /etc/perfsonar
 %define microdep_config_base         %{config_base}/microdep
+%define microdep_runtime_base        /var/lib/perfsonar/microdep
+%define microdep_share_base          /usr/share/perfsonar/microdep
 %define doc_base            /usr/share/doc/perfsonar/microdep
 %define microdep_web_dir    %{install_base}/microdep-map
 
@@ -62,7 +64,7 @@ Requires:               python3-psycopg2
 Requires:               python3-pytz
 Requires:               python3-tzlocal
 Requires:               python3-pyyaml
-Requires:               perfsonar-microdep-geolite2
+Requires:               perfsonar-microdep-enrichdbs
 BuildRequires:          systemd
 BuildRequires:          systemd-rpm-macros    
 # ... but macros are not yet utilized below
@@ -80,12 +82,14 @@ Requires:               perfsonar-microdep-utils
 %description archive
 A package collection required to prepare for archiving of Microdep Analytics on a perfSONAR archive installation.
 
-%package geolite2
-Summary:		MaxMind's Geolite2 geoip databases
+%package enrichdbs
+Summary:		Enrichment databases for Microdep (geoip etc.)
 Group:			Applications/Communications
 
-%description geolite2
-Geopositioning information from Maxmind to enrich datasets with AS numbers, city and country.
+%description enrichdbs
+Databases used to enrich Microdep datasets. Currently ships MaxMind
+GeoLite2 (AS number, city and country geolocation); intended as a
+container for any future enrichment data sources.
 
 %package logstash
 Summary:		Logstash pipeline for archiving Microdep analytic events
@@ -111,6 +115,7 @@ Requires:		perl >= 5.32
 Requires:               perl(CGI) 
 Requires:		perl(Data::Dumper)
 Requires:               perl(DBI) 
+Requires:               perl(DBD::SQLite)
 Requires:		perl(Getopt::Long)
 Requires:		perl(JSON)
 Requires:		perl(LWP::Simple)
@@ -131,18 +136,19 @@ Requires:               chartjs-adapter-moment
 Requires:               chartjs-plugin-zoom
 Requires:               d3js = 4.13.0
 Requires:               hammerjs = 2.0.8
-Requires:               leafletjs = 1.0.3
+Requires:               leafletjs = 1.9.4
 Requires:               leafletjs-contextmenu
 Requires:               leafletjs-markercluster
 Requires:               leafletjs-curve
-Requires:               leafletjs-L.LatLng.UTM
+Requires:               leafletjs-UTM
 Requires:               latlon-sphericaljs
 Requires:               momentjs = 2.30.1
 Requires:               select2js = 4.0.13
 Requires:               sorttablejs = 2.0
-Requires:               perfsonar-tracetree
+Requires:               visjs
+Requires:               perfsonar-microdep-enrichdbs
 BuildRequires:          systemd
-BuildRequires:          systemd-rpm-macros       
+BuildRequires:          systemd-rpm-macros
 # ... but macros are not yet utilized below
 
 %description map
@@ -177,8 +183,9 @@ A collection of handy utilities to apply when working with Microdep analytic dat
 systemctl stop perfsonar-microdep-gap-ana.service || true
 systemctl stop perfsonar-microdep-trace-ana.service || true
 systemctl stop perfsonar-microdep-restart.timer || true
+systemctl stop perfsonar-microdep-hourly-aggregator.timer || true
 
-%pre geolite2
+%pre enrichdbs
 /usr/sbin/groupadd -r perfsonar 2> /dev/null || :
 /usr/sbin/useradd -g perfsonar -r -s /sbin/nologin -c "perfSONAR User" -d /tmp perfsonar 2> /dev/null || :
 
@@ -206,10 +213,24 @@ install -D -m 0644 -t %{buildroot}/%{_unitdir} %{buildroot}/%{install_base}/scri
 install -D -m 0644 -t %{buildroot}/%{_unitdir} %{buildroot}/%{install_base}/scripts/*.timer
 systemctl daemon-reload || true
 # Copy microdep map, httpd and logstash configs into correct folders
+install -D -m 0644 %{buildroot}/%{microdep_config_base}/microdep-map_sqlite3_template.db %{buildroot}/%{microdep_runtime_base}/microdep_ipv4.db
+install -D -m 0644 %{buildroot}/%{microdep_config_base}/microdep-map_sqlite3_template.db %{buildroot}/%{microdep_runtime_base}/microdep_ipv6.db
 install -D -m 0644 -t %{buildroot}/etc/httpd/conf.d/ %{buildroot}/%{microdep_config_base}/apache-microdep-map.conf
 install -D -m 0644 -t %{buildroot}/etc/httpd/conf.d/ %{buildroot}/%{microdep_config_base}/apache-microdep-ana.conf
 install -D -m 0644 -t %{buildroot}/%{install_base}/logstash/microdep_pipeline/ %{buildroot}/%{microdep_config_base}/logstash/microdep/*
 install -D -m 0644 -t %{buildroot}/etc/logrotate.d/ %{buildroot}/%{microdep_config_base}/logrotate.d/microdep
+# Copy Geodb to correct folder
+install -D -m 0644 -t %{buildroot}/%{microdep_share_base}/GeoLite2/ %{buildroot}/%{microdep_config_base}/GeoLite2/*
+
+# Copy license file
+mkdir -p %{buildroot}/%{doc_base}
+#install -D -m 0644 -t %{buildroot}/%{doc_base} %{buildroot}/%{install_base}/LICENSE
+install -D -m 0644 %{buildroot}/%{install_base}/LICENSE %{buildroot}/%{doc_base}/LICENSE-ana
+install -D -m 0644 %{buildroot}/%{install_base}/LICENSE %{buildroot}/%{doc_base}/LICENSE-archive
+install -D -m 0644 %{buildroot}/%{install_base}/LICENSE %{buildroot}/%{doc_base}/LICENSE-logstash
+install -D -m 0644 %{buildroot}/%{install_base}/LICENSE %{buildroot}/%{doc_base}/LICENSE-map
+install -D -m 0644 %{buildroot}/%{install_base}/LICENSE %{buildroot}/%{doc_base}/LICENSE-toolkit
+install -D -m 0644 %{buildroot}/%{install_base}/LICENSE %{buildroot}/%{doc_base}/LICENSE-utils
 
 # Copy license file
 mkdir -p %{buildroot}/%{doc_base}
@@ -233,6 +254,7 @@ rm -rf %{buildroot}/%{microdep_config_base}/apache-microdep-ana.conf
 rm -rf %{buildroot}/%{microdep_config_base}/logstash/microdep
 rm -rf %{buildroot}/%{microdep_config_base}/psconfig
 rm -rf %{buildroot}/%{microdep_config_base}/logrotate.d
+rm -rf %{buildroot}/%{microdep_config_base}/GeoLite2/*
 
 # Make js and css libs available in web folder (-r for relative paths ... to make rpmbuild happy)
 ln -sr /usr/share/javascript/chartjs/4.4.2/chart.umd.js %{buildroot}/%{microdep_web_dir}/js
@@ -259,23 +281,35 @@ ln -sr /usr/share/javascript/jquery-ui/jquery-ui.css %{buildroot}/%{microdep_web
 ln -sr /usr/share/javascript/jquery-ui/jquery-ui.min.css %{buildroot}/%{microdep_web_dir}/css/
 ln -sr /usr/share/javascript/latlon-sphericaljs/2.3.0/latlon-spherical.js %{buildroot}/%{microdep_web_dir}/js/
 ln -sr /usr/share/javascript/latlon-sphericaljs/2.3.0/dms.js %{buildroot}/%{microdep_web_dir}/js/
-ln -sr /usr/share/javascript/leafletjs/1.0.3/leaflet.css %{buildroot}/%{microdep_web_dir}/css/
-ln -sr /usr/share/javascript/leafletjs/1.0.3/leaflet.js %{buildroot}/%{microdep_web_dir}/js/
-ln -sr /usr/share/javascript/leafletjs/1.0.3/images %{buildroot}/%{microdep_web_dir}/css/
-ln -sr /usr/share/javascript/leaflet-contextmenu/1.2.1/leaflet.contextmenu.min.css %{buildroot}/%{microdep_web_dir}/css/
-ln -sr /usr/share/javascript/leaflet-contextmenu/1.2.1/leaflet.contextmenu.min.js %{buildroot}/%{microdep_web_dir}/js/
-ln -sr /usr/share/javascript/leaflet-markercluster/1.0.3/MarkerCluster.Default.css %{buildroot}/%{microdep_web_dir}/css/
-ln -sr /usr/share/javascript/leaflet-markercluster/1.0.3/MarkerCluster.css %{buildroot}/%{microdep_web_dir}/css/
-ln -sr /usr/share/javascript/leaflet-markercluster/1.0.3/leaflet.markercluster-src.js %{buildroot}/%{microdep_web_dir}/js/
-ln -sr /usr/share/javascript/leaflet-curve/0.9.2/leaflet.curve.js %{buildroot}/%{microdep_web_dir}/js/
-ln -sr /usr/share/javascript/leaflet-L.LatLng.UTM/1.0/L.LatLng.UTM.js %{buildroot}/%{microdep_web_dir}/js/
+ln -sr /usr/share/javascript/leafletjs/1.9.4/leaflet.css %{buildroot}/%{microdep_web_dir}/css/
+ln -sr /usr/share/javascript/leafletjs/1.9.4/leaflet.js %{buildroot}/%{microdep_web_dir}/js/
+ln -sr /usr/share/javascript/leafletjs/1.9.4/leaflet.js.map %{buildroot}/%{microdep_web_dir}/js/
+ln -sr /usr/share/javascript/leafletjs/1.9.4/images %{buildroot}/%{microdep_web_dir}/css/
+ln -sr /usr/share/javascript/leaflet-contextmenu/1.4.0/leaflet.contextmenu.min.css %{buildroot}/%{microdep_web_dir}/css/
+ln -sr /usr/share/javascript/leaflet-contextmenu/1.4.0/leaflet.contextmenu.min.js %{buildroot}/%{microdep_web_dir}/js/
+ln -sr /usr/share/javascript/leaflet-markercluster/1.5.3/MarkerCluster.Default.css %{buildroot}/%{microdep_web_dir}/css/
+ln -sr /usr/share/javascript/leaflet-markercluster/1.5.3/MarkerCluster.css %{buildroot}/%{microdep_web_dir}/css/
+ln -sr /usr/share/javascript/leaflet-markercluster/1.5.3/leaflet.markercluster.js %{buildroot}/%{microdep_web_dir}/js/
+ln -sr /usr/share/javascript/leaflet-markercluster/1.5.3/leaflet.markercluster.js.map %{buildroot}/%{microdep_web_dir}/js/
+ln -sr /usr/share/javascript/leaflet-curve/1.0.0/leaflet.curve.js %{buildroot}/%{microdep_web_dir}/js/
+ln -sr /usr/share/javascript/leaflet-UTM/1.0/L.LatLng.UTM.js %{buildroot}/%{microdep_web_dir}/js/
 ln -sr /usr/share/javascript/momentjs/2.30.1/moment.js %{buildroot}/%{microdep_web_dir}/js/
 ln -sr /usr/share/javascript/select2/4.0.13/css/select2.min.css %{buildroot}/%{microdep_web_dir}/css/
 ln -sr /usr/share/javascript/select2/4.0.13/js/select2.min.js %{buildroot}/%{microdep_web_dir}/js/
+ln -rs /usr/share/javascript/visjs/4.21.0/vis.js   %{buildroot}/%{microdep_web_dir}/js/vis.js
+ln -rs /usr/share/javascript/visjs/4.21.0/vis.map   %{buildroot}/%{microdep_web_dir}/js/vis.map
+ln -rs /usr/share/javascript/visjs/4.21.0/vis.css   %{buildroot}/%{microdep_web_dir}/css/vis.css
+ln -rs /usr/share/javascript/visjs/4.21.0/vis.min.js   %{buildroot}/%{microdep_web_dir}/js/vis.min.js
+ln -rs /usr/share/javascript/visjs/4.21.0/vis.min.css   %{buildroot}/%{microdep_web_dir}/css/vis.min.css
+ln -rs /usr/share/javascript/visjs/4.21.0/img   %{buildroot}/%{microdep_web_dir}/css/img 
+ln -rs /usr/share/javascript/visjs/4.21.0/vis-timeline-graph2d.min.css   %{buildroot}/%{microdep_web_dir}/css/vis-timeline-graph2d.min.css
 ln -sr /usr/share/javascript/sorttable/2.0/sorttable.js %{buildroot}/%{microdep_web_dir}/js/
 
-# Link mapconfig
-ln -sr %{microdep_config_base}/mapconfig.yml %{buildroot}/%{microdep_web_dir}
+# Make GeoLite2 avaiable for js scripts
+mkdir -p %{buildroot}/%{microdep_web_dir}/geo/
+ln -sr %{microdep_share_base}/GeoLite2/GeoLite2-ASN.mmdb %{buildroot}/%{microdep_web_dir}/geo/
+ln -sr %{microdep_share_base}/GeoLite2/GeoLite2-City.mmdb %{buildroot}/%{microdep_web_dir}/geo/
+ln -sr %{microdep_share_base}/GeoLite2/GeoLite2-Country.mmdb %{buildroot}/%{microdep_web_dir}/geo/
 
 # Link up some handy tools
 mkdir -p %{buildroot}/usr/local/bin/ || true
@@ -310,13 +344,21 @@ systemctl daemon-reload || true
 systemctl enable perfsonar-microdep-gap-ana.service || true
 systemctl enable perfsonar-microdep-trace-ana.service || true
 systemctl enable perfsonar-microdep-restart.timer || true
+systemctl enable perfsonar-microdep-hourly-aggregator.timer || true
 systemctl start perfsonar-microdep-gap-ana.service || true
 systemctl start perfsonar-microdep-trace-ana.service || true
 systemctl start perfsonar-microdep-restart.timer || true
+systemctl start perfsonar-microdep-hourly-aggregator.timer || true
 
 %post logstash
-# Add Microdep to Opensearch setup (including Logstash) 
+# Add Microdep to Opensearch setup (including Logstash)
 /usr/lib/perfsonar/bin/microdep_commands/opensearch_config_microdep.sh || true
+
+# Self-heal timer: re-applies the OpenSearch read grant if a perfSONAR/OpenSearch
+# upgrade later resets roles.yml and drops it. Installed but NOT enabled - it is
+# a stop-gap, so an admin opts in explicitly with
+#   systemctl enable --now perfsonar-microdep-opensearch-guard.timer
+systemctl daemon-reload || true
 
 if [ ! -f /etc/perfsonar/microdep/microdep-ana-archive.json ]; then
     # Prepare default logstash archive config for analytic results
@@ -358,9 +400,13 @@ fi
 systemctl stop perfsonar-microdep-gap-ana.service || true
 systemctl stop perfsonar-microdep-trace-ana.service || true
 systemctl stop perfsonar-microdep-restart.timer || true
+systemctl stop perfsonar-microdep-hourly-aggregator.timer || true
 
 %preun logstash
-# Remove Microdep from Opensearch setup (including Logstash) 
+# Stop the OpenSearch read-grant self-heal timer
+systemctl stop perfsonar-microdep-opensearch-guard.timer || true
+systemctl disable perfsonar-microdep-opensearch-guard.timer || true
+# Remove Microdep from Opensearch setup (including Logstash)
 /usr/lib/perfsonar/bin/microdep_commands/opensearch_config_microdep.sh -r config || true
 
 %preun map
@@ -398,10 +444,13 @@ systemctl reload httpd.service || true
 %{_unitdir}/perfsonar-microdep-trace-ana.service
 %{_unitdir}/perfsonar-microdep-restart.service
 %{_unitdir}/perfsonar-microdep-restart.timer
+%{_unitdir}/perfsonar-microdep-hourly-aggregator.service
+%{_unitdir}/perfsonar-microdep-hourly-aggregator.timer
 %attr(0755,perfsonar,perfsonar) %{command_base}/qstream-gap-ana
 %attr(0755,perfsonar,perfsonar) %{command_base}/trace_event_reader.py
 %attr(0755,perfsonar,perfsonar) %{command_base}/create_new_db.sh
 %attr(0755,perfsonar,perfsonar) %{command_base}/fix-pgsql-access.sh
+%attr(0755,perfsonar,perfsonar) %{command_base}/microdep-hourly-aggregator.pl
 %{microdep_config_base}/microdep-tests.json.example
 %{microdep_config_base}/microdep-tests-packet-subcount.json.example
 %config %{microdep_config_base}/microdep-gap-ana.yml
@@ -410,16 +459,39 @@ systemctl reload httpd.service || true
 %files archive
 %license %{doc_base}/LICENSE-archive
 
-%files geolite2
+%files enrichdbs
 %defattr(0644,perfsonar,perfsonar,0755)
-%license %{microdep_config_base}/GeoLite2/LICENSE.txt
-%{microdep_config_base}/GeoLite2/COPYRIGHT.txt
-%{microdep_config_base}/GeoLite2/*.mmdb
+%license %{microdep_share_base}/GeoLite2/LICENSE.txt
+%{microdep_share_base}/GeoLite2/COPYRIGHT.txt
+%{microdep_share_base}/GeoLite2/*.mmdb
 
 %files logstash
 %defattr(0644,perfsonar,perfsonar,0755)
 %license %{doc_base}/LICENSE-logstash
 %attr(0755,perfsonar,perfsonar) %{command_base}/opensearch_config_microdep.sh
+%attr(0755,perfsonar,perfsonar) %{command_base}/microdep-opensearch-guard.sh
+%{_unitdir}/perfsonar-microdep-opensearch-guard.service
+%{_unitdir}/perfsonar-microdep-opensearch-guard.timer
+%attr(0755,perfsonar,perfsonar) %{command_base}/psconfig_archive_ana.sh
+/usr/local/bin/psconfig_archive_ana.sh
+/usr/local/bin/opensearch_config_microdep.sh
+/etc/httpd/conf.d/apache-microdep-ana.conf
+%{install_base}/logstash/microdep_pipeline/*.conf
+%{microdep_config_base}/logstash/microdep-pipelines.yml
+%{microdep_config_base}/microdep_default_policy.json
+%config /var/lib/logstash/microdep 
+%{microdep_config_base}/os-template-gap-ana.json
+%{microdep_config_base}/os-template-trace-ana.json
+%{microdep_config_base}/roles_yml_patch
+%config /etc/logrotate.d/microdep
+
+%files logstash
+%defattr(0644,perfsonar,perfsonar,0755)
+%license %{doc_base}/LICENSE-logstash
+%attr(0755,perfsonar,perfsonar) %{command_base}/opensearch_config_microdep.sh
+%attr(0755,perfsonar,perfsonar) %{command_base}/microdep-opensearch-guard.sh
+%{_unitdir}/perfsonar-microdep-opensearch-guard.service
+%{_unitdir}/perfsonar-microdep-opensearch-guard.timer
 %attr(0755,perfsonar,perfsonar) %{command_base}/psconfig_archive_ana.sh
 /usr/local/bin/psconfig_archive_ana.sh
 /usr/local/bin/opensearch_config_microdep.sh
@@ -440,14 +512,19 @@ systemctl reload httpd.service || true
 %{microdep_web_dir}/img
 %{microdep_web_dir}/js
 %{microdep_web_dir}/css
-%{microdep_web_dir}/*.yml
+%{microdep_web_dir}/fonts
+%{microdep_web_dir}/geo
 %attr(0755,perfsonar,perfsonar) %{command_base}/elastic-get-date-type.pl
 %attr(0755,perfsonar,perfsonar) %{command_base}/yaml-to-json.cgi
 %attr(0755,perfsonar,perfsonar) %{command_base}/get-mapconfig.cgi
-%config %{microdep_config_base}/microdep.db
+%attr(0755,perfsonar,perfsonar) %{command_base}/get-tracetests.pl
+%attr(0755,perfsonar,perfsonar) %{command_base}/hopgeo.pl
 %config %{microdep_config_base}/mapconfig.yml
 %config %{microdep_config_base}/mapconfig.d/
 %{microdep_config_base}/microdep_ipv4-base-geo.json.example
+%config %{microdep_runtime_base}/microdep_ipv4.db
+%config %{microdep_runtime_base}/microdep_ipv6.db
+%{microdep_config_base}/microdep-map_sqlite3_template.db
 %{microdep_config_base}/grafana_dashboard_patch
 /etc/httpd/conf.d/apache-microdep-map.conf
 

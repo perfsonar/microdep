@@ -4,6 +4,19 @@
 export var colors=[];
 export var threshes=[];  // color thresholds for current property
 
+// Escape user/host-derived strings before interpolating into innerHTML
+// (tooltips, link panel, compare legend, copy buttons). Missing this caused
+// "escapeHtml is not defined" once those call sites were ported.
+export function escapeHtml(s) {
+    if (s === undefined || s === null) return "";
+    return String(s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
+
 export function make_palette( palette){
     // Prepare color palette for global colors[] array
     
@@ -11,6 +24,15 @@ export function make_palette( palette){
 	  colors=generate_colors(10, [0.8,0.2,0.2]); // 5 colors in red with 50% green and blue
     } else if ( palette === "traffic2" ) {
 	colors=[ "#80e982", "#80a982", "#e2e404", "#e2a404", "#d98182", "#a98182"]; // GGYYRR
+    } else if ( palette === "cbf" ) {
+	// Color-blind safe (IBM Design "Color Blind Safe" palette):
+	// blue / amber / magenta. Distinguishable for deuteranopia,
+	// protanopia, and tritanopia, while still reading as
+	// "good → middle → bad" via brightness/saturation cues.
+	colors=[ "#648FFF", "#FFB000", "#DC267F" ];
+    } else if ( palette === "cbf2" ) {
+	// 6-step CBF variant — used when traffic2 would be in play.
+	colors=[ "#92B5FF", "#648FFF", "#FFD480", "#FFB000", "#FF7AB6", "#DC267F" ];
     } else {
 	colors=[ "#80d982", "#e2e404", "#d98182"]; // GYR
 	// colors=["#FFCCCC","#FFE5CC","#FFFFCC","#E5FFCC","#CCFFCC","#CCE5FF","#E5CCFF"];
@@ -53,6 +75,13 @@ export function get_color_ppm( val, max){
 }
 
 export function get_color( val, threshes){
+    // Return null for missing / non-numeric values so the caller can tint
+    // the link grey ("no data") instead of running the comparison with NaN
+    // — every NaN comparison is false, so the loop would fall through to
+    // the worst-zone colour and paint no-data links solid red. Callers do
+    // `get_color(...) || empty_color`.
+    if (val === null || val === undefined) return null;
+    if (typeof val !== 'number' || isNaN(val)) return null;
     var n=colors.length;
     var reversed = threshes[0] > threshes[1];
     var ix=0;
@@ -199,7 +228,11 @@ export function add_tab(type, title, num_tabs, html){
 
     let divid='tab' + num_tabs;
 
-    let new_tab=$("main#tabs ul").append(
+    // IMPORTANT: use a direct-child selector (`> ul`) so we only target the
+    // top-level tab-nav. Without it, jQuery would append the new <li> to
+    // every nested <ul> inside main#tabs (the LS-tab nav, the tracetree-tab
+    // nav etc.), producing phantom duplicates of the new tab.
+    let new_tab=$("main#tabs > ul").append(
         "<li><a href='#" + divid + "' title='" + title + "'>#" + num_tabs + ' ' + title + "</a>"
 	    + '<span class="ui-icon ui-icon-close" role="presentation">Remove Tab</span>'
 	    +"</li>"
@@ -209,7 +242,19 @@ export function add_tab(type, title, num_tabs, html){
     );
     $("#"+divid).html(html);
     $("main#tabs").tabs("refresh");
-    $('main#tabs').tabs({ active: num_tabs-1});
+    // Focus the tab we just created. Activating by index was fragile: callers
+    // compute num_tabs in different ways (most count the tabs BEFORE adding, and
+    // some count non-tab <li> children), so `active: num_tabs-1` often selected
+    // the previous tab and the new one stayed hidden behind the map (issue #117).
+    // Look up the <li> that controls this panel instead.
+    // NOTE: the tab-nav <ul> also holds non-tab <li> items (the sidebar-open and
+    // clear-all-tabs buttons, and the "+" report select). jQuery UI only counts
+    // <li> that contain an <a href> as tabs, so any index derived from the raw
+    // <li> count is too high and selecting it silently leaves the map active.
+    // Index within the anchor set instead, matching jQuery UI's own numbering.
+    var $tab_links = $("main#tabs > ul > li > a");
+    var new_idx = $tab_links.index($tab_links.filter("[href='#" + divid + "']"));
+    if (new_idx >= 0) $("main#tabs").tabs("option", "active", new_idx);
 
     // activate sorting if sortable tables within
     let collection= document.getElementById(divid).getElementsByClassName("sortable");
@@ -221,7 +266,11 @@ export function add_tab(type, title, num_tabs, html){
     new_tab.delegate( "span.ui-icon-close", "click", function() {
 	var panelId = $( this ).closest( "li" ).remove().attr( "aria-controls" );
 	$( "#" + panelId ).remove();
-	tabs.tabs( "refresh" );
+	$( "main#tabs" ).tabs( "refresh" );
+	// Notify any listeners (used by tab persistence) that this tab closed.
+	document.dispatchEvent(new CustomEvent('microdep-tab-closed', {
+	    detail: { divid: panelId }
+	}));
     });
 
 
@@ -294,7 +343,7 @@ export function get_period( start, end){
 
 // in a module update the global readonly parms
 export function get_parms() {
-    console.log('location: ' + location);
+    //console.log('location: ' + location);
     // var new_parms= {};
     var    tmp = [];
     location.search
@@ -357,6 +406,8 @@ export function update_url(parameter, value){
 	pars.push( "stats=" + $("#stats_type").val() );
     if (parms.conffile) pars.push( "conffile=" + parms.conffile);   // Add configfile to url if relevant
     if (parms.report) pars.push( "report=" + parms.report);         // Add report to url if relevant
+    var cmpVal = ($("#compare_select").val && $("#compare_select").val()) || parms.compare;   // Snapshot compare mode
+    if (cmpVal && cmpVal !== 'off') pars.push( "compare=" + cmpVal );
     if ( parameter )
 	pars.push( parameter + "=" + value );
     url = urlBase+'?'+pars.join('&');

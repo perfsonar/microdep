@@ -1,0 +1,210 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": { "type": "grafana-opensearch-datasource", "uid": "microdep-jitter" },
+      "description": "Jitter (h_jit) 50th/95th/99th percentile over time, from the dense dragonlab_jitter index.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false, "axisCenteredZero": false, "axisColorMode": "text",
+            "axisLabel": "", "axisPlacement": "auto", "barAlignment": 0, "drawStyle": "line",
+            "fillOpacity": 10, "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "lineInterpolation": "smooth", "lineWidth": 2, "pointSize": 5,
+            "scaleDistribution": { "type": "linear" }, "showPoints": "never", "spanNulls": true,
+            "stacking": { "group": "A", "mode": "none" }, "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null } ] },
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 16, "x": 0, "y": 0 },
+      "id": 1,
+      "options": {
+        "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "pluginVersion": "11.6.10",
+      "targets": [
+        {
+          "datasource": { "type": "grafana-opensearch-datasource", "uid": "microdep-jitter" },
+          "query": "",
+          "queryType": "lucene",
+          "alias": "",
+          "metrics": [ { "id": "1", "type": "percentiles", "field": "h_jit", "settings": { "percents": [ "50", "95", "99" ] } } ],
+          "bucketAggs": [ { "id": "2", "type": "date_histogram", "field": "@timestamp", "settings": { "interval": "auto", "min_doc_count": "0" } } ],
+          "timeField": "@timestamp",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ],
+      "title": "Jitter percentiles over time (h_jit, ms)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "grafana-opensearch-datasource", "uid": "microdep-dragonlab" },
+      "description": "Most recent gap event timestamp in the selected range — is gap data flowing?",
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "fixed", "fixedColor": "text" }, "mappings": [], "unit": "dateTimeFromNow" },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 8, "x": 16, "y": 0 },
+      "id": 2,
+      "options": {
+        "colorMode": "none", "graphMode": "none", "justifyMode": "auto", "orientation": "auto",
+        "reduceOptions": { "calcs": [ "lastNotNull" ], "fields": "", "values": false },
+        "textMode": "value"
+      },
+      "pluginVersion": "11.6.10",
+      "targets": [
+        {
+          "datasource": { "type": "grafana-opensearch-datasource", "uid": "microdep-dragonlab" },
+          "query": "event_type:gap",
+          "queryType": "lucene",
+          "alias": "",
+          "metrics": [ { "id": "1", "type": "max", "field": "@timestamp" } ],
+          "bucketAggs": [ { "id": "2", "type": "date_histogram", "field": "@timestamp", "settings": { "interval": "auto", "min_doc_count": "0" } } ],
+          "timeField": "@timestamp",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "title": "Gap data — last seen",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "grafana-opensearch-datasource", "uid": "microdep-jitter" },
+      "description": "Most recent jitter sample timestamp in the selected range — is jitter data flowing?",
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "fixed", "fixedColor": "text" }, "mappings": [], "unit": "dateTimeFromNow" },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 8, "x": 16, "y": 4 },
+      "id": 3,
+      "options": {
+        "colorMode": "none", "graphMode": "none", "justifyMode": "auto", "orientation": "auto",
+        "reduceOptions": { "calcs": [ "lastNotNull" ], "fields": "", "values": false },
+        "textMode": "value"
+      },
+      "pluginVersion": "11.6.10",
+      "targets": [
+        {
+          "datasource": { "type": "grafana-opensearch-datasource", "uid": "microdep-jitter" },
+          "query": "",
+          "queryType": "lucene",
+          "alias": "",
+          "metrics": [ { "id": "1", "type": "max", "field": "@timestamp" } ],
+          "bucketAggs": [ { "id": "2", "type": "date_histogram", "field": "@timestamp", "settings": { "interval": "auto", "min_doc_count": "0" } } ],
+          "timeField": "@timestamp",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "title": "Jitter data — last seen",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "grafana-opensearch-datasource", "uid": "microdep-dragonlab" },
+      "description": "Link pairs with the most lost time (sum of tloss, ms). Click a column header to sort.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "align": "auto", "cellOptions": { "type": "auto" }, "filterable": true, "inspect": false },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null } ] }
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "from.keyword" }, "properties": [ { "id": "displayName", "value": "Source" } ] },
+          { "matcher": { "id": "byName", "options": "to.keyword" }, "properties": [ { "id": "displayName", "value": "Target" } ] },
+          { "matcher": { "id": "byName", "options": "Sum" }, "properties": [ { "id": "displayName", "value": "Time lost (ms)" }, { "id": "unit", "value": "ms" } ] }
+        ]
+      },
+      "gridPos": { "h": 16, "w": 14, "x": 0, "y": 8 },
+      "id": 4,
+      "options": {
+        "cellHeight": "sm",
+        "footer": { "countRows": false, "fields": "", "reducer": [ "sum" ], "show": false },
+        "showHeader": true,
+        "sortBy": [ { "desc": true, "displayName": "Time lost (ms)" } ]
+      },
+      "pluginVersion": "11.6.10",
+      "targets": [
+        {
+          "datasource": { "type": "grafana-opensearch-datasource", "uid": "microdep-dragonlab" },
+          "query": "event_type:gap",
+          "queryType": "lucene",
+          "alias": "",
+          "metrics": [ { "id": "1", "type": "sum", "field": "tloss" } ],
+          "bucketAggs": [
+            { "id": "2", "type": "terms", "field": "from.keyword", "settings": { "size": "25", "orderBy": "1", "order": "desc", "min_doc_count": "1" } },
+            { "id": "3", "type": "terms", "field": "to.keyword", "settings": { "size": "25", "orderBy": "1", "order": "desc", "min_doc_count": "1" } }
+          ],
+          "timeField": "@timestamp",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "title": "Top link pairs by time lost",
+      "type": "table"
+    },
+    {
+      "datasource": { "type": "grafana-opensearch-datasource", "uid": "microdep-dragonlab" },
+      "description": "Source x target matrix coloured by gap-event count over the selected range.",
+      "fieldConfig": { "defaults": { "color": { "mode": "continuous-YlRd" }, "mappings": [], "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null } ] }, "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 16, "w": 10, "x": 14, "y": 8 },
+      "id": 5,
+      "options": {
+        "sourceField": "from.keyword",
+        "targetField": "to.keyword",
+        "valueField": "Count",
+        "sourceText": "Source",
+        "targetText": "Target",
+        "valueText": "Gaps",
+        "showLegend": true,
+        "legendType": "range",
+        "cellSize": 46,
+        "cellPadding": 3,
+        "txtLength": 18,
+        "txtSize": 12
+      },
+      "pluginVersion": "2.0.0",
+      "targets": [
+        {
+          "datasource": { "type": "grafana-opensearch-datasource", "uid": "microdep-dragonlab" },
+          "query": "event_type:gap",
+          "queryType": "lucene",
+          "alias": "",
+          "metrics": [ { "id": "1", "type": "count" } ],
+          "bucketAggs": [
+            { "id": "2", "type": "terms", "field": "from.keyword", "settings": { "size": "50", "orderBy": "_term", "order": "asc", "min_doc_count": "1" } },
+            { "id": "3", "type": "terms", "field": "to.keyword", "settings": { "size": "50", "orderBy": "_term", "order": "asc", "min_doc_count": "1" } }
+          ],
+          "timeField": "@timestamp",
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "title": "Gap matrix (source x target, by count)",
+      "type": "esnet-matrix-panel"
+    }
+  ],
+  "refresh": "",
+  "schemaVersion": 39,
+  "tags": [ "microdep" ],
+  "templating": { "list": [] },
+  "time": { "from": "now-7d", "to": "now" },
+  "timepicker": {},
+  "timezone": "",
+  "title": "Microdep — Details",
+  "uid": "microdep-details",
+  "version": 1,
+  "weekStart": ""
+}

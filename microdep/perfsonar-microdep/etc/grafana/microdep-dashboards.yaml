@@ -1,0 +1,18 @@
+# Loads the native Microdep dashboards from disk into a "Microdep" folder.
+#
+# Provision by copying to:
+#   /usr/lib/perfsonar/grafana/provisioning/dashboards/
+# and placing the dashboard JSON files under the `path` below.
+apiVersion: 1
+
+providers:
+  - name: microdep
+    orgId: 1
+    folder: Microdep
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      foldersFromFilesStructure: false
+      path: /usr/lib/perfsonar/grafana/dashboards/microdep

@@ -1,0 +1,30 @@
+# OpenSearch datasource for the Microdep `dragonlab_jitter` index (the dense
+# "Queues"/jitter event). Separate from the dragonlab (gap) datasource because
+# the OpenSearch datasource binds one index pattern per datasource.
+# Time field is @timestamp (date); h_jit / h_ddelay / h_min_d are floats (ms).
+#
+# Provision to: /usr/lib/perfsonar/grafana/provisioning/datasources/
+apiVersion: 1
+
+deleteDatasources:
+  - name: Microdep jitter
+    orgId: 1
+
+datasources:
+  - name: Microdep jitter
+    type: grafana-opensearch-datasource
+    access: proxy
+    orgId: 1
+    uid: microdep-jitter
+    url: https://localhost/opensearch
+    basicAuth: false
+    isDefault: false
+    jsonData:
+      database: "dragonlab_jitter"
+      flavor: "opensearch"
+      version: "2.6.0"
+      timeField: "@timestamp"
+      maxConcurrentShardRequests: 5
+      pplEnabled: true
+      tlsAuth: false
+      tlsSkipVerify: true

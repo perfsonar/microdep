@@ -41,9 +41,9 @@ Depends: ${misc:Depends}, ${perl:Depends},
 # pytz
  python3-tz,
  python3-tzlocal,
- perfsonar-microdep-geolite2,
- perfsonar-microdep-utils,
-Recommends: rabbitmq-server
+ perfsonar-microdep-enrichdbs,
+ perfsonar-microdep-utils
+#Recommends: rabbitmq-server
 Description: Microdep analytic toolset to analize perfSONAR datasets
  Analytic scripts to process perfSONAR data sets and generate events. Events may be viualized by Microdep map.
 
@@ -57,14 +57,14 @@ Depends:
 Description: Microdep Analysis for perfSONAR archive
  A package collection required to prepare for archiving of Microdep Analytics on a perfSONAR archive installation.
 
-Package: perfsonar-microdep-geolite2
+Package: perfsonar-microdep-enrichdbs
 Architecture: all
-Description: MaxMind's Geolite2 geoip databases
- Geopositioning information from Maxmind to enrich datasets with AS numbers, city and country.
+Description: Enrichment databases for Microdep (geoip etc.)
+ Databases used to enrich Microdep datasets. Currently ships MaxMind GeoLite2 (AS number, city and country geolocation); a container for future enrichment data sources.
 
 Package: perfsonar-microdep-logstash
 Architecture: all
-Depends: ${misc:Depends}, ${perl:Depends},
+Depends: ${misc:Depends},
  curl,
  logrotate
 #Recommends: perfsonar-archive
@@ -79,6 +79,7 @@ Depends: ${misc:Depends}, ${perl:Depends},
  perl,
  libcgi-pm-perl, 
  libdbi-perl,
+ libdbd-sqlite3-perl,
  libjson-perl,
  libwww-perl,
  libsocket-perl,
@@ -102,7 +103,8 @@ Depends: ${misc:Depends}, ${perl:Depends},
  libjs-moment, 
  libjs-select2.js,
  libjs-sorttable,
- perfsonar-tracetree
+ libjs-vis,
+ perfsonar-microdep-enrichdbs
 Description: Microdep map web GUI presenting analytic results
  Web GUI presenting Microdep analytic results in a map view
 

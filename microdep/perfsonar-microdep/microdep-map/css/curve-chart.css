@@ -1,27 +1,484 @@
-      /* #tabs {width:90%;} */
-      #mapid { height: 900px; z-index: 1;}
-      #midding {width:600px}
-      #busyx {  margin: auto;
-		width: 5%; 
-		/* border: 3px solid #2222aa; */
-		padding: 10px;
-	     }
-      .graph {height:70%;width:90% }
+/* =============================================================================
+ * curve-chart.css — modernised, theme-aware styles for the embedded curve view.
+ * Uses the same design tokens as microdep-map.css so the iframe blends in
+ * regardless of where it's rendered.
+ * ========================================================================== */
 
-      /* css to customize Leaflet default styles  */
-      .popupCustom .leaflet-popup-tip,
-      .popupCustom .leaflet-popup-content-wrapper {
-	  font-size:large;
-	  background: #e0e0e0;
-	  color: #234c5e;
-      }
-      .leaflet-popup, .leaflet-pane {
-	  font-size:large;	
-      }
-      .knapp, select, td, th { font-size:x-large;   }
-      table td { padding:5px; }
-      .knapp { line-height: 1.3em; }
-      th {
-	  cursor: pointer;
-      }
-      caption { font-size: x-large;  font-weight: bold; }
+:root {
+    /* Colour tokens — kept in sync with microdep-map.css */
+    --c-bg:        #0e1217;
+    --c-surface:   #161b22;
+    --c-elevated:  #1c2229;
+    --c-border:    #2a313a;
+    --c-border-h:  #3a4350;
+    --c-text:      #e6e9ee;
+    --c-text-2:    #b1b8c2;
+    --c-text-3:    #7e8794;
+    --c-accent:    #2f81f7;
+    --c-accent-h:  #4a96ff;
+    --c-accent-mute: rgba(47, 129, 247, .14);
+    --c-control:   #232932;
+    --c-control-h: #2c333d;
+    --c-ok:        #3fb950;
+    --c-warn:      #d29922;
+    --c-err:       #f85149;
+
+    --r:    6px;
+    --r-lg: 10px;
+
+    --shadow:    0 1px 3px rgba(0,0,0,.25), 0 1px 2px rgba(0,0,0,.4);
+    --shadow-lg: 0 8px 24px rgba(0,0,0,.45);
+
+    --font-ui:   -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace;
+}
+
+@media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+        --c-bg:        #f6f8fa;
+        --c-surface:   #ffffff;
+        --c-elevated:  #f0f3f7;
+        --c-border:    #d0d7de;
+        --c-border-h:  #afb8c1;
+        --c-text:      #1f2328;
+        --c-text-2:    #57606a;
+        --c-text-3:    #6e7781;
+        --c-accent:    #0969da;
+        --c-accent-h:  #0860c7;
+        --c-accent-mute: rgba(9, 105, 218, .12);
+        --c-control:   #ffffff;
+        --c-control-h: #f3f5f8;
+    }
+}
+[data-theme="light"] {
+    --c-bg:        #f6f8fa;
+    --c-surface:   #ffffff;
+    --c-elevated:  #f0f3f7;
+    --c-border:    #d0d7de;
+    --c-border-h:  #afb8c1;
+    --c-text:      #1f2328;
+    --c-text-2:    #57606a;
+    --c-text-3:    #6e7781;
+    --c-accent:    #0969da;
+    --c-accent-h:  #0860c7;
+    --c-accent-mute: rgba(9, 105, 218, .12);
+    --c-control:   #ffffff;
+    --c-control-h: #f3f5f8;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: var(--c-bg);
+    color: var(--c-text);
+    font-family: var(--font-ui);
+    font-size: 14px;
+    line-height: 1.4;
+}
+
+body {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+/* =================== HEADER =================== */
+.cc-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 12px 22px;
+    background: var(--c-elevated);
+    border-bottom: 1px solid var(--c-border);
+}
+
+.cc-header-left {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    flex-wrap: wrap;
+    min-width: 0;
+}
+
+.cc-title {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--c-text);
+    letter-spacing: .01em;
+}
+
+.cc-range {
+    font-size: .82rem;
+    color: var(--c-text-2);
+    font-family: var(--font-mono);
+}
+
+.cc-busy {
+    width: 22px;
+    height: 22px;
+    /* Hidden by default; the JS toggles it via $().show()/$().hide() */
+}
+
+/* =================== TOOLBAR =================== */
+.cc-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    gap: 14px 18px;
+    padding: 12px 22px;
+    background: var(--c-surface);
+    border-bottom: 1px solid var(--c-border);
+}
+
+.cc-toolbar-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.cc-toolbar-group.cc-nav-group {
+    flex-direction: row;
+    align-items: end;
+    gap: 6px;
+}
+
+.cc-toolbar-spacer {
+    margin-left: auto;        /* push reset-zoom to the right */
+}
+
+.cc-label {
+    font-size: .68rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--c-text-3);
+}
+
+/* Inputs / selects share styling with the main microdep theme */
+.knapp {
+    appearance: none;
+    -webkit-appearance: none;
+    background: var(--c-control);
+    color: var(--c-text);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r);
+    padding: 7px 12px;
+    font-family: var(--font-ui);
+    font-size: .85rem;
+    line-height: 1.2;
+    transition: background .15s, border-color .15s, color .15s;
+}
+.knapp:hover { background: var(--c-control-h); border-color: var(--c-border-h); }
+.knapp:focus { outline: none; border-color: var(--c-accent); box-shadow: 0 0 0 2px var(--c-accent-mute); }
+
+.cc-select {
+    min-width: 140px;
+    padding-right: 30px;
+    background-image:
+        linear-gradient(45deg, transparent 50%, var(--c-text-2) 50%),
+        linear-gradient(135deg, var(--c-text-2) 50%, transparent 50%);
+    background-position: calc(100% - 14px) 52%, calc(100% - 9px) 52%;
+    background-size: 5px 5px, 5px 5px;
+    background-repeat: no-repeat;
+}
+
+.cc-input {
+    min-width: 140px;
+    font-family: var(--font-mono);
+}
+
+.cc-nav-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+    font-weight: 500;
+}
+
+button.knapp { cursor: pointer; }
+button.knapp:disabled { opacity: .45; cursor: not-allowed; }
+
+/* =================== TABS =================== */
+.cc-tabs {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--c-bg) !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0;
+}
+
+.cc-tabs-nav {
+    display: flex;
+    align-items: center;
+    flex: 0 0 auto;
+    background: var(--c-elevated) !important;
+    border: none !important;
+    border-bottom: 1px solid var(--c-border) !important;
+    padding: 0 14px !important;
+    margin: 0 !important;
+    list-style: none !important;
+    gap: 4px;
+    min-height: 38px;
+}
+.cc-tabs-nav:empty {
+    display: none;            /* hide nav when no curves added yet */
+}
+/* Visual styling lives on the <li> so the close-icon <span> (a sibling of the
+   <a> inside the same <li>) shares the same background / border / rounded
+   corners as the tab label, instead of leaking outside it. */
+.cc-tabs-nav li {
+    display: inline-flex;
+    align-items: center;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    border-radius: var(--r) var(--r) 0 0;
+    margin: 0 !important;
+    padding: 0 4px 0 0 !important;
+    transition: background .15s, border-color .15s;
+}
+.cc-tabs-nav li:hover {
+    background: var(--c-accent-mute);
+}
+.cc-tabs-nav li.ui-tabs-active {
+    background: var(--c-surface) !important;
+    border-bottom-color: var(--c-accent) !important;
+}
+
+.cc-tabs-nav li a {
+    display: inline-block;
+    padding: 8px 14px !important;
+    color: var(--c-text-2) !important;
+    background: transparent !important;
+    border: none !important;
+    border-radius: 0 !important;
+    font-size: .82rem;
+    text-decoration: none;
+    transition: color .15s;
+}
+.cc-tabs-nav li:hover a,
+.cc-tabs-nav li.ui-tabs-active a {
+    color: var(--c-text) !important;
+}
+
+/* Close icon for closable tabs (mirrors microdep-map.css) */
+.cc-tabs-nav li span.ui-icon-close {
+    background: none !important;
+    background-image: none !important;
+    text-indent: 0 !important;
+    width: 20px !important;
+    height: 20px !important;
+    margin: 0 0 0 4px !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    cursor: pointer;
+    font-size: 0;
+    line-height: 1;
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    vertical-align: middle;
+    border-radius: var(--r);
+    color: var(--c-text-3);
+    transition: background .15s, color .15s;
+    position: relative;
+    z-index: 2;
+}
+.cc-tabs-nav li span.ui-icon-close::before {
+    content: '×';
+    display: block;
+    font-size: 18px;
+    line-height: 18px;
+    font-weight: 600;
+    color: inherit;
+}
+.cc-tabs-nav li.ui-tabs-active span.ui-icon-close { color: var(--c-text); }
+.cc-tabs-nav li span.ui-icon-close:hover {
+    background: var(--c-accent-mute);
+    color: var(--c-accent);
+}
+
+/* Tab panels (added via add_tab as <canvas class="graph">). Chart.js runs in
+   non-responsive mode and sizes the canvas itself (width = window.innerWidth *
+   0.9, height ≈ width * 9/16) — we must NOT override its width/height in CSS
+   or the drawing surface gets stretched.
+   `margin: auto` on a flex item works on both axes inside a flex column,
+   so the canvas is centred horizontally AND vertically within the remaining
+   space below the tab nav. */
+.cc-tabs > .graph,
+.cc-tabs > .ui-tabs-panel {
+    flex: 0 0 auto;
+    background: var(--c-surface) !important;
+    border: none !important;
+    margin: auto !important;
+    padding: 0 !important;
+    display: block;
+}
+
+canvas.graph {
+    display: block;
+    /* width/height managed by chart.js — do not !important them */
+    max-width: 100%;
+    background: var(--c-surface);
+}
+
+/* Placeholder shown when the elastic query returns 0 hits. Lives inside a
+   regular tab panel so the user gets a visible affirmative for their action. */
+.cc-empty-graph {
+    margin: auto;
+    padding: 60px 30px;
+    text-align: center;
+    color: var(--c-text-2);
+    max-width: 520px;
+}
+.cc-empty-graph h3 {
+    margin: 0 0 14px;
+    color: var(--c-text);
+    font-size: 1.05rem;
+    font-weight: 600;
+}
+.cc-empty-graph p {
+    margin: 8px 0;
+    font-size: .85rem;
+    color: var(--c-text-3);
+    line-height: 1.5;
+}
+.cc-empty-graph .cc-empty-period {
+    display: inline-block;
+    margin-top: 16px;
+    padding: 10px 16px;
+    background: var(--c-elevated);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r);
+    text-align: left;
+    font-family: var(--font-mono);
+    font-size: .78rem;
+}
+.cc-empty-graph .cc-empty-period strong {
+    color: var(--c-text-2);
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    font-size: .7rem;
+    font-weight: 600;
+}
+
+/* When there are no tabs yet, fill the empty cc-tabs region with the surface
+   colour so the page doesn't show a dark gap. */
+.cc-tabs:not(:has(canvas)) {
+    background: var(--c-surface) !important;
+}
+
+/* =================== LEGEND / STATUS =================== */
+.cc-legend {
+    padding: 8px 22px;
+    background: var(--c-surface);
+    border-top: 1px solid var(--c-border);
+    font-size: .78rem;
+    color: var(--c-text-2);
+}
+.cc-legend:empty {
+    display: none;
+}
+
+.cc-legend table {
+    border-collapse: collapse;
+    width: auto;
+}
+.cc-legend td {
+    padding: 4px 10px;
+    border-radius: var(--r);
+}
+
+.cc-status-bar {
+    display: flex;
+    gap: 22px;
+    padding: 6px 22px;
+    background: var(--c-elevated);
+    border-top: 1px solid var(--c-border);
+    font-size: .72rem;
+    font-family: var(--font-mono);
+    color: var(--c-text-3);
+}
+.cc-status-label {
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--c-text-3);
+    margin-right: 4px;
+}
+#status, #error { color: var(--c-text-2); }
+
+.cc-missing {
+    color: var(--c-warn);
+    padding: 0 22px 8px;
+    font-size: .78rem;
+}
+.cc-missing:empty { display: none; }
+
+/* =================== DATATABLES OVERRIDES =================== */
+table.dataTable {
+    background: var(--c-surface) !important;
+    color: var(--c-text) !important;
+    font-size: .82rem !important;
+}
+table.dataTable thead th,
+table.dataTable thead td {
+    background: var(--c-elevated) !important;
+    color: var(--c-text) !important;
+    border-bottom: 1px solid var(--c-border) !important;
+}
+table.dataTable tbody tr {
+    background: var(--c-surface) !important;
+    color: var(--c-text-2) !important;
+}
+table.dataTable tbody tr:hover {
+    background: var(--c-elevated) !important;
+}
+table.dataTable td, table.dataTable th {
+    padding: 6px 10px !important;
+    border-color: var(--c-border) !important;
+}
+
+/* =================== JQUERY UI DATEPICKER =================== */
+.ui-datepicker {
+    background: var(--c-surface) !important;
+    color: var(--c-text) !important;
+    border: 1px solid var(--c-border) !important;
+    box-shadow: var(--shadow-lg);
+    font-family: var(--font-ui) !important;
+    font-size: .82rem !important;
+    border-radius: var(--r-lg) !important;
+}
+.ui-datepicker .ui-datepicker-header {
+    background: var(--c-elevated) !important;
+    color: var(--c-text) !important;
+    border: none !important;
+    border-bottom: 1px solid var(--c-border) !important;
+}
+.ui-datepicker td a, .ui-datepicker td span {
+    color: var(--c-text) !important;
+    background: transparent !important;
+    border: none !important;
+}
+.ui-datepicker td a:hover {
+    background: var(--c-accent-mute) !important;
+}
+.ui-datepicker td .ui-state-active {
+    background: var(--c-accent) !important;
+    color: #fff !important;
+    font-weight: 600 !important;
+}
+
+/* =================== RESPONSIVE =================== */
+@media (max-width: 700px) {
+    .cc-header, .cc-toolbar, .cc-status-bar { padding-left: 14px; padding-right: 14px; }
+    .cc-toolbar-spacer { margin-left: 0; }
+    .cc-select, .cc-input { min-width: 110px; }
+}
