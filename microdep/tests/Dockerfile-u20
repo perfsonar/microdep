@@ -1,0 +1,126 @@
+# syntax=docker/dockerfile:1-labs
+#
+# Dockerfile to build perfSONAR  node
+# To build, cd to folder and run
+#
+#     docker build --build-arg TYPE=<node-variant> -t perfsonar-<node-variant> ."
+#
+# where <node-variant> may be "testpoint" og "toolkit" 
+#
+# To run container with systemd operative in none-priviledge mode (may not work...)  
+#   docker run -d --tmpfs /tmp --tmpfs /run -v /sys/fs/cgroup:/sys/fs/cgroup:ro --net=host --name perfsonar-testpoint --rm perfsonar-testpoint
+#   docker run -d --tmpfs /tmp --tmpfs /run -v /sys/fs/cgroup:/sys/fs/cgroup:ro --net=host --name perfsonar-toolkit --rm perfsonar-toolkit
+#
+# ... or in privilede-mode
+#   docker run -d --privileged --net=host --name perfsonar-testpoint --rm perfsonar-testpoint
+#   docker run -d --privileged --net=host --name perfsonar-toolkit --rm perfsonar-toolkit
+#
+#
+
+
+FROM systemd-image-u20:latest
+LABEL org.opencontainers.image.authors="Otto J Wittner <wittner@sikt.no>"
+
+# Fix default locals
+ENV LANG=en_US.UTF-8
+ENV LANGUAGE=en_US.UTF-8
+ENV LC_COLLATE=C
+ENV LC_CTYPE=en_US.UTF-8
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# To install tzdata quietly 
+RUN ln -fs /usr/share/zoneinfo/Europe/Oslo /etc/localtime 
+
+# ---- D o w n l o a d   a n d   i n s t a l l   p a c k a g e s  ------
+
+# Add misc management stuff
+RUN apt-get update && apt-get -y upgrade && apt-get install -y apt-utils coreutils man-db nano emacs git openssh-client net-tools iputils-ping traceroute tcpdump curl bind9-host unzip gnupg software-properties-common tree
+
+# Add required perfsonar repos
+RUN curl -o /etc/apt/sources.list.d/perfsonar-release.list https://downloads.perfsonar.net/debian/perfsonar-release.list
+RUN curl -s -o /etc/apt/trusted.gpg.d/perfsonar-release.gpg.asc https://downloads.perfsonar.net/debian/perfsonar-release.gpg.key
+RUN add-apt-repository universe
+RUN apt-get update
+
+ARG TYPE
+
+RUN apt-get --download-only  --no-install-recommends -y install perfsonar-$TYPE
+# Fix missing example conf file in perfsonar-lsregistrationdaemon package
+#RUN mkdir -p /usr/share/doc/perfsonar-lsregistrationdaemon/examples/
+#RUN curl -s -o /usr/share/doc/perfsonar-lsregistrationdaemon/examples/lsregistrationdaemon.conf https://raw.githubusercontent.com/perfsonar/ls-registration-daemon/master/etc/lsregistrationdaemon.conf
+# Make sure rsyslog and postgresql are installed before perfsonar install
+#RUN apt -y install rsyslog postgresql firewalld
+RUN apt-get -y install rsyslog 
+COPY microdep/tests/rsyslog/u22/rsyslog.conf /etc/rsyslog.conf
+COPY microdep/tests/rsyslog/listen.conf /etc/rsyslog.d/listen.conf
+COPY microdep/tests/rsyslog/python-pscheduler.conf /etc/rsyslog.d/python-pscheduler.conf
+COPY microdep/tests/rsyslog/owamp-syslog.conf /etc/rsyslog.d/owamp-syslog.conf
+RUN printf '#!/bin/sh\nexit 0' > /usr/sbin/policy-rc.d
+
+#RUN --security=insecure /lib/systemd/systemd --user; echo "systemd running..."; sleep 10; systemctl --user status; echo "AVBRYT NUH!"; sleep 50000
+
+#RUN /usr/sbin/rsyslogd -iNONE && /usr/bin/pg_ctlcluster 14 main start && \
+#env OPENSEARCH_INITIAL_ADMIN_PASSWORD=perfSONAR123! RUNLEVEL=1 apt-get --no-install-recommends -y install perfsonar-$TYPE
+
+# Add Opensearch dashboards ("Kibana")
+RUN if [ "$TYPE" = "toolkit" ]; then \
+       apt-get --download-only -y install opensearch-dashboards; \
+    fi
+
+# Prepare access to local repos
+#RUN apt install dpkg-dev
+COPY unibuild-repo/*.deb /var/lib/unibuild-microdep-repo/
+COPY unibuild-repo/Packages /var/lib/unibuild-microdep-repo/
+COPY unibuild-repo/Release /var/lib/unibuild-microdep-repo/
+#COPY pstracetree/unibuild-repo/*.deb /var/lib/unibuild-pstracetree-repo
+#COPY pstracetree/unibuild-repo/Packages /var/lib/unibuild-pstracetree-repo
+#COPY pstracetree/unibuild-repo/Release /var/lib/unibuild-pstracetree-repo
+RUN echo "deb [trusted=yes] file:/var/lib/unibuild-microdep-repo ./" > /etc/apt/sources.list.d/local-microdep-repo.list
+#RUN echo "deb [trusted=yes] file:/var/lib/unibuild-pstracetree-repo ./" > /etc/apt/sources.list.d/local-pstracetree-repo.list
+#RUN apt-get --allow-unauthenticated update
+RUN apt-get update 
+
+# ----  E n d   d o w n l o a d s   a n d   p a c k a g e   i n s t a l l   ----
+
+# ---- P r e p a r e   s y s t e m d   s e r v i c e s
+
+# Add service to run (re)run password setup for opensearch
+COPY microdep/tests/opensearch-security-admin.service /usr/lib/systemd/system/
+#RUN if [ "$TYPE" = "toolkit" ]; then \
+#     systemctl enable opensearch-security-admin.service; \
+#fi
+
+# Make ntdp stay root and stop attempting to update system clock
+#RUN sed -i 's|-u ntp:ntp ||g' /usr/lib/systemd/system/ntpd.service
+#RUN echo "disable kernel" >> /etc/ntp.conf
+
+# Add lookup service configs 
+COPY microdep/tests/etc/lsregistrationdaemon.conf*  /etc/perfsonar/
+
+# Add service to apply host specific config
+#COPY etc/hostspecific-conf.service /usr/lib/systemd/system/
+#RUN systemctl enable hostspecific-conf.service
+
+# Add one shot service installing toolkit and microdep
+#COPY etc/install-perfsonar-packages.service /usr/lib/systemd/system/
+#RUN systemctl enable install-perfsonar-packages.service
+
+# Update topology db with info from psconfig test description
+# A d d   s y s t e m d   s e r v i c e   f o r   t h i s  ! !
+# Based on "PathChanged="
+# /usr/lib/perfsonar/bin/microdep_commands/microdep-psconfig-load.pl --db /var/lib/perfsonar/microdep/microdep_ipv4.db /etc/perfsonar/psconfig/pscheduler.d/microdep-tests.json
+       
+# http web (use 443 instead!)
+EXPOSE 80  
+# https web
+EXPOSE 443
+# Opensearch (use https://<hostname>:443/opensearch/ instead)
+#EXPOSE 9200
+# Opensearch Dashboard   
+EXPOSE 5601
+# Grafana   
+EXPOSE 3000   
+
+# Run systemd as in "parent"-image
+CMD ["/lib/systemd/systemd"]

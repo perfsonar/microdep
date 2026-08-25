@@ -1,0 +1,25 @@
+;; This buffer is for text that is not saved, and for Lisp evaluation.
+;; To create a file, visit it with C-x C-f and enter text in its buffer.
+
+
+--json '{ "size": 0, "aggs": { "peer": { "terms": { "field": "from_to.keyword" } } } }'
+
+--json '{ "query": { "range": { "@date": { "gte": "now-1d/d", "lt": "now/d" } } }, "size": 0, "aggs": { "peer": { "terms": { "field": "from_to.keyword" } } } }'
+
+# This one delivers peers
+--json '{ "query": { "range": { "@date": { "gte": "now-7d", "lt": "now" } } }, "size": 0, "aggs": { "peer": { "terms": { "field": "from_to.keyword", "size" : 10000  } } } }'
+
+
+# Peers with geopos data
+--json '{ "query": { "range": { "@date": { "gte": "now-7d", "lt": "now" } } }, "size": 0, "aggs": { "peer": { "terms": { "field": "from.keyword", "size" : 10000  }, "aggs": { "lat": { "avg":  { "field": "from_geo.latitude" } },  "lon": { "avg":  { "field": "from_geo.longitude" } } } } } }'
+
+# Geopos from both from- and to-fields
+
+https://localhost:9200/_msearch
+
+--json '
+{"index": "microdep*"}
+{ "query": { "range": { "@date": { "gte": "now-7d", "lt": "now" } } }, "size": 0, "aggs": { "from-nodes": { "terms": { "field": "from.keyword", "size" : 10000  }, "aggs": { "lat": { "avg":  { "field": "from_geo.latitude" } },  "lon": { "avg":  { "field": "from_geo.longitude" } } } } } }
+{"index": "microdep*"}
+{ "query": { "range": { "@date": { "gte": "now-7d", "lt": "now" } } }, "size": 0, "aggs": { "to-nodes": { "terms": { "field": "to.keyword", "size" : 10000  }, "aggs": { "lat": { "avg":  { "field": "to_geo.latitude" } },  "lon": { "avg":  { "field": "to_geo.longitude" } } } } } }
+'
