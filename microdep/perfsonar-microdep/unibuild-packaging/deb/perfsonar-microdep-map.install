@@ -5,9 +5,11 @@ bin/microdep_commands/yaml-to-json.cgi usr/lib/perfsonar/bin/microdep_commands/
 bin/microdep_commands/get-mapconfig.cgi usr/lib/perfsonar/bin/microdep_commands/
 bin/microdep_commands/get-tracetests.pl usr/lib/perfsonar/bin/microdep_commands/
 bin/microdep_commands/hopgeo.pl usr/lib/perfsonar/bin/microdep_commands/
+bin/microdep_commands/microdep-config.cgi usr/lib/perfsonar/bin/microdep_commands/
 etc/mapconfig.yml etc/perfsonar/microdep/
 etc/mapconfig.d/* etc/perfsonar/microdep/mapconfig.d/
-etc/microdep-map_sqlite3_template.db etc/perfsonar/microdep/
+etc/microdep_ipv4.db var/lib/perfsonar/microdep/
+etc/microdep_ipv6.db var/lib/perfsonar/microdep/
 etc/apache-microdep-map.conf etc/apache2/conf-available/
 etc/grafana_dashboard_patch etc/perfsonar/
 

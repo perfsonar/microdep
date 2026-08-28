@@ -37,12 +37,12 @@ case "$1" in
 	fi
 
 	# Prepare default local topology DBs
-	if [ ! -e /var/lib/perfsonar/microdep/microdep_ipv4.db ]; then
-	    cp /etc/perfsonar/microdep/microdep-map_sqlite3_template.db /var/lib/perfsonar/microdep/microdep_ipv4.db
-	fi
-	if [ ! -e /var/lib/perfsonar/microdep/microdep_ipv6.db ]; then
-	    cp /etc/perfsonar/microdep/microdep-map_sqlite3_template.db /var/lib/perfsonar/microdep/microdep_ipv6.db
-	fi
+	#if [ ! -e /var/lib/perfsonar/microdep/microdep_ipv4.db ]; then
+	#    cp /etc/perfsonar/microdep/microdep-map_sqlite3_template.db /var/lib/perfsonar/microdep/microdep_ipv4.db
+	#fi
+	#if [ ! -e /var/lib/perfsonar/microdep/microdep_ipv6.db ]; then
+	#    cp /etc/perfsonar/microdep/microdep-map_sqlite3_template.db /var/lib/perfsonar/microdep/microdep_ipv6.db
+	#fi
 	
 	# Enable apache config
         if [ -e /usr/share/apache2/apache2-maintscript-helper ]; then
