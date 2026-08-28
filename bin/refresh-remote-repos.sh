@@ -15,7 +15,9 @@ usage () {
     echo "-u username     Remote user. Default is $USER."
     echo "-d distro       Select distro, rpm/deb/auto. Default is $DISTRO."
     echo "-e remote-sh    Remote shell cmd to apply. Default is $RSH."
-    echo "-s              Be silent"
+    echo "-L              Liste package in remote repo after repo refresh."
+    echo "-U              Update installed packages on remote host after repo refresh."
+    echo "-y              Answer Y to all prompts."
 
     exit 1;
 }
@@ -28,7 +30,7 @@ msg () {
 }
 
 # Parse arguments
-while getopts ":hsd:u:e:" opt; do
+while getopts ":hyLUd:u:e:" opt; do
     case $opt in
 	d)
 	    DISTRO=$OPTARG
@@ -39,8 +41,14 @@ while getopts ":hsd:u:e:" opt; do
 	e)
 	    RSH=$OPTARG
 	    ;;
-	s)
-	    SILENT=y
+	y)
+	    YESTOALL=y
+	    ;;
+	L)
+	    LISTREPO=y
+	    ;;
+	U)
+	    UPDATEREMOTE=y
 	    ;;
 	h)
 	    echo "Refresh remote repos at give host."
@@ -80,8 +88,10 @@ if [ "$DISTRO" = "auto" ]; then
     exit 1
 fi 
 
-read -p "Sync $DISTRO-repos to $HOST (y/N)? " YESNO
-if [  "$YESNO" != "y" -a  "$YESNO" != "Y" ]; then exit 0; fi
+if [ "$YESTOALL" != "y" ]; then
+    read -p "Sync $DISTRO-repos to $HOST (y/N)? " YESNO
+    if [  "$YESNO" != "y" -a  "$YESNO" != "Y" ]; then exit 0; fi
+fi
 
 # Check if sudo is avaiable on remote host
 echo "Checking remote sudo status..."
@@ -110,7 +120,6 @@ if [ "$DISTRO" = "rpm" ]; then
     
     echo "Synching to remote repo at $HOST ..."
     rsync --rsync-path "sudo rsync" -vr -e "$RSH" unibuild-repo/RPMS $HOST:/var/lib/unibuild-repo/
-    #rsync --rsync-path "sudo rsync" -vr -e "$RSH" pstracetree/unibuild-repo/RPMS $HOST:/var/lib/unibuild-repo/
 
     echo "Preparing remote repo ..."
     $RSH $HOST sudo dnf -y install yum-utils createrepo
@@ -124,42 +133,39 @@ if [ "$DISTRO" = "rpm" ]; then
     echo "Refreshing repo list ..."
     $RSH $HOST sudo dnf clean all
     echo "Done!"
-    read -p "List packages in new local repo on $HOST (y/N)? " YESNO
-    if [  "$YESNO" = "y" -o  "$YESNO" = "Y" ]; then
+    if [  "$LISTREPO" = "y" ]; then
+	echo "== Remote repo content =="
 	$RSH $HOST sudo dnf list | grep unibuild-repo
     fi
-    read -p "Update installed packages on $HOST (y/N)? " YESNO
-    if [  "$YESNO" = "y" -o  "$YESNO" = "Y" ]; then
+    if [  "$UPDATEREMOTE" = "y" ]; then
+	echo "Updating packages on remote host..."
 	$RSH $HOST sudo dnf -y update --nogpgcheck
     fi
 
 elif [ "$DISTRO" = "deb" ]; then
 
-#    if [ ! -e "unibuild-repo/Release" -o ! -e "pstracetree/unibuild-repo/Release" ]; then
     if [ ! -e "unibuild-repo/Release" ]; then
-	echo "Error: No valid DEB build found (unibuild-repo/Release or pstracetree/unibuild-repo/Release is missing). Run 'make deb' first." >&2
+	echo "Error: No valid DEB build found (unibuild-repo/Release is missing). Run 'make deb' first." >&2
 	exit 1
     fi
     
     echo "Synching to remote $DISTRO-repo at $HOST ..."
     rsync --rsync-path "sudo rsync" -vr -e "$RSH" unibuild-repo/*.deb unibuild-repo/Packages unibuild-repo/Release $HOST:/var/lib/unibuild-microdep-repo/
-    #rsync --rsync-path "sudo rsync" -vr -e "$RSH" pstracetree/unibuild-repo/*.deb pstracetree/unibuild-repo/Packages pstracetree/unibuild-repo/Release $HOST:/var/lib/unibuild-pstracetree-repo/
 
     echo "Enabling remote repo ..."
     TMPDIR=$(mktemp -d)
     echo "deb [trusted=yes] file:/var/lib/unibuild-microdep-repo ./" > $TMPDIR/local-microdep-repo.list
-    #echo "deb [trusted=yes] file:/var/lib/unibuild-pstracetree-repo ./" > $TMPDIR/local-pstracetree-repo.list
     rsync --rsync-path "sudo rsync" -vr -e "$RSH" $TMPDIR/ $HOST:/etc/apt/sources.list.d/
     rm -r $TMPDIR
     echo "Refreshing repo list ..."
     $RSH $HOST sudo apt-get -y update
     echo "Done!"
-    read -p "List packages in new local repo on $HOST (y/N)? " YESNO
-    if [  "$YESNO" = "y" -o  "$YESNO" = "Y" ]; then
+    if [  "$LISTREPO" = "y" ]; then
+	echo "== Remote repo content =="
 	$RSH $HOST apt list | grep "/unibuild"
     fi
-    read -p "Update installed packages on $HOST (y/N)? " YESNO
-    if [  "$YESNO" = "y" -o  "$YESNO" = "Y" ]; then
+    if [  "$UPDATEREMOTE" = "y" ]; then
+	echo "Updating packages on remote host..."
 	$RSH $HOST sudo apt-get -y upgrade
     fi
 else
