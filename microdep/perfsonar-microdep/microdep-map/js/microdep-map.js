@@ -1489,7 +1489,7 @@ function link_popup(link){
 	}
 
 	// --- Queues (jitter / h_ddelay) ---
-	var queuesIndex = (event_index && event_index['jitter']) ? event_index['jitter'] : 'index-not-configured');
+	var queuesIndex = (event_index && event_index['jitter']) ? event_index['jitter'] : 'index-not-configured';
 	var queuesUrl = 'curve-chart.html?net=' + parms.net + '&index=' + queuesIndex + '&from=' + link.from + '&to=' + link.to + '&event=jitter&property=h_ddelay&start=' + start + '&end=' + end + "&title=From " + link.from + " to " + link.to;
 	var queuesBtn = document.createElement("button");
 	queuesBtn.className = "knapp";
