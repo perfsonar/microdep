@@ -403,7 +403,11 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
     // ====================================================================
 
     async function traceroute_sum(tr_data) {
-        let nodes = [{ label: 'start', id: 'start', hop: 0, color: { background: '#20C020' } }];
+        // The hop-zero node stands for the traceroute sender, so label it with
+        // that host (the one named in the viewer's title) instead of a generic
+        // "Start" (issue #136). The id stays 'start' - it keys the edges.
+        const start_label = params.from || from || 'Start';
+        let nodes = [{ label: start_label, id: 'start', hop: 0, color: { background: '#20C020' } }];
         let node_ix = [];
         let edges = [];
         let stats = [];
@@ -420,6 +424,13 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
                 set_progress(40 + Math.round(50 * _seen / tr_data.length), 'Building topology');
                 await _yield();
             }
+            // Every trace begins at the sender, so hop one of EVERY trace has to
+            // link back to the start node. Without this reset `routers` still
+            // holds the previous trace's last hop, and the start node ends up
+            // connected to the first trace's first hop only (issue #136).
+            routers = [];
+            routers['start'] = 1;
+
             let last_node = 0, all_hops = [];
             if (!start) start = tr.ts;
             range = tr.ts - start;
