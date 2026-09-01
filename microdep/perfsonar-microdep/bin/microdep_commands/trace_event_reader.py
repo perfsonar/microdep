@@ -107,7 +107,7 @@ param = {
     'output':'',                  # Output filename.
     'oneoutput':'',               # Output filename for single file output or to external host given in psConfig archiver spec.
     'samepath': 0,                # Flag to enable placement of outputfile in same folder as input file 
-    'namemap': '/var/lib/microdep/my-network/etc/mp-address.txt',    # File path to name-to-ip mapping db
+    'namemap': '/etc/perfsonar/microdep/mp-address.txt',    # File path to name-to-ip mapping db
     'geodb': '/usr/share/GeoIP/GeoLite2-ASN.mmdb',                     # File path to ip-to-ASN mapping db
     'dbtype': 'mysql',            # Database type. 'mysql' and 'postgresql' supported.
     'dbname': 'routingmonitor',   # Name of database for anomality parameters
@@ -121,7 +121,7 @@ param = {
     'maxprocs': 1,                # Max no of parallel processes in batch mode
     'topoevents': 0,              # Flag to enable detection and output of topology events
     'topointerval': 3600,         # Min no of seconds between topology events
-    'pslookup': 'http://ps-west.es.net/lookup/activehosts.json',  # Source of perfSONAR Lookup Service hosts
+    'pslookup': 'http://35.223.142.206/lookup/_search',  # API of perfSONAR Lookup Service
     'pslookupwait': 3600,         # Min no of seconds to wait between refreshing info fetched from pslookup-service
     'ipv6': 0,                    # Flag enabling ipv6 address parsing
     'followinterval': 10,          # No of seconds to wait between requests for data from openseach archive
@@ -720,31 +720,41 @@ class Resolver:
             
         if param['pslookup'] and self.geopos[ip]['refresh'] < time.time():
             # Attempt to fetch geopos info from perfSONAR's Lookup Service
-            if not self.pslookuphost:
-                try:
-                    # Fetch list of lookup service hosts
-                    pslookuphost_str = urllib.request.urlopen(param['pslookup']).read()
-                    self.pslookuphost = json.loads(pslookuphost_str)
-                except urllib.error.URLError:
-                    pass
-
-            for pshost in self.pslookuphost['hosts']:
-                try:
-                    # Lookup host name (via pslookup api at port 8090)
-                    pslookup_str = urllib.request.urlopen(pshost['locator'] + "/?host-name=" + ip).read()
-                    if param['verbose'] > 3:
-                        print("pslookup-data:")
-                        print(pslookup_str)
-                    pslookup = json.loads(pslookup_str)
-                    if pslookup:
-                        # Position available. Store applying Geolite2 (Maxmine) tags / keys
-                        self.store_geopos(ip, pslookup[0])
-                        break
-                    else:
-                        # Search for host name among interface addresses (applying opensearch api at port 80)
-                        opensearch_api = pshost['locator'].replace(":8090","").replace("records","_search")
-                        iso_now = datetime.fromtimestamp(time.time(), pytz.timezone(str(get_localzone()))).isoformat()    # ISO formatted current time with timezone
-                        query_data = { 'query': { 'bool': { 'filter': [ { 'term': { 'interface-addresses': ip } }, { 'range': { 'expires' : { 'gt' : iso_now  } } } ] } }, 'size': 1 }
+            opensearch_api = param['pslookup']
+            query_data = {
+                'query': { 'bool' : { 'filter' : [
+                    { 'bool' : { 'should' : [
+                        { 'bool' : { 'must' : [
+                            { 'term' : { 'type' : 'host'} },
+                            { 'term' : { 'host-name' : ip } }
+                        ] } },
+                        { 'bool' : { 'must' : [
+                            { 'term' : { 'type' : 'interface' } },
+                            { 'term' : { 'interface-addresses' : ip } }
+                        ] } }
+                    ] } },
+                    { 'range' : { 'expires': { 'gt': 'now' } } }
+                ] } } , 'sort': [ {'type':'asc'} ], 'size' : 1 }
+            query_req = urllib.request.Request(opensearch_api, data=bytes(json.dumps(query_data), encoding='utf-8') )
+            query_req.add_header('Content-Type', 'application/json')
+            try:
+                pslookup_str = urllib.request.urlopen(query_req).read()
+                if param['verbose'] > 3:
+                    print("pslookup-data:")
+                    print(pslookup_str)
+                pslookup = json.loads(pslookup_str)
+                if pslookup and pslookup['hits'] and pslookup['hits']['total']['value'] > 0:
+                    # Valied respons. Check type.
+                    if pslookup['hits']['hits'][0]['_source']['type'][0] == 'host':
+		        # Host record/document found. Store geopos from document.
+                        self.store_geopos(ip, pslookup['hits']['hits'][0]['_source'])
+                    elif pslookup['hits']['hits'][0]['_source']['type'][0] == 'interface' and pslookup['hits']['hits'][0]['_source']['uri']: 
+		        # Interface with ip found. Apply uri to find parent host for interface.
+                        query_data = { 'query': { 'bool': { 'filter': [
+                            {'term': {'type': 'host'}},
+                            {'term': {'host-net-interfaces': pslookup['hits']['hits'][0]['_source']['uri'] }},
+                            {'range': {'expires': {'gt': 'now'}}}
+                        ]}}, 'size': 1}
                         query_req = urllib.request.Request(opensearch_api, data=bytes(json.dumps(query_data), encoding='utf-8') )
                         query_req.add_header('Content-Type', 'application/json')
                         pslookup_str = urllib.request.urlopen(query_req).read()
@@ -752,23 +762,11 @@ class Resolver:
                             print("pslookup-data:")
                             print(pslookup_str)
                         pslookup = json.loads(pslookup_str)
-                        if pslookup and pslookup['hits'] and pslookup['hits']['total']['value'] > 0 and pslookup['hits']['hits'][0]['_source']['uri']:
-                            # Apply uri to find parent host for interface
-                            query_data = { 'query': { 'bool': { 'filter': [ { 'term': { 'host-net-interfaces': pslookup['hits']['hits'][0]['_source']['uri'] } } ] } }, 'size': 1 }
-                            query_req = urllib.request.Request(opensearch_api, data=bytes(json.dumps(query_data), encoding='utf-8') )
-                            query_req.add_header('Content-Type', 'application/json')
-                            pslookup_str = urllib.request.urlopen(query_req).read()
-                            if param['verbose'] > 3:
-                                print("pslookup-data:")
-                                print(pslookup_str)
-                            pslookup = json.loads(pslookup_str)
-                            if pslookup and pslookup['hits'] and pslookup['hits']['total']['value'] > 0:
-                                # Parent host found. Store position if available
-                                self.store_geopos(ip, pslookup['hits']['hits'][0]['_source'])
-                                break
-
-                except urllib.error.URLError:
-                    pass
+                        if pslookup and pslookup['hits'] and pslookup['hits']['total']['value'] > 0:
+                            # Parent host found. Store position if available
+                            self.store_geopos(ip, pslookup['hits']['hits'][0]['_source'])
+            except urllib.error.URLError:
+                pass
 
             # Set refresh interval for geopos info.
             self.geopos[ip]['refresh'] = time.time() + float(param['pslookupwait'])

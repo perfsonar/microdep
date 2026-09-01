@@ -1489,10 +1489,7 @@ function link_popup(link){
 	}
 
 	// --- Queues (jitter / h_ddelay) ---
-	// Use the configured jitter index (e.g. dragonlab_jitter, shared by both
-	// nets) - NOT parms.net + '_jitter', which becomes dragonlab_6_jitter on
-	// Net-6 and reports "No jitter data" (issue #100).
-	var queuesIndex = (event_index && event_index['jitter']) ? event_index['jitter'] : (parms.net + '_jitter');
+	var queuesIndex = (event_index && event_index['jitter']) ? event_index['jitter'] : 'index-not-configured';
 	var queuesUrl = 'curve-chart.html?net=' + parms.net + '&index=' + queuesIndex + '&from=' + link.from + '&to=' + link.to + '&event=jitter&property=h_ddelay&start=' + start + '&end=' + end + "&title=From " + link.from + " to " + link.to;
 	var queuesBtn = document.createElement("button");
 	queuesBtn.className = "knapp";
@@ -1952,7 +1949,7 @@ var mouseover=false;
 var _hubCenteredNets = {};
 
 // The "hub" host = the node that appears in the most links (in a star topology
-// like dragonlab that's the monitoring host every pair shares). Returns its
+// that's the monitoring host every pair shares). Returns its
 // point ({id,lat,lon}) or null.
 function _hub_point() {
     var counts = {};

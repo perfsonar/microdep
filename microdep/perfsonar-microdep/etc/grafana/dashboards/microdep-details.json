@@ -8,7 +8,7 @@
   "panels": [
     {
       "datasource": { "type": "grafana-opensearch-datasource", "uid": "microdep-jitter" },
-      "description": "Jitter (h_jit) 50th/95th/99th percentile over time, from the dense dragonlab_jitter index.",
+      "description": "Jitter (h_jit) 50th/95th/99th percentile over time, from the dense microdep_gap_ana index.",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
@@ -51,7 +51,7 @@
       "type": "timeseries"
     },
     {
-      "datasource": { "type": "grafana-opensearch-datasource", "uid": "microdep-dragonlab" },
+      "datasource": { "type": "grafana-opensearch-datasource", "uid": "microdep-gap-ana" },
       "description": "Most recent gap event timestamp in the selected range — is gap data flowing?",
       "fieldConfig": {
         "defaults": { "color": { "mode": "fixed", "fixedColor": "text" }, "mappings": [], "unit": "dateTimeFromNow" },
@@ -67,7 +67,7 @@
       "pluginVersion": "11.6.10",
       "targets": [
         {
-          "datasource": { "type": "grafana-opensearch-datasource", "uid": "microdep-dragonlab" },
+          "datasource": { "type": "grafana-opensearch-datasource", "uid": "microdep-gap-ana" },
           "query": "event_type:gap",
           "queryType": "lucene",
           "alias": "",
@@ -113,7 +113,7 @@
       "type": "stat"
     },
     {
-      "datasource": { "type": "grafana-opensearch-datasource", "uid": "microdep-dragonlab" },
+      "datasource": { "type": "grafana-opensearch-datasource", "uid": "microdep-gap-ana" },
       "description": "Link pairs with the most lost time (sum of tloss, ms). Click a column header to sort.",
       "fieldConfig": {
         "defaults": {
@@ -138,7 +138,7 @@
       "pluginVersion": "11.6.10",
       "targets": [
         {
-          "datasource": { "type": "grafana-opensearch-datasource", "uid": "microdep-dragonlab" },
+          "datasource": { "type": "grafana-opensearch-datasource", "uid": "microdep-gap-ana" },
           "query": "event_type:gap",
           "queryType": "lucene",
           "alias": "",
@@ -156,7 +156,7 @@
       "type": "table"
     },
     {
-      "datasource": { "type": "grafana-opensearch-datasource", "uid": "microdep-dragonlab" },
+      "datasource": { "type": "grafana-opensearch-datasource", "uid": "microdep-gap-ana" },
       "description": "Source x target matrix coloured by gap-event count over the selected range.",
       "fieldConfig": { "defaults": { "color": { "mode": "continuous-YlRd" }, "mappings": [], "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null } ] }, "unit": "short" }, "overrides": [] },
       "gridPos": { "h": 16, "w": 10, "x": 14, "y": 8 },
@@ -178,7 +178,7 @@
       "pluginVersion": "2.0.0",
       "targets": [
         {
-          "datasource": { "type": "grafana-opensearch-datasource", "uid": "microdep-dragonlab" },
+          "datasource": { "type": "grafana-opensearch-datasource", "uid": "microdep-gap-ana" },
           "query": "event_type:gap",
           "queryType": "lucene",
           "alias": "",

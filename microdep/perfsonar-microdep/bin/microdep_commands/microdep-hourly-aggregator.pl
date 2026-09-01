@@ -31,7 +31,7 @@ use POSIX qw(strftime);
 use Getopt::Long;
 
 # ----- options -----
-my $opt_index    = 'dragonlab';
+my $opt_index    = 'microdep_gap_ana';
 my $opt_outdir   = '/var/lib/logstash/microdep';
 my $opt_outfile  = 'gap-ana-hourly.json';
 my $opt_window   = 3600;     # seconds in one summary bucket

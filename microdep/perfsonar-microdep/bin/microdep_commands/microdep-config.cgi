@@ -25,7 +25,7 @@ if ( $debug > 0 ){
 #my $local_ip =  parm("local_ip") || "unknown";
 #my $r_host= parm("node_name");  # no no: $r_host = $q->remote_host() if !$r_host;
 #my $variant=parm('variant');
-my $net=parm('net') || "dragonlab";
+my $net=parm('net') || "unknown-network";
 #my $file=parm('file');
 
 #printf "remote_host: %s\n",  $q->remote_host();

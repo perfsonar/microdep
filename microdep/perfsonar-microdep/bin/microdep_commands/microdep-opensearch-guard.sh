@@ -6,7 +6,7 @@
 #
 # The Microdep map (via the CGIs) and the Grafana dashboards read the archive
 # ANONYMOUSLY through https://localhost/opensearch. Read access to the Microdep
-# indices (dragonlab* / microdep*) is granted by inserting roles_yml_patch into
+# indices (microdep*) is granted by inserting roles_yml_patch into
 # the perfSONAR OpenSearch role config; opensearch_config_microdep.sh does that
 # at package install time.
 #
@@ -26,7 +26,7 @@
 
 set -u
 
-PROBE_URL="${MICRODEP_PROBE_URL:-https://localhost/opensearch/dragonlab/_count}"
+PROBE_URL="${MICRODEP_PROBE_URL:-https://localhost/opensearch/microdep*/_count}"
 CONFIG_SCRIPT="${MICRODEP_CONFIG_SCRIPT:-/usr/lib/perfsonar/bin/microdep_commands/opensearch_config_microdep.sh}"
 TAG="microdep-opensearch-guard"
 

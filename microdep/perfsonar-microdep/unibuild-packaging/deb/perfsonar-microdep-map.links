@@ -31,6 +31,7 @@
 /usr/share/javascript/leaflet/MarkerCluster.Default.css /usr/lib/perfsonar/microdep-map/css/MarkerCluster.Default.css
 /usr/share/javascript/leaflet/MarkerCluster.css /usr/lib/perfsonar/microdep-map/css/MarkerCluster.css
 /usr/share/javascript/leaflet/leaflet.markercluster.js /usr/lib/perfsonar/microdep-map/js/leaflet.markercluster.js
+/usr/share/javascript/leaflet/leaflet.markercluster-src.js.map /usr/lib/perfsonar/microdep-map/js/leaflet.markercluster.min.js.map
 /usr/share/javascript/leaflet/leaflet.markercluster.min.js /usr/lib/perfsonar/microdep-map/js/leaflet.markercluster-src.js
 /usr/share/javascript/leaflet/leaflet.markercluster.min.js /usr/lib/perfsonar/microdep-map/js/leaflet.markercluster.min.js
 /usr/share/javascript/leaflet/leaflet.markercluster.min.js.map /usr/lib/perfsonar/microdep-map/js/leaflet.markercluster.min.js.map

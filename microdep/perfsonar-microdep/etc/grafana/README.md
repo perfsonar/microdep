@@ -12,8 +12,8 @@ button injected into the perfSONAR main dashboard) — it does not replace it.
 
 | File | Purpose | Provision to |
 |------|---------|--------------|
-| `microdep-datasource.yaml`        | OpenSearch datasource for the `dragonlab` index (gap) | `…/grafana/provisioning/datasources/` |
-| `microdep-jitter-datasource.yaml` | OpenSearch datasource for the `dragonlab_jitter` index (Queues/jitter) | `…/grafana/provisioning/datasources/` |
+| `microdep-datasource.yaml`        | OpenSearch datasource for the `microdep_gap_ana` index (gap) | `…/grafana/provisioning/datasources/` |
+| `microdep-jitter-datasource.yaml` | Alternative OpenSearch datasource for the `microdep_gap_ana` index (Queues/jitter) | `…/grafana/provisioning/datasources/` |
 | `microdep-dashboards.yaml`        | Dashboard provider (loads the `dashboards/` dir into a "Microdep" folder) | `…/grafana/provisioning/dashboards/` |
 | `dashboards/microdep-gaps.json`   | Native dashboard: total gaps (stat), gaps over time, top-10 source hosts, map button | `…/grafana/dashboards/microdep/` |
 | `dashboards/microdep-map.json`    | The geographic map embedded full-size as an `<iframe>` to `/microdep/` | `…/grafana/dashboards/microdep/` |
@@ -48,18 +48,18 @@ Then open Grafana → Dashboards → **Microdep / Microdep — Gaps overview**.
   `<iframe>`) and on `/microdep/` not sending a blocking `X-Frame-Options` /
   CSP `frame-ancestors` (it is same-origin with Grafana, so it frames fine).
 - The datasource mirrors perfSONAR's own `perfsonar-local.yaml` (proxy access,
-  `tlsSkipVerify`, flavor `opensearch`) but targets the `dragonlab` index with a
-  distinct uid `microdep-dragonlab`, so it sits alongside the pscheduler one.
+  `tlsSkipVerify`, flavor `opensearch`) but targets the `microdep_gap_ana` index with a
+  distinct uid `microdep-gap-ana`, so it sits alongside the pscheduler one.
 
 ## Possible extensions
 
 - **Per-link** table (from→to) via nested terms / multi-terms aggregation.
 - **Severity** columns (avg/max `down_ppm`, time lost) once field names are
   confirmed against the gap mapping.
-- **Other event types**: jitter ("Queues", index `dragonlab_jitter`,
-  percentile metrics), route changes (`dragonlab_routemon`) — likely a second
+- **Other event types**: jitter ("Queues", index `microdep_gap_ana`,
+  percentile metrics), route changes (`microdep_trace_ana`) — likely a second
   datasource per index, or an index-pattern datasource.
-- **Multi-network**: Net-4 (`dragonlab`) vs Net-6 (`dragonlab_6`) as a
+- **Multi-network**: Net-4 (`microdep_ipv4`) vs Net-6 (`microdep_ipv6`) as a
   datasource template variable (`${ds}`), the pattern perfSONAR dashboards use.
 - **Heatmap** report natively via the installed `esnet-matrix-panel`.
 - **Packaging**: wire these into the deb/rpm post-install the way

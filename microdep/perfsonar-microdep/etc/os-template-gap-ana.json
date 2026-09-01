@@ -1,7 +1,5 @@
 {
     "index_patterns": [
-	"dragonlab",
-	"dragonlab_jitter",
 	"microdep_gap_ana*"
     ],
     "template": {

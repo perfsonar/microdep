@@ -18,9 +18,9 @@ bin/microdep_commands/microdep-config.cgi
 bin/microdep_commands/get-tracetests.pl
 bin/microdep_commands/hopgeo.pl
 etc/mapconfig.yml
-etc/mapconfig.d/dragonlab.yml
-microdep-map/dragonlab/dragonlab-base-geo.json
-etc/dragonlab-base-geo.json.example
+etc/mapconfig.d/microdep_ipv4.yml
+etc/mapconfig.d/microdep_ipv6.yml
+etc/microdep_ipv4-base-geo.json.example
 microdep-map/css/microdep-map.css
 microdep-map/css/curve-chart.css
 microdep-map/fonts/dmsans-400-latin.woff2
@@ -40,7 +40,8 @@ microdep-map/fonts/jetbrainsmono-600-latinext.woff2
 etc/microdep-tests-packet-subcount.json.example
 etc/microdep-tests.json.example
 etc/apache-microdep-map.conf
-etc/microdep-map_sqlite3_template.db
+etc/microdep_ipv4.db
+etc/microdep_ipv6.db
 etc/roles_yml_patch
 etc/grafana_dashboard_patch
 etc/microdep_default_policy.json

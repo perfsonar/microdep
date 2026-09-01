@@ -181,7 +181,7 @@ fi
 
 # Update topology db with info from psconfig test description
 #RUN if [ "$TYPE" = "tootlkit" ]; then \
-#       /usr/lib/perfsonar/bin/microdep_commands/microdep-psconfig-load.pl --db /etc/perfsonar/microdep/mp-dragonlab/etc/microdep.db /etc/perfsonar/psconfig/pscheduler.d/microdep-tests.json; \
+#       /usr/lib/perfsonar/bin/microdep_commands/microdep-psconfig-load.pl --db /var/lib/perfsonar/microdep/microdep_ipv4.db /etc/perfsonar/psconfig/pscheduler.d/microdep-tests.json; \
 #    fi
        
 # Add subsession support for powstream (assuming powstream is compiled with patch from branch "subsession-owp")

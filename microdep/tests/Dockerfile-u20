@@ -18,7 +18,7 @@
 #
 
 
-FROM systemd-image-u22:latest
+FROM systemd-image-u20:latest
 LABEL org.opencontainers.image.authors="Otto J Wittner <wittner@sikt.no>"
 
 # Fix default locals

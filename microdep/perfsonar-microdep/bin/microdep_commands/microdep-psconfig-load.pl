@@ -15,7 +15,7 @@ use LWP::Simple;
 
 my $debug=0;
 
-my $database="/var/lib/microdep/mp-dragonlab/etc/microdep.db";
+my $database="/etc/perfsonar/microdep/microdep.db";
 my $driver   = "SQLite";
 my $userid = "";
 my $password = "";

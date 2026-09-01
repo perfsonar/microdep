@@ -1,6 +1,6 @@
-# OpenSearch datasource for the Microdep `dragonlab` index (Net-4).
+# OpenSearch datasource for the Microdep `microdep_gap_ana` index (Net-4).
 #
-# Mirrors perfSONAR's own perfsonar-local.yaml, but points at the dragonlab
+# Mirrors perfSONAR's own perfsonar-local.yaml, but points at the microdep_gap_ana
 # index instead of pscheduler*, and uses @timestamp as the time field.
 #   - @timestamp : date           <- use this
 #   - timestamp  : float (epoch)  <- NOT a date type, unusable as time field
@@ -12,20 +12,20 @@
 apiVersion: 1
 
 deleteDatasources:
-  - name: Microdep dragonlab
+  - name: Microdep gap ana
     orgId: 1
 
 datasources:
-  - name: Microdep dragonlab
+  - name: Microdep gap ana
     type: grafana-opensearch-datasource
     access: proxy
     orgId: 1
-    uid: microdep-dragonlab
+    uid: microdep-gap-ana
     url: https://localhost/opensearch
     basicAuth: false
     isDefault: false
     jsonData:
-      database: "dragonlab"
+      database: "microdep_gap_ana"
       flavor: "opensearch"
       version: "2.6.0"
       timeField: "@timestamp"

@@ -1,5 +1,5 @@
 Source: perfsonar-microdep
-Architecture: all
+#Architecture: all
 Section: misc
 Priority: optional
 Maintainer: perfSONAR developers <debian@perfsonar.net>

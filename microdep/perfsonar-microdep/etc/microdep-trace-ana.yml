@@ -38,7 +38,7 @@
 #maxprocs: 1                # Max no of parallel processes in batch mode
 #topoevents: 0              # Flag to enable detection and output of topology events
 #topointerval: 3600         # Min no of seconds between topology events
-#pslookup: 'http://ps-west.es.net/lookup/activehosts.json'  # Source of perfSONAR Lookup Service hosts
+#pslookup: 'http://35.223.142.206/lookup/_search'  # API of perfSONAR Lookup Service
 #pslookupwait: 3600         # Min no of seconds to wait between refreshing info fetched from pslookup-service
 #ipv6: 0                    # Flag enabling ipv6 address parsing
 #followinterval: 10         # No of seconds to wait between requests for data from openseach archive

@@ -1,0 +1,30 @@
+#
+# Map config for default ipv6 network
+#
+#  (see mapconfig.yaml for more comments)
+#
+
+microdep_ipv6:
+  # Measuremet network/variant parameters
+  title: "Net-6"
+  descr: "Measurement network applying ipv6 test traffic"
+  #archive: "https://localhost/opensearch"  # Url to relevant Opensearch DB holding indices
+  ip_version: "6"
+  event_type:
+    # Event types for variant
+    gap:
+      index: "microdep_gap_ana"
+    jitter:
+      index: "microdep_gap_ana" 
+    routeerr:
+      index: "microdep_trace_ana" 
+    routechange:
+      index: "microdep_trace_ana" 
+    tcprouteerr:
+      index: "microdep_trace_ana" 
+    tcproutechange:
+      index: "microdep_trace_ana" 
+    correlation:
+      index: "microdep_corr_ana"
+      topology_index: "microdep_gap_ana" 
+

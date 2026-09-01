@@ -138,7 +138,7 @@ $opt_v ||= 0;          # Flag: Be verbose
 $opt_version ||= 0;    # Flag: Show version
 $opt_topoevents ||= 0;       # Flag: Enable toplogy events
 $opt_topointerval ||= 3600;  # Min interval between topology events
-$opt_pslookup ||= "http://ps-west.es.net/lookup/activehosts.json";  # Source of perfSONAR Lookup Service hosts;
+$opt_pslookup ||= "http://35.223.142.206/lookup/_search";  # API of perfSONAR Lookup Service;
 $opt_pslookup_wait ||= 3600; # Min interval between attempts to fetch info from ps-lookup service
 $opt_ipv6 ||= 0;             # Flag to turn on ipv6 packet analysis
 $opt_follow ||= 0;           # Flag to turn on rereading of owamp input source 
@@ -778,53 +778,55 @@ sub validate_ip{
     }
     if (! exists($geopos{$ip}) || $geopos{$ip}{'refresh'} < time() ) {
 	# Attempt to fetch geo coordinates from perfSONAR's Lookup Service
-	if (@{$pslookuphost->{'hosts'}} == 0) {
-	    my $pslookuphost_str = get( $opt_pslookup );
-	    $pslookuphost = decode_json $pslookuphost_str;
-	    print "pslookup hosts:\n", Dumper($pslookuphost) if $opt_debug > 1;
-	}
-	foreach (@{$pslookuphost->{'hosts'}}) {
-	    # Ask a Lookup Service host for data
-	    my $pslookup_str = get( $_->{'locator'} . "/?host-name=" . $ip);
-	    if (defined $pslookup_str) {
-		print "pslookup for ", $ip, ":\n", Dumper($pslookup_str) if $opt_debug > 3;
-		my $pslookup = decode_json $pslookup_str;
-		if (@{$pslookup}) {
-		    # Position available. Store.
-		    store_geopos($ip, $pslookup->[0]);
-		    last;
-		} else {
-		    # No host found. Search for ip among interface addresses (applying opensearch api at port 80)
-		    my $opensearch_api = $_->{'locator'};
-		    $opensearch_api =~ s/:8090//g;
-		    $opensearch_api =~ s/records/_search/g;
-		    my $iso_now = strftime("%Y-%m-%dT%H:%M:%S%z", localtime); # ISO formatted current time with timezone
-		    # Prepare to post json query string
-                    my $query_data = '{ "query": { "bool": { "filter": [ { "term": { "interface-addresses": "' . $ip . '" } }, { "range": { "expires" : { "gt" : "' . $iso_now . '" } } } ] } }, "size": 1 }';
-		    # Run query
-		    my $query_req = LWP::UserAgent->new;
-		    my $pslookup_resp = $query_req->post($opensearch_api, 'Content-Type' => 'application/json', Content => $query_data );
+	my $opensearch_api = $opt_pslookup;
+	# Prepare to post json query to fetch host or interface record/document matching current ip
+	my $query_data = '{ "query": { "bool": { "filter": [
+  	     { "bool": { "should": [
+       	       { "bool": { "must" : [
+	         {"term": {"type": "host" }},
+	         {"term": {"host-name": "' . $ip . '"}}
+       	       ]}},
+       	       { "bool": { "must" : [
+                 {"term": {"type": "interface"}},
+	         {"term": {"interface-addresses": "' . $ip . '"}}
+               ]}}
+  	     ]}},
+  	     {"range": {"expires": {"gt": "now" }}}
+	   ]}}, "sort": [ {"type": "asc"} ], "size": 1 }';
+#	my $query_data = '{ "query": { "bool": { "should": [
+#{ "bool": { "must": [ {"term": {"type": "host"}}, {"term": {"host-name": "' . $ip . '"}}]}},
+#{ "bool": { "must": [ {"term": {"type": "interface"}}, {"term": {"interface-addresses": "' . $ip . '"}}]}} 
+#        ], "filter": [{"range": {"expires": {"gt": "now"}}}]}}, "size": 1}';
+	# Run query
+	my $query_req = LWP::UserAgent->new;
+	my $pslookup_resp = $query_req->post($opensearch_api, 'Content-Type' => 'application/json', Content => $query_data );
+	if (defined $pslookup_resp) {
+	    print "pslookup for ", $ip, ":\n", Dumper($pslookup_resp) if $opt_debug > 3;
+	    $pslookup = decode_json $pslookup_resp->{'_content'};
+	    if (%{$pslookup} && $pslookup->{'hits'} && $pslookup->{'hits'}->{'total'}{'value'} > 0) {
+		# Valied respons. Check type.
+		if ($pslookup->{'hits'}->{'hits'}[0]->{'_source'}->{'type'}[0] eq "host") {
+		    # Host record/document found. Store geopos from document.
+		    store_geopos($ip, $pslookup->{'hits'}->{'hits'}[0]->{'_source'});
+		} elsif ($pslookup->{'hits'}->{'hits'}[0]->{'_source'}->{'type'}[0] eq "interface" && $pslookup->{'hits'}->{'hits'}[0]->{'_source'}->{'uri'}) {
+		    # Interface with ip found. Apply uri to find parent host for interface.
+		    $query_data = '{ "query": { "bool": { "filter": [
+		        {"term": {"type": "host"}},
+     		        {"term": {"host-net-interfaces": "' . $pslookup->{'hits'}->{'hits'}[0]->{'_source'}->{'uri'} . '"}},
+		        {"range": {"expires": {"gt": "now"}}}
+ 		      ]}}, "size": 1}';
+		    $pslookup_resp = $query_req->post($opensearch_api, 'Content-Type' => 'application/json', Content => $query_data );
 		    if (defined $pslookup_resp) {
 			print "pslookup for ", $ip, ":\n", Dumper($pslookup_resp) if $opt_debug > 3;
 			$pslookup = decode_json $pslookup_resp->{'_content'};
-			if (%{$pslookup} && $pslookup->{'hits'} && $pslookup->{'hits'}->{'total'}{'value'} > 0 && $pslookup->{'hits'}->{'hits'}[0]->{'_source'}->{'uri'} ) {
-			    # Interface with ip found. Apply uri to find parent host for interface
-			    $query_data = '{ "query": { "bool": { "filter": [ { "term": { "host-net-interfaces": "' . $pslookup->{'hits'}->{'hits'}[0]->{'_source'}->{'uri'}  . '" } }, { "range": { "expires" : { "gt" : "' . $iso_now . '" } } } ] } }, "size": 1 }';
-			    $pslookup_resp = $query_req->post($opensearch_api, 'Content-Type' => 'application/json', Content => $query_data );
-			    if (defined $pslookup_resp) {
-				print "pslookup for ", $ip, ":\n", Dumper($pslookup_resp) if $opt_debug > 3;
-				$pslookup = decode_json $pslookup_resp->{'_content'};
-				if (%{$pslookup} && $pslookup->{'hits'} && $pslookup->{'hits'}->{'total'}{'value'} > 0 && $pslookup->{'hits'}->{'hits'}[0]->{'_source'} ) {
-				    # Parent host found. Store position if available
-				    store_geopos($ip, $pslookup->{'hits'}->{'hits'}[0]->{'_source'});
-				    last;
-				}
-			    }
+			if (%{$pslookup} && $pslookup->{'hits'} && $pslookup->{'hits'}->{'total'}{'value'} > 0 && $pslookup->{'hits'}->{'hits'}[0]->{'_source'} ) {
+			    # Parent host found. Store position if available.
+			    store_geopos($ip, $pslookup->{'hits'}->{'hits'}[0]->{'_source'});
 			}
 		    }
 		}
 	    }
-	}
+	}	
 	# Set refresh interval for geopos info.
 	$geopos{$ip}{'refresh'} = time() + $opt_pslookup_wait;
     }
