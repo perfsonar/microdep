@@ -35,7 +35,7 @@
 #batchsize: 0           # When >0 overrides detected batch size (packet count) when reading owamp subsession data sets.
 #topoevents: false      # Enable output of topology events whenever a topology change is detected. Requires -json. 
 #topointerval: 3600     # Min interval (sec) between topology events.
-#pslookup: "http://35.223.142.206/lookup"  # Source url for perfSONAR lookup service. 
+#pslookup: "http://35.223.142.206/lookup/_search"  # Source url for perfSONAR lookup service. 
 #wait:  3600            # Min no of seconds to wait between refreshing info fetched from pslookup-service. 
 #ipv6: false            # Analyse ipv6 packets (and ignore ipv4).
 #conf: ""               # Filename to config file, i.e. THIS FILE. Note that CLI options override options for file.
