@@ -885,14 +885,27 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
     // ====================================================================
 
     function fix_positions(nodes, stats, container) {
+        let minx = 15, maxx = container.clientWidth - 30;
+        let miny = 15, maxy = container.clientHeight - 30;
+
+        // Pin the sender (hop zero) to the top-left corner. It used to be left to
+        // the physics engine, which parked it next to its first hop - frequently
+        // bottom-right, so the graph read backwards. Anchoring it gives every
+        // topology the same orientation: sender top-left, path fanning out.
+        let zeroi = find_node(nodes, 'start');
+        if (zeroi !== null) {
+            nodes[zeroi].x = minx;
+            nodes[zeroi].y = miny;
+            nodes[zeroi].fixed = true;
+            nodes[zeroi].physics = false;
+        }
+
         let last = stats.length - 1;
         if (last >= 0) {
             let starti = find_node(nodes, stats[0].address);
             let endi = find_node(nodes, stats[last].address);
 
             if (starti !== null && endi !== null) {
-                let minx = 15, maxx = container.clientWidth - 30;
-                let miny = 15, maxy = container.clientHeight - 30;
 
                 if (stats[0].latitude <= stats[last].latitude) {
                     nodes[starti].y = maxy;
@@ -908,7 +921,8 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
                     nodes[starti].x = minx;
                     nodes[endi].x = maxx;
                 }
-                nodes[starti].fixed = true;
+                // Only a positional hint now - the sender above is the anchor, and
+                // a second fixed node would fight it.
             }
         }
     }
