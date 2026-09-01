@@ -135,7 +135,7 @@ fi
 if [ "$REMOVE" ]; then
     if [ "$REMOVE" = "config" -o "$REMOVE" = "all" ]; then
 	# Clean up pipeline for logstash
-	if [ -e /etc/logstash/pipelines.yml ]; then
+	if [ -e /etc/logstash/pipelines.yml -a -e /etc/perfsonar/microdep/logstash/microdep-pipelines.yml ]; then
 	    msg "Removing Microdep pipeline from Logstash..."
 	    TMPPIPELINE=$(mktemp)
 	    cp /etc/logstash/pipelines.yml $TMPPIPELINE
@@ -143,7 +143,7 @@ if [ "$REMOVE" ]; then
 	    systemctl restart logstash.service || true
 	fi
 	# Remove read/write access to Microdep opensearch indices
-	if [ -e /usr/lib/perfsonar/archive/config/roles.yml ]; then
+	if [ -e /usr/lib/perfsonar/archive/config/roles.yml -a -e /etc/perfsonar/microdep/roles_yml_patch ]; then
 	    msg "Removing read/write access to Microdep indices in Opensearch..."
 	    TMPROLESYML=$(mktemp)
 	    grep -v -x -F -f /etc/perfsonar/microdep/roles_yml_patch /usr/lib/perfsonar/archive/config/roles.yml > $TMPROLESYML && mv $TMPROLESYML /usr/lib/perfsonar/archive/config/roles.yml
@@ -179,14 +179,14 @@ if [ "$REMOVE" ]; then
 fi
 
 # Enable Microdep pipeline for logstash (by adding content of /etc/perfsonar/microdep/microdep-pipelines.yml if not already present)
-if [ -f /etc/logstash/pipelines.yml ]; then
+if [ -e /etc/logstash/pipelines.yml -a -e /etc/perfsonar/microdep/logstash/microdep-pipelines.yml ]; then
     msg "Adding Microdep pipeline to Logstash..."
     grep -q -x -F -f /etc/perfsonar/microdep/logstash/microdep-pipelines.yml /etc/logstash/pipelines.yml || ( cat /etc/perfsonar/microdep/logstash/microdep-pipelines.yml >> /etc/logstash/pipelines.yml )
     systemctl restart logstash.service || true
 fi
 
 # Add read and write accesses to Microdep opensearch indices
-if [ -e /usr/lib/perfsonar/archive/config/roles.yml ]; then
+if [ -e /usr/lib/perfsonar/archive/config/roles.yml -a -e /etc/perfsonar/microdep/roles_yml_patch ]; then
     if ! grep -q -x -F -f /etc/perfsonar/microdep/roles_yml_patch /usr/lib/perfsonar/archive/config/roles.yml; then
 	# Microdep index missing. Add.
 	wait_opensearch
