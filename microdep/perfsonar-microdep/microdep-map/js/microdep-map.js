@@ -340,7 +340,12 @@ function restoreOneTab(spec) {
 
 var point_distance_min = 50;  // meters between
 var point_distance_stretch = 0.001;  // delta degrees
-var period_length = 86400; // a day - to be replaced by dynamic length
+// Length of the window currently on screen, in seconds. The digest divides lost
+// time by it to get unavailability in ppm, so a fixed value silently rescales
+// every reading that is not a day long: on the hour scale it made gaps look 24x
+// smaller than they were, which is why nothing showed up there (issue #59).
+// Kept in sync with the window in get_connections().
+var period_length = 86400;
 var mymap; var myRenderer;
 var markers = [];
 var clustergroup=[];
@@ -2014,8 +2019,27 @@ function digest_aggregates(aggs, stats_type){
     return digest;
 }
 
+// Painting by a property the fetched records do not carry produces a map that
+// looks empty: every link falls back to the "no data" colour and the legend
+// shows bare default thresholds, with nothing anywhere saying why. That is what
+// made the hour scale look broken (issue #59) - it fetches raw events, which
+// carry a different set of fields than the daily summaries do. The property
+// lists now follow the records, so this should not arise; if it ever does, say
+// so rather than drawing a blank map and leaving the user to guess.
+function warn_if_property_absent(hits, prop) {
+    if (!Array.isArray(hits) || hits.length === 0) return;
+    for (var h = 0; h < hits.length; h++) {
+        var v = hits[h]._source ? hits[h]._source[prop] : undefined;
+        if (typeof v === "number" && isFinite(v)) return;      // at least one value
+    }
+    $("#error").html(hhmmss(new Date()) + " : none of the " + hits.length + " "
+        + parms.event + " records for this period carry a '" + prop_title(prop)
+        + "' value - try another property;;");
+}
+
 function draw_links(hits, prop){
     get_thresholds(hits, prop);
+    warn_if_property_absent(hits, prop);
     update_legend(prop_title(prop),threshes);
     hits.sort(sort_hits);
     var new_ends=[];
@@ -2476,6 +2500,7 @@ function update_compare_legend(propTitle, baselineLabel) {
 }
 
 function taint_links( hits, prop){
+    warn_if_property_absent(hits, prop);
     var done=[];
     var compareMode = parms.compare && parms.compare !== 'off';
     if ( hits.length > 0){
@@ -4280,6 +4305,10 @@ function get_connections(){
 	start= new Date(msstart).toISOString(); end= new Date(msend).toISOString();
 	if ( period < 2*24 ){ tloss=1000; } else if ( period <= 7*24 ){ tloss=5000; } else { tloss=60000; }
     }
+    // Unavailability is derived from lost time per unit of time, so the divisor
+    // has to be the window actually being shown - not always a day.
+    period_length = Math.max(1, Math.round((new Date(end).getTime() - new Date(start).getTime()) / 1000));
+
     // Publish the viewed window's end so the inline stale-data banner can tell
     // live from historic views: a window ending in the past is historic, so the
     // "data is N old / refresh now" nag is suppressed there (issue #95).
