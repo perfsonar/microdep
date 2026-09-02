@@ -45,7 +45,9 @@
 #config: ''                 # Path to configuration file (this one). Note that commandline options override config file.               
 
 ## perfSONAR Microdep settings
-samepath: True
+reportpath: ''
+reportpostpath: ''
+namemap: ''
 oneoutput: /etc/perfsonar/microdep/microdep-ana-archive.json
 pssrc: https://localhost/opensearch
 dbtype: postgresql
