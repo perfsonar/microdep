@@ -236,6 +236,65 @@ function _alpha(hex, alpha) {
     return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
+
+// Chart.js is told its colours once, when the chart is built, and keeps them.
+// The page itself restyles when the theme changes (curve-chart.html mirrors the
+// main page's choice through localStorage), so an already-drawn chart was left
+// with the previous palette - most visibly its title, drawn in the light theme's
+// near-black and then unreadable on the dark background.
+//
+// Keep a handle on the charts we draw and repaint them from the current CSS
+// variables when the theme changes.
+const _live_charts = new Set();
+
+export function restyle_charts() {
+    if (_live_charts.size === 0) return;
+    const accent   = _theme_var('--c-accent',   '#2f81f7');
+    const border   = _theme_var('--c-border',   '#2a313a');
+    const borderH  = _theme_var('--c-border-h', '#3a4350');
+    const text     = _theme_var('--c-text',     '#e6e9ee');
+    const text2    = _theme_var('--c-text-2',   '#b1b8c2');
+    const text3    = _theme_var('--c-text-3',   '#7e8794');
+    const elevated = _theme_var('--c-elevated', '#1c2229');
+
+    if (typeof Chart !== 'undefined') Chart.defaults.color = text2;
+
+    for (const c of Array.from(_live_charts)) {
+        // Charts belonging to a closed tab are gone - drop them rather than
+        // throwing on a destroyed instance.
+        if (!c || !c.options || !c.canvas || !c.canvas.isConnected) { _live_charts.delete(c); continue; }
+        try {
+            const o = c.options;
+            if (o.plugins) {
+                if (o.plugins.title)  o.plugins.title.color = text;
+                if (o.plugins.legend && o.plugins.legend.labels) o.plugins.legend.labels.color = text2;
+                if (o.plugins.tooltip) {
+                    o.plugins.tooltip.backgroundColor = elevated;
+                    o.plugins.tooltip.titleColor = text;
+                    o.plugins.tooltip.bodyColor = text2;
+                    o.plugins.tooltip.borderColor = border;
+                }
+            }
+            for (const key in (o.scales || {})) {
+                const sc = o.scales[key];
+                if (!sc) continue;
+                if (sc.ticks) sc.ticks.color = text3;
+                if (sc.title) sc.title.color = text3;
+                if (sc.grid) { sc.grid.color = _alpha(border, 0.5); sc.grid.tickColor = borderH; }
+            }
+            c.update('none');
+        } catch (err) {
+            console.log('restyle_charts: ' + err);
+        }
+    }
+    void accent;   // kept for symmetry with chart_curve's palette
+}
+
+// curve-chart.html raises this after it mirrors a theme change.
+if (typeof window !== 'undefined') {
+    window.addEventListener('microdep-theme-changed', function () { restyle_charts(); });
+}
+
 export function chart_curve( div, hits, property, title, unit ){
     var container = document.getElementById(div); // .getContext('2d');
     var h= window.innerHeight * 0.6;
@@ -391,5 +450,6 @@ export function chart_curve( div, hits, property, title, unit ){
     };
 
     chart = new Chart(container, config);
+    _live_charts.add(chart);
 
 } // of chart_curve
