@@ -1907,6 +1907,11 @@ table.sortable th:not(.sorttable_sorted):not(.sorttable_sorted_reverse):not(.sor
    negation to scope the rule to the visible panel only. */
 .tracetree-topo:not([aria-hidden="true"]) {
     display: grid !important;
+    /* The generic `.ui-tabs .ui-tabs-panel { padding: 0 !important }` also hits
+       this pane, so its own padding never applied: the graph and the control
+       column sat flush against the tab nav above them and looked like they ran
+       into it. Put the breathing room back. */
+    padding: 16px 20px !important;
     flex: 1 1 auto;          /* grow past min-height to use the whole tab */
     min-height: 0;
     grid-template-rows: 1fr; /* the single row takes the available height */
@@ -1940,6 +1945,13 @@ table.sortable th:not(.sorttable_sorted):not(.sorttable_sorted_reverse):not(.sor
     flex-direction: column;
     gap: 10px;
     width: 100px;
+    /* Keep the controls inside their grid cell: start at the top rather than
+       being stretched/centred, never grow past the cell, and scroll when the
+       legend is long - otherwise the column spills over whatever sits above. */
+    align-self: start;
+    min-height: 0;
+    max-height: 100%;
+    overflow-y: auto;
 }
 
 .topo-controls {
@@ -2058,23 +2070,99 @@ table.sortable th:not(.sorttable_sorted):not(.sorttable_sorted_reverse):not(.sor
 /* Color legend inside the topology sidebar — center the values and keep them
    readable on every cell colour. mix-blend-mode: difference automatically
    inverts the text against whatever colour is behind it. */
-.tracetree-legend {
+/* Node-colour scale in the topology sidebar. Deliberately unlike the controls
+   above it: a gradient bar with tick values, so it reads as a legend rather
+   than another column of buttons. */
+.tracetree-scale {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 8px;
+    /* Framed and full-width, so it lines up with the control buttons above. */
+    box-sizing: border-box;
     width: 100%;
-    border-collapse: separate;
-    border-spacing: 0 4px;
-    font-size: .78rem;
-    font-family: var(--font-mono);
-}
-.tracetree-legend td {
-    text-align: center;
-    padding: 6px 8px;
+    padding: 8px 8px 10px;
+    border: 1px solid var(--c-border);
     border-radius: var(--r);
-    color: #ffffff;
-    mix-blend-mode: normal;
-    text-shadow:
-        0 0 2px rgba(0, 0, 0, .85),
-        0 1px 0 rgba(0, 0, 0, .4);
-    letter-spacing: .02em;
+    background: var(--c-elevated);
+}
+.tracetree-scale-caption {
+    font-size: .7rem;
+    letter-spacing: .04em;
+    font-weight: 600;
+    /* No text-transform: the unit has to stay lowercase "ms" even in a heading. */
+    color: var(--c-text);          /* brighter than the tick values below it */
+    text-align: center;
+    margin-bottom: 2px;
+}
+.tracetree-scale-body {
+    display: flex;
+    justify-content: center;       /* bar + ticks sit centred in the box */
+    gap: 8px;
+    height: 150px;
+}
+.tracetree-scale-bar {
+    width: 10px;
+    flex: 0 0 10px;
+    border: 1px solid var(--c-border);
+    border-radius: 5px;
+}
+.tracetree-scale-ticks {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    font-family: var(--font-mono);
+    font-size: .68rem;
+    color: var(--c-text-2);
+    line-height: 1;
+    /* Values sit left of the bar and are right-aligned against it, so the digits
+       line up with the colour they label. */
+    text-align: right;
+    /* Sized to the digits, not stretched: stretching left a wide empty gutter on
+       the left of the panel and the pair read as off-centre. */
+    flex: 0 0 auto;
+    font-variant-numeric: tabular-nums;
+}
+
+/* The floating copy of the scale, shown over the graph itself. The sidebar one
+   lives outside the element that goes fullscreen, so it disappears there and in
+   the maximized view - this copy covers both. */
+.tracetree-scale-float {
+    display: none;
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    z-index: 5;
+    width: 92px;
+    padding: 2px;
+    background: color-mix(in srgb, var(--c-surface) 88%, transparent);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, .35);
+}
+.tracetree-scale-float .tracetree-scale {
+    border: 0;
+    background: none;
+    margin-top: 0;
+}
+body.tracetree-maximized .tracetree-scale-float,
+.tracetree-graph:fullscreen .tracetree-scale-float,
+.tracetree-graph:-webkit-full-screen .tracetree-scale-float {
+    display: block;
+}
+
+/* Docs sub-tab: plain prose that was sitting flush against the top-left corner. */
+/* The selector has to out-specify `.ui-tabs .ui-tabs-panel { padding: 0
+   !important }` (two classes), which is what pinned this prose to the top-left
+   corner - !important alone is not enough against it. */
+.ui-tabs .ui-tabs-panel.tracetree-docs {
+    padding: 18px 22px 24px !important;
+    max-width: 70ch;
+    line-height: 1.55;
+    overflow-y: auto;
+}
+.tracetree-docs h2 {
+    margin-top: 0;
 }
 
 .tracetree-popup-body table {
@@ -2624,6 +2712,39 @@ div.graph:has(> .curve-iframe-wrap):not([aria-hidden="true"]) {
     padding: 10px 16px;
     background: var(--c-elevated);
     border-bottom: 1px solid var(--c-border);
+}
+
+/* The range shown under the timeline. It inherited a hard-coded near-black,
+   which is unreadable on the dark theme. */
+.tracetree-timeinfo {
+    color: var(--c-text) !important;
+    font-size: .8rem;
+    font-variant-numeric: tabular-nums;
+    padding: 2px 4px 6px;
+}
+
+/* ---- Maximized topology -------------------------------------------------
+   A step between the normal view and true fullscreen: the topology takes the
+   whole content area, and everything framing it goes away. Only the header
+   (which says which pair this is) and the exit button remain. */
+.tracetree-exit-max {
+    display: none;
+    margin-left: auto;
+}
+body.tracetree-maximized .tracetree-exit-max {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+body.tracetree-maximized main#tabs > ul,
+body.tracetree-maximized .ls-tabs > ul,
+body.tracetree-maximized .tracetree-tabs-wrap > ul,
+body.tracetree-maximized .tracetree-sidebar,
+body.tracetree-maximized .tracetree-timeline-wrap {
+    display: none !important;
+}
+body.tracetree-maximized .tracetree-topo:not([aria-hidden="true"]) {
+    grid-template-columns: 1fr;   /* the control column is gone */
 }
 .tracetree-title {
     font-size: .9rem;
