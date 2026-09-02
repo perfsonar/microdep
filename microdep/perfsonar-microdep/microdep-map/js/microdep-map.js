@@ -1993,6 +1993,64 @@ function gap_list( from, to, hits, lines, sort_type){
     return digest;
 }
 
+// Restarting the analytic services flushes an extra summary event, so a link can
+// end up with more than one summary record covering the same period (issue #53).
+// Everything downstream is keyed by from+to and simply overwrites - and since the
+// heatmap sorts descending by value before filling its cells, the last write is
+// the SMALLEST of the duplicates, so the view quietly under-reports. Merge them
+// instead, each property the way the config says that property aggregates.
+//
+// Records without duplicates are returned untouched, so the normal case costs
+// one pass and changes nothing.
+function coalesce_pairs(hits, etype) {
+    if (!Array.isArray(hits) || hits.length < 2) return hits;
+
+    var groups = {}, order = [], duplicates = false;
+    for (var i = 0; i < hits.length; i++) {
+        var src = hits[i] && hits[i]._source;
+        if (!src) continue;
+        var key = src.from + "\u0000" + src.to;
+        if (!groups[key]) { groups[key] = []; order.push(key); }
+        else { duplicates = true; }
+        groups[key].push(src);
+    }
+    if (!duplicates) return hits;
+
+    var aggr = (prop_aggr && prop_aggr[etype]) || {};
+    var merged = [], pairs_merged = 0;
+    for (var k = 0; k < order.length; k++) {
+        var recs = groups[order[k]];
+        if (recs.length === 1) { merged.push({ _source: recs[0] }); continue; }
+        pairs_merged++;
+
+        // Start from the newest record so non-numeric fields (names, addresses,
+        // timestamps) keep a sensible value, then combine the numbers.
+        recs.sort(function (a, b) {
+            return String(a["@timestamp"] || "") < String(b["@timestamp"] || "") ? -1 : 1;
+        });
+        var out = Object.assign({}, recs[recs.length - 1]);
+
+        var fields = {};
+        recs.forEach(function (r) { Object.keys(r).forEach(function (f) { fields[f] = 1; }); });
+        Object.keys(fields).forEach(function (f) {
+            var vals = [];
+            recs.forEach(function (r) {
+                if (typeof r[f] === "number" && isFinite(r[f])) vals.push(r[f]);
+            });
+            if (vals.length < 2) return;
+            switch (aggr[f]) {
+            case "sum": out[f] = vals.reduce(function (a, b) { return a + b; }, 0); break;
+            case "max": out[f] = Math.max.apply(null, vals); break;
+            case "min": out[f] = Math.min.apply(null, vals); break;
+            default:    out[f] = vals.reduce(function (a, b) { return a + b; }, 0) / vals.length;
+            }
+        });
+        merged.push({ _source: out });
+    }
+    console.log("microdep: merged duplicate summary records for " + pairs_merged + " link pair(s)");
+    return merged;
+}
+
 function count_aggregates(aggs){
     var n = 0;
     var from_buckets=aggs.from.buckets;
@@ -4328,7 +4386,7 @@ function get_connections(){
 	    }
 	    if (resp.hits && resp.hits.total.value > 0){
 		var nrecs=resp.hits.total.value.toString();
-		if ( etype === "gapsum" || etype === "routesum" ){ summary=resp.hits.hits; }
+		if ( etype === "gapsum" || etype === "routesum" ){ summary=coalesce_pairs(resp.hits.hits, etype); }
 		else if ( resp.aggregations){ aggregates=resp.aggregations; summary=digest_aggregates(aggregates, $("#stats_type").val()); nrecs = count_aggregates( aggregates ); }
 		else { if (! sum_etype || start.substr(0,10) === now.toISOString().substr(0,10)) { summary=digest_es_data(etype, resp.hits.hits); } last_hits=resp.hits.hits; }
 		harvest_ip_name(summary);
@@ -4349,7 +4407,7 @@ function get_connections(){
 	if (parms.debug) console.log(sum_url);
 	$.getJSON( sum_url, function(resp){
 	    if (resp.hits && resp.hits.total.value > 0){
-		var nrecs=resp.hits.total.value.toString(); summary=resp.hits.hits; harvest_ip_name(summary);
+		var nrecs=resp.hits.total.value.toString(); summary=coalesce_pairs(resp.hits.hits, sum_etype); harvest_ip_name(summary);
 		var msg = hhmmss(new Date()) + " Got " + nrecs + " " + sum_etype + " records for " + $("#datepicker").val() + " " + $("#period_input").val() + " ;;";
 		$("#status").html( msg );
 		_paint_with_compare(summary, etype, $("#prop_select").val(), start, end);
