@@ -716,10 +716,22 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
                 timestep: 0.35
             },
             layout: { improvedLayout: true },
-            nodes: {},
+            nodes: {
+                // Bigger boxes and type: at the zoom the whole topology fits
+                // into, the labels were the first thing to become unreadable.
+                font: { size: 15 },
+                margin: 8,
+                borderWidth: 1.5
+            },
             edges: {
-                scaling: { max: 8 },
-                arrows: { middle: { enabled: true, scaleFactor: 1, type: 'arrow' } }
+                // Edges used to scale up to 8px, so a handful of them crossing
+                // the same area turned into a solid smear. Thin lines keep the
+                // structure readable where they overlap; the width still varies
+                // with the number of traces, just over a narrower range.
+                width: 0.5,
+                scaling: { min: 0.5, max: 3 },
+                selectionWidth: 2,
+                arrows: { middle: { enabled: true, scaleFactor: 0.8, type: 'arrow' } }
             },
             interaction: {
                 hover: true,
@@ -746,14 +758,14 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
             new vis.Network(container, topology, opts);
         } else if (tree) {
             update_tree_json(tree, topology);
-            setTimeout(function () { anchor_start_node(tree); }, 1500);
+            setTimeout(function () { settle_layout(tree); }, 1500);
         } else {
             tree = new vis.Network(container, topology, opts);
 
             // Anchor the sender once the layout settles; the timeout is a
             // fallback for when the stabilisation event does not fire.
-            tree.once('stabilizationIterationsDone', function () { anchor_start_node(tree); });
-            setTimeout(function () { anchor_start_node(tree); }, 2500);
+            tree.once('stabilizationIterationsDone', function () { settle_layout(tree); });
+            setTimeout(function () { settle_layout(tree); }, 2500);
 
             // A graph laid out while its tab was hidden has no usable size, so
             // it shows up zoomed in and the user has to press "fit content".
@@ -762,7 +774,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
                 const c = el('treetainer');
                 if (!c || c.offsetParent === null) return;   // still hidden
                 setTimeout(function () {
-                    try { tree.redraw(); tree.fit(); } catch (_) {}
+                    try { tree.redraw(); settle_layout(tree); } catch (_) {}
                 }, 60);
             });
 
@@ -963,6 +975,64 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
     // topology reads the same way. It has to run after the layout has settled:
     // vis works in its own coordinate space, not container pixels, so a position
     // picked up front (e.g. 15,15) just lands in the middle of the graph.
+    // The force layout settles into whatever shape it likes - typically about as
+    // tall as it is wide - while the pane it lives in is wide and short. Fitting
+    // that into the pane is then limited by height, and everything ends up drawn
+    // small (measured: a 2823x2362 layout in a 1066x448 pane fits at 0.17, i.e.
+    // ~10px nodes). Stretching the settled positions towards the pane's own
+    // proportions costs nothing structurally - no edge crosses that did not
+    // cross before - and buys ~40% more zoom, so nodes and labels get bigger.
+    function spread_to_pane(network) {
+        let cw, ch;
+        try {
+            cw = network.canvas.frame.canvas.clientWidth;
+            ch = network.canvas.frame.canvas.clientHeight;
+        } catch (_) { return; }
+        if (!cw || !ch) return;
+
+        let pos;
+        try { pos = network.getPositions(); } catch (_) { return; }
+        const ids = Object.keys(pos);
+        if (ids.length < 3) return;
+
+        const xs = ids.map(function (i) { return pos[i].x; });
+        const ys = ids.map(function (i) { return pos[i].y; });
+        const minx = Math.min.apply(null, xs), maxx = Math.max.apply(null, xs);
+        const miny = Math.min.apply(null, ys), maxy = Math.max.apply(null, ys);
+        const bw = maxx - minx, bh = maxy - miny;
+        if (bw < 1 || bh < 1) return;
+
+        let k = Math.sqrt((cw / ch) / (bw / bh));
+        if (!isFinite(k) || k <= 0) return;
+        if (Math.abs(k - 1) < 0.05) return;          // already close enough
+        k = Math.max(0.6, Math.min(1.8, k));          // never distort wildly
+
+        const cx = (maxx + minx) / 2, cy = (maxy + miny) / 2;
+        ids.forEach(function (id) {
+            network.moveNode(id, cx + (pos[id].x - cx) * k, cy + (pos[id].y - cy) / k);
+        });
+    }
+
+    // Reshape first, then pin the sender relative to the final positions.
+    //
+    // Both steps need a laid-out canvas: while the tab is still hidden (a reload
+    // restores it in the background) the canvas has no width, the proportions
+    // cannot be computed and fit() lands on a meaningless scale that nothing
+    // corrects afterwards. So wait for a real canvas rather than acting on a
+    // zero-sized one. Repeat calls are harmless - once the layout matches the
+    // pane, the reshape is a no-op.
+    function settle_layout(network, retries) {
+        if (retries === undefined) retries = 8;
+        let cw = 0;
+        try { cw = network.canvas.frame.canvas.clientWidth; } catch (_) { /* not ready */ }
+        if (cw < 50) {
+            if (retries > 0) setTimeout(function () { settle_layout(network, retries - 1); }, 400);
+            return;
+        }
+        spread_to_pane(network);
+        anchor_start_node(network);
+    }
+
     function anchor_start_node(network) {
         if (!network) return;
         let pos;
