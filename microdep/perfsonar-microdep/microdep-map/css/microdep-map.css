@@ -881,6 +881,24 @@ main#tabs {
     overflow: hidden;
 }
 
+/* jQuery UI's own theme sets `.ui-widget-content { color: #333 }`, and every
+   tab panel carries that class. Anything inside one that does not set its own
+   colour therefore renders near-black on our dark background - the timeline
+   range line and the "From ... for ..." heading in Hop stats were both this.
+   Override it once, at the source, so the whole widget tree follows the theme. */
+.ui-widget-content,
+.ui-widget-content a:not(.knapp):not(.ui-tabs-anchor) {
+    color: var(--c-text);
+}
+
+/* White on the bright cyan accent is barely legible (contrast 1.8). These
+   badges want dark text on the accent, the way the legend chips do. */
+.trace-variant caption .variant-no,
+.trace-compare-table thead th.trace-compare-vno .variant-no {
+    color: var(--c-bg) !important;
+}
+
+
 .ui-tabs .ui-tabs-panel:not(#mapid) { overflow: auto; }
 
 /* Graph/report panels need padding */
