@@ -234,13 +234,57 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         }
     }
 
-    function create_legend(elem_suffix, colors, limits) {
-        let table = '<table class="tracetree-legend">\n';
-        for (let i in colors) {
-            let lim = limits[i].toPrecision(3);
-            table += '<tr><td style="background-color:' + colors[i] + '" title=' + lim + '>' + lim + '</td>\n';
+    // The floating copy of the scale lives inside the graph container so that it
+    // is also there in fullscreen (the sidebar is outside the fullscreened
+    // element). vis.Network empties that container when it (re)initialises, and
+    // the legend is built BEFORE the graph is drawn, so this has to be callable
+    // again afterwards rather than done once.
+    let _scale_markup = '';
+
+    function attach_float_legend() {
+        if (!_scale_markup) return;
+        const gc = el('treetainer');
+        if (!gc) return;
+        let floating = el('legend-float');
+        if (!floating) {
+            floating = document.createElement('div');
+            floating.id = id + '-legend-float';
+            floating.className = 'tracetree-scale-float';
         }
-        el(elem_suffix).innerHTML = table + '</table>';
+        if (floating.parentElement !== gc) gc.appendChild(floating);
+        floating.innerHTML = _scale_markup;
+    }
+
+    function create_legend(elem_suffix, colors, limits) {
+        // A colour scale, not a stack of coloured cells: the old rendering looked
+        // like another row of buttons under the real ones. Gradient bar on the
+        // left, tick values alongside, lowest at the bottom.
+        const stops = colors.slice().reverse().join(', ');
+        // One format for the whole scale: toPrecision(3) gave "0.00, 24.2, 121",
+        // i.e. a different number of decimals per tick. Pick the decimals once,
+        // from the largest value, and use them for every tick.
+        const top = Math.max.apply(null, limits.map(Number).filter(function (v) { return isFinite(v); }));
+        const dec = top >= 100 ? 0 : (top >= 10 ? 1 : 2);
+        let ticks = '';
+        for (let i = colors.length - 1; i >= 0; i--) {
+            ticks += '<span>' + Number(limits[i]).toFixed(dec) + '</span>';
+        }
+        // Values first, then the bar: the numbers read down the left edge and are
+        // right-aligned against it, so the digits line up with their colours.
+        const markup =
+            '<div class="tracetree-scale" title="Node colour scale - round-trip time (ms)">' +
+              '<div class="tracetree-scale-caption">RTT ms</div>' +
+              '<div class="tracetree-scale-body">' +
+                '<div class="tracetree-scale-ticks">' + ticks + '</div>' +
+                '<div class="tracetree-scale-bar" style="background:linear-gradient(to bottom, ' + stops + ')"></div>' +
+              '</div>' +
+            '</div>';
+        const target = el(elem_suffix);
+        if (target) target.innerHTML = markup;
+        // The same scale, floating over the graph - that copy is the one seen in
+        // fullscreen and in the maximized view, where the sidebar is gone.
+        _scale_markup = markup;
+        attach_float_legend();
     }
 
     // ====================================================================
@@ -403,7 +447,11 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
     // ====================================================================
 
     async function traceroute_sum(tr_data) {
-        let nodes = [{ label: 'start', id: 'start', hop: 0, color: { background: '#20C020' } }];
+        // The hop-zero node stands for the traceroute sender, so label it with
+        // that host (the one named in the viewer's title) instead of a generic
+        // "Start" (issue #136). The id stays 'start' - it keys the edges.
+        const start_label = params.from || from || 'Start';
+        let nodes = [{ label: start_label, id: 'start', hop: 0, color: { background: '#20C020' } }];
         let node_ix = [];
         let edges = [];
         let stats = [];
@@ -420,6 +468,13 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
                 set_progress(40 + Math.round(50 * _seen / tr_data.length), 'Building topology');
                 await _yield();
             }
+            // Every trace begins at the sender, so hop one of EVERY trace has to
+            // link back to the start node. Without this reset `routers` still
+            // holds the previous trace's last hop, and the start node ends up
+            // connected to the first trace's first hop only (issue #136).
+            routers = [];
+            routers['start'] = 1;
+
             let last_node = 0, all_hops = [];
             if (!start) start = tr.ts;
             range = tr.ts - start;
@@ -644,8 +699,21 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         let opts = {
             physics: {
                 solver: 'barnesHut',
-                stabilization: { enabled: true, iterations: 10 },
-                timestep: 0.3
+                // 10 iterations was far too few - the graph was drawn before it
+                // had settled, so it came out tangled and bunched up. Give it
+                // room to spread: stronger repulsion, longer springs, and enough
+                // iterations to actually converge.
+                barnesHut: {
+                    gravitationalConstant: -12000,
+                    centralGravity: 0.15,
+                    springLength: 170,
+                    springConstant: 0.03,
+                    damping: 0.35,
+                    avoidOverlap: 0.6
+                },
+                stabilization: { enabled: true, iterations: 300, updateInterval: 25 },
+                minVelocity: 0.75,
+                timestep: 0.35
             },
             layout: { improvedLayout: true },
             nodes: {},
@@ -669,6 +737,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         }
 
         fix_positions(data.nodes, data.stats, container);
+        setTimeout(attach_float_legend, 0);   // after vis has taken the container
         let nodes_ds = new vis.DataSet(data.nodes);
         let edges_ds = new vis.DataSet(data.edges);
         topology = { nodes: nodes_ds, edges: edges_ds };
@@ -677,8 +746,25 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
             new vis.Network(container, topology, opts);
         } else if (tree) {
             update_tree_json(tree, topology);
+            setTimeout(function () { anchor_start_node(tree); }, 1500);
         } else {
             tree = new vis.Network(container, topology, opts);
+
+            // Anchor the sender once the layout settles; the timeout is a
+            // fallback for when the stabilisation event does not fire.
+            tree.once('stabilizationIterationsDone', function () { anchor_start_node(tree); });
+            setTimeout(function () { anchor_start_node(tree); }, 2500);
+
+            // A graph laid out while its tab was hidden has no usable size, so
+            // it shows up zoomed in and the user has to press "fit content".
+            // Re-measure and fit whenever this tab becomes visible instead.
+            $('main#tabs').on('tabsactivate', function () {
+                const c = el('treetainer');
+                if (!c || c.offsetParent === null) return;   // still hidden
+                setTimeout(function () {
+                    try { tree.redraw(); tree.fit(); } catch (_) {}
+                }, 60);
+            });
 
             tree.on("hoverNode", function (ev) {
                 if (last_tr !== null)
@@ -873,15 +959,44 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
     //  Node positioning
     // ====================================================================
 
+    // Park the sender (hop zero) above and left of everything else, so every
+    // topology reads the same way. It has to run after the layout has settled:
+    // vis works in its own coordinate space, not container pixels, so a position
+    // picked up front (e.g. 15,15) just lands in the middle of the graph.
+    function anchor_start_node(network) {
+        if (!network) return;
+        let pos;
+        try { pos = network.getPositions(); } catch (_) { return; }
+        if (!pos || !pos['start']) return;
+        let minx = null, miny = null;
+        for (const id in pos) {
+            if (id === 'start') continue;
+            minx = (minx === null) ? pos[id].x : Math.min(minx, pos[id].x);
+            miny = (miny === null) ? pos[id].y : Math.min(miny, pos[id].y);
+        }
+        if (minx === null) return;
+        try {
+            network.body.data.nodes.update({
+                id: 'start',
+                x: Math.round(minx - 160),
+                y: Math.round(miny - 160),
+                fixed: true,
+                physics: false
+            });
+            network.fit();
+        } catch (err) { console.log('anchor_start_node: ' + err); }
+    }
+
     function fix_positions(nodes, stats, container) {
+        let minx = 15, maxx = container.clientWidth - 30;
+        let miny = 15, maxy = container.clientHeight - 30;
+
         let last = stats.length - 1;
         if (last >= 0) {
             let starti = find_node(nodes, stats[0].address);
             let endi = find_node(nodes, stats[last].address);
 
             if (starti !== null && endi !== null) {
-                let minx = 15, maxx = container.clientWidth - 30;
-                let miny = 15, maxy = container.clientHeight - 30;
 
                 if (stats[0].latitude <= stats[last].latitude) {
                     nodes[starti].y = maxy;
@@ -897,7 +1012,8 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
                     nodes[starti].x = minx;
                     nodes[endi].x = maxx;
                 }
-                nodes[starti].fixed = true;
+                // Only a positional hint now - the sender above is the anchor, and
+                // a second fixed node would fight it.
             }
         }
     }
@@ -1633,6 +1749,8 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
   <div class="tracetree-header">
     <span class="tracetree-title">Traceroute</span>
     <span class="tracetree-peers">${peers_label}</span>
+    <button class="knapp tracetree-exit-max" id="${id}-unmaximize"
+            title="Leave the maximized view (Esc)">&#x2715; Exit</button>
   </div>
   <div id="${id}-tabs" class="tracetree-tabs-wrap">
     <ul>
@@ -1652,6 +1770,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
       <div class="tracetree-sidebar">
         <div class="topo-controls">
           <button class="knapp topo-btn" id="${id}-fullscreen">Full screen</button>
+          <button class="knapp topo-btn" id="${id}-maximize">Maximize</button>
           <button class="knapp topo-btn" id="${id}-simple">Simple</button>
           <button class="knapp topo-btn" id="${id}-full">Full</button>
           <button class="knapp topo-btn" id="${id}-stop">Stop layout</button>
@@ -1709,6 +1828,42 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
                 }
             });
         }
+
+        // Maximize: give the topology the whole content area without going
+        // fullscreen - drop the tab strips, the control column and the timeline,
+        // keep the "from ... to ..." header and an exit button. The left nav is
+        // folded away too (and put back on exit, unless it was already folded).
+        let restore_sidebar = false;
+        function set_maximized(on) {
+            document.body.classList.toggle('tracetree-maximized', on);
+            const sidebar = document.getElementById('sidebar');
+            if (on) {
+                if (sidebar && !sidebar.classList.contains('collapsed')) {
+                    const t = document.getElementById('sidebarToggle');
+                    if (t) { t.click(); restore_sidebar = true; }
+                }
+            } else if (restore_sidebar) {
+                const o = document.getElementById('openSidebarBtn');
+                if (o) o.click();
+                restore_sidebar = false;
+            }
+            // The graph just changed size in a way no layout event covers.
+            setTimeout(function () {
+                try { if (tree) { tree.redraw(); tree.fit(); } } catch (_) {}
+            }, 350);
+        }
+
+        const max_btn = el('maximize');
+        if (max_btn) max_btn.addEventListener('click', function () { set_maximized(true); });
+
+        const unmax_btn = el('unmaximize');
+        if (unmax_btn) unmax_btn.addEventListener('click', function () { set_maximized(false); });
+
+        document.addEventListener('keydown', function (ev) {
+            if (ev.key === 'Escape' && document.body.classList.contains('tracetree-maximized')) {
+                set_maximized(false);
+            }
+        });
 
         // Simple view — reduce graph
         let simple_btn = el('simple');
