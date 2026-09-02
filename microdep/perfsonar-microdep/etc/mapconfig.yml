@@ -34,14 +34,12 @@ event_type:
         # Table columns (in addition to date and time) to display in map popup windows
         - tloss
         - h_ddelay
-    default_field: "down_ppm"
+    # down_ppm is NOT emitted on raw gap events - only on the gapsum summaries
+    # below (verified against an archive: 0 of 104 gap records carry it, while
+    # all 112 gapsum records do). Offering it here left the non-summary view
+    # ("today") defaulting to a property with no data behind it.
+    default_field: "tloss"
     field:
-      down_ppm:
-        title: "Unavailability"
-        descr: "Fraction of downtime over total time in parts-per-million (10 ppm <=> \"five-nines\")."
-        unit: "ppm"
-        type: "number"
-        aggr: "sum"
       tloss:
         title: "Time lost"
         descr: "Downtime in packet flow."
