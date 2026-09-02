@@ -1011,8 +1011,12 @@ def createJSON(alert):
             path = input_dir[alert["thread"]] + "/" + filename
         else:
             # Place outputfile in report folder
-            os.makedirs(report_dir[alert["thread"]], exist_ok=True)  # Create folders if required
-            path = report_dir[alert["thread"]] + "/" + filename
+            if report_dir[alert["thread"]]:
+                # Create folders if required
+                os.makedirs(report_dir[alert["thread"]], exist_ok=True)  
+                path = report_dir[alert["thread"]] + "/" + filename
+            else:
+                path = filename
 
         with open(path, "a") as outfile:
             if param['verbose'] > 2:
@@ -1685,7 +1689,7 @@ def findLastIp(traceroute, dest):
     for i in range(len(traceroute)-1, -1, -1):
         # Scan from last probe and backwards
         for j in range(len(traceroute[i])-1,-1,-1):
-            if len(traceroute[i][j].split(".")) == 4:
+            if len(traceroute[i][j].split(".")) == 4 or re.search(IP6_RE, traceroute[i][j]) and param["ipv6"]:
                 return traceroute[i][j], i+1
                 
     # No ips found (all "*" or errormsgs)
@@ -1753,19 +1757,23 @@ def errorCheck(traceroute, unique_pair, time, analysis_state):
 
     # Examine last line
     for probe in last:    
-        if str(probe).strip() == "*":                # Count "*"s i.e "No replies"
+        if str(probe).strip() == "*":
+            # Count "*"s i.e "No replies"
             noreply += 1
             tracesummary.count('probes_stopped_at_last_hop')
-        elif str(probe).strip() == str(destination): # Count successes , i.e packages reaching their destination
+        elif str(probe).strip() == str(destination):
+            # Count successes , i.e packages reaching their destination
             reached += 1
             ipseen = str(probe).strip()
             lastip = destination                     # Set dst-ip as last-ip since this is the one making traceroute terminate  
             tracesummary.count('probes_to_dst')
-        elif len(str(probe).strip().split(".")) == 4: # Count stopped routes at none-desitantion addresses (ipv4)
+        elif len(str(probe).strip().split(".")) == 4 or re.search(IP6_RE, str(probe).strip()) and param["ipv6"]:
+            # Count stopped routes at none-desitantion addresses (ipv4 or ipv6)
             other += 1
             ipseen = str(probe).strip()
             tracesummary.count('probes_with_none_dst_last_hop')
-        elif str(probe).strip().startswith("!"):      # Any error messages
+        elif str(probe).strip().startswith("!"):
+            # Any error messages
             errors.append(str(probe).strip())
             errorsIP.append(ipseen)
             tracesummary.count('probes_with_errormsg')
@@ -2468,8 +2476,13 @@ def read(path, srchost, srcdate, mode="batch", thread=0, starttime=0):
     filename = os.path.basename(path)
     input_file[thread] = filename
     input_dir[thread] = os.path.dirname(path)
-    report_dir[thread] = param['reportpath'] + "/" + srchost + "/" + srcdate + "/" + param['reportpostpath']
-    
+    if param['reportpath']:
+        # Apply sub-folder scheme i.e. <reportpath>/<srchost>/<date>/<reportpostpath>
+        report_dir[thread] = param['reportpath'] + "/" + srchost + "/" + srcdate + "/" + param['reportpostpath']
+    else:
+        # No reportpath given. Do not prefix output with any path.
+        report_dir[thread] = ""
+        
     # Extract info from filename
     dsthost = str(filename)[filename.find("_")+1:-3]  # Assume "..._<ipv4-addr>.gz" filename format
     traceroute_type = "udp"
@@ -2979,10 +2992,6 @@ if __name__ == "__main__":
         import isodate
         import pika        
 
-#    if param["ipv6" ]:
-#        print("Error: Parsing of Ipv6 addresses not yet supported.")
-#        sys.exit()
-        
     asn_lookup = geoip2.database.Reader(param['geodb'])  # Instansiate ASN lookup object
     resolver = Resolver(param['namemap'])  # Initiate ip-to-name and name-to-ip resolver 
 
