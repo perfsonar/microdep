@@ -150,8 +150,10 @@ export function heatmap(div, hits, property, get_color, threshes, title, templat
                             '" target="_blank" rel="noopener">';
                 }
             }
+            const ink = _hm_ink(color);
             html += '<div class="heatmap-cell-inner" style="background:' +
-                    _hm_esc(color) + '">' + _hm_esc(fmt_val(v)) + "</div>";
+                    _hm_esc(color) + (ink ? ';color:' + ink : '') + '">' +
+                    _hm_esc(fmt_val(v)) + "</div>";
             if (url) html += on_cell_click ? "</button>" : "</a>";
             html += "</td>";
         }
@@ -177,6 +179,32 @@ function _hm_uniq(arr) {
     const out = [];
     for (const v of arr) { if (!seen.has(v)) { seen.add(v); out.push(v); } }
     return out;
+}
+
+// Heatmap cells carry data-driven backgrounds that run from bright yellow to
+// dark - a single text colour cannot sit on all of them (light-on-yellow measured
+// at contrast 1.2). Pick black or white per cell from the background's luminance.
+function _hm_ink(color) {
+    let r, g, b;
+    const s = String(color).trim();
+    let m = s.match(/^#([0-9a-f]{3})$/i);
+    if (m) {
+        r = parseInt(m[1][0] + m[1][0], 16);
+        g = parseInt(m[1][1] + m[1][1], 16);
+        b = parseInt(m[1][2] + m[1][2], 16);
+    } else if ((m = s.match(/^#([0-9a-f]{6})$/i))) {
+        r = parseInt(m[1].slice(0, 2), 16);
+        g = parseInt(m[1].slice(2, 4), 16);
+        b = parseInt(m[1].slice(4, 6), 16);
+    } else if ((m = s.match(/rgba?\(([^)]+)\)/i))) {
+        const p = m[1].split(',').map(Number);
+        r = p[0]; g = p[1]; b = p[2];
+    } else {
+        return '';                     // unknown format: leave the CSS default
+    }
+    const f = function (v) { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+    const L = 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+    return L > 0.45 ? '#111111' : '#ffffff';
 }
 
 function _hm_esc(s) {
