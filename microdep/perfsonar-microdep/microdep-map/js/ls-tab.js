@@ -559,6 +559,18 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
             api:        api,
             ip_version: params.ip_version
         });
+
+        // Tell the map which pair is on screen, so a reload comes back to it
+        // instead of the "no traceroute data matching ..." pane. Picking a pair
+        // from the Peers list used to be forgotten entirely.
+        document.dispatchEvent(new CustomEvent('microdep-tracetree-pair', {
+            detail: {
+                divid: id, from: p_from, to: p_to,
+                startEpoch: t_start, endEpoch: t_end,
+                mahost: mahost, api: api, ip_version: params.ip_version,
+                net: params.net
+            }
+        }));
     }
 
     // ── Build the outer 3-tab structure ─────────────────────────────────
