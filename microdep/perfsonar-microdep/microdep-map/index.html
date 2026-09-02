@@ -701,6 +701,22 @@
         });
       }
       $(document).ajaxComplete(function(){ setTimeout(replaceNaN, 100); });
+      // Footer error indicator: half a dozen places write into #error, so key
+      // the colour off what it ends up saying rather than off each writer. Red
+      // only when there is something to report; "none" sits there most of the
+      // time and should not read as a fault.
+      (function () {
+        var errEl = document.getElementById('error');
+        if (!errEl) return;
+        var refreshErrState = function () {
+          var txt = (errEl.textContent || '').trim().toLowerCase();
+          errEl.classList.toggle('is-quiet', txt === '' || txt === 'none');
+        };
+        refreshErrState();
+        new MutationObserver(refreshErrState)
+          .observe(errEl, { childList: true, characterData: true, subtree: true });
+      })();
+
       var legendEl = document.getElementById('legend');
       if (legendEl) {
         var legendObserver = new MutationObserver(function(){ setTimeout(replaceNaN, 50); });
