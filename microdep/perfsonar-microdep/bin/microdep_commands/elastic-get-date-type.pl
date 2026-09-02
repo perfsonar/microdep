@@ -49,6 +49,7 @@ my $path_addr=parm('path_addr'); # list of ips
 my $date_field='@date';
 $date_field = '@timestamp' if $path_addr;
 my $load_coords = parm('load_coords');
+my $count = parm('count');      # Totals only - no hits, no aggregations
 
 my $ip_list; # make an array for ES
 
@@ -253,7 +254,12 @@ if ( $path_addr){
 ';
 }
 
-if (! $type) {
+if ( $count ) {
+    # Cheap probe: how many records match, nothing else. Used to find out
+    # whether a measurement network holds any data at all without pulling the
+    # records themselves (the ordinary query returns ~600kB for a week).
+    $search = '{ "size": 0, "track_total_hits": true, ' . $query_head . $query_tail . '}';
+} elsif (! $type) {
     # Fetch only list of flows seen (incl. address data)
     $search ='{ "size": 0, ' . $query_head . $query_tail . ', ' . $flow_aggr .'}'; 
 } elsif ( $type eq "topology" ) {
