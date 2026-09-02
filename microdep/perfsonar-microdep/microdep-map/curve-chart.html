@@ -34,10 +34,13 @@
         var saved = localStorage.getItem('microdep-theme') || 'auto';
         document.documentElement.setAttribute('data-theme', saved);
       } catch (_) { /* private browsing etc. */ }
-      // Re-apply when the parent storage changes.
+      // Re-apply when the parent storage changes. The CSS follows the attribute
+      // on its own, but a chart already on screen keeps the colours it was built
+      // with, so tell the module layer to repaint them too.
       window.addEventListener('storage', function (e) {
         if (e.key === 'microdep-theme' && e.newValue) {
           document.documentElement.setAttribute('data-theme', e.newValue);
+          window.dispatchEvent(new Event('microdep-theme-changed'));
         }
       });
     })();
