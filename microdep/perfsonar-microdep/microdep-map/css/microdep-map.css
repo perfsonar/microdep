@@ -1366,6 +1366,9 @@ table#legend::after { display: none !important; }
 .status-label { font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
 #status { color: var(--c-ok); }
 #error { color: var(--c-err); }
+/* "none" is the resting state, not a problem - only colour it like one when it
+   actually says something. */
+#error.is-quiet { color: var(--c-text-3); font-weight: 400; }
 
 /* ==========================================================
    TABLES
