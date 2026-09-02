@@ -5,6 +5,12 @@
 title: "Network-name"           # NEEDS TO BE OVERRIDDEN
 descr: "My measurement network" # NEEDS TO BE OVERRIDDEN
 archive: "https://localhost/opensearch"  # Url to relevant Opensearch DB holding indices
+# default_network: true         # Set in ONE network's config (see mapconfig.d/) to
+                                # open the map on that network. When no network
+                                # sets it, the map opens on whichever network has
+                                # measurements, so a variant that carries no data
+                                # (e.g. IPv6 on a host without IPv6) is not picked
+                                # just because its name sorts first.
 default_event_type: "gap"       # Event type to apply if no relevant is available
 default_event_type_live: "gap"  # Event type to apply if no relevant is available and date is today
 ip_version: ""                  # All ip versions includene if empty. "4" filters ipv4 only and "6" filters ipv6 only.   

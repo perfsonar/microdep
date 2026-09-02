@@ -479,6 +479,74 @@ export var prop_aggr = {};         // Hash table (indexed by event_type and fiel
 export var prop_reversed = {};     // Hash table (indexed by event_type and field) of flags indicating reversed ordering for a field values (to be applied in summary popups, tables and legends).
 export var prop_thresholds={};     // Hash table (indexed by event_type and field) of thresholds for field values (to be applied in legends and heatmaps).
 
+
+// Which measurement network should the map open on?
+//
+// Nothing used to decide this: the list is sorted alphabetically by title and
+// the browser simply took the first option. On a host where the alphabetically
+// first network happens to be one that carries no data - an IPv6 variant on a
+// host without IPv6, say - the map opened on an empty view.
+//
+// Order of precedence:
+//   1. whatever the URL or the restored session asks for (handled by the
+//      caller, which only applies our answer when parms.net is unset),
+//   2. a network marked `default_network: true` in its config,
+//   3. the network with the most measurements over the last week.
+//
+// Step 3 costs one small request per network (totals only, ~160 bytes) and only
+// runs when no default is configured and there is more than one network to
+// choose between. It is also self-correcting: the day IPv6 starts producing
+// data, that network becomes eligible without anyone editing a config.
+function probe_net_size(net) {
+    const conf = conffile[net];
+    if (!conf) return Promise.resolve(0);
+    const events = conf.event_type || {};
+    const etype = conf.default_event_type || Object.keys(events)[0];
+    const index = etype && events[etype] && events[etype].index;
+    if (!index) return Promise.resolve(0);
+
+    const end = new Date();
+    const start = new Date(end.getTime() - 7 * 24 * 3600 * 1000);
+    const url = "elastic-get-date-type.pl?net=" + encodeURIComponent(net)
+	      + "&index=" + encodeURIComponent(index)
+	      + "&event_type=" + encodeURIComponent(etype)
+	      + "&start=" + start.toISOString()
+	      + "&end=" + end.toISOString()
+	      + "&count=1";
+    return fetch(url)
+	.then(function (r) { return r.ok ? r.json() : null; })
+	.then(function (j) {
+	    const total = j && j.hits && j.hits.total;
+	    return (total && typeof total.value === "number") ? total.value : 0;
+	})
+	.catch(function () { return 0; });
+}
+
+export function choose_default_network(nets) {
+    if (!nets || nets.length === 0) return Promise.resolve(null);
+
+    // Configured default wins - a site that knows what it wants gets a stable
+    // answer with no probing at all.
+    for (const n of nets) {
+	const flag = conffile[n] && conffile[n].default_network;
+	if (flag === true || flag === "true") return Promise.resolve(n);
+    }
+    if (nets.length === 1) return Promise.resolve(nets[0]);
+
+    // Otherwise pick the one with data, without letting a slow or unreachable
+    // archive hold up the page: whatever has answered by then decides, and an
+    // all-zero result leaves the alphabetical order alone.
+    const probes = Promise.all(nets.map(function (n) {
+	return probe_net_size(n).then(function (c) { return { net: n, count: c }; });
+    })).then(function (results) {
+	let best = null;
+	for (const r of results) if (!best || r.count > best.count) best = r;
+	return (best && best.count > 0) ? best.net : null;
+    });
+    const timeout = new Promise(function (resolve) { setTimeout(function () { resolve(null); }, 2500); });
+    return Promise.race([probes, timeout]);
+}
+
 export function get_config( conffilename, call_back){
     // Fetch config info and initialize page
     $.getJSON( "get-mapconfig.cgi", function(read_conffile) {
@@ -494,7 +562,11 @@ export function get_config( conffilename, call_back){
 	    }
 	    // Update select-boks for networks/variants
 	    make_prop_select("network", net_names, net_desc, net_long_desc);
-	    call_back();
+	    // ...and decide which one to open on before handing over (issue #72).
+	    choose_default_network(net_names).then(function (net) {
+		if (net) $("#network").val(net);
+		call_back();
+	    });
 	}
 
     })
