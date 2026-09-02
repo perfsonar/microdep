@@ -323,6 +323,18 @@ button.knapp:disabled { opacity: .45; cursor: not-allowed; }
     display: block;
 }
 
+/* `margin: auto` centres the panel, so whenever the plot is smaller than the
+   pane there is leftover space above and below it - measured on a test host:
+   222px top and bottom. Painting the panel in a different shade from the
+   container turned that leftover into what reads as a second, empty frame
+   (issue #134); it is most obvious on the light theme, where the panel is white
+   against an off-white container. The canvas keeps its own surface colour, so
+   the plot still reads as a card - only the empty space around it stops
+   pretending to be one. */
+.cc-tabs > .ui-tabs-panel {
+    background: transparent !important;
+}
+
 canvas.graph {
     display: block;
     /* width/height managed by chart.js — do not !important them */
