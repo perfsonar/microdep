@@ -901,6 +901,18 @@ function only_links_by_color(color){
     }
 }
 
+// The property lists differ between the raw and the summary view (a raw gap
+// record has tloss but no down_ppm, a gapsum the other way round), so the title
+// has to be looked up in whichever list the current view is using. Every call
+// site used to read the summary map unconditionally, which happened to work for
+// properties present in both and produced "undefined" for the rest.
+function prop_title(prop) {
+    const sum = event_sum_type[parms.event];
+    return (prop_desc[parms.event] && prop_desc[parms.event][prop])
+        || (sum && prop_desc[sum] && prop_desc[sum][prop])
+        || prop;
+}
+
 function update_legend(title, threshes){
     var html="<table border=1 align=center id=legend> ";
     html+="<tr align=center>";
@@ -2004,7 +2016,7 @@ function digest_aggregates(aggs, stats_type){
 
 function draw_links(hits, prop){
     get_thresholds(hits, prop);
-    update_legend(prop_desc[event_sum_type[parms.event]][prop],threshes);
+    update_legend(prop_title(prop),threshes);
     hits.sort(sort_hits);
     var new_ends=[];
     for (var i=0; i < hits.length; i++){
@@ -2159,7 +2171,7 @@ function draw_topology(topo){
 
 function taint_topology( topo, prop){
     get_thresholds(topo, prop);
-    update_legend(prop_desc[event_sum_type[parms.event]][prop],threshes);
+    update_legend(prop_title(prop),threshes);
     for (var i=0; i < topo.length; i++){
 	var link=topo[i]; var ab=[link._source.from, link._source.to]; var abs = ab.join();
 	if ( linkByName[abs] ){
@@ -2472,7 +2484,7 @@ function taint_links( hits, prop){
 	    update_compare_legend(prop_desc[event_sum_type[parms.event]][prop], _compare_label(parms.compare));
 	    _clear_compare_labels();
 	} else {
-	    update_legend(prop_desc[event_sum_type[parms.event]][prop],threshes);
+	    update_legend(prop_title(prop),threshes);
 	    _clear_compare_labels();
 	}
 	for (var i=0; i < hits.length; i++){
@@ -4202,6 +4214,11 @@ function change_date(delta){
 	p.setHours(p.getHours() + hour + increment * delta);
     } else { var days = Math.round(increment / 24); p.setDate( p.getDate() + days * delta ); }
     $("#period_input").val(hhmm(p)); $("#datepicker").datepicker('setDate', p);
+    // setDate() does not fire the datepicker's change event, so Prev/Next/Today
+    // would otherwise keep the previous date's property list - and today is
+    // served from raw events while earlier days come from summaries, which carry
+    // different fields.
+    update_props();
     update_url(); show_network(parms.net); update_url();
 }
 
@@ -4341,6 +4358,12 @@ function init_map(){
     $( "#datepicker" ).datepicker({dateFormat: "yy-mm-dd", "defaultDate": -1, "firstDay": 1, "maxDate": 0 });
     var dato; if ( parms.date) dato=parms.date; else dato="-1d";
     $("#datepicker").datepicker('setDate', dato).on("change", function() {
+	// Which property list applies depends on the date (today is served from
+	// raw events, earlier days from summaries), so it has to be rebuilt here
+	// the same way the period selector does it - otherwise moving between
+	// today and an earlier day leaves the previous day's properties on
+	// screen, offering fields the fetched records do not carry.
+	update_props();
 	$("#next").prop('dsabled', selected_hour_is_future() ); update_url(); show_network(parms.net);
     });
     $("#period").change( function(){ parms.period = $("#period").val(); update_props(); update_url(); get_topology(); $("#period_input").val('00:00'); });
