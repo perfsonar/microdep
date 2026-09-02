@@ -57,6 +57,40 @@ function loadStoredTabSpecs() {
     try { return JSON.parse(localStorage.getItem(TAB_STORE_KEY) || '[]'); }
     catch (_) { return []; }
 }
+// A pair chosen in a Routes tab's Peers list (or auto-resolved on open) is
+// stored against that tab, so a reload restores the topology that was on screen
+// rather than dropping the user back on the peer list.
+// During start-up the network/event/property handlers fire once on their own
+// (init does $("#network").trigger("change")), and each of them jumps to the map
+// tab. That would undo the restored tab, so they only do it once start-up is
+// over - i.e. for changes the user actually made.
+let initialising = true;
+function endInitialising() { initialising = false; }
+
+document.addEventListener('microdep-tracetree-pair', function (e) {
+    const d = (e && e.detail) || {};
+    if (!d.divid || !d.from || !d.to) return;
+    const prev = tabSpecs.get(d.divid) || {};
+    const shortName = function (h) { return String(h || '').split('.').slice(0, 2).join('.'); };
+    persistTab(d.divid, {
+        kind: 'routes',
+        title: prev.title || ('Routes: ' + shortName(d.from) + ' \u2192 ' + shortName(d.to)),
+        from: d.from,
+        to: d.to,
+        startEpoch: d.startEpoch,
+        endEpoch: d.endEpoch,
+        options: prev.options || {
+            net: d.net, mahost: d.mahost, verify_SSL: 0,
+            api: d.api, ip_version: d.ip_version
+        }
+    });
+    // The spec's identity just changed (a menu-opened Routes tab is
+    // 'check|routes' until a pair is picked, then 'routes|from|to'), so the
+    // stored "active tab" pointer would no longer match and a reload would fall
+    // back to the map. Re-save it while this tab is the active one.
+    if (!restoringTabs) saveActiveTab();
+});
+
 document.addEventListener('microdep-tab-closed', function (e) {
     unpersistTab(e.detail.divid);
 });
@@ -129,6 +163,108 @@ function applyActiveAfterRestore() {
     }
 }
 
+// Leaflet sizes itself when it is created and loads tiles for the area it
+// believes it covers. Both go wrong when that happens while the map is not on
+// screen - hidden tab after a reload, or a window that is not being rendered at
+// all: the size stays stale and only part of the tiles ever arrive, which looks
+// like the map shrank into a square.
+//
+// Recovery cannot lean on ResizeObserver alone: its callbacks are delivered
+// with rendering, so in a background window they arrive a minute late or not at
+// all (measured: 59s). So we re-check from every angle that means "the map may
+// be on screen now" - tab activation, the page becoming visible, and a few
+// delayed passes - and only act when something is actually wrong.
+// What the initial view was fitted to, and the map size it was computed with.
+// getBoundsZoom() derives the zoom from the current map size, so a fit performed
+// while the map is hidden (size 0) or barely laid out yields zoom 0-1 - the
+// whole world drawn into a 512px square inside a full-size container, which is
+// what "the map shrank to a little square" actually was. The view is fitted only
+// once per network on purpose (so later data changes don't fight the user's
+// pan/zoom), so nothing corrected it afterwards.
+let _lastFit = null;
+
+function remember_fit(bounds, center) {
+    if (!window.mymap) return;
+    const sz = window.mymap.getSize();
+    _lastFit = { bounds: bounds, center: center || null, w: sz.x, h: sz.y };
+}
+
+// Re-apply the initial fit, but ONLY when the one we did was computed against an
+// unusable map size. A normal resize must not throw away the user's own view.
+function refit_if_fitted_blind() {
+    const map = window.mymap;
+    if (!map || !_lastFit || !_lastFit.bounds) return;
+    if (_lastFit.w >= 200 && _lastFit.h >= 200) return;      // fit was sound
+    const sz = map.getSize();
+    if (sz.x < 200 || sz.y < 200) return;                    // still not usable
+    try {
+        const b = L.latLngBounds(_lastFit.bounds);
+        if (!b.isValid()) return;
+        map.setView(_lastFit.center || b.getCenter(),
+                    Math.min(map.getBoundsZoom(b, true), 6),
+                    { animate: false });
+        _lastFit.w = sz.x;
+        _lastFit.h = sz.y;
+    } catch (err) {
+        console.log('refit_if_fitted_blind: ' + err);
+    }
+}
+
+function refresh_map_view(passes) {
+    passes = passes || 5;
+    const tick = function () {
+        const map = window.mymap;
+        if (map && typeof map.invalidateSize === 'function') {
+            const c = map.getContainer();
+            const r = c ? c.getBoundingClientRect() : null;
+            if (r && r.width > 0 && r.height > 0) {
+                const s = map.getSize();
+                if (Math.abs(s.x - r.width) > 1 || Math.abs(s.y - r.height) > 1) {
+                    map.invalidateSize({ animate: false });
+                }
+                refit_if_fitted_blind();
+                map.eachLayer(function (layer) {
+                    // Finish any tile left mid-fade and re-request missing ones.
+                    if (layer._tiles) {
+                        for (const k in layer._tiles) {
+                            const t = layer._tiles[k];
+                            if (t && t.el) { t.el.style.opacity = 1; t.active = true; }
+                        }
+                        if (typeof layer.redraw === 'function') layer.redraw();
+                    }
+                });
+            }
+        }
+        if (--passes > 0) setTimeout(tick, 300);
+    };
+    tick();
+}
+
+function watchMapVisibility() {
+    // Cheap and event-driven where possible...
+    document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'visible') refresh_map_view();
+    });
+    // Any tab activation, not just one we think is the map: refresh_map_view()
+    // is a no-op unless the map is actually on screen and actually wrong, so
+    // there is nothing to gain from guessing which tab it was.
+    $('main#tabs').on('tabsactivate', function () { refresh_map_view(); });
+    window.addEventListener('focus', function () { refresh_map_view(3); });
+    // ...and observed as well, for size changes that no event covers (sidebar
+    // collapse, window resize). This one is best-effort: see the note above.
+    const panel = document.getElementById('mapid');
+    if (panel && typeof ResizeObserver !== 'undefined') {
+        let lastW = -1, lastH = -1;
+        new ResizeObserver(function (entries) {
+            const r = entries[0].contentRect;
+            if (r.width === lastW && r.height === lastH) return;
+            lastW = r.width;
+            lastH = r.height;
+            if (r.width > 0 && r.height > 0) refresh_map_view(2);
+        }).observe(panel);
+    }
+}
+
 // Replays stored specs to recreate the tabs after a page reload. Called once
 // from the init flow (see end of get_config().then or similar). Wrapped in
 // `restoringTabs` so the persistence hooks inside the tab openers don't
@@ -140,8 +276,16 @@ function restoreSavedTabs() {
     // Pre-flight sanity: if microdep-map didn't finish wiring up the
     // primary handlers we'd just create broken tabs, so skip and try later.
     if (typeof event_index === 'undefined' || jQuery.isEmptyObject(event_index)) {
-        console.log('Tab restore deferred — config not ready yet, retrying in 2s');
-        setTimeout(restoreSavedTabs, 2000);
+        setTimeout(restoreSavedTabs, 250);
+        return;
+    }
+    // Report tabs (the "+" menu ones) are built from the current summary, so
+    // they do have to wait for it. Routes/curve tabs do not - restoring them
+    // right away means the tab the user was on takes focus immediately instead
+    // of after the whole map has finished drawing.
+    if (specs.some(function (sp) { return sp && sp.kind === 'check'; }) &&
+        (typeof summary === 'undefined' || !summary || !summary.length)) {
+        setTimeout(restoreSavedTabs, 250);
         return;
     }
 
@@ -161,6 +305,7 @@ function restoreSavedTabs() {
         // panel and the tabsactivate listener (in index.html) re-shows the
         // map-container if needed.
         applyActiveAfterRestore();
+        if (map_tab_is_active()) refresh_map_view();
     }
 }
 
@@ -489,7 +634,12 @@ function refreshLinkPanel() {
 function show_map (network) {
     console.log ("Showing map");
     if ( ! mymap ){
-	mymap = L.map('mapid');
+	// fadeAnimation off: Leaflet fades tiles in via an opacity transition, and
+	// tiles that load while the container is hidden (another tab has focus after
+	// a reload) never finish it - they stay at ~0.2 opacity for good. The result
+	// is a bright square of fully-drawn tiles surrounded by nearly invisible
+	// ones, which reads as "the map shrank to a small square".
+	mymap = L.map('mapid', { fadeAnimation: false });
 	window.mymap = mymap;     // expose for invalidateSize() from index.html
 	myRenderer = L.canvas({ padding: 0.5, tolerance: 20 });
 	var osmUrl='https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
@@ -593,6 +743,7 @@ function make_markers ( network, points, focus) {
 	// hub host and marks the network done.
 	var b = L.latLngBounds(bounds);
 	mymap.setView(b.getCenter(), Math.min(mymap.getBoundsZoom(b, true), 6));
+	remember_fit(bounds, null);
     }
 }
 
@@ -2000,6 +2151,7 @@ function draw_topology(topo){
             var z = (points.length > 1 && hb.isValid())
                   ? Math.min(mymap.getBoundsZoom(hb, true), 6) : 6;
             mymap.setView([hub.lat, hub.lon], z);
+            if (hb.isValid()) remember_fit(hb, [hub.lat, hub.lon]);
             _hubCenteredNets[parms.net] = true;
         }
     }
@@ -2414,11 +2566,26 @@ function _has_any_links() {
     }
     return false;
 }
+// Is the map (first) tab the one on screen? Callbacks from the data-loading
+// chain must not touch map-only chrome when the user is on another tab.
+function map_tab_is_active() {
+    try {
+        const idx = $('main#tabs').tabs('option', 'active');
+        const href = $('main#tabs > ul > li > a').eq(idx).attr('href');
+        return !href || href === '#mapid';
+    } catch (_) {
+        return true;
+    }
+}
+
 function _set_map_empty_state(empty) {
     // Hide the threshold legend when there's no coloured event data — it
     // describes a scale that doesn't apply. (tabsactivate restores it.)
     var lg = document.getElementById('legend');
-    if (lg) lg.style.display = empty ? 'none' : '';
+    // Runs when the data arrives, which - since tabs are restored on load - can
+    // be while the user is on a Routes tab. Showing it then drops the map's
+    // threshold legend on top of the traceroute view.
+    if (lg) lg.style.display = (empty || !map_tab_is_active()) ? 'none' : '';
     // Only cover the map with the overlay when there's literally nothing to show
     // (no links at all). When topology links are present (grey, no event data)
     // keep the map visible + clickable — the "no event data" note lives in the
@@ -4144,7 +4311,11 @@ function get_connections(){
 	}).fail( function(e, textStatus, error ) { console.log("failed to get data from server :" + textStatus + ", " + error); });
     }
     if (parms.report) { $("#check").val(parms.report).trigger('change'); delete parms.report; }
-    $("#tabs").tabs("option", "active", 0);
+    // Runs at the end of an async load chain, so during start-up it lands well
+    // after the saved tab was restored and would drag the user back to the map
+    // (and worse, that jump got saved, so the next reload went to the map for
+    // real - hence the alternating behaviour).
+    if (!initialising) $("#tabs").tabs("option", "active", 0);
 };
 
 function pad(d){ return ("0"+d).slice(-2) ; }
@@ -4181,9 +4352,13 @@ function init_map(){
 	else { refresh_active=true; $("#datepicker").datepicker('setDate', new Date()); get_topology(); active_color=$(this).css("background-color"); $(this).css("background-color", refresh_color); setInterval( function(){ get_topology(); }, refresh_period ); }
     } );
     $("#search_input").keyup( function(){ var str = $("#search_input").val(); focus_links( str, 'flip' ); } );
-    $("#network").change( async function(){ parms.net= $("#network").val(); update_props(); remove_links(links); show_network(parms.net); update_url(); $("#tabs").tabs("option", "active", 0); });
-    $("#event_type").change( function(){ parms.event = $("#event_type").val(); update_props(); load_coords_from_all_sources(network); update_url(); $("#tabs").tabs("option", "active", 0); });
-    $("#prop_select").change( function(){ parms.property = $("#prop_select").val(); baselineCompareKey=''; _paint_with_compare(summary, parms.event, $("#prop_select").val(), start, end); update_url(); $("#tabs").tabs("option", "active", 0); });
+    // `meta.fromInit` marks the one-off trigger at the end of init. That run must
+    // not jump to the map: it would land after the saved tab was restored (the
+    // handler is async, so a timing flag loses the race) and drag the user off
+    // their tab - which is why the focus kept alternating between reloads.
+    $("#network").change( async function(ev, meta){ if (!(meta && meta.fromInit)) endInitialising(); parms.net= $("#network").val(); update_props(); remove_links(links); show_network(parms.net); update_url(); if (!(meta && meta.fromInit) && !initialising) $("#tabs").tabs("option", "active", 0); });
+    $("#event_type").change( function(){ endInitialising(); parms.event = $("#event_type").val(); update_props(); load_coords_from_all_sources(network); update_url(); if (!initialising) $("#tabs").tabs("option", "active", 0); });
+    $("#prop_select").change( function(){ endInitialising(); parms.property = $("#prop_select").val(); baselineCompareKey=''; _paint_with_compare(summary, parms.event, $("#prop_select").val(), start, end); update_url(); if (!initialising) $("#tabs").tabs("option", "active", 0); });
     // Snapshot compare dropdown — flips threshold vs diff-vs-baseline palette.
     $("#compare_select").change( function(){ parms.compare = $("#compare_select").val(); baselineCompareKey=''; _paint_with_compare(summary, parms.event, $("#prop_select").val(), start, end); update_url(); });
     // Real-locations toggle (#TIER1): replace straight links with hop-by-hop
@@ -4203,7 +4378,7 @@ function init_map(){
         update_url();
     });
     fill_select( "stats_type", stats_types );
-    $("#stats_type").change( function(){ summary=digest_aggregates(aggregates, $("#stats_type").val()); _paint_with_compare(summary, parms.event, $("#prop_select").val(), start, end); update_url(); $("#tabs").tabs("option", "active", 0); });
+    $("#stats_type").change( function(){ endInitialising(); summary=digest_aggregates(aggregates, $("#stats_type").val()); _paint_with_compare(summary, parms.event, $("#prop_select").val(), start, end); update_url(); if (!initialising) $("#tabs").tabs("option", "active", 0); });
     if ( parms.node){ focus_node=parms.node; get_topology(); links_on=true; }
     $("#check").change( function(){
 	var report_type = $("#check").val(); var title = $("#check").find(":selected").text();
@@ -4260,7 +4435,7 @@ function init_map(){
     $("#clearAllTabsBtn").click(function () { clear_all_tabs(); });
     $("#mapid").on('click', "a.trigger", function(e){ var node=e.target.id; focus_links( node, 'flip' ) });
     if (parms.compare) { $("#compare_select").val(parms.compare); }
-    $("#network").trigger("change");
+    $("#network").trigger("change", [{ fromInit: true }]);
 
     // Whenever the user switches tabs, remember the active one so we can
     // restore it after a page reload. (Skipped while restoring, since we'd
@@ -4273,7 +4448,15 @@ function init_map(){
     // After the initial network/topology load settles, replay any persisted
     // tabs from the previous session. 1.5s is enough for the AJAX chain
     // triggered by the network change above (config + topology + summary).
-    setTimeout(restoreSavedTabs, 1500);
+    // Kick off straight away; restoreSavedTabs() defers itself until the pieces
+    // it needs are in place (config always, summary only for report tabs).
+    // Start-up is over at the first sign of the user doing anything - safer than
+    // enumerating every control, and it cannot be outlived by a slow request.
+    ['pointerdown', 'keydown'].forEach(function (evt) {
+        document.addEventListener(evt, endInitialising, { once: true, capture: true });
+    });
+    watchMapVisibility();
+    setTimeout(restoreSavedTabs, 100);
 }
 
 $(document).ready ( function(){ get_parms( ); get_config( parms.conffile, init_map ); });
