@@ -859,29 +859,82 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
     //  Graph reduction / collapsing
     // ====================================================================
 
+    // "Simple view": the same topology with the noise taken out (issue #148).
+    //
+    //   - hops that never answered ("<ttl>*") are dropped - they carry no
+    //     address, so they say nothing beyond "something was here";
+    //   - nodes that report the same host name are merged into one, since
+    //     several addresses of one router should read as one router;
+    //   - local loops (an edge that starts and ends at the same node, which
+    //     merging can also create) are removed;
+    //   - the sender is always kept. It used to disappear here, because the
+    //     old filter only admitted nodes that had a statistics record and the
+    //     hop-zero node has none;
+    //   - what is left is still capped per hop, now keeping the nodes most
+    //     traces actually went through rather than whichever came first.
     function reduce_graph(data) {
-        let ok_nodes = {};
-        let nodes = [];
-        let edges = [];
-        let hops = [];
+        const START = 'start';
+        const is_unanswered = function (id) { return /\*$/.test(String(id)); };
 
-        for (let stats of data.stats) {
-            if (!hops[stats.hop]) hops[stats.hop] = 0;
-            if (hops[stats.hop]++ <= max_parallel) {
-                ok_nodes[stats.address] = true;
+        // Which node does each id end up as? Same label - same node.
+        const by_label = {}, remap = {};
+        for (const node of data.nodes) {
+            if (node.id === START || is_unanswered(node.id)) continue;
+            const label = node.label || node.id;
+            if (by_label[label] === undefined) by_label[label] = node.id;
+            remap[node.id] = by_label[label];
+        }
+
+        // Build the surviving nodes, folding the merged ones together.
+        const kept = {};
+        for (const node of data.nodes) {
+            if (is_unanswered(node.id)) continue;
+            if (node.id === START) { kept[START] = Object.assign({}, node); continue; }
+            const id = remap[node.id];
+            if (!kept[id]) {
+                kept[id] = Object.assign({}, node, { id: id });
+            } else if (typeof node.n === 'number') {
+                kept[id].n = (kept[id].n || 0) + node.n;
             }
         }
-        for (let node of data.nodes) {
-            if (node.id in ok_nodes) {
-                nodes.push(node);
+
+        // Cap the width of each hop, busiest first, sender exempt.
+        const per_hop = {};
+        for (const id in kept) {
+            if (id === START) continue;
+            const hop = kept[id].hop;
+            (per_hop[hop] = per_hop[hop] || []).push(kept[id]);
+        }
+        const admitted = {};
+        if (kept[START]) admitted[START] = kept[START];
+        for (const hop in per_hop) {
+            per_hop[hop]
+                .sort(function (a, b) { return (b.n || 0) - (a.n || 0); })
+                .slice(0, max_parallel)
+                .forEach(function (n) { admitted[n.id] = n; });
+        }
+
+        // Re-point the edges at the surviving nodes, dropping local loops and
+        // folding duplicates that the merge collapsed onto each other.
+        const edge_by_key = {};
+        for (const edge of data.edges) {
+            const from = edge.from === START ? START : remap[edge.from];
+            const to   = edge.to   === START ? START : remap[edge.to];
+            if (!from || !to || from === to) continue;
+            if (!(from in admitted) || !(to in admitted)) continue;
+            const key = from + '\u0000' + to;
+            if (!edge_by_key[key]) {
+                edge_by_key[key] = Object.assign({}, edge, { id: key, from: from, to: to });
+            } else if (typeof edge.value === 'number') {
+                edge_by_key[key].value = (edge_by_key[key].value || 0) + edge.value;
             }
         }
-        for (let edge of data.edges) {
-            if (edge.to in ok_nodes && edge.from in ok_nodes) {
-                edges.push(edge);
-            }
-        }
-        return { nodes: nodes, edges: edges, stats: data.stats };
+
+        return {
+            nodes: Object.keys(admitted).map(function (k) { return admitted[k]; }),
+            edges: Object.keys(edge_by_key).map(function (k) { return edge_by_key[k]; }),
+            stats: data.stats
+        };
     }
 
     function collapse_nodes(data) {
