@@ -1993,6 +1993,24 @@ function gap_list( from, to, hits, lines, sort_type){
     return digest;
 }
 
+// What unit is a field declared with? Needed to tell a rate (ppm) from a total
+// (ms, count) when merging records - the config is the authority on that.
+function _field_unit(etype, field) {
+    try {
+        var events = conffile[parms.net].event_type;
+        for (var e in events) {
+            if (events[e].summary_event_type === etype &&
+                events[e].summary_field && events[e].summary_field[field]) {
+                return events[e].summary_field[field].unit;
+            }
+            if (e === etype && events[e].field && events[e].field[field]) {
+                return events[e].field[field].unit;
+            }
+        }
+    } catch (_) { /* config not loaded yet */ }
+    return undefined;
+}
+
 // Restarting the analytic services flushes an extra summary event, so a link can
 // end up with more than one summary record covering the same period (issue #53).
 // Everything downstream is keyed by from+to and simply overwrites - and since the
@@ -2030,6 +2048,27 @@ function coalesce_pairs(hits, etype) {
         });
         var out = Object.assign({}, recs[recs.length - 1]);
 
+        // Summary records say how long they cover, in lasted_sec. When every
+        // record in the group has it, rates and averages can be weighted by
+        // that span instead of being treated as if the records were equals -
+        // which matters because the duplicates a restart leaves behind cover
+        // very unequal slices of the day.
+        var spans = recs.map(function (r) {
+            return (typeof r.lasted_sec === "number" && isFinite(r.lasted_sec) && r.lasted_sec > 0)
+                ? r.lasted_sec : null;
+        });
+        var weighted = spans.every(function (sp) { return sp !== null; });
+        var total_span = weighted ? spans.reduce(function (a, b) { return a + b; }, 0) : 0;
+
+        function weighted_mean(field) {
+            var num = 0, den = 0;
+            for (var i = 0; i < recs.length; i++) {
+                var v = recs[i][field];
+                if (typeof v === "number" && isFinite(v)) { num += v * spans[i]; den += spans[i]; }
+            }
+            return den > 0 ? num / den : null;
+        }
+
         var fields = {};
         recs.forEach(function (r) { Object.keys(r).forEach(function (f) { fields[f] = 1; }); });
         Object.keys(fields).forEach(function (f) {
@@ -2038,11 +2077,26 @@ function coalesce_pairs(hits, etype) {
                 if (typeof r[f] === "number" && isFinite(r[f])) vals.push(r[f]);
             });
             if (vals.length < 2) return;
+            var sum = function () { return vals.reduce(function (a, b) { return a + b; }, 0); };
+
+            // How long the merged record covers is the sum of its parts.
+            if (f === "lasted_sec" || f === "late_sec") { out[f] = sum(); return; }
+
+            // A rate is not additive: two half-days at 900 and 100 ppm make a
+            // day at 500, not at 1000. Weight it by how long each part lasted.
+            if (weighted && total_span > 0 && String(_field_unit(etype, f) || "").toLowerCase() === "ppm") {
+                var w = weighted_mean(f);
+                if (w !== null) { out[f] = w; return; }
+            }
+
             switch (aggr[f]) {
-            case "sum": out[f] = vals.reduce(function (a, b) { return a + b; }, 0); break;
+            case "sum": out[f] = sum(); break;
             case "max": out[f] = Math.max.apply(null, vals); break;
             case "min": out[f] = Math.min.apply(null, vals); break;
-            default:    out[f] = vals.reduce(function (a, b) { return a + b; }, 0) / vals.length;
+            default:
+                // Averages are weighted too when the spans are known.
+                var wm = weighted && total_span > 0 ? weighted_mean(f) : null;
+                out[f] = (wm !== null) ? wm : sum() / vals.length;
             }
         });
         merged.push({ _source: out });
