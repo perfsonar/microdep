@@ -69,15 +69,40 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         end:        time_end
     };
 
-    // ── Colour ramp for node heatmap ──────────────────────────────────
+    // ── Node shading: how often a node was seen ───────────────────────
+    // Deliberately neutral. Colour now carries meaning on the LINKS (minimum
+    // RTT, traffic-light), so the nodes must not compete for it - they encode
+    // observation frequency, which has no good/bad direction (issue #148).
     const node_colors = [
-        "#f7fbff",
-        "#deebf7",
-        "#c6dbef",
-        "#9ecae1",
-        "#6baed6",
-        "#4292c6"
+        "#eceff3",
+        "#d6dbe2",
+        "#b9c1cc",
+        "#98a3b2",
+        "#778396",
+        "#5a6a80"
     ];
+
+    // ── Link colouring: minimum RTT, traffic-light ────────────────────
+    // Same palettes the map uses, so the two views read alike, and the same
+    // colour-blind-safe switch drives both.
+    const link_colors     = ["#80e982", "#80a982", "#e2e404", "#e2a404", "#d98182", "#a98182"];
+    const link_colors_cbf = ["#92B5FF", "#648FFF", "#FFD480", "#FFB000", "#FF7AB6", "#DC267F"];
+    const link_color_unknown = "#7e8794";
+
+    function link_palette() {
+        let cbf = false;
+        try { cbf = localStorage.getItem('microdep-cbf') === '1'; } catch (_) { /* private mode */ }
+        return cbf ? link_colors_cbf : link_colors;
+    }
+
+    // Marker colours for the two ends of the path.
+    function end_colors() {
+        let cbf = false;
+        try { cbf = localStorage.getItem('microdep-cbf') === '1'; } catch (_) {}
+        return cbf
+            ? { source: '#648FFF', destination: '#FFB000', error: '#DC267F' }
+            : { source: '#20C020', destination: '#e2a404', error: '#d02020' };
+    }
 
     // ====================================================================
     //  Stats class  (statistical accumulator)
@@ -204,6 +229,94 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
     //  Colour limits / legend
     // ====================================================================
 
+
+    // Colour each link by how much minimum RTT it adds - the difference between
+    // the minimum RTT seen at its two ends. That is the part of the path length
+    // this hop is responsible for, which is what makes a traffic-light reading
+    // meaningful: green for a short hop, red for a long one.
+    //
+    // The scale is logarithmic on purpose. Hop lengths are roughly tri-modal -
+    // sub-millisecond inside an access network, ~10 ms across a core, >100 ms on
+    // a long-haul leg - so linear steps would put almost every hop in the first
+    // bucket.
+
+    // The sender and the destination are the two nodes a reader looks for first,
+    // so give them a colour of their own rather than leaving them in the shading
+    // that everything else uses (issue #148). A node that ended a trace short of
+    // the destination keeps its error marking.
+    function mark_path_ends(tree) {
+        if (!tree || !tree.nodes) return;
+        const ends = end_colors();
+        let dest = null;
+
+        // The destination is whatever the view was opened for; fall back to the
+        // furthest hop when the name does not appear among the nodes.
+        for (const n of tree.nodes) {
+            if (n.id === to || n.label === to) { dest = n; break; }
+        }
+        if (!dest) {
+            for (const n of tree.nodes) {
+                if (n.id === 'start') continue;
+                if (!dest || (n.hop || 0) > (dest.hop || 0)) dest = n;
+            }
+        }
+
+        for (const n of tree.nodes) {
+            if (n.id === 'start') {
+                n.color = Object.assign({}, n.color, { background: ends.source, border: ends.source });
+            } else if (dest && n.id === dest.id) {
+                n.color = Object.assign({}, n.color, { background: ends.destination, border: ends.destination });
+            } else if (n.color && n.color.border === 'AA1111') {
+                n.color = Object.assign({}, n.color, { border: ends.error });
+            }
+        }
+    }
+
+    function taint_edges_by_rtt(tree) {
+        const palette = link_palette();
+        if (!tree || !tree.edges || !tree.stats) return null;
+
+        const min_rtt = { start: 0 };          // the sender is the zero point
+        for (const st of tree.stats) {
+            if (st && typeof st.min === 'number' && isFinite(st.min)) min_rtt[st.address] = st.min;
+        }
+
+        const deltas = [];
+        for (const e of tree.edges) {
+            const a = min_rtt[e.from], b = min_rtt[e.to];
+            e.rtt_delta = (typeof a === 'number' && typeof b === 'number' && isFinite(a) && isFinite(b))
+                ? Math.max(0, b - a)
+                : null;
+            if (e.rtt_delta !== null) deltas.push(e.rtt_delta);
+        }
+        if (deltas.length === 0) return null;
+
+        // Log steps between a sub-millisecond floor and the longest hop seen.
+        const floor = 0.05;
+        const top = Math.max.apply(null, deltas);
+        const limits = [0];
+        if (top > floor) {
+            for (let i = 1; i < palette.length; i++) {
+                limits.push(floor * Math.pow(top / floor, (i - 1) / (palette.length - 2)));
+            }
+        } else {
+            for (let i = 1; i < palette.length; i++) limits.push(floor * i);
+        }
+
+        for (const e of tree.edges) {
+            let col = link_color_unknown;
+            if (e.rtt_delta !== null) {
+                for (let i = limits.length - 1; i >= 0; i--) {
+                    if (e.rtt_delta >= limits[i]) { col = palette[i]; break; }
+                }
+            }
+            // inherit:false is required - vis otherwise paints edges in the
+            // colour of the node they leave, ignoring what we set here.
+            e.color = { color: col, highlight: col, hover: col, inherit: false };
+        }
+        return { palette: palette, limits: limits };
+    }
+
     function create_limits(nodes, colors) {
         let stats = new Stats();
         for (let node of nodes) {
@@ -255,7 +368,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         floating.innerHTML = _scale_markup;
     }
 
-    function create_legend(elem_suffix, colors, limits) {
+    function create_legend(elem_suffix, colors, limits, caption) {
         // A colour scale, not a stack of coloured cells: the old rendering looked
         // like another row of buttons under the real ones. Gradient bar on the
         // left, tick values alongside, lowest at the bottom.
@@ -273,7 +386,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         // right-aligned against it, so the digits line up with their colours.
         const markup =
             '<div class="tracetree-scale" title="Node colour scale - round-trip time (ms)">' +
-              '<div class="tracetree-scale-caption">RTT ms</div>' +
+              '<div class="tracetree-scale-caption">' + (caption || 'RTT ms') + '</div>' +
               '<div class="tracetree-scale-body">' +
                 '<div class="tracetree-scale-ticks">' + ticks + '</div>' +
                 '<div class="tracetree-scale-bar" style="background:linear-gradient(to bottom, ' + stops + ')"></div>' +
@@ -368,7 +481,16 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
 
             let limits = create_limits(slice.tree.nodes, node_colors);
             taint_nodes(slice.tree.nodes, node_colors, limits);
-            create_legend('legend', node_colors, limits);
+            mark_path_ends(slice.tree);
+
+            // The scale beside the graph describes the LINK colours now: node
+            // shading only says how often a node was seen, which needs no key.
+            const link_scale = taint_edges_by_rtt(slice.tree);
+            if (link_scale) {
+                create_legend('legend', link_scale.palette, link_scale.limits, 'min RTT ms');
+            } else {
+                create_legend('legend', node_colors, limits, 'traces');
+            }
 
             plot_tree_json(slice.tree, id + '-treetainer', false);
             report_stats(slice.tree);
