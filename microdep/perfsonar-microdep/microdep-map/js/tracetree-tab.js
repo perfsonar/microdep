@@ -69,6 +69,351 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         end:        time_end
     };
 
+
+    // ====================================================================
+    //  Paths view - the same traces laid out by hop (issue #148 follow-up)
+    // ====================================================================
+    //
+    // The force-directed topology places nodes wherever the physics settles, so
+    // position carries no meaning and two reloads never agree. A traceroute has
+    // an order built in - hop 1, hop 2, ... - and this view uses it: one column
+    // per hop, nodes stacked within the column, ribbons between them whose width
+    // is the number of traces that took that link. The dominant route is the
+    // thickest band; the alternatives peel off and rejoin around it. Ribbon
+    // colour is how much minimum RTT the hop adds, in the three bands hop
+    // lengths naturally fall into (access / core / long haul).
+    //
+    // Host names sit in two rows, above and below the diagram, alternating so
+    // neighbouring columns never fight for the same space, each joined to its
+    // node by a leader line.
+
+    let paths_dirty = true;
+    const paths_state = { topN: 6, sel: null };
+    const P_SRC_ID = '0|source';
+
+    function paths_short(host) {
+        if (/^\d+\*$/.test(host) || /^[\d.]+$/.test(host) || /:/.test(host)) return host;
+        return host.split('.')[0];
+    }
+
+    // tr_data -> { nodes, links, routes, band, traces, maxttl }
+    function build_paths_model(tr_data) {
+        const nodes = {}, links = {}, order_n = [], order_l = [];
+        const add_node = function (ttl, host) {
+            const id = ttl + '|' + host;
+            if (!nodes[id]) {
+                nodes[id] = { id: id, ttl: ttl, host: host, short: ttl === 0 ? 'source' : paths_short(host), n: 0, rtts: [], star: /\*$/.test(host) };
+                order_n.push(id);
+            }
+            return nodes[id];
+        };
+        const src = add_node(0, 'source');
+        const routes = {};
+        let maxttl = 0;
+        for (const tr of tr_data) {
+            src.n++;
+            let prev = src, prev_rtt = 0;
+            const key = [];
+            for (const hop of tr.val) {
+                const host = hop.hostname || hop.ip || (hop.ttl + '*');
+                const node = add_node(hop.ttl, host);
+                node.n++;
+                if (typeof hop.rtt === 'number' && isFinite(hop.rtt)) node.rtts.push(hop.rtt);
+                const lid = prev.id + '->' + node.id;
+                if (!links[lid]) { links[lid] = { id: lid, from: prev.id, to: node.id, n: 0, deltas: [] }; order_l.push(lid); }
+                links[lid].n++;
+                if (typeof hop.rtt === 'number' && isFinite(hop.rtt)) {
+                    links[lid].deltas.push(Math.max(0, hop.rtt - prev_rtt));
+                    prev_rtt = hop.rtt;
+                }
+                key.push(host);
+                if (hop.ttl > maxttl) maxttl = hop.ttl;
+                prev = node;
+            }
+            const k = key.join(' ');
+            if (!routes[k]) routes[k] = { hosts: key, n: 0, prof: {} };
+            routes[k].n++;
+            for (const hop of tr.val) {
+                if (typeof hop.rtt === 'number' && isFinite(hop.rtt)) (routes[k].prof[hop.ttl] = routes[k].prof[hop.ttl] || []).push(hop.rtt);
+            }
+        }
+        const median = function (a) { const b = a.slice().sort(function (x, y) { return x - y; }); const m = b.length >> 1; return b.length % 2 ? b[m] : (b[m - 1] + b[m]) / 2; };
+        const out_nodes = order_n.map(function (id) {
+            const n = nodes[id];
+            return { id: n.id, ttl: n.ttl, host: n.host, short: n.short, n: n.n, star: n.star,
+                     rmin: n.rtts.length ? Math.min.apply(null, n.rtts) : null, rmed: n.rtts.length ? median(n.rtts) : null };
+        });
+        const out_links = order_l.map(function (id) { const l = links[id]; return { id: l.id, from: l.from, to: l.to, n: l.n, dmin: l.deltas.length ? Math.min.apply(null, l.deltas) : null }; });
+        const out_routes = Object.keys(routes).map(function (k) {
+            const r = routes[k]; const prof = [0];
+            for (let i = 1; i <= r.hosts.length; i++) prof.push(r.prof[i] ? median(r.prof[i]) : null);
+            return { hosts: r.hosts, n: r.n, prof: prof };
+        }).sort(function (a, b) { return b.n - a.n; });
+        const band = [[0, 0]];
+        for (let i = 1; i <= maxttl; i++) {
+            let lo = Infinity, hi = -Infinity;
+            for (const tr of tr_data) { const h = tr.val[i - 1]; if (h && typeof h.rtt === 'number' && isFinite(h.rtt)) { if (h.rtt < lo) lo = h.rtt; if (h.rtt > hi) hi = h.rtt; } }
+            band.push(isFinite(lo) ? [lo, hi] : null);
+        }
+        const dom = out_routes[0];
+        out_routes.forEach(function (r, i) {
+            r.idx = i;
+            r.links = {}; r.nodes = {}; r.nodes[P_SRC_ID] = true;
+            let prev = P_SRC_ID;
+            r.hosts.forEach(function (h, j) { const id = (j + 1) + '|' + h; r.links[prev + '->' + id] = true; r.nodes[id] = true; prev = id; });
+            r.diverge = null;
+            if (dom) { const m = Math.max(r.hosts.length, dom.hosts.length); for (let q = 0; q < m; q++) { if (r.hosts[q] !== dom.hosts[q]) { r.diverge = q + 1; break; } } }
+        });
+        return { nodes: out_nodes, links: out_links, routes: out_routes, band: band, traces: tr_data.length, maxttl: maxttl };
+    }
+
+    const paths_bin = function (d) { return d === null || d === undefined ? 'na' : d < 1 ? 'lo' : d < 10 ? 'mid' : 'hi'; };
+    const paths_fmt = function (v) { return v === null || v === undefined ? '–' : v >= 100 ? String(Math.round(v)) : v >= 10 ? v.toFixed(1) : v.toFixed(2); };
+    const paths_esc = function (x) { return String(x).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+    const SEP = ' › ', DOT = ' · ', ARROW = ' → ', DASH = ' – ';
+
+    function paths_tip_show(e, html) {
+        const t = el('paths-tip'); if (!t) return;
+        t.innerHTML = html; t.style.display = 'block';
+        const pane = el('paths').getBoundingClientRect();
+        let x = e.clientX - pane.left + 14, y = e.clientY - pane.top + 14;
+        if (x + t.offsetWidth > pane.width - 8) x = Math.max(8, x - t.offsetWidth - 28);
+        t.style.left = x + 'px'; t.style.top = y + 'px';
+    }
+    function paths_tip_hide() { const t = el('paths-tip'); if (t) t.style.display = 'none'; }
+
+    function render_paths() {
+        const pane = el('paths');
+        if (!pane || !in_slice || !in_slice.tr_data) return;
+        const M = build_paths_model(in_slice.tr_data);
+        const svg = el('paths-svg'), prof = el('paths-prof');
+        let cbf = false; try { cbf = localStorage.getItem('microdep-cbf') === '1'; } catch (_) { /* private mode */ }
+        pane.classList.toggle('is-cbf', cbf);
+
+        if (!M.routes.length) {
+            svg.innerHTML = ''; prof.innerHTML = '';
+            el('paths-table').querySelector('tbody').innerHTML = '';
+            el('paths-note').textContent = 'No traceroutes in this period.';
+            paths_dirty = false;
+            return;
+        }
+
+        const cols = M.maxttl + 1;
+        const byId = {}; M.nodes.forEach(function (n) { byId[n.id] = n; });
+        const byTtl = []; for (let c = 0; c < cols; c++) byTtl.push([]);
+        M.nodes.forEach(function (n) { byTtl[n.ttl].push(n); });
+        const outL = {}, inL = {};
+        M.links.forEach(function (l) { (outL[l.from] = outL[l.from] || []).push(l); (inL[l.to] = inL[l.to] || []).push(l); });
+
+        // ---- order nodes within columns (barycenter, three sweeps) ----
+        byTtl.forEach(function (arr) { arr.sort(function (a, b) { return b.n - a.n; }); arr.forEach(function (n, i) { n.order = i; }); });
+        const sweep = function (forward) {
+            for (let k = 1; k < cols; k++) {
+                const c = forward ? k : cols - 1 - k;
+                byTtl[c].forEach(function (n) {
+                    const ls = forward ? (inL[n.id] || []) : (outL[n.id] || []);
+                    let sum = 0, w = 0;
+                    ls.forEach(function (l) { const o = byId[forward ? l.from : l.to]; sum += o.order * l.n; w += l.n; });
+                    n.bary = w ? sum / w : n.order;
+                });
+                byTtl[c].sort(function (a, b) { return (a.bary - b.bary) || (b.n - a.n); });
+                byTtl[c].forEach(function (n, i) { n.order = i; });
+            }
+        };
+        sweep(true); sweep(false); sweep(true);
+
+        // ---- label rows: alternate above / below, stack within a column ----
+        const LH = 13;
+        let maxTop = 0, maxBot = 0;
+        byTtl.forEach(function (arr, c) {
+            if (arr.length === 1) { arr[0].row = (c % 2 === 0) ? 'top' : 'bot'; arr[0].slot = 0; }
+            else {
+                const half = Math.ceil(arr.length / 2);
+                arr.forEach(function (n, i) { if (i < half) { n.row = 'top'; n.slot = half - 1 - i; } else { n.row = 'bot'; n.slot = i - half; } });
+            }
+            let t = 0, b = 0; arr.forEach(function (n) { if (n.row === 'top') t++; else b++; });
+            maxTop = Math.max(maxTop, t); maxBot = Math.max(maxBot, b);
+        });
+        const topArea = 26 + LH * maxTop, botArea = 22 + LH * maxBot;
+
+        // ---- geometry ----
+        const padL = 40, padR = 40, nodeW = 10, gap = 10, maxNodeH = 30;
+        // Height follows the content: the busiest column at the capped scale,
+        // plus room for the ribbons to fan out. A fixed height left a thin band
+        // floating in empty space with long leader lines on both sides.
+        let tallest = 0;
+        byTtl.forEach(function (arr) { tallest = Math.max(tallest, arr.reduce(function (t, n) { return t + Math.max(4, n.n * maxNodeH / M.traces); }, 0) + gap * (arr.length - 1)); });
+        const avail = Math.max(150, Math.round(tallest * 2.2 + 40));
+        const H = topArea + avail + botArea;
+        const scroller = el('paths-scroll1');
+        const colW = Math.max(96, Math.floor((scroller.clientWidth - 16 - padL - padR) / Math.max(1, cols - 1)));
+        const W = padL + colW * (cols - 1) + padR;
+        let scale = Infinity;
+        byTtl.forEach(function (arr) { const sum = arr.reduce(function (t, n) { return t + n.n; }, 0); const g = gap * (arr.length - 1); if (sum) scale = Math.min(scale, (avail - g) / sum); });
+        scale = Math.min(scale, maxNodeH / M.traces);
+        M.nodes.forEach(function (n) { n.h = Math.max(4, n.n * scale); });
+        byTtl.forEach(function (arr, c) {
+            const total = arr.reduce(function (t, n) { return t + n.h; }, 0) + gap * (arr.length - 1);
+            let y = topArea + (avail - total) / 2;
+            arr.forEach(function (n) { n.x = padL + c * colW; n.y0 = y; n.y1 = y + n.h; y += n.h + gap; });
+        });
+        M.nodes.forEach(function (n) {
+            const outs = (outL[n.id] || []).slice().sort(function (a, b) { return byId[a.to].y0 - byId[b.to].y0; });
+            let off = 0; outs.forEach(function (l) { l.h = Math.max(1.2, l.n * scale); l.sy0 = n.y0 + off; l.sy1 = l.sy0 + l.h; off += l.h; });
+            const ins = (inL[n.id] || []).slice().sort(function (a, b) { return byId[a.from].y0 - byId[b.from].y0; });
+            off = 0; ins.forEach(function (l) { const h = Math.max(1.2, l.n * scale); l.ty0 = n.y0 + off; l.ty1 = l.ty0 + h; off += h; });
+        });
+
+        // ---- draw the path diagram ----
+        const dstIds = {};
+        M.routes.forEach(function (r) { if (r.hosts.length && r.hosts[r.hosts.length - 1] === to) dstIds[r.hosts.length + '|' + to] = true; });
+        let out = '';
+        for (let c = 0; c < cols; c++) {
+            const x = padL + c * colW + nodeW / 2;
+            out += '<line class="tp-grid" x1="' + x + '" x2="' + x + '" y1="' + (topArea - 4) + '" y2="' + (H - botArea + 4) + '"></line>';
+        }
+        M.links.forEach(function (l) {
+            const a = byId[l.from], b = byId[l.to];
+            const x0 = a.x + nodeW, x1 = b.x, xm = (x0 + x1) / 2;
+            const d = 'M' + x0 + ',' + l.sy0 + ' C' + xm + ',' + l.sy0 + ' ' + xm + ',' + l.ty0 + ' ' + x1 + ',' + l.ty0 +
+                      ' L' + x1 + ',' + l.ty1 + ' C' + xm + ',' + l.ty1 + ' ' + xm + ',' + l.sy1 + ' ' + x0 + ',' + l.sy1 + ' Z';
+            out += '<path class="tp-ribbon ' + paths_bin(l.dmin) + '" data-key="' + paths_esc(l.id) + '" d="' + d + '"></path>';
+        });
+        M.nodes.forEach(function (n) {
+            const cls = ['tp-node', n.ttl === 0 ? 'src' : '', dstIds[n.id] ? 'dst' : '', n.star ? 'star' : ''].filter(Boolean).join(' ');
+            const cx = n.x + nodeW / 2;
+            const label = n.short.length > 22 ? n.short.slice(0, 21) + '…' : n.short;
+            let ly, leader;
+            if (n.row === 'top') {
+                ly = topArea - 10 - n.slot * LH;
+                leader = '<line class="tp-leader" x1="' + cx + '" x2="' + cx + '" y1="' + (ly + 3) + '" y2="' + n.y0 + '"></line>';
+            } else {
+                ly = H - botArea + 16 + n.slot * LH;
+                leader = '<line class="tp-leader" x1="' + cx + '" x2="' + cx + '" y1="' + n.y1 + '" y2="' + (ly - 9) + '"></line>';
+            }
+            out += '<g class="' + cls + '" data-id="' + paths_esc(n.id) + '">' + leader +
+                   '<rect x="' + n.x + '" y="' + n.y0 + '" width="' + nodeW + '" height="' + n.h + '" rx="2"></rect>' +
+                   '<text class="tp-lbl" x="' + cx + '" y="' + ly + '" text-anchor="middle">' + paths_esc(label) + '</text></g>';
+        });
+        svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H); svg.setAttribute('width', W); svg.setAttribute('height', H);
+        svg.innerHTML = out;
+
+        const linkById = {}; M.links.forEach(function (l) { linkById[l.id] = l; });
+        svg.querySelectorAll('.tp-ribbon').forEach(function (pth) {
+            const l = linkById[pth.dataset.key];
+            pth.addEventListener('mousemove', function (e) {
+                paths_tip_show(e, '<div class="mono">' + paths_esc(byId[l.from].ttl === 0 ? from : byId[l.from].host) + '<span class="k">' + ARROW + '</span>' + paths_esc(byId[l.to].host) + '</div>' +
+                    '<div><span class="k">traces</span> <span class="mono">' + l.n + '</span><span class="k">' + DOT + 'hop adds</span> <span class="mono">' + (l.dmin === null ? 'no reply' : '+' + paths_fmt(l.dmin) + ' ms') + '</span></div>');
+            });
+            pth.addEventListener('mouseleave', paths_tip_hide);
+        });
+        svg.querySelectorAll('.tp-node').forEach(function (g) {
+            const n = byId[g.dataset.id];
+            g.addEventListener('mousemove', function (e) {
+                paths_tip_show(e, '<div class="mono">' + paths_esc(n.ttl === 0 ? from : n.host) + '</div>' +
+                    '<div><span class="k">hop</span> <span class="mono">' + (n.ttl === 0 ? 'source' : n.ttl) + '</span><span class="k">' + DOT + 'seen in</span> <span class="mono">' + n.n + '</span> <span class="k">of ' + M.traces + '</span></div>' +
+                    (n.rmin !== null ? '<div><span class="k">min RTT</span> <span class="mono">' + paths_fmt(n.rmin) + ' ms</span><span class="k">' + DOT + 'median</span> <span class="mono">' + paths_fmt(n.rmed) + ' ms</span></div>' : ''));
+            });
+            g.addEventListener('mouseleave', paths_tip_hide);
+        });
+
+        // ---- latency profile, on the same columns ----
+        const PH = 230, pT = 14, pB = 26;
+        const xs = function (c) { return padL + c * colW + nodeW / 2; };
+        const allVals = [];
+        M.band.forEach(function (b) { if (b) { allVals.push(b[0], b[1]); } });
+        M.routes.forEach(function (r) { r.prof.forEach(function (v) { if (v !== null) allVals.push(v); }); });
+        const yMin = 0.05, yMax = Math.max(1, Math.max.apply(null, allVals)) * 1.25;
+        const ys = function (v) { const vv = Math.max(yMin, v); return pT + (PH - pT - pB) * (1 - (Math.log10(vv) - Math.log10(yMin)) / (Math.log10(yMax) - Math.log10(yMin))); };
+        let po = '';
+        [0.1, 1, 10, 100, 1000].forEach(function (t) {
+            if (t > yMax) return;
+            po += '<line class="tp-grid" x1="' + padL + '" x2="' + (W - padR + 20) + '" y1="' + ys(t) + '" y2="' + ys(t) + '"></line>' +
+                  '<text class="tp-ylab" x="' + (padL - 6) + '" y="' + (ys(t) + 3.5) + '" text-anchor="end">' + t + ' ms</text>';
+        });
+        po += '<line class="tp-axis" x1="' + padL + '" x2="' + (W - padR + 20) + '" y1="' + (PH - pB) + '" y2="' + (PH - pB) + '"></line>';
+        for (let c = 0; c < cols; c++) po += '<text class="tp-tick" x="' + xs(c) + '" y="' + (PH - pB + 15) + '" text-anchor="middle">' + (c === 0 ? 'src' : c) + '</text>';
+        let top = '', bot = [];
+        M.band.forEach(function (b, c) { if (!b) return; top += (top ? 'L' : 'M') + xs(c) + ',' + ys(b[1]) + ' '; bot.push(xs(c) + ',' + ys(b[0])); });
+        if (top) po += '<path class="tp-band" d="' + top + ' L' + bot.reverse().join(' L') + ' Z"></path>';
+        const shown = paths_state.topN ? M.routes.slice(0, paths_state.topN) : M.routes;
+        const dom = M.routes[0];
+        const lineOf = function (r) { let d = ''; r.prof.forEach(function (v, c) { if (v === null) return; d += (d ? 'L' : 'M') + xs(c) + ',' + ys(c === 0 ? yMin : v) + ' '; }); return d; };
+        shown.slice().reverse().forEach(function (r) { if (r.idx === 0) return; po += '<path class="tp-line' + (paths_state.sel === r.idx ? ' sel' : '') + '" d="' + lineOf(r) + '"></path>'; });
+        po += '<path class="tp-line dom" d="' + lineOf(dom) + '"></path>';
+        dom.prof.forEach(function (v, c) { if (v === null || c === 0) return; po += '<circle class="tp-pt" cx="' + xs(c) + '" cy="' + ys(v) + '" r="3.5"></circle>'; });
+        if (paths_state.sel !== null && paths_state.sel !== 0) {
+            M.routes[paths_state.sel].prof.forEach(function (v, c) { if (v === null || c === 0) return; po += '<circle class="tp-pt sel" cx="' + xs(c) + '" cy="' + ys(v) + '" r="3.5"></circle>'; });
+        }
+        po += '<line class="tp-xh" x1="0" x2="0" y1="' + pT + '" y2="' + (PH - pB) + '"></line>';
+        prof.setAttribute('viewBox', '0 0 ' + W + ' ' + PH); prof.setAttribute('width', W); prof.setAttribute('height', PH);
+        prof.innerHTML = po;
+        prof.onmousemove = function (e) {
+            const pt = prof.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
+            const q = pt.matrixTransform(prof.getScreenCTM().inverse());
+            const c = Math.max(0, Math.min(cols - 1, Math.round((q.x - padL - nodeW / 2) / colW)));
+            const xh = prof.querySelector('.tp-xh'); xh.style.display = 'block'; xh.setAttribute('x1', xs(c)); xh.setAttribute('x2', xs(c));
+            const r = paths_state.sel !== null ? M.routes[paths_state.sel] : dom; const b = M.band[c];
+            paths_tip_show(e, '<div><span class="k">hop</span> <span class="mono">' + (c === 0 ? 'source' : c) + '</span><span class="k">' + DOT + '</span><span class="mono">' + paths_esc(c === 0 ? from : (r.hosts[c - 1] || '–')) + '</span></div>' +
+                '<div><span class="k">' + (paths_state.sel !== null && paths_state.sel !== 0 ? 'selected route' : 'dominant route') + ' median</span> <span class="mono">' + paths_fmt(c === 0 ? 0 : r.prof[c]) + ' ms</span></div>' +
+                (b ? '<div><span class="k">all traces</span> <span class="mono">' + paths_fmt(b[0]) + DASH + paths_fmt(b[1]) + ' ms</span></div>' : ''));
+        };
+        prof.onmouseleave = function () { const xh = prof.querySelector('.tp-xh'); if (xh) xh.style.display = 'none'; paths_tip_hide(); };
+
+        // ---- routes table ----
+        const tb = el('paths-table').querySelector('tbody');
+        el('paths-note').textContent = paths_state.topN
+            ? 'showing ' + shown.length + ' of ' + M.routes.length + DOT + 'the dominant route carries ' + dom.n + ' of ' + M.traces + ' traces'
+            : 'all ' + M.routes.length + ' routes';
+        tb.innerHTML = shown.map(function (r) {
+            const share = r.n / M.traces * 100;
+            const route = r.hosts.map(function (h, i) {
+                const sh = paths_short(h);
+                return (r.diverge !== null && i + 1 >= r.diverge && h !== dom.hosts[i]) ? '<b>' + paths_esc(sh) + '</b>' : paths_esc(sh);
+            }).join(SEP);
+            return '<tr class="tp-rt' + (paths_state.sel === r.idx ? ' sel' : '') + '" data-r="' + r.idx + '"><td class="num">' + (r.idx + 1) + '</td>' +
+                '<td><span class="tp-share" style="width:' + Math.max(4, share * 2.2) + 'px"></span>' + share.toFixed(0) + '%</td>' +
+                '<td class="num">' + r.n + '</td><td class="num">' + r.hosts.length + '</td>' +
+                '<td>' + (r.idx === 0 ? '<span class="tp-muted">dominant route</span>' : (r.diverge ? 'hop ' + r.diverge : '–')) + '</td>' +
+                '<td class="num">' + paths_fmt(r.prof[r.prof.length - 1]) + ' ms</td>' +
+                '<td class="route" title="' + paths_esc(r.hosts.join(SEP)) + '">' + route + '</td></tr>';
+        }).join('');
+        tb.querySelectorAll('tr.tp-rt').forEach(function (tr) {
+            tr.addEventListener('click', function () { const i = Number(tr.dataset.r); paths_state.sel = (paths_state.sel === i) ? null : i; render_paths(); });
+        });
+
+        // ---- focus ----
+        svg.classList.toggle('has-focus', paths_state.sel !== null);
+        if (paths_state.sel !== null) {
+            const r = M.routes[paths_state.sel];
+            svg.querySelectorAll('.tp-ribbon').forEach(function (pth) { pth.classList.toggle('on', !!r.links[pth.dataset.key]); });
+            svg.querySelectorAll('.tp-node').forEach(function (g) { g.classList.toggle('on', !!r.nodes[g.dataset.id]); });
+        }
+        paths_dirty = false;
+    }
+
+    function paths_tab_active() {
+        const p = el('paths');
+        return !!(p && p.getAttribute('aria-hidden') !== 'true' && p.offsetParent !== null);
+    }
+
+    function bind_paths_controls() {
+        const topBtn = el('paths-top'), allBtn = el('paths-all');
+        if (topBtn && allBtn) {
+            topBtn.addEventListener('click', function () { paths_state.topN = 6; topBtn.setAttribute('aria-pressed', 'true'); allBtn.setAttribute('aria-pressed', 'false'); render_paths(); });
+            allBtn.addEventListener('click', function () { paths_state.topN = 0; allBtn.setAttribute('aria-pressed', 'true'); topBtn.setAttribute('aria-pressed', 'false'); render_paths(); });
+        }
+        const s1 = el('paths-scroll1'), s2 = el('paths-scroll2');
+        if (s1 && s2) {
+            let lock = false;
+            [[s1, s2], [s2, s1]].forEach(function (pair) {
+                pair[0].addEventListener('scroll', function () { if (lock) return; lock = true; pair[1].scrollLeft = pair[0].scrollLeft; lock = false; });
+            });
+        }
+        let rt = null;
+        window.addEventListener('resize', function () { clearTimeout(rt); rt = setTimeout(function () { if (paths_tab_active()) render_paths(); }, 150); });
+    }
+
     // ── Node shading: how often a node was seen ───────────────────────
     // Deliberately neutral. Colour now carries meaning on the LINKS (minimum
     // RTT, traffic-light), so the nodes must not compete for it - they encode
@@ -493,6 +838,8 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
             }
 
             plot_tree_json(slice.tree, id + '-treetainer', false);
+            paths_dirty = true;
+            if (paths_tab_active()) render_paths();
             report_stats(slice.tree);
             report_trace('diff', slice.tr_data);
             plot_stats_hops(slice.tree);
@@ -2000,6 +2347,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
   <div id="${id}-tabs" class="tracetree-tabs-wrap">
     <ul>
       <li><a href="#${id}-topo">Topology</a></li>
+      <li><a href="#${id}-paths">Paths</a></li>
       <li><a href="#${id}-stats">Hop stats</a></li>
       <li><a href="#${id}-trace">Traceroute</a></li>
       <li><a href="#${id}-docs">Docs</a></li>
@@ -2023,6 +2371,31 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         </div>
         <div id="${id}-legend"></div>
       </div>
+    </div>
+    <div id="${id}-paths" class="tracetree-paths">
+      <div class="tracetree-paths-bar">
+        <div class="tracetree-paths-legend">
+          <span class="tp-lg"><i class="tp-sw tp-lo"></i>hop adds &lt; 1 ms</span>
+          <span class="tp-lg"><i class="tp-sw tp-mid"></i>1 &ndash; 10 ms</span>
+          <span class="tp-lg"><i class="tp-sw tp-hi"></i>&gt; 10 ms</span>
+          <span class="tp-lg"><i class="tp-sw tp-na"></i>no reply</span>
+          <span class="tp-lg"><i class="tp-dot tp-src"></i>source</span>
+          <span class="tp-lg"><i class="tp-dot tp-dst"></i>destination</span>
+        </div>
+        <div class="tracetree-paths-ctl">
+          <span class="tp-ctl-label">Routes</span>
+          <div class="tp-seg" role="group" aria-label="Routes shown">
+            <button type="button" class="knapp" id="${id}-paths-top" aria-pressed="true">Top 6</button>
+            <button type="button" class="knapp" id="${id}-paths-all" aria-pressed="false">All</button>
+          </div>
+        </div>
+      </div>
+      <div class="tracetree-paths-scroll" id="${id}-paths-scroll1"><svg id="${id}-paths-svg" role="img" aria-label="Traceroute paths by hop"></svg></div>
+      <div class="tracetree-paths-sub"><h3>Latency profile by hop</h3><span>median RTT per hop, log scale &middot; accent = dominant route &middot; grey = other routes &middot; shaded = min&ndash;max of all traces</span></div>
+      <div class="tracetree-paths-scroll" id="${id}-paths-scroll2"><svg id="${id}-paths-prof" role="img" aria-label="Round-trip time by hop"></svg></div>
+      <div class="tracetree-paths-sub"><h3>Distinct routes</h3><span id="${id}-paths-note"></span></div>
+      <div class="tracetree-paths-routes"><table id="${id}-paths-table"><thead><tr><th class="num">#</th><th>Share</th><th class="num">Traces</th><th class="num">Hops</th><th>Leaves dominant route at</th><th class="num">Median RTT at end</th><th>Route</th></tr></thead><tbody></tbody></table></div>
+      <div class="tracetree-paths-tip" id="${id}-paths-tip"></div>
     </div>
     <div id="${id}-stats"></div>
     <div id="${id}-trace"></div>
@@ -2178,10 +2551,16 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
     // restore it when the user switches back to a data-driven sub-tab.
     $('#' + id + '-tabs').on('tabsactivate', function (event, ui) {
         const tl = el('timeline-container');
-        if (!tl) return;
-        const is_docs = ui.newPanel && ui.newPanel.attr('id') === id + '-docs';
-        tl.style.display = is_docs ? 'none' : '';
+        if (tl) {
+            const is_docs = ui.newPanel && ui.newPanel.attr('id') === id + '-docs';
+            tl.style.display = is_docs ? 'none' : '';
+        }
+        // The Paths view is drawn when it is opened: it needs the pane's real
+        // width, and it would be wasted work to redraw it on every slice change
+        // while it is hidden.
+        if (ui.newPanel && ui.newPanel.attr('id') === id + '-paths') render_paths();
     });
+    bind_paths_controls();
 
     // The tree container is sized by CSS now: its grid row fills the tab, so the
     // graph follows the window instead of being pinned to 55% of the viewport
