@@ -4013,9 +4013,25 @@ div#legend:has(.legend-count) table#legend {
    lanes, so top-down they line up row for row) */
 .tracetree-paths-charts { display: flex; flex-direction: column; gap: 10px; }
 .tracetree-paths-main, .tracetree-paths-side { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-.tracetree-paths.is-vertical .tracetree-paths-charts { flex-direction: row; align-items: flex-start; }
-.tracetree-paths.is-vertical .tracetree-paths-main { flex: 1 1 auto; }
-.tracetree-paths.is-vertical .tracetree-paths-side { flex: 0 0 330px; }
+/* Top-down, the two charts share their lanes row for row, so their drawings
+   must start at the same height whatever their headings do. A grid with one
+   shared row for the headings and one for the charts guarantees that: a
+   heading that wraps to two lines pushes BOTH charts down, not just its own.
+   (flex could not - each column stacked its own heading and drawing.) */
+.tracetree-paths.is-vertical .tracetree-paths-charts {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 330px;
+    grid-template-rows: auto auto;
+    column-gap: 10px;
+    row-gap: 6px;
+    align-items: start;
+}
+.tracetree-paths.is-vertical .tracetree-paths-main,
+.tracetree-paths.is-vertical .tracetree-paths-side { display: contents; }
+.tracetree-paths.is-vertical .tracetree-paths-main > .tracetree-paths-sub    { grid-column: 1; grid-row: 1; }
+.tracetree-paths.is-vertical .tracetree-paths-main > .tracetree-paths-scroll { grid-column: 1; grid-row: 2; }
+.tracetree-paths.is-vertical .tracetree-paths-side > .tracetree-paths-sub    { grid-column: 2; grid-row: 1; }
+.tracetree-paths.is-vertical .tracetree-paths-side > .tracetree-paths-scroll { grid-column: 2; grid-row: 2; }
 .tracetree-paths.is-vertical .tracetree-paths-scroll { overflow-y: visible; }
 .tracetree-paths .tp-node.seg rect { fill: var(--c-text-2); opacity: .55; cursor: pointer; }
 .tracetree-paths .tp-node.seg:hover rect { opacity: .9; }
