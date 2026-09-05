@@ -4079,3 +4079,23 @@ div#legend:has(.legend-count) table#legend {
 .tp-share { display: inline-block; height: 8px; background: var(--c-accent); border-radius: 4px; vertical-align: middle; margin-right: 8px; opacity: .85; }
 .tp-muted { color: var(--c-text-3); }
 @media (prefers-reduced-motion: reduce) { .tracetree-paths .tp-ribbon { transition: none; } }
+
+/* ===== Traceroute "Timeline" sub-tab: the same traces laid out by time =====
+   Shares the Paths pane chrome (bar, legend, headings, tooltip). */
+.tracetree-tline-routes { padding: 0 4px; }
+.tracetree-tline .tl-sw-hatch { background: repeating-linear-gradient(45deg, var(--c-text) 0 1px, transparent 1px 4px); }
+.tracetree-tline .tl-hatch { stroke: var(--c-text); stroke-width: 1; opacity: .55; }
+.tracetree-tline .tl-host { fill: var(--c-text); }
+.tracetree-tline .tl-route { opacity: .9; }
+.tracetree-tline .tl-route-lbl { fill: var(--c-bg); font-weight: 600; font-size: 10px; pointer-events: none; }
+.tracetree-tline .tl-cell.lo  { fill: var(--tp-lo); }
+.tracetree-tline .tl-cell.mid { fill: var(--tp-mid); }
+.tracetree-tline .tl-cell.hi  { fill: var(--tp-hi); }
+.tracetree-tline .tl-cell.na  { fill: var(--tp-na); opacity: .5; }
+.tracetree-tline .tl-rowline { stroke: var(--c-surface); stroke-width: 1; }
+.tracetree-tline .tl-line { fill: none; stroke: var(--c-accent); stroke-width: 1.5; }
+.tracetree-tline .tl-pt { fill: var(--c-accent); stroke: var(--c-surface); stroke-width: 1; }
+.tracetree-tline .tl-pt.miss { fill: var(--c-surface); stroke: var(--c-accent); }
+.tracetree-tline .tl-sel { fill: none; stroke: var(--c-text); stroke-width: 1.5; pointer-events: none; }
+.tracetree-tline .tl-hit { fill: transparent; cursor: crosshair; }
+
