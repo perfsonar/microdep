@@ -4040,7 +4040,11 @@ div#legend:has(.legend-count) table#legend {
 .tracetree-paths .tp-node.src rect { fill: var(--tp-src); }
 .tracetree-paths .tp-node.dst rect { fill: var(--tp-dst); }
 .tracetree-paths .tp-node.star rect { fill: var(--tp-na); opacity: .6; }
-.tracetree-paths .tp-ribbon { opacity: .78; stroke: var(--c-surface); stroke-width: 1; transition: opacity .15s ease; }
+/* The outline separates neighbouring ribbons; painted under the fill so it
+   does not eat into thin ones. A ribbon at the minimum width (one or two
+   traces) is drawn solid, so a split off the main band stays visible. */
+.tracetree-paths .tp-ribbon { opacity: .78; stroke: var(--c-surface); stroke-width: 1; paint-order: stroke; transition: opacity .15s ease; }
+.tracetree-paths .tp-ribbon.thin { opacity: .95; }
 .tracetree-paths .tp-ribbon.lo  { fill: var(--tp-lo); }
 .tracetree-paths .tp-ribbon.mid { fill: var(--tp-mid); }
 .tracetree-paths .tp-ribbon.hi  { fill: var(--tp-hi); }
