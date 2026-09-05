@@ -1524,7 +1524,12 @@ function link_popup(link){
 		api: 'opensearch',
 		// Follow the selected network's IP version, so Net-6 shows v6
 		// traceroutes instead of always falling back to v4 (issue #127).
-		ip_version: net_ip_version[parms.net]
+		ip_version: net_ip_version[parms.net],
+		// The archive records the local end by IP (and usually only the
+		// direction it traces itself), so ls_tab gets the addresses too
+		// and can match the pair by either form or direction.
+		from_adr: link.from_adr || name_to_ip[link.from] || '',
+		to_adr:   link.to_adr   || name_to_ip[link.to]   || ''
 	    };
 	    if(! jQuery.isEmptyObject(conffile[parms.net].archive) ) {
 		routesOpts.mahost = conffile[parms.net].archive;

@@ -54,7 +54,12 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
         stime:       options.stime,
         // Empty/absent means "all versions" (the config allows that) - only
         // filter when the network actually pins one (issue #127).
-        ip_version:  options.ip_version
+        ip_version:  options.ip_version,
+        // Addresses of the two ends (when the map knows them): the archive
+        // records one end by IP and the other by name, so a pair is matched by
+        // either form - see find_matching_pair().
+        from_adr:    options.from_adr   || '',
+        to_adr:      options.to_adr     || ''
     };
 
     // Compute time range (epoch seconds)
@@ -131,51 +136,50 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
         return url + (url.indexOf('?') >= 0 ? '&' : '?') + qs;
     }
 
-    // Find the best matching peer pair in `list` against the requested
-    // `want_from`/`want_to`. The microdep map sometimes passes hostnames in a
-    // slightly different form than what's recorded in the archive (e.g. a
-    // CNAME vs the canonical FQDN), and OpenSearch matches as exact strings,
-    // so we try progressively looser comparisons.
+    // Find the archive's pair entry for the requested `want_from`/`want_to`.
+    // Three things make this fuzzy: the map may pass a hostname in a slightly
+    // different form than the archive records (CNAME vs canonical FQDN), the
+    // archive records one end by IP and the other by name (the map hands us the
+    // addresses too, when it knows them), and traceroutes usually exist in one
+    // direction only - the local host traces towards its peers - while the map
+    // link may point the other way. So every level of strictness is tried in
+    // both directions before loosening further; a reverse hit is returned with
+    // `reversed: true` so the caller can say so.
     //
-    // Returns a `{from, to}` entry from `list` or null when nothing matches.
-    function find_matching_pair(list, want_from, want_to) {
-        const wf = (want_from || '').toLowerCase();
-        const wt = (want_to   || '').toLowerCase();
+    // Returns a `{from, to}` entry from `list` (plus `reversed`) or null.
+    function find_matching_pair(list, want_from, want_to, want_from_adr, want_to_adr) {
+        const norm  = s => String(s || '').trim().toLowerCase();
+        const is_ip = s => /^[0-9.]+$/.test(s) || s.indexOf(':') >= 0;
+        // Loose equality for names: FQDN vs short form either way. Addresses
+        // only match exactly - "10.0.0.1" must not swallow "10.0.0.10".
+        const like = (a, b) => a === b || (!is_ip(a) && !is_ip(b) && (a.indexOf(b) >= 0 || b.indexOf(a) >= 0));
+        const head = s => is_ip(s) ? s : s.split('.')[0];
 
-        // 1. Exact match (case-insensitive).
-        for (const p of list) {
-            if (p.from.toLowerCase() === wf && p.to.toLowerCase() === wt) return p;
+        // Candidate strings for each end: the topology name and its address.
+        const F = [norm(want_from), norm(want_from_adr)].filter(Boolean);
+        const T = [norm(want_to),   norm(want_to_adr)].filter(Boolean);
+        if (!F.length || !T.length) return null;
+
+        const levels = [
+            // 1. Exact match on both ends (name or address, case-insensitive).
+            (from, to) => list.find(p => from.includes(norm(p.from)) && to.includes(norm(p.to))),
+            // 2. One side is a substring of the other (FQDN vs short form).
+            (from, to) => list.find(p => from.some(f => like(norm(p.from), f)) && to.some(t => like(norm(p.to), t))),
+            // 3. First DNS label on both ends ("ps-branko" === "ps-branko").
+            (from, to) => list.find(p => from.some(f => head(norm(p.from)) === head(f)) && to.some(t => head(norm(p.to)) === head(t))),
+            // 4. The destination alone identifies the pair - with a single
+            //    archive the source is implicitly "us", however it is spelled.
+            (from, to) => { const h = list.filter(p => to.some(t => like(norm(p.to), t)));     return h.length === 1 ? h[0] : null; },
+            // 5. Same for the source.
+            (from, to) => { const h = list.filter(p => from.some(f => like(norm(p.from), f))); return h.length === 1 ? h[0] : null; }
+        ];
+        const dirs = [ { from: F, to: T, reversed: false }, { from: T, to: F, reversed: true } ];
+        for (const level of levels) {
+            for (const d of dirs) {
+                const p = level(d.from, d.to);
+                if (p) return d.reversed ? Object.assign({}, p, { reversed: true }) : p;
+            }
         }
-        // 2. One side is a substring of the other (handles FQDN vs short form).
-        for (const p of list) {
-            const pf = p.from.toLowerCase();
-            const pt = p.to.toLowerCase();
-            const from_ok = pf.indexOf(wf) >= 0 || wf.indexOf(pf) >= 0;
-            const to_ok   = pt.indexOf(wt) >= 0 || wt.indexOf(pt) >= 0;
-            if (from_ok && to_ok) return p;
-        }
-        // 3. First DNS label match (e.g. "ps-branko" === "ps-branko").
-        const wf_head = wf.split('.')[0];
-        const wt_head = wt.split('.')[0];
-        for (const p of list) {
-            if (p.from.toLowerCase().split('.')[0] === wf_head &&
-                p.to.toLowerCase().split('.')[0]   === wt_head) return p;
-        }
-        // 4. Destination uniquely matches. The microdep map sends a hostname
-        //    for the source, but the archive often records the local IP
-        //    instead — in a single-archive scenario the source is implicitly
-        //    "us", so a unique destination match identifies the right pair.
-        function dest_matches(pt) {
-            return pt === wt || pt.indexOf(wt) >= 0 || wt.indexOf(pt) >= 0;
-        }
-        const to_hits = list.filter(p => dest_matches(p.to.toLowerCase()));
-        if (to_hits.length === 1) return to_hits[0];
-        // 5. Same idea for source (less common but mirrors rule 4).
-        function src_matches(pf) {
-            return pf === wf || pf.indexOf(wf) >= 0 || wf.indexOf(pf) >= 0;
-        }
-        const from_hits = list.filter(p => src_matches(p.from.toLowerCase()));
-        if (from_hits.length === 1) return from_hits[0];
         return null;
     }
 
@@ -337,7 +341,7 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
 
             // Auto-trigger best-matching pair (see find_matching_pair docs).
             if (params.from && params.to && pair_list.length) {
-                const match = find_matching_pair(pair_list, params.from, params.to);
+                const match = find_matching_pair(pair_list, params.from, params.to, params.from_adr, params.to_adr);
                 if (match) {
                     open_tracetree_esmond(server, match.mno);
                 } else {
@@ -427,10 +431,13 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
             // match, no-match, or no-peers — otherwise it spins forever.
             if (params.from && params.to) {
                 const match = pair_list.length
-                    ? find_matching_pair(pair_list, params.from, params.to)
+                    ? find_matching_pair(pair_list, params.from, params.to, params.from_adr, params.to_adr)
                     : null;
                 if (match) {
-                    open_tracetree_os(mahost, match.from, match.to, t_start, t_end);
+                    open_tracetree_os(mahost, match.from, match.to, t_start, t_end, {
+                        requested: { from: params.from, to: params.to },
+                        notice: match.reversed ? reverse_notice(match) : ''
+                    });
                 } else {
                     el('trace').innerHTML =
                         '<div class="center-text" style="padding:40px">' +
@@ -537,17 +544,33 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
         render_tracetree(base, evt['input-source'], evt['input-destination'], start_time, end_time, /*api=*/'esmond');
     }
 
-    function open_tracetree_os(server, peer_from, peer_to, t_start, t_end) {
-        render_tracetree(server, peer_from, peer_to, t_start, t_end, /*api=*/'opensearch');
+    function open_tracetree_os(server, peer_from, peer_to, t_start, t_end, extra) {
+        render_tracetree(server, peer_from, peer_to, t_start, t_end, /*api=*/'opensearch', extra);
     }
 
-    function render_tracetree(mahost, p_from, p_to, t_start, t_end, api) {
+    // Text for the strip above the graph when only the opposite direction of
+    // the requested pair exists in the archive.
+    function reverse_notice(match) {
+        const esc = s => String(s || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+        return 'Opposite direction shown: this archive has no traceroute for ' +
+               '<strong>' + esc(params.from) + '</strong> \u2192 <strong>' + esc(params.to) + '</strong>, ' +
+               'so <strong>' + esc(match.from) + '</strong> \u2192 <strong>' + esc(match.to) + '</strong> is displayed instead. ' +
+               'Hops and round-trip times are as seen from ' + esc(match.from) + '.';
+    }
+
+    // `extra` (optional): { notice: html shown above the graph,
+    //                       requested: {from, to} the pair the caller asked for
+    //                       when it differs from the one displayed }
+    function render_tracetree(mahost, p_from, p_to, t_start, t_end, api, extra) {
+        extra = extra || {};
         const inner_id = id + '-trace-inner';
         const trace_pane = el('trace');
         // The wrapper needs a class: as a plain block it would not grow, and the
         // tracetree inside it (flex: 1) would stop at its min-height, leaving the
         // lower part of the tab empty.
-        trace_pane.innerHTML = '<div id="' + inner_id + '" class="tracetree-host"></div>';
+        trace_pane.innerHTML =
+            (extra.notice ? '<div class="tracetree-notice">' + extra.notice + '</div>' : '') +
+            '<div id="' + inner_id + '" class="tracetree-host"></div>';
         // Sub-tabs are Traceroute (0) and Peers (1) - the old `active: 2` is a
         // leftover from a three-tab layout and selects nothing, so opening a
         // pair from the Peers list never switched to the graph.
@@ -563,9 +586,12 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
         // Tell the map which pair is on screen, so a reload comes back to it
         // instead of the "no traceroute data matching ..." pane. Picking a pair
         // from the Peers list used to be forgotten entirely.
+        // A pair resolved from a map link is remembered as the map named it,
+        // so a reload resolves it the same way (and shows the same notice).
+        const req = extra.requested || {};
         document.dispatchEvent(new CustomEvent('microdep-tracetree-pair', {
             detail: {
-                divid: id, from: p_from, to: p_to,
+                divid: id, from: req.from || p_from, to: req.to || p_to,
                 startEpoch: t_start, endEpoch: t_end,
                 mahost: mahost, api: api, ip_version: params.ip_version,
                 net: params.net

@@ -2685,6 +2685,22 @@ div.graph:has(> .curve-iframe-wrap):not([aria-hidden="true"]) {
     flex: 0 0 auto;      /* the tab nav keeps its content height */
 }
 
+/* Strip above the traceroute graph when the archive only has the opposite
+   direction of the pair the map asked for. */
+.tracetree-notice {
+    flex: 0 0 auto;
+    margin: 10px 16px 0;
+    padding: 8px 12px;
+    border: 1px solid var(--c-border);
+    border-left: 3px solid var(--c-warn);
+    border-radius: var(--r);
+    background: var(--c-elevated);
+    color: var(--c-text-2);
+    font-size: .82rem;
+    line-height: 1.45;
+}
+.tracetree-notice strong { color: var(--c-text); font-weight: 600; }
+
 /* Wrapper that ls_tab() puts the tracetree into: it sits between the flex
    .ls-pane and .tracetree-inner, so it has to pass the height through. */
 .tracetree-host {
