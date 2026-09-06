@@ -4013,9 +4013,25 @@ div#legend:has(.legend-count) table#legend {
    lanes, so top-down they line up row for row) */
 .tracetree-paths-charts { display: flex; flex-direction: column; gap: 10px; }
 .tracetree-paths-main, .tracetree-paths-side { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-.tracetree-paths.is-vertical .tracetree-paths-charts { flex-direction: row; align-items: flex-start; }
-.tracetree-paths.is-vertical .tracetree-paths-main { flex: 1 1 auto; }
-.tracetree-paths.is-vertical .tracetree-paths-side { flex: 0 0 330px; }
+/* Top-down, the two charts share their lanes row for row, so their drawings
+   must start at the same height whatever their headings do. A grid with one
+   shared row for the headings and one for the charts guarantees that: a
+   heading that wraps to two lines pushes BOTH charts down, not just its own.
+   (flex could not - each column stacked its own heading and drawing.) */
+.tracetree-paths.is-vertical .tracetree-paths-charts {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 330px;
+    grid-template-rows: auto auto;
+    column-gap: 10px;
+    row-gap: 6px;
+    align-items: start;
+}
+.tracetree-paths.is-vertical .tracetree-paths-main,
+.tracetree-paths.is-vertical .tracetree-paths-side { display: contents; }
+.tracetree-paths.is-vertical .tracetree-paths-main > .tracetree-paths-sub    { grid-column: 1; grid-row: 1; }
+.tracetree-paths.is-vertical .tracetree-paths-main > .tracetree-paths-scroll { grid-column: 1; grid-row: 2; }
+.tracetree-paths.is-vertical .tracetree-paths-side > .tracetree-paths-sub    { grid-column: 2; grid-row: 1; }
+.tracetree-paths.is-vertical .tracetree-paths-side > .tracetree-paths-scroll { grid-column: 2; grid-row: 2; }
 .tracetree-paths.is-vertical .tracetree-paths-scroll { overflow-y: visible; }
 .tracetree-paths .tp-node.seg rect { fill: var(--c-text-2); opacity: .55; cursor: pointer; }
 .tracetree-paths .tp-node.seg:hover rect { opacity: .9; }
@@ -4024,9 +4040,11 @@ div#legend:has(.legend-count) table#legend {
 .tp-seg { display: inline-flex; gap: 4px; }
 .tp-seg .knapp[aria-pressed="true"] { outline: 2px solid var(--c-accent); outline-offset: -2px; }
 
-.tracetree-paths-sub { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; padding: 4px 4px 0; }
-.tracetree-paths-sub h3 { margin: 0; font-size: .86rem; font-weight: 600; color: var(--c-text); }
-.tracetree-paths-sub span { font-size: .76rem; color: var(--c-text-3); }
+/* Chart headings: the title on its own line, the note always beneath it, so
+   every chart's heading has the same shape whether or not its note wraps. */
+.tracetree-paths-sub { display: flex; flex-direction: column; gap: 3px; padding: 12px 4px 2px; }
+.tracetree-paths-sub h3 { margin: 0; font-size: 1rem; font-weight: 600; color: var(--c-text); line-height: 1.25; }
+.tracetree-paths-sub span { font-size: .76rem; color: var(--c-text-3); line-height: 1.4; }
 
 .tracetree-paths-scroll { overflow-x: auto; overflow-y: hidden; background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--r); padding: 4px 8px; }
 .tracetree-paths-scroll > svg { display: block; }
