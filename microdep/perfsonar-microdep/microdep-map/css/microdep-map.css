@@ -2685,6 +2685,9 @@ div.graph:has(> .curve-iframe-wrap):not([aria-hidden="true"]) {
     flex: 0 0 auto;      /* the tab nav keeps its content height */
 }
 
+/* "All N peers of X" buttons above the Peers list: the tree view */
+.ls-tree-bar { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 0 10px; }
+
 /* Strip above the traceroute graph when the archive only has the opposite
    direction of the pair the map asked for. */
 .tracetree-notice {
