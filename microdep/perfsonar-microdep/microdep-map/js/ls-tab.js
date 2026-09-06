@@ -59,7 +59,10 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
         // records one end by IP and the other by name, so a pair is matched by
         // either form - see find_matching_pair().
         from_adr:    options.from_adr   || '',
-        to_adr:      options.to_adr     || ''
+        to_adr:      options.to_adr     || '',
+        // Map-supplied leaf status for the tree view (a function, so it is
+        // never persisted and always reflects the map's current property).
+        leaf_status: typeof options.leaf_status === 'function' ? options.leaf_status : null
     };
 
     // Compute time range (epoch seconds)
@@ -181,6 +184,23 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
             }
         }
         return null;
+    }
+
+    // Every pair the archive holds FROM `want_from` (by name or address): the
+    // source as the archive spells it plus the list of peers, or null.
+    function find_tree_pairs(list, want_from, want_from_adr) {
+        const norm = s => String(s || '').trim().toLowerCase();
+        const F = [norm(want_from), norm(want_from_adr)].filter(Boolean);
+        if (!F.length) return null;
+        const head = s => s.split('.')[0];
+        let hits = list.filter(p => F.includes(norm(p.from)));
+        if (!hits.length) hits = list.filter(p => F.some(f => !/^[0-9.:]+$/.test(f) && head(norm(p.from)) === head(f)));
+        if (!hits.length) return null;
+        const cnt = {}; let src = null;
+        hits.forEach(p => { cnt[p.from] = (cnt[p.from] || 0) + 1; if (src === null || cnt[p.from] > cnt[src]) src = p.from; });
+        const peers = []; const seen = {};
+        hits.forEach(p => { if (p.from === src && !seen[p.to]) { seen[p.to] = true; peers.push(p.to); } });
+        return { from: src, peers: peers.sort() };
     }
 
     // ── Fetch list of LS-discovered MA hosts ────────────────────────────
@@ -332,8 +352,22 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
                 });
             });
 
+            // One button per source with several peers: every route from that
+            // host in one tree.
+            const by_src = {};
+            pair_list.forEach(function (p) { (by_src[p.from] = by_src[p.from] || []).push(p.to); });
+            let trees = '';
+            Object.keys(by_src).sort().forEach(function (src) {
+                if (by_src[src].length < 2) return;
+                trees += '<button class="knapp ls-pair-btn" data-action="os-tree" data-server="' + mahost + '"' +
+                         ' data-from="' + src + '" data-to="' + by_src[src].join(',') + '"' +
+                         ' data-start="' + t_start + '" data-end="' + t_end + '"' +
+                         ' title="Every route from ' + src + ' in one picture">All ' + by_src[src].length + ' peers of ' + src + '</button>';
+            });
+            const tree_bar = trees ? '<div class="ls-tree-bar">' + trees + '</div>' : '';
+
             if (pair_list.length) {
-                el('peers').innerHTML = head + tableHead + body + tableTail;
+                el('peers').innerHTML = head + tree_bar + tableHead + body + tableTail;
             } else {
                 el('peers').innerHTML = head + '<h4 class="center-text">No traceroutes found in this archive for the selected period.</h4>';
             }
@@ -416,8 +450,22 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
                         '</tr>';
             }
 
+            // One button per source with several peers: every route from that
+            // host in one tree.
+            const by_src = {};
+            pair_list.forEach(function (p) { (by_src[p.from] = by_src[p.from] || []).push(p.to); });
+            let trees = '';
+            Object.keys(by_src).sort().forEach(function (src) {
+                if (by_src[src].length < 2) return;
+                trees += '<button class="knapp ls-pair-btn" data-action="os-tree" data-server="' + mahost + '"' +
+                         ' data-from="' + src + '" data-to="' + by_src[src].join(',') + '"' +
+                         ' data-start="' + t_start + '" data-end="' + t_end + '"' +
+                         ' title="Every route from ' + src + ' in one picture">All ' + by_src[src].length + ' peers of ' + src + '</button>';
+            });
+            const tree_bar = trees ? '<div class="ls-tree-bar">' + trees + '</div>' : '';
+
             if (pair_list.length) {
-                el('peers').innerHTML = head + tableHead + body + tableTail;
+                el('peers').innerHTML = head + tree_bar + tableHead + body + tableTail;
             } else {
                 el('peers').innerHTML = head + '<h4 class="center-text">No traceroutes found in this archive for the selected period.</h4>';
             }
@@ -429,7 +477,22 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
             // The "Resolving peer pair…" spinner was shown in ls_tab() for
             // every from/to launch, so it MUST be replaced on every outcome —
             // match, no-match, or no-peers — otherwise it spins forever.
-            if (params.from && params.to) {
+            if (params.from && Array.isArray(params.to)) {
+                // A restored tree tab: the peers are already the archive's own names.
+                open_tracetree_os(mahost, params.from, params.to, t_start, t_end);
+            } else if (params.from && params.to === '*') {
+                // Every peer of the host: the tree view.
+                const tree = pair_list.length ? find_tree_pairs(pair_list, params.from, params.from_adr) : null;
+                if (tree) {
+                    open_tracetree_os(mahost, tree.from, tree.peers, t_start, t_end, { requested: { from: params.from, to: '*' } });
+                } else {
+                    el('trace').innerHTML =
+                        '<div class="center-text" style="padding:40px">' +
+                          '<p>No traceroutes from <strong>' + params.from + '</strong> were found in this archive for the selected period.</p>' +
+                          '<p style="color:var(--c-text-3);font-size:.85rem">Traceroutes are recorded by the host that runs them, so a tree needs the archive of that host.</p>' +
+                        '</div>';
+                }
+            } else if (params.from && params.to) {
                 const match = pair_list.length
                     ? find_matching_pair(pair_list, params.from, params.to, params.from_adr, params.to_adr)
                     : null;
@@ -531,6 +594,14 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
                     parseInt(btn.dataset.start, 10),
                     parseInt(btn.dataset.end,   10)
                 );
+            } else if (btn.dataset.action === 'os-tree') {
+                open_tracetree_os(
+                    btn.dataset.server,
+                    btn.dataset.from,
+                    btn.dataset.to.split(','),
+                    parseInt(btn.dataset.start, 10),
+                    parseInt(btn.dataset.end,   10)
+                );
             }
         });
     }
@@ -577,10 +648,11 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
         $('#' + id + '-tabs').tabs({ active: 0 });
 
         tracetree_tab(inner_id, p_from, p_to, t_start, t_end, {
-            mahost:     mahost,
-            verify_SSL: params.verify_SSL,
-            api:        api,
-            ip_version: params.ip_version
+            mahost:      mahost,
+            verify_SSL:  params.verify_SSL,
+            api:         api,
+            ip_version:  params.ip_version,
+            leaf_status: params.leaf_status
         });
 
         // Tell the map which pair is on screen, so a reload comes back to it
