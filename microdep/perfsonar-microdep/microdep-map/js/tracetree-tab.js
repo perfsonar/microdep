@@ -333,7 +333,16 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         const scroller = el('paths-scroll1');
         const availAcrossTotal = Math.max(400, scroller.clientWidth - 24);
         let scale = maxBand / M.traces;                   // a band, never a slab
-        V.nodes.forEach(function (n) { n.b = Math.max(4, n.n * scale); });   // band width across the flow
+        // Ribbon widths are proportional to the trace count, but never below a
+        // visible line: a branch carrying one trace in a hundred would otherwise
+        // be a hairline that vanishes where it leaves the main band. A node's
+        // band is then whatever its ribbons need on either side.
+        const minW = 3;
+        V.links.forEach(function (l) { l.w = Math.max(minW, l.n * scale); });
+        V.nodes.forEach(function (n) {
+            const sum = function (ls) { return (ls || []).reduce(function (t, l) { return t + l.w; }, 0); };
+            n.b = Math.max(4, n.n * scale, sum(outL[n.id]), sum(inL[n.id]));   // band width across the flow
+        });
 
         // Alternating label rows are only needed left-to-right; top-down puts the
         // name beside the node, so the lane just has to be wide enough for it.
@@ -376,12 +385,16 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
             let a = padAcross0 + (vertical ? Math.max(0, (acrossExtent - total) / 2) : (acrossExtent - total) / 2);
             arr.forEach(function (n) { n.along = along; n.a0 = a; n.a1 = a + n.b; a += n.b + (vertical ? (8 + n.labelW + 26) : gapBase); });
         });
-        // link slots along each node's band
+        // link slots along each node's band, centred when the ribbons on one
+        // side need less than the band (the minimum width can make the two
+        // sides differ by a few pixels)
         V.nodes.forEach(function (n) {
             const outs = (outL[n.id] || []).slice().sort(function (a, b) { return byId[a.to].a0 - byId[b.to].a0; });
-            let off = 0; outs.forEach(function (l) { l.w = Math.max(1.2, l.n * scale); l.s0 = n.a0 + off; l.s1 = l.s0 + l.w; off += l.w; });
+            let off = (n.b - outs.reduce(function (t, l) { return t + l.w; }, 0)) / 2;
+            outs.forEach(function (l) { l.s0 = n.a0 + off; l.s1 = l.s0 + l.w; off += l.w; });
             const ins = (inL[n.id] || []).slice().sort(function (a, b) { return byId[a.from].a0 - byId[b.from].a0; });
-            off = 0; ins.forEach(function (l) { const w = Math.max(1.2, l.n * scale); l.t0 = n.a0 + off; l.t1 = l.t0 + w; off += w; });
+            off = (n.b - ins.reduce(function (t, l) { return t + l.w; }, 0)) / 2;
+            ins.forEach(function (l) { l.t0 = n.a0 + off; l.t1 = l.t0 + l.w; off += l.w; });
         });
 
         // flow -> screen
@@ -414,7 +427,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
                 d = 'M' + al0 + ',' + l.s0 + ' C' + alm + ',' + l.s0 + ' ' + alm + ',' + l.t0 + ' ' + al1 + ',' + l.t0 +
                     ' L' + al1 + ',' + l.t1 + ' C' + alm + ',' + l.t1 + ' ' + alm + ',' + l.s1 + ' ' + al0 + ',' + l.s1 + ' Z';
             }
-            out += '<path class="tp-ribbon ' + paths_bin(l.dmin) + '" data-key="' + paths_esc(l.id) + '" d="' + d + '"></path>';
+            out += '<path class="tp-ribbon ' + paths_bin(l.dmin) + (l.w <= minW ? ' thin' : '') + '" data-key="' + paths_esc(l.id) + '" d="' + d + '"></path>';
         });
         V.nodes.forEach(function (n) {
             const cls = ['tp-node', (n.ttl === 0 && !n.collapsed) ? 'src' : '', dstIds[n.id] ? 'dst' : '', n.star ? 'star' : '', n.collapsed ? 'seg' : ''].filter(Boolean).join(' ');
