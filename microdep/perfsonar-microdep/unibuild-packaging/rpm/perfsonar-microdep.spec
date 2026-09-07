@@ -3,7 +3,6 @@
 %define command_base        %{microdep_bin_base}/microdep_commands
 %define config_base         /etc/perfsonar
 %define microdep_config_base         %{config_base}/microdep
-%define microdep_runtime_base        /var/lib/perfsonar/microdep
 %define microdep_share_base          /usr/share/perfsonar/microdep
 %define doc_base            /usr/share/doc/perfsonar/microdep
 %define microdep_web_dir    %{install_base}/microdep-map
@@ -205,7 +204,10 @@ systemctl stop perfsonar-microdep-hourly-aggregator.timer || true
 %install
 rm -rf %{buildroot}
 pwd & ls -l
-make ROOTPATH=%{buildroot}/%{install_base} CONFIGPATH=%{buildroot}/%{microdep_config_base} install
+make ROOTPATH=%{buildroot}/%{install_base} \
+     CONFIGPATH=%{buildroot}/%{microdep_config_base} \
+     SHAREPATH=%{buildroot}/%{microdep_share_base} \
+     install
 
 # Install systemd services
 mkdir -p %{buildroot}/%{_unitdir}
@@ -218,7 +220,7 @@ install -D -m 0644 -t %{buildroot}/etc/httpd/conf.d/ %{buildroot}/%{microdep_con
 install -D -m 0644 -t %{buildroot}/%{install_base}/logstash/microdep_pipeline/ %{buildroot}/%{microdep_config_base}/logstash/microdep/*
 install -D -m 0644 -t %{buildroot}/etc/logrotate.d/ %{buildroot}/%{microdep_config_base}/logrotate.d/microdep
 # Copy Geodb to correct folder
-install -D -m 0644 -t %{buildroot}/%{microdep_share_base}/GeoLite2/ %{buildroot}/%{microdep_config_base}/GeoLite2/*
+#install -D -m 0644 -t %{buildroot}/%{microdep_share_base}/GeoLite2/ %{buildroot}/%{microdep_config_base}/GeoLite2/*
 
 # Copy license file
 mkdir -p %{buildroot}/%{doc_base}

@@ -41,7 +41,7 @@ etc/microdep-tests.json.example
 etc/apache-microdep-map.conf
 etc/roles_yml_patch
 etc/grafana_dashboard_patch
-etc/microdep_default_policy.json
+archive/microdep_default_policy.json
 etc/microdep-gap-ana.yml
 etc/microdep-trace-ana.yml
 bin/microdep_commands/rabbitmq-consume.py
@@ -71,10 +71,10 @@ etc/logstash/microdep/29-microdep-misc-fix.conf
 etc/logstash/microdep/35-microdep-outputs.conf
 etc/logstash/microdep-pipelines.yml
 etc/logrotate.d/microdep
-etc/os-template-gap-ana.json
-etc/os-template-trace-ana.json
-etc/GeoLite2/GeoLite2-City.mmdb
-etc/GeoLite2/COPYRIGHT.txt
-etc/GeoLite2/GeoLite2-ASN.mmdb
-etc/GeoLite2/GeoLite2-Country.mmdb
-etc/GeoLite2/LICENSE.txt
+archive/os-template-gap-ana.json
+archive/os-template-trace-ana.json
+share/GeoLite2/GeoLite2-City.mmdb
+share/GeoLite2/COPYRIGHT.txt
+share/GeoLite2/GeoLite2-ASN.mmdb
+share/GeoLite2/GeoLite2-Country.mmdb
+share/GeoLite2/LICENSE.txt

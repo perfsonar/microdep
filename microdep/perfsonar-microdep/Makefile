@@ -1,6 +1,7 @@
 PACKAGE=perfsonar-microdep
 ROOTPATH=/usr/lib/perfsonar
 CONFIGPATH=/etc/perfsonar
+SHAREPATH=/usr/share/perfsonar
 PACKAGEPATH=.
 PERFSONAR_AUTO_VERSION=5.3.0
 PERFSONAR_AUTO_RELNUM=1
@@ -25,13 +26,15 @@ dist: MANIFEST
 install:
 #	Install all files according to MANIFEST
 	@echo Installing...
-	@awk -v rp=$(ROOTPATH) -v cp=$(CONFIGPATH) '{ \
+	@awk -v rootp=$(ROOTPATH) -v confp=$(CONFIGPATH) -v sharep=$(SHAREPATH) '{ \
 		if ( substr($$1,1,1) != "#" && NF >= 1) { \
 			cmd=""; \
 			if ( substr($$1,1,4) == "etc/" ) { \
-				cmd="install -m 640 -TD "$$1" "cp"/"substr($$1,5) \
+				cmd="install -m 640 -TD "$$1" "confp"/"substr($$1,5) \
+			} else if ( substr($$1,1,4) == "share/" ) { \
+				cmd="install -m 640 -TD "$$1" "sharep"/"substr($$1,5) \
 			} else { \
-				cmd="install -m 640 -TD "$$1" "rp"/"$$1 \
+				cmd="install -m 640 -TD "$$1" "rootp"/"$$1 \
 			} \
 			system(cmd); \
 			split(cmd,c," "); print(c[6]); \
