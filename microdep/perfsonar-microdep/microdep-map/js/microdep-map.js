@@ -2139,20 +2139,6 @@ function get_topology(source = "archive"){
     var network=parms.net;
 
     switch (source) {
-    case "sqlite-db":
-	//var url="microdep-config.cgi?secret=\"" + conffile[parms.net].database_secret + "\"&variant=mp-" + network + "&start=" + start + "&end=" + end;
-	var url="microdep-config.cgi?net=" + network + "&start=" + start + "&end=" + end;
-	$.getJSON( url, function(topology){
-	    if (topology.length == 0) {
-		$("#error").html(hhmmss(new Date()) + " : No topology data found for " + parms.event + " events on " + $("#datepicker").val() + " " + $("#period_input").val() + ";;");
-		remove_links(links);
-		_set_map_empty_state(true);
-	    } else {
-		if (points.length == 0) { load_coords_from_all_sources(network); return; }
-		draw_topology( topology ); get_connections();
-	    }
-	}).fail( function( jqxhr, textStatus, error ) { console.log( "Request" + url + " Failed: " + textStatus + ", " + error ); });
-	break;
     case "archive":
 	var query_index = event_index[parms.event];
 	if ( conffile[parms.net].event_type.topology.index ) { query_index = conffile[parms.net].event_type.topology.index; }
@@ -2166,14 +2152,11 @@ function get_topology(source = "archive"){
 		if (!jQuery.isEmptyObject(result.error)) {
 		    console.log("        (\"" + result.error.msg  + "\")");
 		}
-		// No topology data returned. Try sqlite-db instead.
-		get_topology("sqlite-db");
 		return;
 	    }
 	    var topology = [];
 	    if (! result.aggregations.peer.buckets.length) {
-		console.log("No topology data returned from archive. Trying sqlite db ...");
-		get_topology("sqlite-db");
+		console.log("No topology data returned from archive.");
 	    } else {
 		for (var p=0; p < result.aggregations.peer.buckets.length; p++) { topology.push(result.aggregations.peer.buckets[p].key.split("_")); }
 		draw_topology( topology ); get_connections();
@@ -3993,22 +3976,8 @@ function load_coords(network, service, goal){
 	}).fail( function(e, textStatus, error ) { console.log( "Request" + url + " Failed: " + textStatus + ", " + error ); _coords_load_done(network, goal); });
 	return;
     }
-    if ( service === "db" ) {
-	start = new Date($("#datepicker").val() + " 00:00:00").getTime()/1000;
-	end= new Date($("#datepicker").val() + " 23:59:59").getTime()/1000;
-	var network=parms.net;
-	var url="microdep-config.cgi?mode=nodes&net=" + network + "&start=" + start + "&end=" + end;
-	$.getJSON( url, function(nodes){
-	    for ( var n=0; n < nodes.length; n++) {
-		var p={}; p.id = nodes[n][0]; p.name = nodes[n][1]; p.lat = nodes[n][2]; p.lon = nodes[n][3];
-		reg_ip_adr(p.name, nodes[n][4]);
-		let point_already_loaded = points.find(o => o.id === p.id);
-		if (! point_already_loaded) { points.push( p); } else { console.log( "Duplicate node info for node " + p.id ); }
-	    }
-	    _coords_load_done(network, goal);
-	}).fail( function( jqxhr, textStatus, error ) { console.log( "Request" + url + " Failed: " + textStatus + ", " + error ); _coords_load_done(network, goal); });
-	return;
-    }
+    
+    // Default "service": Attempt to load local json source for geo-pos data
     var url= "./" + network + "/" + network + "-" + service + "-geo.json";
     $.getJSON( url, function(tjenester){
 	if ( "_meta" in tjenester ){
@@ -4045,8 +4014,8 @@ function _coords_load_done(network, goal) {
 }
 
 function load_coords_from_all_sources(network){
-    load_coords(network, "topoevents", 2);
-    load_coords(network, "db", 2);
+    load_coords(network, "topoevents", 1);
+    // ( Only one source in perfSONAR version of Microdep)
 }
 
 function show_network(network){
@@ -4325,8 +4294,6 @@ function get_peer_data(from, to, div){
 	if (jQuery.isEmptyObject(resp.hits)) {
 	    console.log("Warning: Failed to fetch data from archive. Check archive url inn mapconfig.yml.");
 	    if (!jQuery.isEmptyObject(resp.error)) { console.log("        (\"" + resp.error.msg  + "\")");}
-	    // No topology data returned. Try sqlite-db instead.
-	    get_topology("sqlite-db");
 	    return;
 	}
         if (resp.hits && resp.hits.total.value > 0){
@@ -4381,8 +4348,6 @@ function get_connections(){
 	    if (jQuery.isEmptyObject(resp.hits)) {
 		console.log("Warning: Failed to fetch data from archive. Check archive url in mapconfig.yml.");
 		if (!jQuery.isEmptyObject(resp.error)) { console.log("        (\"" + resp.error.msg  + "\")"); }
-		// No topology data returned. Try sqlite-db instead.
-		get_topology("sqlite-db"); return;
 	    }
 	    if (resp.hits && resp.hits.total.value > 0){
 		var nrecs=resp.hits.total.value.toString();

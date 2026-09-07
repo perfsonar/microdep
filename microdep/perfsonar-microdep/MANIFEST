@@ -14,7 +14,6 @@ microdep-map/js/tracetree-tab.js
 bin/microdep_commands/elastic-get-date-type.pl
 bin/microdep_commands/yaml-to-json.cgi
 bin/microdep_commands/get-mapconfig.cgi
-bin/microdep_commands/microdep-config.cgi
 bin/microdep_commands/get-tracetests.pl
 bin/microdep_commands/hopgeo.pl
 etc/mapconfig.yml
@@ -40,8 +39,6 @@ microdep-map/fonts/jetbrainsmono-600-latinext.woff2
 etc/microdep-tests-packet-subcount.json.example
 etc/microdep-tests.json.example
 etc/apache-microdep-map.conf
-etc/microdep_ipv4.db
-etc/microdep_ipv6.db
 etc/roles_yml_patch
 etc/grafana_dashboard_patch
 etc/microdep_default_policy.json
