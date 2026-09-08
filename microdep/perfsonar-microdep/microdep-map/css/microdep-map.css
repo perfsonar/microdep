@@ -2687,6 +2687,9 @@ div.graph:has(> .curve-iframe-wrap):not([aria-hidden="true"]) {
 
 /* "All N peers of X" buttons above the Peers list: the tree view */
 .ls-tree-bar { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 0 10px; }
+/* tick column of the Peers list */
+.ls-table th.ls-check, .ls-table td.ls-check { width: 20px; padding-right: 0; cursor: default; }
+.ls-table .ls-pick, .ls-table .ls-pick-all { accent-color: var(--c-accent); width: 15px; height: 15px; margin: 0; vertical-align: middle; cursor: pointer; }
 
 /* Strip above the traceroute graph when the archive only has the opposite
    direction of the pair the map asked for. */

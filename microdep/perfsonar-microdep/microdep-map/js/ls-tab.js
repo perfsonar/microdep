@@ -364,7 +364,12 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
                          ' data-start="' + t_start + '" data-end="' + t_end + '"' +
                          ' title="Every route from ' + src + ' in one picture">All ' + by_src[src].length + ' peers of ' + src + '</button>';
             });
-            const tree_bar = trees ? '<div class="ls-tree-bar">' + trees + '</div>' : '';
+            // "Show selected" opens the checked pairs: one as a pair, several
+            // (of one source) as a tree of just those peers.
+            const selected_btn = '<button class="knapp ls-pair-btn" data-action="os-selected" data-server="' + mahost + '"' +
+                                 ' data-start="' + t_start + '" data-end="' + t_end + '" id="' + id + '-show-selected" disabled' +
+                                 ' title="Tick pairs in the list, then show them: one as a pair, several of one source as a tree">Show selected</button>';
+            const tree_bar = pair_list.length ? '<div class="ls-tree-bar">' + selected_btn + trees + '</div>' : '';
 
             if (pair_list.length) {
                 el('peers').innerHTML = head + tree_bar + tableHead + body + tableTail;
@@ -424,7 +429,7 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
             '</div>';
         const tableHead =
             '<table id="' + id + '-peer-table" class="sortable ls-table">' +
-              '<thead><tr><th>Time updated<th>Peers list</thead><tbody>';
+              '<thead><tr><th class="sorttable_nosort ls-check"><input type="checkbox" class="ls-pick-all" title="Select every listed pair (those matching the search)" aria-label="Select all"></th><th>Time updated<th>Peers list</thead><tbody>';
         const tableTail = '</tbody></table>';
 
         $.getJSON(fetch_url, function (results) {
@@ -443,6 +448,7 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
 
                 const tu = new Date(buckets[r].timestamp.value);
                 body += '<tr>' +
+                          '<td class="ls-check"><input type="checkbox" class="ls-pick" data-from="' + peer_from + '" data-to="' + peer_to + '" aria-label="Select ' + pair_key + '"></td>' +
                           '<td>' + tu.toLocaleDateString() + 'T' + tu.toLocaleTimeString() + '</td>' +
                           '<td><button class="knapp ls-pair-btn" data-action="os-pair" data-server="' + mahost + '"' +
                             ' data-from="' + peer_from + '" data-to="' + peer_to + '"' +
@@ -462,7 +468,12 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
                          ' data-start="' + t_start + '" data-end="' + t_end + '"' +
                          ' title="Every route from ' + src + ' in one picture">All ' + by_src[src].length + ' peers of ' + src + '</button>';
             });
-            const tree_bar = trees ? '<div class="ls-tree-bar">' + trees + '</div>' : '';
+            // "Show selected" opens the checked pairs: one as a pair, several
+            // (of one source) as a tree of just those peers.
+            const selected_btn = '<button class="knapp ls-pair-btn" data-action="os-selected" data-server="' + mahost + '"' +
+                                 ' data-start="' + t_start + '" data-end="' + t_end + '" id="' + id + '-show-selected" disabled' +
+                                 ' title="Tick pairs in the list, then show them: one as a pair, several of one source as a tree">Show selected</button>';
+            const tree_bar = pair_list.length ? '<div class="ls-tree-bar">' + selected_btn + trees + '</div>' : '';
 
             if (pair_list.length) {
                 el('peers').innerHTML = head + tree_bar + tableHead + body + tableTail;
@@ -533,6 +544,7 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
         if (search) {
             search.addEventListener('keyup', function () {
                 search_table(id + '-peer-search', id + '-peer-table');
+                sync_pick_all();
             });
         }
 
@@ -602,8 +614,57 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
                     parseInt(btn.dataset.start, 10),
                     parseInt(btn.dataset.end,   10)
                 );
+            } else if (btn.dataset.action === 'os-selected') {
+                const picked = picked_pairs();
+                if (!picked.length) return;
+                const t0 = parseInt(btn.dataset.start, 10), t1 = parseInt(btn.dataset.end, 10);
+                if (picked.length === 1) open_tracetree_os(btn.dataset.server, picked[0].from, picked[0].to, t0, t1);
+                else open_tracetree_os(btn.dataset.server, picked[0].from, picked.map(function (p) { return p.to; }), t0, t1);
             }
         });
+        // The tick boxes: the header box follows the search filter, the rows
+        // keep the header box and the "Show selected" button in step.
+        peers_pane.addEventListener('change', function (ev) {
+            const box = ev.target;
+            if (box.classList && box.classList.contains('ls-pick-all')) {
+                visible_rows().forEach(function (tr) { const cb = tr.querySelector('.ls-pick'); if (cb) cb.checked = box.checked; });
+            } else if (!(box.classList && box.classList.contains('ls-pick'))) {
+                return;
+            }
+            sync_pick_all();
+            update_selected_button();
+        });
+    }
+
+    function visible_rows() {
+        const tbl = document.getElementById(id + '-peer-table');
+        return tbl ? Array.prototype.filter.call(tbl.querySelectorAll('tbody tr'), function (tr) { return tr.style.display !== 'none'; }) : [];
+    }
+
+    function picked_pairs() {
+        const peers_pane = el('peers');
+        return peers_pane ? Array.prototype.map.call(peers_pane.querySelectorAll('.ls-pick:checked'), function (cb) { return { from: cb.dataset.from, to: cb.dataset.to }; }) : [];
+    }
+
+    function sync_pick_all() {
+        const all = document.querySelector('#' + id + '-peer-table .ls-pick-all'); if (!all) return;
+        const rows = visible_rows().map(function (tr) { return tr.querySelector('.ls-pick'); }).filter(Boolean);
+        const n = rows.filter(function (cb) { return cb.checked; }).length;
+        all.checked = rows.length > 0 && n === rows.length;
+        all.indeterminate = n > 0 && n < rows.length;
+    }
+
+    function update_selected_button() {
+        const btn = el('show-selected'); if (!btn) return;
+        const picked = picked_pairs();
+        const sources = {}; picked.forEach(function (p) { sources[p.from] = true; });
+        const n_src = Object.keys(sources).length;
+        btn.disabled = !picked.length || n_src > 1;
+        btn.textContent = !picked.length ? 'Show selected'
+                        : picked.length === 1 ? 'Show the selected pair'
+                        : 'Show ' + picked.length + ' selected peers as a tree';
+        btn.title = n_src > 1 ? 'The selected pairs have ' + n_src + ' different sources; a tree grows from one'
+                  : 'Tick pairs in the list, then show them: one as a pair, several of one source as a tree';
     }
 
     // ── Open the Traceroute tab and render via tracetree_tab() ──────────
