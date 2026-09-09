@@ -3932,8 +3932,14 @@ function extend_unidirectional_links() {
                 var baseColor = link._baseColor;
                 extendedLinks[abs] = { bp0: link._bezierP0, bp1: link._bezierP1, bp2: link._bezierP2, fullStart: link._fullStart, fullEnd: link._fullEnd, fullControl: link._fullControl, tooltip: tooltipContent, popup: popupContent, source: sourceData, baseColor: baseColor };
                 link.remove();
-                var newBP0 = link._fullStart; var newBP2 = link._fullEnd;
-                var cubicC1 = link._fullControl; var cubicC2 = link._bezierP1 || link._fullControl;
+                // draw_link() reverses its `ends` before reading coordinates, so
+                // _fullStart is the link's DESTINATION and _fullEnd its SOURCE.
+                // Run the full-length curve from the source to the destination
+                // (a Bezier reversed is the same curve with its control points
+                // swapped), so the arrow heads, which follow the curve's
+                // direction of travel, point the way the traffic goes (#162).
+                var newBP0 = link._fullEnd; var newBP2 = link._fullStart;
+                var cubicC1 = link._bezierP1 || link._fullControl; var cubicC2 = link._fullControl;
                 var newLine = L.curve(['M', newBP0, 'C', cubicC1, cubicC2, newBP2], { color: color, fill: false, weight: 6 });
                 newLine._bezierP0 = link._bezierP0; newLine._bezierP1 = link._bezierP1; newLine._bezierP2 = link._bezierP2;
                 newLine._fullStart = link._fullStart; newLine._fullEnd = link._fullEnd; newLine._fullControl = link._fullControl;
@@ -4051,6 +4057,9 @@ function draw_link( ends, color, tooltip, popup){
 	    line = L.curve(['M', bezierP0, 'Q', bezierP1, bezierP2 ], { color: color, fill: false, weight:6 });
 	}
 	line._bezierP0 = bezierP0; line._bezierP1 = bezierP1; line._bezierP2 = bezierP2;
+	// NB: `ends` was reversed above, so latlon1 is the destination and latlon2
+	// the source: the half-curve runs from the middle to the SOURCE node, and
+	// _fullStart/_fullEnd are named for that reversed order.
 	line._fullStart = [latlon1.lat, latlon1.lon]; line._fullEnd = [latlon2.lat, latlon2.lon]; line._fullControl = [cp1.lat, cp1.lon];
 	if (line) line.addTo(mymap);
 	else console.log('Line draw failed ' + line_name);
