@@ -120,6 +120,7 @@ export function get_thresholds( hits, prop){
 	    var interval=max-min;
 	    var logint=0;
 	    var length= colors.length;
+	    var i;
 	    if ( interval > 100 && min > 0 && max / min > 100 ){ // go logarithmic
 		logint = Math.log10(interval);
 		var incr = logint / length;
@@ -128,10 +129,24 @@ export function get_thresholds( hits, prop){
 		}
 	    } else { // linear scale
 		var incr = (max - min) / length;
-		var i;
 		for (i=1; i< length; i++){
 		    thresh.push( round_number( min + (incr * i) ) );
 		}
+	    }
+	    // A scale needs thresholds strictly above the minimum and strictly
+	    // increasing. With every link at the same value - say 0 failed routes -
+	    // the interval is 0, every threshold equals the minimum (and rounding 0
+	    // even gives NaN), and the strict "value < threshold" test put every
+	    // link, the zeros included, in the worst colour (issue #163). Rounding
+	    // can collapse a tiny interval the same way. Then grade from the
+	    // minimum upwards in steps of its own size, so the value seen is the
+	    // best colour and anything larger climbs the scale.
+	    var usable = thresh.length > 0 && thresh[0] > min &&
+		thresh.every(function (t, k) { return typeof t === 'number' && !isNaN(t) && (k === 0 || t > thresh[k - 1]); });
+	    if ( ! usable ){
+		var step = min > 0 ? min : 1;
+		thresh = [];
+		for (i=1; i< length; i++){ thresh.push( min + step * i ); }
 	    }
 	}
     }
