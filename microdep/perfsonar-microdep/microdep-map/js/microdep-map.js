@@ -824,9 +824,18 @@ function make_markers ( network, points, focus) {
 }
 
 function remove_links(){
+    // Take every layer off the map, not only the ones in `links`: a one-way
+    // link is rebuilt by extend_unidirectional_links() as a full-length or half
+    // line that replaces the original in linkByName, while `links` keeps the
+    // original, which is already gone. Clearing `links` alone left the rebuilt
+    // lines behind on a network switch (issue #161), most visibly with event
+    // types whose links run one way, such as route errors.
     var i;
     for ( i=0; i<links.length; i++ ){
 	if ( links[i] ) links[i].remove();
+    }
+    for ( var ab in linkByName ){
+	if ( linkByName[ab] && typeof linkByName[ab].remove === 'function' ) linkByName[ab].remove();
     }
     for (var name in arrowMarkers) {
         removeArrowMarkers(name);
@@ -835,6 +844,7 @@ function remove_links(){
     links=[];
     linkByName=[];
     ends=[];
+    extendedLinks=[];
 }
 
 function remove_link(ab){
@@ -842,7 +852,10 @@ function remove_link(ab){
 	linkByName[ab].remove();
 	removeArrowMarkers(ab);
 	delete linkByName[ab];
-	ends.splice( ends, ends.indexOf(ab), 1);
+	// splice() takes an index first; passing the array itself removed the
+	// wrong entries and inserted a stray 1, so `ends` drifted from linkByName.
+	var at = ends.indexOf(ab);
+	if ( at >= 0 ) ends.splice( at, 1 );
     }
 }
 
