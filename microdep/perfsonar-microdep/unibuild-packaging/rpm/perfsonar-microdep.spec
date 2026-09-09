@@ -3,7 +3,6 @@
 %define command_base        %{microdep_bin_base}/microdep_commands
 %define config_base         /etc/perfsonar
 %define microdep_config_base         %{config_base}/microdep
-%define microdep_runtime_base        /var/lib/perfsonar/microdep
 %define microdep_share_base          /usr/share/perfsonar/microdep
 %define doc_base            /usr/share/doc/perfsonar/microdep
 %define microdep_web_dir    %{install_base}/microdep-map
@@ -34,8 +33,8 @@ Summary:		Microdep analytic toolset to analize perfSONAR datasets
 Group:			Applications/Communications
 BuildRequires:          curl
 BuildRequires:          perl >= 5.32
-BuildRequires:          perl(DBI)
-BuildRequires:          perl(DBD::SQLite)
+#BuildRequires:          perl(DBI)
+#BuildRequires:          perl(DBD::SQLite)
 BuildRequires:          perl(JSON)
 Requires:		perl >= 5.32
 # qstream_gap_ana
@@ -106,16 +105,16 @@ Group:			Applications/Communications
 BuildRequires:          perl >= 5.32
 BuildRequires:          perl(LWP::Simple)
 BuildRequires:          perl(JSON)
-BuildRequires:          perl(DBI)
-BuildRequires:          perl(DBD::SQLite)
+#BuildRequires:          perl(DBI)
+#BuildRequires:          perl(DBD::SQLite)
 #Requires:               perfsonar-toolkit >= 5.0.7
 Requires:		httpd
 Requires:               mod_ssl
 Requires:		perl >= 5.32
 Requires:               perl(CGI) 
 Requires:		perl(Data::Dumper)
-Requires:               perl(DBI) 
-Requires:               perl(DBD::SQLite)
+#Requires:               perl(DBI) 
+#Requires:               perl(DBD::SQLite)
 Requires:		perl(Getopt::Long)
 Requires:		perl(JSON)
 Requires:		perl(LWP::Simple)
@@ -205,22 +204,20 @@ systemctl stop perfsonar-microdep-hourly-aggregator.timer || true
 %install
 rm -rf %{buildroot}
 pwd & ls -l
-make ROOTPATH=%{buildroot}/%{install_base} CONFIGPATH=%{buildroot}/%{microdep_config_base} install
+make -e ROOTPATH=%{buildroot}/%{install_base} \
+     -e CONFIGPATH=%{buildroot}/%{microdep_config_base} \
+     -e SHAREPATH=%{buildroot}/%{microdep_share_base} \
+     install
 
 # Install systemd services
 mkdir -p %{buildroot}/%{_unitdir}
 install -D -m 0644 -t %{buildroot}/%{_unitdir} %{buildroot}/%{install_base}/scripts/*.service
 install -D -m 0644 -t %{buildroot}/%{_unitdir} %{buildroot}/%{install_base}/scripts/*.timer
 systemctl daemon-reload || true
-# Copy microdep map, httpd and logstash configs into correct folders
-install -D -m 0644 %{buildroot}/%{microdep_config_base}/microdep_ipv4.db %{buildroot}/%{microdep_runtime_base}/microdep_ipv4.db
-install -D -m 0644 %{buildroot}/%{microdep_config_base}/microdep_ipv6.db %{buildroot}/%{microdep_runtime_base}/microdep_ipv6.db
+# Copy selected files into correct folders
 install -D -m 0644 -t %{buildroot}/etc/httpd/conf.d/ %{buildroot}/%{microdep_config_base}/apache-microdep-map.conf
 install -D -m 0644 -t %{buildroot}/etc/httpd/conf.d/ %{buildroot}/%{microdep_config_base}/apache-microdep-ana.conf
-install -D -m 0644 -t %{buildroot}/%{install_base}/logstash/microdep_pipeline/ %{buildroot}/%{microdep_config_base}/logstash/microdep/*
 install -D -m 0644 -t %{buildroot}/etc/logrotate.d/ %{buildroot}/%{microdep_config_base}/logrotate.d/microdep
-# Copy Geodb to correct folder
-install -D -m 0644 -t %{buildroot}/%{microdep_share_base}/GeoLite2/ %{buildroot}/%{microdep_config_base}/GeoLite2/*
 
 # Copy license file
 mkdir -p %{buildroot}/%{doc_base}
@@ -251,12 +248,8 @@ rm -f %{buildroot}/%{install_base}/Makefile
 rm -f %{buildroot}/%{install_base}/LICENSE
 rm -rf %{buildroot}/%{microdep_config_base}/apache-microdep-map.conf
 rm -rf %{buildroot}/%{microdep_config_base}/apache-microdep-ana.conf
-rm -rf %{buildroot}/%{microdep_config_base}/logstash/microdep
 rm -rf %{buildroot}/%{microdep_config_base}/psconfig
 rm -rf %{buildroot}/%{microdep_config_base}/logrotate.d
-rm -rf %{buildroot}/%{microdep_config_base}/GeoLite2/*
-rm -rf %{buildroot}/%{microdep_config_base}/microdep_ipv4.db
-rm -rf %{buildroot}/%{microdep_config_base}/microdep_ipv6.db
 
 # Make js and css libs available in web folder (-r for relative paths ... to make rpmbuild happy)
 ln -sr /usr/share/javascript/chartjs/4.4.2/chart.umd.js %{buildroot}/%{microdep_web_dir}/js
@@ -480,31 +473,11 @@ systemctl reload httpd.service || true
 /etc/httpd/conf.d/apache-microdep-ana.conf
 %{install_base}/logstash/microdep_pipeline/*.conf
 %{microdep_config_base}/logstash/microdep-pipelines.yml
-%{microdep_config_base}/microdep_default_policy.json
 %config /var/lib/logstash/microdep 
-%{microdep_config_base}/os-template-gap-ana.json
-%{microdep_config_base}/os-template-trace-ana.json
-%{microdep_config_base}/roles_yml_patch
-%config /etc/logrotate.d/microdep
-
-%files logstash
-%defattr(0644,perfsonar,perfsonar,0755)
-%license %{doc_base}/LICENSE-logstash
-%attr(0755,perfsonar,perfsonar) %{command_base}/opensearch_config_microdep.sh
-%attr(0755,perfsonar,perfsonar) %{command_base}/microdep-opensearch-guard.sh
-%{_unitdir}/perfsonar-microdep-opensearch-guard.service
-%{_unitdir}/perfsonar-microdep-opensearch-guard.timer
-%attr(0755,perfsonar,perfsonar) %{command_base}/psconfig_archive_ana.sh
-/usr/local/bin/psconfig_archive_ana.sh
-/usr/local/bin/opensearch_config_microdep.sh
-/etc/httpd/conf.d/apache-microdep-ana.conf
-%{install_base}/logstash/microdep_pipeline/*.conf
-%{microdep_config_base}/logstash/microdep-pipelines.yml
-%{microdep_config_base}/microdep_default_policy.json
-%config /var/lib/logstash/microdep 
-%{microdep_config_base}/os-template-gap-ana.json
-%{microdep_config_base}/os-template-trace-ana.json
-%{microdep_config_base}/roles_yml_patch
+/usr/lib/perfsonar/archive/config/ilm/install/microdep_default_policy.json
+/usr/lib/perfsonar/archive/config/os-template-gap-ana.json
+/usr/lib/perfsonar/archive/config/os-template-trace-ana.json
+/usr/lib/perfsonar/archive/config/microdep_roles_yml_patch
 %config /etc/logrotate.d/microdep
 
 %files map
@@ -521,12 +494,9 @@ systemctl reload httpd.service || true
 %attr(0755,perfsonar,perfsonar) %{command_base}/get-mapconfig.cgi
 %attr(0755,perfsonar,perfsonar) %{command_base}/get-tracetests.pl
 %attr(0755,perfsonar,perfsonar) %{command_base}/hopgeo.pl
-%attr(0755,perfsonar,perfsonar) %{command_base}/microdep-config.cgi
 %config %{microdep_config_base}/mapconfig.yml
 %config %{microdep_config_base}/mapconfig.d/
 %{microdep_config_base}/microdep_ipv4-base-geo.json.example
-%config %{microdep_runtime_base}/microdep_ipv4.db
-%config %{microdep_runtime_base}/microdep_ipv6.db
 %{microdep_config_base}/grafana_dashboard_patch
 /etc/httpd/conf.d/apache-microdep-map.conf
 

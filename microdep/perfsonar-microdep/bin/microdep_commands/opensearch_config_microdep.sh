@@ -143,10 +143,10 @@ if [ "$REMOVE" ]; then
 	    systemctl restart logstash.service || true
 	fi
 	# Remove read/write access to Microdep opensearch indices
-	if [ -e /usr/lib/perfsonar/archive/config/roles.yml -a -e /etc/perfsonar/microdep/roles_yml_patch ]; then
+	if [ -e /usr/lib/perfsonar/archive/config/roles.yml -a -e /usr/lib/perfsonar/archive/config/microdep_roles_yml_patch ]; then
 	    msg "Removing read/write access to Microdep indices in Opensearch..."
 	    TMPROLESYML=$(mktemp)
-	    grep -v -x -F -f /etc/perfsonar/microdep/roles_yml_patch /usr/lib/perfsonar/archive/config/roles.yml > $TMPROLESYML && mv $TMPROLESYML /usr/lib/perfsonar/archive/config/roles.yml
+	    grep -v -x -F -f /usr/lib/perfsonar/archive/config/microdep_roles_yml_patch /usr/lib/perfsonar/archive/config/roles.yml > $TMPROLESYML && mv $TMPROLESYML /usr/lib/perfsonar/archive/config/roles.yml
 	    # Refresh config of opensearch security
 	    if [ -e $OPENSEARCH_SECURITY_CONFIG/roles.yml ]; then
 		cp -f /usr/lib/perfsonar/archive/config/roles.yml $OPENSEARCH_SECURITY_CONFIG/roles.yml
@@ -186,13 +186,13 @@ if [ -e /etc/logstash/pipelines.yml -a -e /etc/perfsonar/microdep/logstash/micro
 fi
 
 # Add read and write accesses to Microdep opensearch indices
-if [ -e /usr/lib/perfsonar/archive/config/roles.yml -a -e /etc/perfsonar/microdep/roles_yml_patch ]; then
-    if ! grep -q -x -F -f /etc/perfsonar/microdep/roles_yml_patch /usr/lib/perfsonar/archive/config/roles.yml; then
+if [ -e /usr/lib/perfsonar/archive/config/roles.yml -a -e /usr/lib/perfsonar/archive/config/microdep_roles_yml_patch ]; then
+    if ! grep -q -x -F -f /usr/lib/perfsonar/archive/config/microdep_roles_yml_patch /usr/lib/perfsonar/archive/config/roles.yml; then
 	# Microdep index missing. Add.
 	wait_opensearch
 	msg "Adding read and write access to Micordep indices..."
-	sed -i '/prometheus\*/r /etc/perfsonar/microdep/roles_yml_patch' /usr/lib/perfsonar/archive/config/roles.yml
-	sed -i '/prometheus_\*/r /etc/perfsonar/microdep/roles_yml_patch' /usr/lib/perfsonar/archive/config/roles.yml
+	sed -i '/prometheus\*/r /usr/lib/perfsonar/archive/config/microdep_roles_yml_patch' /usr/lib/perfsonar/archive/config/roles.yml
+	sed -i '/prometheus_\*/r /usr/lib/perfsonar/archive/config/microdep_roles_yml_patch' /usr/lib/perfsonar/archive/config/roles.yml
 	# Refresh config of opensearch security
 	if [ -e $OPENSEARCH_SECURITY_CONFIG/roles.yml ]; then
 	    cp -f /usr/lib/perfsonar/archive/config/roles.yml $OPENSEARCH_SECURITY_CONFIG/roles.yml
@@ -211,13 +211,13 @@ wait_opensearch_api
 
 # Add templates
 msg "Adding Microdep index templates..."
-curl -k -u admin:${ADMIN_PASS} -s -H 'Content-Type: application/json' -XPUT "$OPENSEARCH_URL/_index_template/microdep_gap_ana" -d @/etc/perfsonar/microdep/os-template-gap-ana.json 2>/dev/null ; echo
-curl -k -u admin:${ADMIN_PASS} -s -H 'Content-Type: application/json' -XPUT "$OPENSEARCH_URL/_index_template/microdep_trace_ana" -d @/etc/perfsonar/microdep/os-template-trace-ana.json 2>/dev/null ; echo
+curl -k -u admin:${ADMIN_PASS} -s -H 'Content-Type: application/json' -XPUT "$OPENSEARCH_URL/_index_template/microdep_gap_ana" -d @/usr/lib/perfsonar/archive/config/os-template-gap-ana.json 2>/dev/null ; echo
+curl -k -u admin:${ADMIN_PASS} -s -H 'Content-Type: application/json' -XPUT "$OPENSEARCH_URL/_index_template/microdep_trace_ana" -d @/usr/lib/perfsonar/archive/config/os-template-trace-ana.json 2>/dev/null ; echo
 
 if [ $(curl -s -o /dev/null -w "%{http_code}" -u admin:${ADMIN_PASS} -k "$OPENSEARCH_URL/_plugins/_ism/policies/microdep_default_policy") -ne 200 ]; then
     # No policy found.  Create new.
     msg "Creating default Microdep index policy..."
-    curl -k -u admin:${ADMIN_PASS} -H 'Content-Type: application/json' -X PUT "$OPENSEARCH_URL/_plugins/_ism/policies/microdep_default_policy" -d "@/etc/perfsonar/microdep/microdep_default_policy.json" 2>/dev/null ; echo
+    curl -k -u admin:${ADMIN_PASS} -H 'Content-Type: application/json' -X PUT "$OPENSEARCH_URL/_plugins/_ism/policies/microdep_default_policy" -d "@/usr/lib/perfsonar/archive/config/ilm/install/microdep_default_policy.json" 2>/dev/null ; echo
     # Apply policy to index
     msg "Applying Microdep index policy to indices..."
     curl -k -u admin:${ADMIN_PASS} -H 'Content-Type: application/json' -X POST "$OPENSEARCH_URL/_plugins/_ism/add/microdep*" -d '{ "policy_id": "microdep_default_policy" }' 2>/dev/null ; echo
