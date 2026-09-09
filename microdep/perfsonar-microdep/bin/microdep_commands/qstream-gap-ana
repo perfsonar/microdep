@@ -1597,7 +1597,7 @@ sub check_jitter{
 	if ( ! $jitter_data{$id}{start} ){
 	    $jitter_data{$id}{start} = $tstart;
 	}
-	if ( ! $jitter_data{$id}{high_ddlay} && $indicator > $opt_ddelay_high ){
+	if ( ! $jitter_data{$id}{high_ddelay} && $indicator > $opt_ddelay_high ){
 	    $jitter_data{$id}{high_ddelay} = $indicator;
 	    $jitter_data{$id}{ddelay_acc} = $ddelay;
 	}

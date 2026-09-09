@@ -77,6 +77,18 @@ if (defined $ip_version && $ip_version =~ /^([46])$/) {
     $ipv_filter = ', { "term": { "test.spec.ip-version": ' . $1 . ' } }';
 }
 
+# Optional trimming for callers that only need the path. The traceroute viewer
+# reads the timestamp, the test spec and the parsed hops; the rest of a
+# pscheduler document (raw output, meta, schedule) is more than half its size,
+# which matters once one request carries every peer of a host.
+my $source_filter = '';
+$source_filter = '"_source": [ "@timestamp", "test.spec", "result.json", "result.succeeded" ], ' if ($cgi->param('slim'));
+# Optional result cap. OpenSearch refuses more than 10000 hits in one page.
+my $size = 8640;
+if (defined $cgi->param('size') && $cgi->param('size') =~ /^(\d+)$/) {
+    $size = $1 > 10000 ? 10000 : $1;
+}
+
 # Prepare query
 my $query='';
 if (! $from || ! $to ) {
@@ -114,13 +126,13 @@ if (! $from || ! $to ) {
                            { "bool": { "must": [ { "terms": { "test.spec.source.keyword": [' . $fl . '] } }, { "terms": { "test.spec.dest.keyword": [' . $tl . '] } } ] } },
                            { "bool": { "must": [ { "terms": { "test.spec.source.keyword": [' . $tl . '] } }, { "terms": { "test.spec.dest.keyword": [' . $fl . '] } } ] } }
                          ] } }
-                     ] } }, "size": 8640 }';
+                     ] } }, ' . $source_filter . '"size": ' . $size . ' }';
     } else {
         $query = '{ "query": { "bool": { "filter": [ { "term": { "test.type.keyword": "trace" } },
                                                      { "term": { "test.spec.source.keyword": "' . $from . '" } },
                                                      { "term": { "test.spec.dest.keyword": "' . $to . '" } },
                                                      { "range": { "@timestamp": { "gte": "' . $iso_start . '", "lt": "' . $iso_end . '" } } }' . $ipv_filter . '
-                                                   ] } }, "size": 8640 }';
+                                                   ] } }, ' . $source_filter . '"size": ' . $size . ' }';
     }
 }
 

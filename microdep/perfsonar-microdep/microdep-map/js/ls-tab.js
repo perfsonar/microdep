@@ -54,7 +54,15 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
         stime:       options.stime,
         // Empty/absent means "all versions" (the config allows that) - only
         // filter when the network actually pins one (issue #127).
-        ip_version:  options.ip_version
+        ip_version:  options.ip_version,
+        // Addresses of the two ends (when the map knows them): the archive
+        // records one end by IP and the other by name, so a pair is matched by
+        // either form - see find_matching_pair().
+        from_adr:    options.from_adr   || '',
+        to_adr:      options.to_adr     || '',
+        // Map-supplied leaf status for the tree view (a function, so it is
+        // never persisted and always reflects the map's current property).
+        leaf_status: typeof options.leaf_status === 'function' ? options.leaf_status : null
     };
 
     // Compute time range (epoch seconds)
@@ -131,52 +139,68 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
         return url + (url.indexOf('?') >= 0 ? '&' : '?') + qs;
     }
 
-    // Find the best matching peer pair in `list` against the requested
-    // `want_from`/`want_to`. The microdep map sometimes passes hostnames in a
-    // slightly different form than what's recorded in the archive (e.g. a
-    // CNAME vs the canonical FQDN), and OpenSearch matches as exact strings,
-    // so we try progressively looser comparisons.
+    // Find the archive's pair entry for the requested `want_from`/`want_to`.
+    // Three things make this fuzzy: the map may pass a hostname in a slightly
+    // different form than the archive records (CNAME vs canonical FQDN), the
+    // archive records one end by IP and the other by name (the map hands us the
+    // addresses too, when it knows them), and traceroutes usually exist in one
+    // direction only - the local host traces towards its peers - while the map
+    // link may point the other way. So every level of strictness is tried in
+    // both directions before loosening further; a reverse hit is returned with
+    // `reversed: true` so the caller can say so.
     //
-    // Returns a `{from, to}` entry from `list` or null when nothing matches.
-    function find_matching_pair(list, want_from, want_to) {
-        const wf = (want_from || '').toLowerCase();
-        const wt = (want_to   || '').toLowerCase();
+    // Returns a `{from, to}` entry from `list` (plus `reversed`) or null.
+    function find_matching_pair(list, want_from, want_to, want_from_adr, want_to_adr) {
+        const norm  = s => String(s || '').trim().toLowerCase();
+        const is_ip = s => /^[0-9.]+$/.test(s) || s.indexOf(':') >= 0;
+        // Loose equality for names: FQDN vs short form either way. Addresses
+        // only match exactly - "10.0.0.1" must not swallow "10.0.0.10".
+        const like = (a, b) => a === b || (!is_ip(a) && !is_ip(b) && (a.indexOf(b) >= 0 || b.indexOf(a) >= 0));
+        const head = s => is_ip(s) ? s : s.split('.')[0];
 
-        // 1. Exact match (case-insensitive).
-        for (const p of list) {
-            if (p.from.toLowerCase() === wf && p.to.toLowerCase() === wt) return p;
+        // Candidate strings for each end: the topology name and its address.
+        const F = [norm(want_from), norm(want_from_adr)].filter(Boolean);
+        const T = [norm(want_to),   norm(want_to_adr)].filter(Boolean);
+        if (!F.length || !T.length) return null;
+
+        const levels = [
+            // 1. Exact match on both ends (name or address, case-insensitive).
+            (from, to) => list.find(p => from.includes(norm(p.from)) && to.includes(norm(p.to))),
+            // 2. One side is a substring of the other (FQDN vs short form).
+            (from, to) => list.find(p => from.some(f => like(norm(p.from), f)) && to.some(t => like(norm(p.to), t))),
+            // 3. First DNS label on both ends ("ps-branko" === "ps-branko").
+            (from, to) => list.find(p => from.some(f => head(norm(p.from)) === head(f)) && to.some(t => head(norm(p.to)) === head(t))),
+            // 4. The destination alone identifies the pair - with a single
+            //    archive the source is implicitly "us", however it is spelled.
+            (from, to) => { const h = list.filter(p => to.some(t => like(norm(p.to), t)));     return h.length === 1 ? h[0] : null; },
+            // 5. Same for the source.
+            (from, to) => { const h = list.filter(p => from.some(f => like(norm(p.from), f))); return h.length === 1 ? h[0] : null; }
+        ];
+        const dirs = [ { from: F, to: T, reversed: false }, { from: T, to: F, reversed: true } ];
+        for (const level of levels) {
+            for (const d of dirs) {
+                const p = level(d.from, d.to);
+                if (p) return d.reversed ? Object.assign({}, p, { reversed: true }) : p;
+            }
         }
-        // 2. One side is a substring of the other (handles FQDN vs short form).
-        for (const p of list) {
-            const pf = p.from.toLowerCase();
-            const pt = p.to.toLowerCase();
-            const from_ok = pf.indexOf(wf) >= 0 || wf.indexOf(pf) >= 0;
-            const to_ok   = pt.indexOf(wt) >= 0 || wt.indexOf(pt) >= 0;
-            if (from_ok && to_ok) return p;
-        }
-        // 3. First DNS label match (e.g. "ps-branko" === "ps-branko").
-        const wf_head = wf.split('.')[0];
-        const wt_head = wt.split('.')[0];
-        for (const p of list) {
-            if (p.from.toLowerCase().split('.')[0] === wf_head &&
-                p.to.toLowerCase().split('.')[0]   === wt_head) return p;
-        }
-        // 4. Destination uniquely matches. The microdep map sends a hostname
-        //    for the source, but the archive often records the local IP
-        //    instead — in a single-archive scenario the source is implicitly
-        //    "us", so a unique destination match identifies the right pair.
-        function dest_matches(pt) {
-            return pt === wt || pt.indexOf(wt) >= 0 || wt.indexOf(pt) >= 0;
-        }
-        const to_hits = list.filter(p => dest_matches(p.to.toLowerCase()));
-        if (to_hits.length === 1) return to_hits[0];
-        // 5. Same idea for source (less common but mirrors rule 4).
-        function src_matches(pf) {
-            return pf === wf || pf.indexOf(wf) >= 0 || wf.indexOf(pf) >= 0;
-        }
-        const from_hits = list.filter(p => src_matches(p.from.toLowerCase()));
-        if (from_hits.length === 1) return from_hits[0];
         return null;
+    }
+
+    // Every pair the archive holds FROM `want_from` (by name or address): the
+    // source as the archive spells it plus the list of peers, or null.
+    function find_tree_pairs(list, want_from, want_from_adr) {
+        const norm = s => String(s || '').trim().toLowerCase();
+        const F = [norm(want_from), norm(want_from_adr)].filter(Boolean);
+        if (!F.length) return null;
+        const head = s => s.split('.')[0];
+        let hits = list.filter(p => F.includes(norm(p.from)));
+        if (!hits.length) hits = list.filter(p => F.some(f => !/^[0-9.:]+$/.test(f) && head(norm(p.from)) === head(f)));
+        if (!hits.length) return null;
+        const cnt = {}; let src = null;
+        hits.forEach(p => { cnt[p.from] = (cnt[p.from] || 0) + 1; if (src === null || cnt[p.from] > cnt[src]) src = p.from; });
+        const peers = []; const seen = {};
+        hits.forEach(p => { if (p.from === src && !seen[p.to]) { seen[p.to] = true; peers.push(p.to); } });
+        return { from: src, peers: peers.sort() };
     }
 
     // ── Fetch list of LS-discovered MA hosts ────────────────────────────
@@ -328,8 +352,27 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
                 });
             });
 
+            // One button per source with several peers: every route from that
+            // host in one tree.
+            const by_src = {};
+            pair_list.forEach(function (p) { (by_src[p.from] = by_src[p.from] || []).push(p.to); });
+            let trees = '';
+            Object.keys(by_src).sort().forEach(function (src) {
+                if (by_src[src].length < 2) return;
+                trees += '<button class="knapp ls-pair-btn" data-action="os-tree" data-server="' + mahost + '"' +
+                         ' data-from="' + src + '" data-to="' + by_src[src].join(',') + '"' +
+                         ' data-start="' + t_start + '" data-end="' + t_end + '"' +
+                         ' title="Every route from ' + src + ' in one picture">All ' + by_src[src].length + ' peers of ' + src + '</button>';
+            });
+            // "Show selected" opens the checked pairs: one as a pair, several
+            // (of one source) as a tree of just those peers.
+            const selected_btn = '<button class="knapp ls-pair-btn" data-action="os-selected" data-server="' + mahost + '"' +
+                                 ' data-start="' + t_start + '" data-end="' + t_end + '" id="' + id + '-show-selected" disabled' +
+                                 ' title="Tick pairs in the list, then show them: one as a pair, several of one source as a tree">Show selected</button>';
+            const tree_bar = pair_list.length ? '<div class="ls-tree-bar">' + selected_btn + trees + '</div>' : '';
+
             if (pair_list.length) {
-                el('peers').innerHTML = head + tableHead + body + tableTail;
+                el('peers').innerHTML = head + tree_bar + tableHead + body + tableTail;
             } else {
                 el('peers').innerHTML = head + '<h4 class="center-text">No traceroutes found in this archive for the selected period.</h4>';
             }
@@ -337,7 +380,7 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
 
             // Auto-trigger best-matching pair (see find_matching_pair docs).
             if (params.from && params.to && pair_list.length) {
-                const match = find_matching_pair(pair_list, params.from, params.to);
+                const match = find_matching_pair(pair_list, params.from, params.to, params.from_adr, params.to_adr);
                 if (match) {
                     open_tracetree_esmond(server, match.mno);
                 } else {
@@ -386,7 +429,7 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
             '</div>';
         const tableHead =
             '<table id="' + id + '-peer-table" class="sortable ls-table">' +
-              '<thead><tr><th>Time updated<th>Peers list</thead><tbody>';
+              '<thead><tr><th class="sorttable_nosort ls-check"><input type="checkbox" class="ls-pick-all" title="Select every listed pair (those matching the search)" aria-label="Select all"></th><th>Time updated<th>Peers list</thead><tbody>';
         const tableTail = '</tbody></table>';
 
         $.getJSON(fetch_url, function (results) {
@@ -405,6 +448,7 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
 
                 const tu = new Date(buckets[r].timestamp.value);
                 body += '<tr>' +
+                          '<td class="ls-check"><input type="checkbox" class="ls-pick" data-from="' + peer_from + '" data-to="' + peer_to + '" aria-label="Select ' + pair_key + '"></td>' +
                           '<td>' + tu.toLocaleDateString() + 'T' + tu.toLocaleTimeString() + '</td>' +
                           '<td><button class="knapp ls-pair-btn" data-action="os-pair" data-server="' + mahost + '"' +
                             ' data-from="' + peer_from + '" data-to="' + peer_to + '"' +
@@ -412,8 +456,27 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
                         '</tr>';
             }
 
+            // One button per source with several peers: every route from that
+            // host in one tree.
+            const by_src = {};
+            pair_list.forEach(function (p) { (by_src[p.from] = by_src[p.from] || []).push(p.to); });
+            let trees = '';
+            Object.keys(by_src).sort().forEach(function (src) {
+                if (by_src[src].length < 2) return;
+                trees += '<button class="knapp ls-pair-btn" data-action="os-tree" data-server="' + mahost + '"' +
+                         ' data-from="' + src + '" data-to="' + by_src[src].join(',') + '"' +
+                         ' data-start="' + t_start + '" data-end="' + t_end + '"' +
+                         ' title="Every route from ' + src + ' in one picture">All ' + by_src[src].length + ' peers of ' + src + '</button>';
+            });
+            // "Show selected" opens the checked pairs: one as a pair, several
+            // (of one source) as a tree of just those peers.
+            const selected_btn = '<button class="knapp ls-pair-btn" data-action="os-selected" data-server="' + mahost + '"' +
+                                 ' data-start="' + t_start + '" data-end="' + t_end + '" id="' + id + '-show-selected" disabled' +
+                                 ' title="Tick pairs in the list, then show them: one as a pair, several of one source as a tree">Show selected</button>';
+            const tree_bar = pair_list.length ? '<div class="ls-tree-bar">' + selected_btn + trees + '</div>' : '';
+
             if (pair_list.length) {
-                el('peers').innerHTML = head + tableHead + body + tableTail;
+                el('peers').innerHTML = head + tree_bar + tableHead + body + tableTail;
             } else {
                 el('peers').innerHTML = head + '<h4 class="center-text">No traceroutes found in this archive for the selected period.</h4>';
             }
@@ -425,12 +488,30 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
             // The "Resolving peer pair…" spinner was shown in ls_tab() for
             // every from/to launch, so it MUST be replaced on every outcome —
             // match, no-match, or no-peers — otherwise it spins forever.
-            if (params.from && params.to) {
+            if (params.from && Array.isArray(params.to)) {
+                // A restored tree tab: the peers are already the archive's own names.
+                open_tracetree_os(mahost, params.from, params.to, t_start, t_end);
+            } else if (params.from && params.to === '*') {
+                // Every peer of the host: the tree view.
+                const tree = pair_list.length ? find_tree_pairs(pair_list, params.from, params.from_adr) : null;
+                if (tree) {
+                    open_tracetree_os(mahost, tree.from, tree.peers, t_start, t_end, { requested: { from: params.from, to: '*' } });
+                } else {
+                    el('trace').innerHTML =
+                        '<div class="center-text" style="padding:40px">' +
+                          '<p>No traceroutes from <strong>' + params.from + '</strong> were found in this archive for the selected period.</p>' +
+                          '<p style="color:var(--c-text-3);font-size:.85rem">Traceroutes are recorded by the host that runs them, so a tree needs the archive of that host.</p>' +
+                        '</div>';
+                }
+            } else if (params.from && params.to) {
                 const match = pair_list.length
-                    ? find_matching_pair(pair_list, params.from, params.to)
+                    ? find_matching_pair(pair_list, params.from, params.to, params.from_adr, params.to_adr)
                     : null;
                 if (match) {
-                    open_tracetree_os(mahost, match.from, match.to, t_start, t_end);
+                    open_tracetree_os(mahost, match.from, match.to, t_start, t_end, {
+                        requested: { from: params.from, to: params.to },
+                        notice: match.reversed ? reverse_notice(match) : ''
+                    });
                 } else {
                     el('trace').innerHTML =
                         '<div class="center-text" style="padding:40px">' +
@@ -463,6 +544,7 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
         if (search) {
             search.addEventListener('keyup', function () {
                 search_table(id + '-peer-search', id + '-peer-table');
+                sync_pick_all();
             });
         }
 
@@ -524,8 +606,65 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
                     parseInt(btn.dataset.start, 10),
                     parseInt(btn.dataset.end,   10)
                 );
+            } else if (btn.dataset.action === 'os-tree') {
+                open_tracetree_os(
+                    btn.dataset.server,
+                    btn.dataset.from,
+                    btn.dataset.to.split(','),
+                    parseInt(btn.dataset.start, 10),
+                    parseInt(btn.dataset.end,   10)
+                );
+            } else if (btn.dataset.action === 'os-selected') {
+                const picked = picked_pairs();
+                if (!picked.length) return;
+                const t0 = parseInt(btn.dataset.start, 10), t1 = parseInt(btn.dataset.end, 10);
+                if (picked.length === 1) open_tracetree_os(btn.dataset.server, picked[0].from, picked[0].to, t0, t1);
+                else open_tracetree_os(btn.dataset.server, picked[0].from, picked.map(function (p) { return p.to; }), t0, t1);
             }
         });
+        // The tick boxes: the header box follows the search filter, the rows
+        // keep the header box and the "Show selected" button in step.
+        peers_pane.addEventListener('change', function (ev) {
+            const box = ev.target;
+            if (box.classList && box.classList.contains('ls-pick-all')) {
+                visible_rows().forEach(function (tr) { const cb = tr.querySelector('.ls-pick'); if (cb) cb.checked = box.checked; });
+            } else if (!(box.classList && box.classList.contains('ls-pick'))) {
+                return;
+            }
+            sync_pick_all();
+            update_selected_button();
+        });
+    }
+
+    function visible_rows() {
+        const tbl = document.getElementById(id + '-peer-table');
+        return tbl ? Array.prototype.filter.call(tbl.querySelectorAll('tbody tr'), function (tr) { return tr.style.display !== 'none'; }) : [];
+    }
+
+    function picked_pairs() {
+        const peers_pane = el('peers');
+        return peers_pane ? Array.prototype.map.call(peers_pane.querySelectorAll('.ls-pick:checked'), function (cb) { return { from: cb.dataset.from, to: cb.dataset.to }; }) : [];
+    }
+
+    function sync_pick_all() {
+        const all = document.querySelector('#' + id + '-peer-table .ls-pick-all'); if (!all) return;
+        const rows = visible_rows().map(function (tr) { return tr.querySelector('.ls-pick'); }).filter(Boolean);
+        const n = rows.filter(function (cb) { return cb.checked; }).length;
+        all.checked = rows.length > 0 && n === rows.length;
+        all.indeterminate = n > 0 && n < rows.length;
+    }
+
+    function update_selected_button() {
+        const btn = el('show-selected'); if (!btn) return;
+        const picked = picked_pairs();
+        const sources = {}; picked.forEach(function (p) { sources[p.from] = true; });
+        const n_src = Object.keys(sources).length;
+        btn.disabled = !picked.length || n_src > 1;
+        btn.textContent = !picked.length ? 'Show selected'
+                        : picked.length === 1 ? 'Show the selected pair'
+                        : 'Show ' + picked.length + ' selected peers as a tree';
+        btn.title = n_src > 1 ? 'The selected pairs have ' + n_src + ' different sources; a tree grows from one'
+                  : 'Tick pairs in the list, then show them: one as a pair, several of one source as a tree';
     }
 
     // ── Open the Traceroute tab and render via tracetree_tab() ──────────
@@ -537,35 +676,55 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
         render_tracetree(base, evt['input-source'], evt['input-destination'], start_time, end_time, /*api=*/'esmond');
     }
 
-    function open_tracetree_os(server, peer_from, peer_to, t_start, t_end) {
-        render_tracetree(server, peer_from, peer_to, t_start, t_end, /*api=*/'opensearch');
+    function open_tracetree_os(server, peer_from, peer_to, t_start, t_end, extra) {
+        render_tracetree(server, peer_from, peer_to, t_start, t_end, /*api=*/'opensearch', extra);
     }
 
-    function render_tracetree(mahost, p_from, p_to, t_start, t_end, api) {
+    // Text for the strip above the graph when only the opposite direction of
+    // the requested pair exists in the archive.
+    function reverse_notice(match) {
+        const esc = s => String(s || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+        return 'Opposite direction shown: this archive has no traceroute for ' +
+               '<strong>' + esc(params.from) + '</strong> \u2192 <strong>' + esc(params.to) + '</strong>, ' +
+               'so <strong>' + esc(match.from) + '</strong> \u2192 <strong>' + esc(match.to) + '</strong> is displayed instead. ' +
+               'Hops and round-trip times are as seen from ' + esc(match.from) + '.';
+    }
+
+    // `extra` (optional): { notice: html shown above the graph,
+    //                       requested: {from, to} the pair the caller asked for
+    //                       when it differs from the one displayed }
+    function render_tracetree(mahost, p_from, p_to, t_start, t_end, api, extra) {
+        extra = extra || {};
         const inner_id = id + '-trace-inner';
         const trace_pane = el('trace');
         // The wrapper needs a class: as a plain block it would not grow, and the
         // tracetree inside it (flex: 1) would stop at its min-height, leaving the
         // lower part of the tab empty.
-        trace_pane.innerHTML = '<div id="' + inner_id + '" class="tracetree-host"></div>';
+        trace_pane.innerHTML =
+            (extra.notice ? '<div class="tracetree-notice">' + extra.notice + '</div>' : '') +
+            '<div id="' + inner_id + '" class="tracetree-host"></div>';
         // Sub-tabs are Traceroute (0) and Peers (1) - the old `active: 2` is a
         // leftover from a three-tab layout and selects nothing, so opening a
         // pair from the Peers list never switched to the graph.
         $('#' + id + '-tabs').tabs({ active: 0 });
 
         tracetree_tab(inner_id, p_from, p_to, t_start, t_end, {
-            mahost:     mahost,
-            verify_SSL: params.verify_SSL,
-            api:        api,
-            ip_version: params.ip_version
+            mahost:      mahost,
+            verify_SSL:  params.verify_SSL,
+            api:         api,
+            ip_version:  params.ip_version,
+            leaf_status: params.leaf_status
         });
 
         // Tell the map which pair is on screen, so a reload comes back to it
         // instead of the "no traceroute data matching ..." pane. Picking a pair
         // from the Peers list used to be forgotten entirely.
+        // A pair resolved from a map link is remembered as the map named it,
+        // so a reload resolves it the same way (and shows the same notice).
+        const req = extra.requested || {};
         document.dispatchEvent(new CustomEvent('microdep-tracetree-pair', {
             detail: {
-                divid: id, from: p_from, to: p_to,
+                divid: id, from: req.from || p_from, to: req.to || p_to,
                 startEpoch: t_start, endEpoch: t_end,
                 mahost: mahost, api: api, ip_version: params.ip_version,
                 net: params.net

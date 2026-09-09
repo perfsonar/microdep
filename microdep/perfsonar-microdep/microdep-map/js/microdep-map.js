@@ -317,7 +317,10 @@ function restoreOneTab(spec) {
               '<div class="spinner"></div><p>Restoring routes…</p>' +
             '</div>');
         const tab_id = 'tab' + before;
-        ls_tab(tab_id, spec.from, spec.to, spec.startEpoch, spec.endEpoch, spec.options || {});
+        // Functions do not survive localStorage; the tree's leaf colours come
+        // from the live map, so re-attach the callback on every restore.
+        const opts = Object.assign({}, spec.options || {}, { leaf_status: leaf_status_fn(spec.from) });
+        ls_tab(tab_id, spec.from, spec.to, spec.startEpoch, spec.endEpoch, opts);
         tabSpecs.set(tab_id, spec);
     } else if (spec.kind === 'curve') {
         const sep = spec.url.indexOf('?') >= 0 ? '&' : '?';
@@ -707,6 +710,69 @@ function spread_points(points){
     }
 }
 
+// The tree view: every traceroute from `host` in one picture, as a Routes tab
+// opened for "all peers" ('*'); ls_tab resolves the peers from the archive.
+function open_tree_tab(host) {
+    let num_tabs = $("main#tabs > ul > li").length;
+    let title = 'Tree: ' + host.split('.').slice(0, 2).join('.');
+    add_tab('div', title, num_tabs, '<div class="center-text" style="padding:40px"><div class="spinner"></div><p>Loading traceroute data\u2026</p></div>');
+    let tab_id = 'tab' + num_tabs;
+    let start_epoch = new Date($("#datepicker").val()).getTime() / 1000;
+    let end_epoch = start_epoch + parms.period * 3600;
+    var opts = {
+	net: parms.net,
+	mahost: 'https://localhost:9200/',
+	verify_SSL: 0,
+	api: 'opensearch',
+	ip_version: net_ip_version[parms.net],
+	from_adr: name_to_ip[host] || '',
+	leaf_status: leaf_status_fn(host)
+    };
+    if (! jQuery.isEmptyObject(conffile[parms.net].archive)) opts.mahost = conffile[parms.net].archive;
+    ls_tab(tab_id, host, '*', start_epoch, end_epoch, opts);
+    persistTab(tab_id, { kind: 'routes', title: title, from: host, to: '*', startEpoch: start_epoch, endEpoch: end_epoch, options: opts });
+    const tab_count = $('main#tabs > ul > li > a').length;
+    if (tab_count > 0) $('main#tabs').tabs('option', 'active', tab_count - 1);
+}
+
+// What the map currently shows for the link between the tree's `root` and a
+// peer: the colour of the link out of the root and the property values both
+// ways. The traceroute viewer calls the returned function when it draws a
+// leaf, so the colours follow the map's selected property and date. Hosts
+// are matched by name, address or first label, since pscheduler may spell a
+// host differently than the topology does.
+function leaf_status_fn(root) {
+    const alias_set = function (name) {
+	const a = {};
+	const add = function (x) { if (!x) return; const n = String(x).toLowerCase(); a[n] = true; a[n.split('.')[0]] = true; };
+	add(name); add(name_to_ip[name]);
+	return function (x) { if (!x) return false; const n = String(x).toLowerCase(); return !!(a[n] || a[n.split('.')[0]] || (name_to_ip[x] && a[String(name_to_ip[x]).toLowerCase()])); };
+    };
+    const is_root = alias_set(root);
+    return function (peer) {
+	const is_peer = alias_set(peer);
+	const etype = event_sum_type[parms.event] || parms.event;
+	const unit = (typeof _field_unit === 'function') ? (_field_unit(etype, parms.property) || '') : '';
+	const label = (prop_desc[etype] && prop_desc[etype][parms.property]) || parms.property;
+	const suffix = (unit && String(label).indexOf(unit) < 0) ? ' ' + unit : '';   // "Unavailability (ppm)" already says ppm
+	const fmt = function (v) { return (v === undefined || v === null || v === '') ? 'no data' : (round_number(v, 2) + suffix); };
+	let out = null, back = null;
+	for (const abs in linkByName) {
+	    const ends = abs.split(','); if (ends.length !== 2) continue;
+	    const layer = linkByName[abs]; if (!layer || !layer.options) continue;
+	    const src = layer._panelSource || {};
+	    const st = { color: layer._baseColor || layer.options.color || '', value: src[parms.property], from: ends[0], to: ends[1] };
+	    if (is_root(ends[0]) && is_peer(ends[1])) out = st;        // root -> peer
+	    else if (is_peer(ends[0]) && is_root(ends[1])) back = st;  // peer -> root
+	}
+	if (!out && !back) return null;
+	const lines = [];
+	if (out)  lines.push({ k: label + ' ' + out.from.split('.')[0] + ' \u2192 ' + out.to.split('.')[0], v: fmt(out.value) });
+	if (back) lines.push({ k: label + ' ' + back.from.split('.')[0] + ' \u2192 ' + back.to.split('.')[0], v: fmt(back.value) });
+	return { color: (out && out.color) || (back && back.color) || '', lines: lines };
+    };
+}
+
 function make_markers ( network, points, focus) {
     var i;
     var bounds = new L.LatLngBounds();
@@ -717,7 +783,8 @@ function make_markers ( network, points, focus) {
 	var marker = L.marker ([points[i].lat, points[i].lon]).addTo(clustergroup[network]);
 	bounds.extend(marker.getLatLng());
 	marker.bindTooltip( points[i].name, {permanent: false, className: "my-label", offset: [0, 0] });
-	var html = '<br><a href="#" class=trigger id="' + id + '">Focus on</a>';
+	var html = '<br><a href="#" class=trigger id="' + id + '">Focus on</a>' +
+	           '<br><a href="#" class="tree-trigger" data-host="' + id + '" title="Every traceroute from this host in one tree">Routes to all peers</a>';
 	var url;
 	if (points[i].url){
 	    url = points[i].url;
@@ -727,6 +794,10 @@ function make_markers ( network, points, focus) {
 	marker.bindPopup("<b><a href=\"" + url + "\">" + "Home for " + id + "</a></b>"+html);
 	$("#" + id ).on('click', "a.trigger", function(e){
 	    focus_links( e.id, 'flip' );
+	});
+	marker.on('popupopen', function (e) {
+	    var a = e.popup.getElement().querySelector('a.tree-trigger');
+	    if (a) a.addEventListener('click', function (ev) { ev.preventDefault(); open_tree_tab(a.dataset.host); e.target.closePopup(); });
 	});
     }
 
@@ -1524,7 +1595,12 @@ function link_popup(link){
 		api: 'opensearch',
 		// Follow the selected network's IP version, so Net-6 shows v6
 		// traceroutes instead of always falling back to v4 (issue #127).
-		ip_version: net_ip_version[parms.net]
+		ip_version: net_ip_version[parms.net],
+		// The archive records the local end by IP (and usually only the
+		// direction it traces itself), so ls_tab gets the addresses too
+		// and can match the pair by either form or direction.
+		from_adr: link.from_adr || name_to_ip[link.from] || '',
+		to_adr:   link.to_adr   || name_to_ip[link.to]   || ''
 	    };
 	    if(! jQuery.isEmptyObject(conffile[parms.net].archive) ) {
 		routesOpts.mahost = conffile[parms.net].archive;
@@ -1993,6 +2069,24 @@ function gap_list( from, to, hits, lines, sort_type){
     return digest;
 }
 
+// What unit is a field declared with? Needed to tell a rate (ppm) from a total
+// (ms, count) when merging records - the config is the authority on that.
+function _field_unit(etype, field) {
+    try {
+        var events = conffile[parms.net].event_type;
+        for (var e in events) {
+            if (events[e].summary_event_type === etype &&
+                events[e].summary_field && events[e].summary_field[field]) {
+                return events[e].summary_field[field].unit;
+            }
+            if (e === etype && events[e].field && events[e].field[field]) {
+                return events[e].field[field].unit;
+            }
+        }
+    } catch (_) { /* config not loaded yet */ }
+    return undefined;
+}
+
 // Restarting the analytic services flushes an extra summary event, so a link can
 // end up with more than one summary record covering the same period (issue #53).
 // Everything downstream is keyed by from+to and simply overwrites - and since the
@@ -2030,6 +2124,27 @@ function coalesce_pairs(hits, etype) {
         });
         var out = Object.assign({}, recs[recs.length - 1]);
 
+        // Summary records say how long they cover, in lasted_sec. When every
+        // record in the group has it, rates and averages can be weighted by
+        // that span instead of being treated as if the records were equals -
+        // which matters because the duplicates a restart leaves behind cover
+        // very unequal slices of the day.
+        var spans = recs.map(function (r) {
+            return (typeof r.lasted_sec === "number" && isFinite(r.lasted_sec) && r.lasted_sec > 0)
+                ? r.lasted_sec : null;
+        });
+        var weighted = spans.every(function (sp) { return sp !== null; });
+        var total_span = weighted ? spans.reduce(function (a, b) { return a + b; }, 0) : 0;
+
+        function weighted_mean(field) {
+            var num = 0, den = 0;
+            for (var i = 0; i < recs.length; i++) {
+                var v = recs[i][field];
+                if (typeof v === "number" && isFinite(v)) { num += v * spans[i]; den += spans[i]; }
+            }
+            return den > 0 ? num / den : null;
+        }
+
         var fields = {};
         recs.forEach(function (r) { Object.keys(r).forEach(function (f) { fields[f] = 1; }); });
         Object.keys(fields).forEach(function (f) {
@@ -2038,11 +2153,26 @@ function coalesce_pairs(hits, etype) {
                 if (typeof r[f] === "number" && isFinite(r[f])) vals.push(r[f]);
             });
             if (vals.length < 2) return;
+            var sum = function () { return vals.reduce(function (a, b) { return a + b; }, 0); };
+
+            // How long the merged record covers is the sum of its parts.
+            if (f === "lasted_sec" || f === "late_sec") { out[f] = sum(); return; }
+
+            // A rate is not additive: two half-days at 900 and 100 ppm make a
+            // day at 500, not at 1000. Weight it by how long each part lasted.
+            if (weighted && total_span > 0 && String(_field_unit(etype, f) || "").toLowerCase() === "ppm") {
+                var w = weighted_mean(f);
+                if (w !== null) { out[f] = w; return; }
+            }
+
             switch (aggr[f]) {
-            case "sum": out[f] = vals.reduce(function (a, b) { return a + b; }, 0); break;
+            case "sum": out[f] = sum(); break;
             case "max": out[f] = Math.max.apply(null, vals); break;
             case "min": out[f] = Math.min.apply(null, vals); break;
-            default:    out[f] = vals.reduce(function (a, b) { return a + b; }, 0) / vals.length;
+            default:
+                // Averages are weighted too when the spans are known.
+                var wm = weighted && total_span > 0 ? weighted_mean(f) : null;
+                out[f] = (wm !== null) ? wm : sum() / vals.length;
             }
         });
         merged.push({ _source: out });

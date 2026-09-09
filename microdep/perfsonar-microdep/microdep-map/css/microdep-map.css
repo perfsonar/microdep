@@ -2685,6 +2685,28 @@ div.graph:has(> .curve-iframe-wrap):not([aria-hidden="true"]) {
     flex: 0 0 auto;      /* the tab nav keeps its content height */
 }
 
+/* "All N peers of X" buttons above the Peers list: the tree view */
+.ls-tree-bar { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 0 10px; }
+/* tick column of the Peers list */
+.ls-table th.ls-check, .ls-table td.ls-check { width: 20px; padding-right: 0; cursor: default; }
+.ls-table .ls-pick, .ls-table .ls-pick-all { accent-color: var(--c-accent); width: 15px; height: 15px; margin: 0; vertical-align: middle; cursor: pointer; }
+
+/* Strip above the traceroute graph when the archive only has the opposite
+   direction of the pair the map asked for. */
+.tracetree-notice {
+    flex: 0 0 auto;
+    margin: 10px 16px 0;
+    padding: 8px 12px;
+    border: 1px solid var(--c-border);
+    border-left: 3px solid var(--c-warn);
+    border-radius: var(--r);
+    background: var(--c-elevated);
+    color: var(--c-text-2);
+    font-size: .82rem;
+    line-height: 1.45;
+}
+.tracetree-notice strong { color: var(--c-text); font-weight: 600; }
+
 /* Wrapper that ls_tab() puts the tracetree into: it sits between the flex
    .ls-pane and .tracetree-inner, so it has to pass the height through. */
 .tracetree-host {
@@ -3960,3 +3982,164 @@ div#legend:has(.legend-count) table#legend {
     font-size: .82rem;
     color: var(--c-text);
 }
+
+/* ===== Traceroute "Paths" sub-tab: the same traces laid out by hop =========
+   One column per hop, ribbons between hops sized by trace count and coloured
+   by the minimum RTT the hop adds. Host names sit in two rows above and below
+   the diagram, alternating by column, each tied to its node by a leader line. */
+.tracetree-paths {
+    --tp-lo:  var(--c-ok);
+    --tp-mid: var(--c-warn);
+    --tp-hi:  var(--c-err);
+    --tp-na:  var(--c-text-3);
+    --tp-src: var(--c-ok);
+    --tp-dst: var(--c-warn);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px 16px 18px !important;
+    overflow: auto;
+}
+/* the map's colour-blind switch drives this view too */
+.tracetree-paths.is-cbf {
+    --tp-lo:  #648FFF;
+    --tp-mid: #FFB000;
+    --tp-hi:  #DC267F;
+    --tp-src: #648FFF;
+    --tp-dst: #FFB000;
+}
+
+.tracetree-paths-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px 24px;
+    padding: 8px 12px;
+    background: var(--c-elevated);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r);
+}
+.tracetree-paths-legend { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
+.tp-lg { display: inline-flex; align-items: center; gap: 6px; font-size: .78rem; color: var(--c-text-2); }
+.tp-sw { display: inline-block; width: 18px; height: 6px; border-radius: 3px; }
+.tp-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; }
+.tp-lo  { background: var(--tp-lo); }  .tp-mid { background: var(--tp-mid); }
+.tp-hi  { background: var(--tp-hi); }  .tp-na  { background: var(--tp-na); }
+.tp-src { background: var(--tp-src); } .tp-dst { background: var(--tp-dst); }
+.tracetree-paths-ctls { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center; }
+.tracetree-paths-ctl { display: flex; align-items: center; gap: 10px; }
+
+/* the two charts: stacked left-to-right, side by side top-down (they share the
+   lanes, so top-down they line up row for row) */
+.tracetree-paths-charts { display: flex; flex-direction: column; gap: 10px; }
+.tracetree-paths-main, .tracetree-paths-side { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+/* Top-down, the two charts share their lanes row for row, so their drawings
+   must start at the same height whatever their headings do. A grid with one
+   shared row for the headings and one for the charts guarantees that: a
+   heading that wraps to two lines pushes BOTH charts down, not just its own.
+   (flex could not - each column stacked its own heading and drawing.) */
+.tracetree-paths.is-vertical .tracetree-paths-charts {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 330px;
+    grid-template-rows: auto auto;
+    column-gap: 10px;
+    row-gap: 6px;
+    align-items: start;
+}
+.tracetree-paths.is-vertical .tracetree-paths-main,
+.tracetree-paths.is-vertical .tracetree-paths-side { display: contents; }
+.tracetree-paths.is-vertical .tracetree-paths-main > .tracetree-paths-sub    { grid-column: 1; grid-row: 1; }
+.tracetree-paths.is-vertical .tracetree-paths-main > .tracetree-paths-scroll { grid-column: 1; grid-row: 2; }
+.tracetree-paths.is-vertical .tracetree-paths-side > .tracetree-paths-sub    { grid-column: 2; grid-row: 1; }
+.tracetree-paths.is-vertical .tracetree-paths-side > .tracetree-paths-scroll { grid-column: 2; grid-row: 2; }
+.tracetree-paths.is-vertical .tracetree-paths-scroll { overflow-y: visible; }
+.tracetree-paths .tp-node.seg rect { fill: var(--c-text-2); opacity: .55; cursor: pointer; }
+.tracetree-paths .tp-node.seg:hover rect { opacity: .9; }
+.tracetree-paths .tp-node.seg .tp-lbl { fill: var(--c-text-2); font-weight: 400; font-style: italic; }
+.tp-ctl-label { font-size: .68rem; letter-spacing: .06em; text-transform: uppercase; color: var(--c-text-3); font-weight: 600; }
+.tp-seg { display: inline-flex; gap: 4px; }
+.tp-seg .knapp[aria-pressed="true"] { outline: 2px solid var(--c-accent); outline-offset: -2px; }
+
+/* Chart headings: the title on its own line, the note always beneath it, so
+   every chart's heading has the same shape whether or not its note wraps. */
+.tracetree-paths-sub { display: flex; flex-direction: column; gap: 3px; padding: 12px 4px 2px; }
+.tracetree-paths-sub h3 { margin: 0; font-size: 1rem; font-weight: 600; color: var(--c-text); line-height: 1.25; }
+.tracetree-paths-sub span { font-size: .76rem; color: var(--c-text-3); line-height: 1.4; }
+
+.tracetree-paths-scroll { overflow-x: auto; overflow-y: hidden; background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--r); padding: 4px 8px; }
+.tracetree-paths-scroll > svg { display: block; }
+.tracetree-paths svg text { font-family: var(--font-mono); font-size: 10.5px; fill: var(--c-text-2); }
+.tracetree-paths .tp-lbl { fill: var(--c-text); font-weight: 500; paint-order: stroke; stroke: var(--c-surface); stroke-width: 3px; stroke-linejoin: round; }
+.tracetree-paths .tp-tick, .tracetree-paths .tp-ylab { font-size: 10px; fill: var(--c-text-3); font-variant-numeric: tabular-nums; }
+.tracetree-paths .tp-grid { stroke: var(--c-border); stroke-width: 1; }
+.tracetree-paths .tp-axis { stroke: var(--c-border-h); stroke-width: 1; }
+.tracetree-paths .tp-leader { stroke: var(--c-text-3); stroke-width: 1; opacity: .6; }
+.tracetree-paths .tp-node rect { fill: var(--c-text-3); }
+.tracetree-paths .tp-node.src rect { fill: var(--tp-src); }
+.tracetree-paths .tp-node.dst rect { fill: var(--tp-dst); }
+.tracetree-paths .tp-node.star rect { fill: var(--tp-na); opacity: .6; }
+/* The outline separates neighbouring ribbons; painted under the fill so it
+   does not eat into thin ones. A ribbon at the minimum width (one or two
+   traces) is drawn solid, so a split off the main band stays visible. */
+.tracetree-paths .tp-ribbon { opacity: .78; stroke: var(--c-surface); stroke-width: 1; paint-order: stroke; transition: opacity .15s ease; }
+.tracetree-paths .tp-ribbon.thin { opacity: .95; }
+.tracetree-paths .tp-ribbon.lo  { fill: var(--tp-lo); }
+.tracetree-paths .tp-ribbon.mid { fill: var(--tp-mid); }
+.tracetree-paths .tp-ribbon.hi  { fill: var(--tp-hi); }
+.tracetree-paths .tp-ribbon.na  { fill: var(--tp-na); }
+.tracetree-paths .tp-ribbon:hover { opacity: 1; }
+.tracetree-paths svg.has-focus .tp-ribbon:not(.on) { opacity: .10; }
+.tracetree-paths svg.has-focus .tp-node:not(.on) { opacity: .28; }
+.tracetree-paths .tp-band { fill: var(--c-text-3); opacity: .14; }
+.tracetree-paths .tp-line { fill: none; stroke: var(--c-text-3); stroke-width: 1; opacity: .35; }
+.tracetree-paths .tp-line.dom { stroke: var(--c-accent); stroke-width: 2; opacity: 1; }
+.tracetree-paths .tp-line.sel { stroke: var(--c-text); stroke-width: 2; opacity: 1; }
+.tracetree-paths .tp-pt { fill: var(--c-accent); stroke: var(--c-surface); stroke-width: 2; }
+.tracetree-paths .tp-pt.sel { fill: var(--c-text); }
+.tracetree-paths .tp-xh { stroke: var(--c-border-h); stroke-dasharray: 3 3; display: none; }
+
+.tracetree-paths-tip {
+    position: absolute; z-index: 9; pointer-events: none; display: none;
+    background: var(--c-elevated); color: var(--c-text);
+    border: 1px solid var(--c-border-h); border-radius: 6px;
+    padding: 8px 10px; font-size: .78rem; line-height: 1.4; max-width: 340px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, .25);
+}
+.tracetree-paths-tip .k { color: var(--c-text-3); }
+.tracetree-paths-tip .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+.tracetree-paths-routes { overflow-x: auto; background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--r); }
+.tracetree-paths-routes table { width: 100%; border-collapse: collapse; }
+.tracetree-paths-routes th, .tracetree-paths-routes td { text-align: left; padding: 7px 12px; border-bottom: 1px solid var(--c-border); font-size: .8rem !important; }
+.tracetree-paths-routes th { font-size: .68rem !important; letter-spacing: .06em; text-transform: uppercase; color: var(--c-text-3); font-weight: 600; position: static; }
+.tracetree-paths-routes td.num, .tracetree-paths-routes th.num { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.tracetree-paths-routes td.route { font-family: var(--font-mono); font-size: .74rem !important; color: var(--c-text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 560px; }
+.tracetree-paths-routes td.route b { color: var(--c-text); font-weight: 500; }
+.tracetree-paths-routes tr.tp-rt { cursor: pointer; }
+.tracetree-paths-routes tr.tp-rt:hover td, .tracetree-paths-routes tr.tp-rt.sel td { background: var(--c-elevated); }
+.tracetree-paths-routes tr.tp-rt.sel td:first-child { box-shadow: inset 3px 0 0 var(--c-accent); }
+.tp-share { display: inline-block; height: 8px; background: var(--c-accent); border-radius: 4px; vertical-align: middle; margin-right: 8px; opacity: .85; }
+.tp-muted { color: var(--c-text-3); }
+@media (prefers-reduced-motion: reduce) { .tracetree-paths .tp-ribbon { transition: none; } }
+
+/* ===== Traceroute "Timeline" sub-tab: the same traces laid out by time =====
+   Shares the Paths pane chrome (bar, legend, headings, tooltip). */
+.tracetree-tline-routes { padding: 0 4px; }
+.tracetree-tline .tl-sw-hatch { background: repeating-linear-gradient(45deg, var(--c-text) 0 1px, transparent 1px 4px); }
+.tracetree-tline .tl-hatch { stroke: var(--c-text); stroke-width: 1; opacity: .55; }
+.tracetree-tline .tl-host { fill: var(--c-text); }
+.tracetree-tline .tl-route { opacity: .9; }
+.tracetree-tline .tl-route-lbl { fill: var(--c-bg); font-weight: 600; font-size: 10px; pointer-events: none; }
+.tracetree-tline .tl-cell.lo  { fill: var(--tp-lo); }
+.tracetree-tline .tl-cell.mid { fill: var(--tp-mid); }
+.tracetree-tline .tl-cell.hi  { fill: var(--tp-hi); }
+.tracetree-tline .tl-cell.na  { fill: var(--tp-na); opacity: .5; }
+.tracetree-tline .tl-rowline { stroke: var(--c-surface); stroke-width: 1; }
+.tracetree-tline .tl-line { fill: none; stroke: var(--c-accent); stroke-width: 1.5; }
+.tracetree-tline .tl-pt { fill: var(--c-accent); stroke: var(--c-surface); stroke-width: 1; }
+.tracetree-tline .tl-pt.miss { fill: var(--c-surface); stroke: var(--c-accent); }
+.tracetree-tline .tl-sel { fill: none; stroke: var(--c-text); stroke-width: 1.5; pointer-events: none; }
+.tracetree-tline .tl-hit { fill: transparent; cursor: crosshair; }
+
