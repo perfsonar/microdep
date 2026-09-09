@@ -204,9 +204,9 @@ systemctl stop perfsonar-microdep-hourly-aggregator.timer || true
 %install
 rm -rf %{buildroot}
 pwd & ls -l
-make ROOTPATH=%{buildroot}/%{install_base} \
-     CONFIGPATH=%{buildroot}/%{microdep_config_base} \
-     SHAREPATH=%{buildroot}/%{microdep_share_base} \
+make -e ROOTPATH=%{buildroot}/%{install_base} \
+     -e CONFIGPATH=%{buildroot}/%{microdep_config_base} \
+     -e SHAREPATH=%{buildroot}/%{microdep_share_base} \
      install
 
 # Install systemd services

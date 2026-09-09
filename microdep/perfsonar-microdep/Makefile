@@ -31,13 +31,13 @@ install:
 			cmd=""; \
 			if ( substr($$1,1,4) == "etc/" ) { \
 				cmd="install -m 640 -TD "$$1" "confp"/"substr($$1,5) \
-			} else if ( substr($$1,1,4) == "share/" ) { \
-				cmd="install -m 640 -TD "$$1" "sharep"/"substr($$1,5) \
+			} else if ( substr($$1,1,6) == "share/" ) { \
+				cmd="install -m 640 -TD "$$1" "sharep"/"substr($$1,7) \
 			} else { \
 				cmd="install -m 640 -TD "$$1" "rootp"/"$$1 \
 			} \
 			system(cmd); \
-			split(cmd,c," "); print(c[6]); \
+			split(cmd,c," "); print("Installing ",c[6]); \
 		} \
 	}'  MANIFEST
 

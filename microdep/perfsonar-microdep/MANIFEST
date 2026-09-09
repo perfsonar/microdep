@@ -73,8 +73,8 @@ etc/logstash/microdep-pipelines.yml
 etc/logrotate.d/microdep
 archive/config/os-template-gap-ana.json
 archive/config/os-template-trace-ana.json
-share/microdep/GeoLite2/GeoLite2-City.mmdb
-share/microdep/GeoLite2/COPYRIGHT.txt
-share/microdep/GeoLite2/GeoLite2-ASN.mmdb
-share/microdep/GeoLite2/GeoLite2-Country.mmdb
-share/microdep/GeoLite2/LICENSE.txt
+share/GeoLite2/GeoLite2-City.mmdb
+share/GeoLite2/COPYRIGHT.txt
+share/GeoLite2/GeoLite2-ASN.mmdb
+share/GeoLite2/GeoLite2-Country.mmdb
+share/GeoLite2/LICENSE.txt
