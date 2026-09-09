@@ -1030,22 +1030,49 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         const excessMode = tline_state.colour === 'excess';
         const valOf = function (h) { return excessMode ? h.excess : h.add; };
 
-        // ---- rows: every hop, or only the ones where something happens ----
-        const rows = [];
+        // ---- rows: one per host of the reference route, in hop order ----
+        // A host the reference route meets at several hops - the destination,
+        // when routes differ in length, or a router that moves a hop when an
+        // earlier one appears - gets ONE row, labelled with its hop range. A hop
+        // of any trace goes to the row of its host when that host has one, else
+        // to the row of the reference host at the same hop, hatched as "other".
+        const allRows = [], rowByHost = {}, rowOfTtl = [];
         for (let t = 1; t <= T.maxttl; t++) {
+            const h = T.ref[t] || (t + '?');
+            if (rowByHost[h] === undefined) { rowByHost[h] = allRows.length; allRows.push({ host: h, tmin: t, tmax: t }); }
+            else allRows[rowByHost[h]].tmax = t;
+            rowOfTtl[t] = rowByHost[h];
+        }
+        const rank = function (h) { const v = valOf(h); return v === null ? Infinity : v; };
+        // per trace: the hop each row shows - its own host's hop first, else the
+        // worst of the alternates that landed there
+        S.forEach(function (s) {
+            const m = {};
+            s.hops.forEach(function (h) {
+                let ri = rowByHost[h.host], alt = false;
+                if (ri === undefined) { ri = rowOfTtl[h.ttl]; alt = true; }
+                if (ri === undefined) return;
+                const cur = m[ri];
+                if (!cur || (cur.alt && !alt) || (cur.alt && alt && rank(h) > rank(cur.h))) m[ri] = { h: h, alt: alt };
+            });
+            s.place = m;
+        });
+        const rows = [];
+        allRows.forEach(function (r, ri) {
             let varies = false;
             if (tline_state.rows === 'vary') {
-                for (const s of S) { const h = s.at[t]; if (!h) continue; const v = valOf(h); if (h.host !== T.ref[t] || v === null || v >= 1) { varies = true; break; } }
+                for (const s of S) { const pl = s.place[ri]; if (!pl) continue; const v = valOf(pl.h); if (pl.alt || v === null || v >= 1) { varies = true; break; } }
             }
-            if (tline_state.rows === 'all' || varies) rows.push(t);
-        }
+            if (tline_state.rows === 'all' || varies) rows.push(ri);
+        });
 
         // ---- geometry ----
         const scroller = el('tline-scroll');
         const W = Math.max(640, scroller.clientWidth - 18);
         let labelChars = 8;
-        rows.forEach(function (t) { labelChars = Math.max(labelChars, (T.ref[t] || '').length); });
-        const L = Math.min(300, 40 + Math.min(labelChars, 36) * P_MONO_PX + 12), R = 18;
+        allRows.forEach(function (r) { labelChars = Math.max(labelChars, r.host.length); });
+        const numW = 48;                                       // hop number, or a range like 21–24
+        const L = Math.min(310, numW + 8 + Math.min(labelChars, 36) * P_MONO_PX + 12), R = 18;
         const avail = W - L - R;
         const cols = tline_columns(S, Math.floor(avail / 3));
         const cw = Math.max(3, Math.min(24, Math.floor(avail / Math.max(1, cols.length))));
@@ -1079,37 +1106,35 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         colRoute.forEach(function (cr, k) { if (cr.mixed) out += '<rect x="' + xAt(k) + '" y="' + yBar + '" width="' + cw + '" height="' + barH + '" fill="url(#' + id + '-tl-hatch)"></rect>'; });
 
         // ---- heatmap ----
-        const label = function (t) {
-            const h = T.ref[t] || '?';
-            const max = Math.floor((L - 40 - 12) / P_MONO_PX);
-            return h.length > max ? h.slice(0, max - 1) + '…' : h;
-        };
-        rows.forEach(function (t, ri) {
-            const y = yHeat + ri * rowH;
-            out += '<text class="tp-tick" x="' + 30 + '" y="' + (y + rowH / 2 + 3.5) + '" text-anchor="end">' + t + '</text>' +
-                   '<text class="tl-host" x="' + 40 + '" y="' + (y + rowH / 2 + 3.5) + '">' + paths_esc(label(t)) + '</text>';
+        const maxChars = Math.floor((L - numW - 8 - 12) / P_MONO_PX);
+        rows.forEach(function (ridx, ri) {
+            const r = allRows[ridx], y = yHeat + ri * rowH;
+            const hops = r.tmin === r.tmax ? String(r.tmin) : r.tmin + '–' + r.tmax;
+            out += '<text class="tp-tick" x="' + numW + '" y="' + (y + rowH / 2 + 3.5) + '" text-anchor="end">' + hops + '</text>' +
+                   '<text class="tl-host" x="' + (numW + 8) + '" y="' + (y + rowH / 2 + 3.5) + '">' + paths_esc(r.host.length > maxChars ? r.host.slice(0, maxChars - 1) + '…' : r.host) + '</text>';
         });
         const cwDraw = cw >= 6 ? cw - 1 : cw;                  // a hairline between columns when there is room
         const cell = [];                                       // [col][row] -> summary for the tooltip
         cols.forEach(function (c, k) {
             cell.push([]);
-            rows.forEach(function (t, ri) {
-                let worst = null, worstRtt = null, n = 0, alt = 0, hostCnt = {}, host = null, star = 0;
+            rows.forEach(function (ridx, ri) {
+                let worst = null, worstRtt = null, worstTtl = null, n = 0, alt = 0, hostCnt = {}, host = null, star = 0;
                 c.samples.forEach(function (s) {
-                    const h = s.at[t]; if (!h) return;
+                    const pl = s.place[ridx]; if (!pl) return;
+                    const h = pl.h;
                     n++;
                     hostCnt[h.host] = (hostCnt[h.host] || 0) + 1; if (host === null || hostCnt[h.host] > hostCnt[host]) host = h.host;
-                    if (h.host !== T.ref[t]) alt++;
+                    if (pl.alt) alt++;
                     const v = valOf(h);
-                    if (v === null) { star++; return; }
-                    if (worst === null || v > worst) { worst = v; worstRtt = h.rtt; }
+                    if (v === null) { star++; if (worstTtl === null) worstTtl = h.ttl; return; }
+                    if (worst === null || v > worst) { worst = v; worstRtt = h.rtt; worstTtl = h.ttl; }
                 });
                 if (!n) { cell[k].push(null); return; }
                 const bin = worst === null ? 'na' : paths_bin(worst);
                 const y = yHeat + ri * rowH;
                 out += '<rect class="tl-cell ' + bin + '" x="' + xAt(k) + '" y="' + y + '" width="' + cwDraw + '" height="' + rowH + '"></rect>';
                 if (alt) out += '<rect x="' + xAt(k) + '" y="' + y + '" width="' + cwDraw + '" height="' + rowH + '" fill="url(#' + id + '-tl-hatch)"></rect>';
-                cell[k].push({ n: n, host: host, alt: alt, worst: worst, rtt: worstRtt, star: star });
+                cell[k].push({ n: n, host: host, alt: alt, worst: worst, rtt: worstRtt, ttl: worstTtl, star: star });
             });
         });
         rows.forEach(function (t, ri) { const y = yHeat + ri * rowH; out += '<line class="tl-rowline" x1="' + x0 + '" x2="' + (x0 + plotW) + '" y1="' + y + '" y2="' + y + '"></line>'; });
@@ -1161,7 +1186,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
             ? P_DOT + 'route #' + (colRoute[tline_state.sel].r + 1) + ' isolated in Paths, click the column again to clear'
             : P_DOT + 'click a column to isolate its route in Paths';
         note.textContent = S.length + ' traceroutes' + P_DOT + (cols.binned ? cols.length + ' bins of ' + tline_fmt_dur(cols.binDur) : 'one column each') +
-            P_DOT + (rows.length === T.maxttl ? T.maxttl + ' hops' : rows.length + ' of ' + T.maxttl + ' hops shown') + selTxt;
+            P_DOT + T.maxttl + ' hops on ' + allRows.length + ' hosts' + (rows.length < allRows.length ? P_DOT + rows.length + ' of ' + allRows.length + ' shown' : '') + selTxt;
 
         // ---- interaction ----
         const hit = svg.querySelector('.tl-hit'), xh = svg.querySelector('.tp-xh');
@@ -1180,8 +1205,8 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
                     (en ? '<span class="k">' + P_DOT + 'RTT to end</span> <span class="mono">' + paths_fmt(en.med) + (en.n > 1 ? ' (' + paths_fmt(en.lo) + P_DASH + paths_fmt(en.hi) + ')' : '') + ' ms</span>' : '') +
                     (en && en.reached < en.of ? '<span class="k">' + P_DOT + (en.of - en.reached) + ' did not reach the destination</span>' : '') + '</div>';
             if (p.ri !== null && cell[p.k][p.ri]) {
-                const t = rows[p.ri], ce = cell[p.k][p.ri];
-                html += '<div><span class="k">hop</span> <span class="mono">' + t + '</span><span class="k">' + P_DOT + '</span><span class="mono">' + paths_esc(ce.host) + '</span>' +
+                const ce = cell[p.k][p.ri];
+                html += '<div><span class="k">hop</span> <span class="mono">' + ce.ttl + '</span><span class="k">' + P_DOT + '</span><span class="mono">' + paths_esc(ce.host) + '</span>' +
                         (ce.alt ? '<span class="k">' + P_DOT + (ce.n > 1 ? ce.alt + ' of ' + ce.n + ' ' : '') + 'not the reference host</span>' : '') + '</div>';
                 html += '<div>' + (ce.worst === null
                     ? '<span class="k">no reply</span>'
