@@ -111,7 +111,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
     //    23-hop path draws as the handful of lanes where routes actually differ.
 
     let paths_dirty = true;
-    const paths_state = { topN: 6, sel: null, vertical: true, compact: true, expanded: {} };
+    const paths_state = { topN: 6, sel: null, vertical: true, compact: true, expanded: {}, simple: false };
     const P_SRC_ID = '0|source';
     const P_MONO_PX = 6.5;                       // width of one character of the label font
 
@@ -125,8 +125,23 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
     // longest route and the shorter routes reach down to it.
     const paths_node_id = function (ttl, host) { return is_dest[host] ? 'D|' + host : ttl + '|' + host; };
 
+    // The hops of one traceroute, either as measured or filtered the way the
+    // topology's simple view filters: hops that never answered say nothing
+    // about where the trace went, and a host that answers again at the next
+    // hop is a local loop. The hops that remain keep their own ttl, so a lane
+    // still means the same hop number in every route.
+    function trace_hops(tr, simple) {
+        if (!simple) return tr.val;
+        const named = tr.val.filter(function (h) { return h.hostname || h.ip; });
+        return named.filter(function (h, i) {
+            if (i === 0) return true;
+            const p = named[i - 1];
+            return (h.hostname || h.ip) !== (p.hostname || p.ip);
+        });
+    }
+
     // tr_data -> { nodes, links, routes, band, traces, maxttl }
-    function build_paths_model(tr_data) {
+    function build_paths_model(tr_data, simple) {
         const nodes = {}, links = {}, order_n = [], order_l = [];
         const add_node = function (ttl, host) {
             const id = paths_node_id(ttl, host);
@@ -145,7 +160,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
             src.n++;
             let prev = src, prev_rtt = 0;
             const key = [];
-            for (const hop of tr.val) {
+            for (const hop of trace_hops(tr, simple)) {
                 const host = hop.hostname || hop.ip || (hop.ttl + '*');
                 const node = add_node(hop.ttl, host);
                 node.n++;
@@ -157,12 +172,12 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
                     links[lid].deltas.push(Math.max(0, hop.rtt - prev_rtt));
                     prev_rtt = hop.rtt;
                 }
-                key.push(host);
+                key[hop.ttl - 1] = host;               // by hop, so lanes still line up
                 if (hop.ttl > maxttl) maxttl = hop.ttl;
                 prev = node;
             }
             const k = key.join(' ');
-            if (!routes[k]) routes[k] = { hosts: key, n: 0, prof: {} };
+            if (!routes[k]) routes[k] = { hosts: key, n: 0, prof: {}, nhops: key.filter(Boolean).length };
             routes[k].n++;
             for (const hop of tr.val) {
                 if (typeof hop.rtt === 'number' && isFinite(hop.rtt)) (routes[k].prof[hop.ttl] = routes[k].prof[hop.ttl] || []).push(hop.rtt);
@@ -178,7 +193,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         const out_routes = Object.keys(routes).map(function (k) {
             const r = routes[k]; const prof = [0];
             for (let i = 1; i <= r.hosts.length; i++) prof.push(r.prof[i] ? median(r.prof[i]) : null);
-            return { hosts: r.hosts, n: r.n, prof: prof };
+            return { hosts: r.hosts, n: r.n, nhops: r.nhops, prof: prof };
         }).sort(function (a, b) { return b.n - a.n; });
         const band = [[0, 0]];
         for (let i = 1; i <= maxttl; i++) {
@@ -304,7 +319,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
     function render_paths() {
         const pane = el('paths');
         if (!pane || !in_slice || !in_slice.tr_data) return;
-        const M = build_paths_model(in_slice.tr_data);
+        const M = build_paths_model(in_slice.tr_data, paths_state.simple);
         const svg = el('paths-svg'), prof = el('paths-prof');
         let cbf = false; try { cbf = localStorage.getItem('microdep-cbf') === '1'; } catch (_) { /* private mode */ }
         pane.classList.toggle('is-cbf', cbf);
@@ -430,7 +445,14 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
 
         // ---- draw ----
         const dstIds = {};
-        M.routes.forEach(function (r) { const last = r.hosts[r.hosts.length - 1]; if (last && is_dest[last]) { const id = paths_node_id(r.hosts.length, last); if (byId[id]) dstIds[id] = true; } });
+        M.routes.forEach(function (r) {
+            for (let t = r.hosts.length; t >= 1; t--) {          // last hop present, holes skipped
+                const last = r.hosts[t - 1];
+                if (!last) continue;
+                if (is_dest[last]) { const id = paths_node_id(t, last); if (byId[id]) dstIds[id] = true; }
+                break;
+            }
+        });
         let out = '';
         lanes.forEach(function (ln, g) {
             const along = padAlong0 + g * pitch + nodeT / 2;
@@ -581,16 +603,18 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
             : 'all ' + M.routes.length + ' routes';
         tb.innerHTML = shown.map(function (r) {
             const share = r.n / M.traces * 100;
-            const route = r.hosts.map(function (h, i) {
+            const shown_hosts = [];
+            r.hosts.forEach(function (h, i) {
                 const sh = paths_short(h);
-                return (r.diverge !== null && i + 1 >= r.diverge && h !== dom.hosts[i]) ? '<b>' + paths_esc(sh) + '</b>' : paths_esc(sh);
-            }).join(P_SEP);
+                shown_hosts.push((r.diverge !== null && i + 1 >= r.diverge && h !== dom.hosts[i]) ? '<b>' + paths_esc(sh) + '</b>' : paths_esc(sh));
+            });
+            const route = shown_hosts.join(P_SEP);
             return '<tr class="tp-rt' + (paths_state.sel === r.idx ? ' sel' : '') + '" data-r="' + r.idx + '"><td class="num">' + (r.idx + 1) + '</td>' +
                 '<td><span class="tp-share" style="width:' + Math.max(4, share * 2.2) + 'px"></span>' + share.toFixed(0) + '%</td>' +
-                '<td class="num">' + r.n + '</td><td class="num">' + r.hosts.length + '</td>' +
+                '<td class="num">' + r.n + '</td><td class="num">' + (r.nhops !== undefined ? r.nhops : r.hosts.length) + '</td>' +
                 '<td>' + (r.idx === 0 ? '<span class="tp-muted">dominant route</span>' : (r.diverge ? 'hop ' + r.diverge : '–')) + '</td>' +
                 '<td class="num">' + paths_fmt(r.prof[r.prof.length - 1]) + ' ms</td>' +
-                '<td class="route" title="' + paths_esc(r.hosts.join(P_SEP)) + '">' + route + '</td></tr>';
+                '<td class="route" title="' + paths_esc(r.hosts.filter(Boolean).join(P_SEP)) + '">' + route + '</td></tr>';
         }).join('');
         tb.querySelectorAll('tr.tp-rt').forEach(function (tr) {
             tr.addEventListener('click', function () { const i = Number(tr.dataset.r); paths_state.sel = (paths_state.sel === i) ? null : i; render_paths(); });
@@ -605,6 +629,33 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         }
         paths_dirty = false;
         void ttlLane;
+    }
+
+    // The Full / Simple pair sits in both the Paths and the Timeline bar and
+    // drives the same filter, so a route keeps its number in both views.
+    function bind_simple_pair(sfx, redraw) {
+        const fb = el(sfx + '-full'), sb = el(sfx + '-simple');
+        if (!fb || !sb) return;
+        const set = function (on) {
+            if (paths_state.simple === on) return;
+            paths_state.simple = on;
+            paths_state.sel = null;
+            paths_state.expanded = {};
+            sync_simple_pair();
+            paths_dirty = true; tline_dirty = true;
+            redraw();
+        };
+        fb.addEventListener('click', function () { set(false); });
+        sb.addEventListener('click', function () { set(true); });
+    }
+
+    function sync_simple_pair() {
+        ['paths', 'tline'].forEach(function (sfx) {
+            const fb = el(sfx + '-full'), sb = el(sfx + '-simple');
+            if (!fb || !sb) return;
+            fb.setAttribute('aria-pressed', paths_state.simple ? 'false' : 'true');
+            sb.setAttribute('aria-pressed', paths_state.simple ? 'true' : 'false');
+        });
     }
 
     function paths_tab_active() {
@@ -629,6 +680,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
             cBtn.addEventListener('click', function () { paths_state.compact = true; paths_state.expanded = {}; press(cBtn, eBtn); render_paths(); });
             eBtn.addEventListener('click', function () { paths_state.compact = false; press(eBtn, cBtn); render_paths(); });
         }
+        bind_simple_pair('paths', function () { if (paths_tab_active()) render_paths(); });
         const s1 = el('paths-scroll1'), s2 = el('paths-scroll2');
         if (s1 && s2) {
             let lock = false;
@@ -682,12 +734,12 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
 
     // tr_data + the Paths model -> samples in time order, with the route index
     // of each and the per-(hop, host) minimum RTT of the period.
-    function build_tline_model(tr_data, M) {
+    function build_tline_model(tr_data, M, simple) {
         const routeIdx = {};
         M.routes.forEach(function (r) { routeIdx[r.hosts.join(' ')] = r.idx; });
         const samples = tr_data.map(function (tr) {
             const hops = [], seen = {};
-            for (const h of tr.val) {                       // first hop per TTL wins (esmond may carry several queries)
+            for (const h of trace_hops(tr, simple)) {       // first hop per TTL wins (esmond may carry several queries)
                 if (seen[h.ttl]) continue; seen[h.ttl] = true;
                 hops.push({ ttl: h.ttl, host: h.hostname || h.ip || (h.ttl + '*'), rtt: (typeof h.rtt === 'number' && isFinite(h.rtt)) ? h.rtt : null });
             }
@@ -836,9 +888,9 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
     // its routes was taken. The lines underneath are the RTT to every peer on
     // a log scale, so a 20 ms and a 300 ms peer share one chart.
     function render_tline_peers(svg, note, rlegend, cbf) {
-        const M = build_paths_model(in_slice.tr_data);
+        const M = build_paths_model(in_slice.tr_data, paths_state.simple);
         if (!M.routes.length) { svg.innerHTML = ''; rlegend.innerHTML = ''; note.textContent = 'No traceroutes in this period.'; tline_dirty = false; return; }
-        const T = build_tline_model(in_slice.tr_data, M);
+        const T = build_tline_model(in_slice.tr_data, M, paths_state.simple);
         const routeMode = tline_state.colour === 'adds';
 
         // ---- per peer: its traces, its routes ranked by share, its best RTT ----
@@ -1025,9 +1077,9 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         pane.classList.toggle('is-cbf', cbf);
         tline_chrome();
         if (multi) { render_tline_peers(svg, note, rlegend, cbf); return; }
-        const M = build_paths_model(in_slice.tr_data);
+        const M = build_paths_model(in_slice.tr_data, paths_state.simple);
         if (!M.routes.length) { svg.innerHTML = ''; rlegend.innerHTML = ''; note.textContent = 'No traceroutes in this period.'; tline_dirty = false; return; }
-        const T = build_tline_model(in_slice.tr_data, M);
+        const T = build_tline_model(in_slice.tr_data, M, paths_state.simple);
         const S = T.samples;
         const excessMode = tline_state.colour === 'excess';
         const valOf = function (h) { return excessMode ? h.excess : h.add; };
@@ -1040,6 +1092,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         // to the row of the reference host at the same hop, hatched as "other".
         const allRows = [], rowByHost = {}, rowOfTtl = [];
         for (let t = 1; t <= T.maxttl; t++) {
+            if (paths_state.simple && !T.ref[t]) continue;      // nobody answered there
             const h = T.ref[t] || (t + '?');
             if (rowByHost[h] === undefined) { rowByHost[h] = allRows.length; allRows.push({ host: h, tmin: t, tmax: t }); }
             else allRows[rowByHost[h]].tmax = t;
@@ -1247,6 +1300,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
             allBtn.addEventListener('click', function () { tline_state.rows = 'all'; press(allBtn, varyBtn); render_tline(); });
             varyBtn.addEventListener('click', function () { tline_state.rows = 'vary'; press(varyBtn, allBtn); render_tline(); });
         }
+        bind_simple_pair('tline', function () { if (tline_tab_active()) render_tline(); });
         let rt = null;
         window.addEventListener('resize', function () { clearTimeout(rt); rt = setTimeout(function () { if (tline_tab_active()) render_tline(); }, 150); });
         watch_width(el('tline-scroll'), function () { if (tline_tab_active()) render_tline(); });
@@ -3482,8 +3536,15 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
             </div>
           </div>
           <div class="tracetree-paths-ctl">
-            <span class="tp-ctl-label">Hops</span>
+            <span class="tp-ctl-label">Detail</span>
             <div class="tp-seg" role="group" aria-label="Hop detail">
+              <button type="button" class="knapp" id="${id}-paths-full" aria-pressed="true" title="Every hop as measured">Full</button>
+              <button type="button" class="knapp" id="${id}-paths-simple" aria-pressed="false" title="Drop the hops that never answered and the local loops, as the topology's simple view does">Simple</button>
+            </div>
+          </div>
+          <div class="tracetree-paths-ctl">
+            <span class="tp-ctl-label">Hops</span>
+            <div class="tp-seg" role="group" aria-label="Hop folding">
               <button type="button" class="knapp" id="${id}-paths-compact" aria-pressed="true" title="Fold runs of hops with no branching into one segment; click a segment to open it">Compact</button>
               <button type="button" class="knapp" id="${id}-paths-every" aria-pressed="false" title="Show every hop">Every hop</button>
             </div>
@@ -3523,6 +3584,13 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
             </div>
           </div>
           <div class="tracetree-paths-ctl">
+            <span class="tp-ctl-label">Detail</span>
+            <div class="tp-seg" role="group" aria-label="Hop detail">
+              <button type="button" class="knapp" id="${id}-tline-full" aria-pressed="true" title="Every hop as measured">Full</button>
+              <button type="button" class="knapp" id="${id}-tline-simple" aria-pressed="false" title="Drop the hops that never answered and the local loops, as the topology's simple view does">Simple</button>
+            </div>
+          </div>
+          <div class="tracetree-paths-ctl">
             <span class="tp-ctl-label" id="${id}-tline-rows-label">Hops</span>
             <div class="tp-seg" role="group" aria-label="Rows shown">
               <button type="button" class="knapp" id="${id}-tline-all" aria-pressed="true">All</button>
@@ -3555,6 +3623,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
       <h3>Paths</h3>
       <p>The same traceroutes laid out by hop: one lane per hop, ribbons between lanes as wide as the number of traceroutes that took that link, coloured by the minimum RTT the hop adds. The dominant route is the thickest band; alternatives peel off and rejoin around it. Runs of hops with no branching fold into one segment that opens on click. Click a route in the table to isolate it.</p>
       <p>Opened for a whole host (from the map&rsquo;s node popup, the <em>All peers</em> button in the Peers list, or by ticking pairs there and pressing <em>Show selected</em>) the same view draws every route from that host at once: shared hops merge into a trunk, the peers are the leaves, and each leaf takes the colour its link has on the map for the selected property.</p>
+      <p><em>Full</em> and <em>Simple</em> filter the traces the way the topology's simple view does: the hops that never answered and the hosts that answer again at the next hop are left out. The hops that remain keep their own number, so a lane still means the same hop in every route, and a link that crosses a dropped hop simply spans two lanes. The switch appears in both the Paths and the Timeline bar and drives the same filter, so a route keeps its number in both.</p>
       <h3>Timeline</h3>
       <p>The same traceroutes laid out by time, one column each (binned when more than fit). The barcode on top shows which route every traceroute took, so a change of route, and how long it held, is a change of colour. The heatmap shows latency at every hop, by default how far above the hop&rsquo;s minimum in the period it was, so a hop that starts queueing changes colour in its row at that time; hatching marks a different host than the reference route&rsquo;s at that hop. The line at the bottom is the round-trip time to the last responding hop. Click a column to isolate its route in the Paths view. For a whole host the rows are the peers instead: a cell is the RTT to the peer above its minimum, or which of its routes was taken, and the lines are the RTT to every peer.</p>
       <h3>Navigation</h3>
