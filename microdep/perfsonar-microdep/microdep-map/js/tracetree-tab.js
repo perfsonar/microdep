@@ -2459,9 +2459,56 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
             if (retries > 0) setTimeout(function () { settle_layout(network, retries - 1); }, 400);
             return;
         }
-        if (topo_layout === 'layered') { view_layered(network); return; }
+        if (topo_layout === 'layered') { stagger_layered(network); view_layered(network); return; }
         spread_to_pane(network);
         anchor_start_node(network);
+    }
+
+    // vis puts every node of a hop at the same height, so two long host names
+    // in one row run into each other. Give a row as many lanes as it needs:
+    // walk it left to right and drop a node one lane lower whenever its box
+    // would touch the last one already placed in that lane. The rows are then
+    // re-stacked with a constant gap, which is wider than the lane step, so a
+    // hop still reads as one band.
+    function stagger_layered(network) {
+        let pos;
+        try { pos = network.getPositions(); } catch (_) { return; }
+        const ids = Object.keys(pos);
+        if (ids.length < 2) return;
+
+        const box = {};
+        let nh = 30;
+        for (const id of ids) {
+            let b;
+            try { b = network.getBoundingBox(id); } catch (_) { return; }
+            if (!b || !isFinite(b.left) || !isFinite(b.right)) return;
+            box[id] = b;
+            nh = Math.max(nh, b.bottom - b.top);
+        }
+
+        const rows = {};
+        for (const id of ids) { const k = Math.round(pos[id].y); (rows[k] = rows[k] || []).push(id); }
+        const keys = Object.keys(rows).map(Number).sort(function (a, b) { return a - b; });
+
+        const GAP_X = 18;                       // clear space between two names
+        const LANE = Math.round(nh) + 8;        // one lane below, boxes clear
+        const ROW_GAP = 130;                    // between one hop and the next
+        let cursor = keys[0];
+        const moves = [];
+        for (const k of keys) {
+            const arr = rows[k].slice().sort(function (a, b) { return pos[a].x - pos[b].x; });
+            const lane_right = [];
+            let lanes = 0;
+            for (const id of arr) {
+                let lane = 0;
+                while (lane_right[lane] !== undefined && box[id].left < lane_right[lane] + GAP_X) lane++;
+                lane_right[lane] = box[id].right;
+                if (lane > lanes) lanes = lane;
+                moves.push({ id: id, y: cursor + lane * LANE });
+            }
+            cursor += lanes * LANE + ROW_GAP;
+        }
+        for (const m of moves) { try { network.moveNode(m.id, pos[m.id].x, m.y); } catch (_) {} }
     }
 
     // The layered drawing of a long path is far taller than the pane. Fitting
