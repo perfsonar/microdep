@@ -23,6 +23,8 @@
  *   - Old UI controls (slider, raw_button, summary_button, tracepeers, etc.).
  *   - copy_tree() — empty stub in original.
  */
+import { ink_on } from './graph.js';
+
 
 export function tracetree_tab(div_id, from, to, time_start, time_end, options = {}) {
 
@@ -1463,8 +1465,10 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         for (const n of tree.nodes) {
             if (n.id === 'start') {
                 n.color = Object.assign({}, n.color, { background: ends.source, border: ends.source });
+                label_ink(n, ends.source);
             } else if (dests[n.id]) {
                 n.color = Object.assign({}, n.color, { background: ends.destination, border: ends.destination });
+                label_ink(n, ends.destination);
             } else if (n.color && n.color.border === 'AA1111') {
                 n.color = Object.assign({}, n.color, { border: ends.error });
             }
@@ -1564,6 +1568,16 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         return limits;
     }
 
+    // A node's label sits inside it, so it has to follow the fill: the shading
+    // that says how often a node was seen runs from near-white to a dark slate,
+    // and black text on the dark end is hard to read (issue #176). Same
+    // luminance rule as the heatmap cells use.
+    function label_ink(node, background) {
+        const ink = ink_on(background);
+        if (!ink) return;
+        node.font = Object.assign({}, node.font, { color: ink });
+    }
+
     function taint_nodes(nodes, colors, limits) {
         for (let nix in nodes) {
             if (nodes[nix].n !== undefined) {
@@ -1571,6 +1585,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
                     if (nodes[nix].n >= limits[lim]) {
                         if (!nodes[nix].color) nodes[nix].color = {};
                         nodes[nix].color.background = colors[lim];
+                        label_ink(nodes[nix], colors[lim]);
                         break;
                     }
                 }

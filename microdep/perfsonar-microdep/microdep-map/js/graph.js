@@ -184,7 +184,8 @@ function _hm_uniq(arr) {
 // Heatmap cells carry data-driven backgrounds that run from bright yellow to
 // dark - a single text colour cannot sit on all of them (light-on-yellow measured
 // at contrast 1.2). Pick black or white per cell from the background's luminance.
-function _hm_ink(color) {
+// Relative luminance (WCAG) of a CSS colour, or null when it cannot be read.
+export function luminance_of(color) {
     let r, g, b;
     const s = String(color).trim();
     let m = s.match(/^#([0-9a-f]{3})$/i);
@@ -200,11 +201,25 @@ function _hm_ink(color) {
         const p = m[1].split(',').map(Number);
         r = p[0]; g = p[1]; b = p[2];
     } else {
-        return '';                     // unknown format: leave the CSS default
+        return null;                   // unknown format
     }
     const f = function (v) { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
-    const L = 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+    return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+}
+
+function _hm_ink(color) {
+    const L = luminance_of(color);
+    if (L === null) return '';         // unknown format: leave the CSS default
     return L > 0.45 ? '#111111' : '#ffffff';
+}
+
+// Black or white, whichever the eye separates better from `color`: the one
+// with the higher WCAG contrast ratio. The heatmap above keeps its own,
+// gentler rule so its cells look as they always have.
+export function ink_on(color) {
+    const L = luminance_of(color);
+    if (L === null) return '';
+    return ((L + 0.05) / 0.05) >= (1.05 / (L + 0.05)) ? '#111111' : '#ffffff';
 }
 
 function _hm_esc(s) {
