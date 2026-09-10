@@ -3488,7 +3488,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
       <p>The viewer opens on <em>Paths</em>; the sub-tab you leave it on is remembered for next time.</p>
       <h3>Topology</h3>
       <p>To construct a likely network topology we have connected nodes that appear in adjacent rows in a particular traceroute report, and then aggregating all single reports to an overall multipath-graph. One series of traceroutes is more likely to represent the state of the routing table at the time of execution, but routing can change any time so a true picture of the topology can not be constructed, and edges in the graph might not represent an actual network connection.</p>
-      <p>The arrow keys pan the graph while the Topology tab is on screen, the same as the buttons at the bottom left of the graph; hold shift to pan further per press.</p>
+      <p>The arrow keys move whichever of these views is on screen: they pan the topology, the same as the buttons at the bottom left of the graph, and scroll the Paths and Timeline charts, sideways along the chart and up and down through the pane. Hold shift to move further per press.</p>
       <p>Dashed lines means there are non-responding routers between nodes. Color scale is log(e) responses. Hover nodes to see links and corresponding table entry. Select node to scroll to table entry. Drag nodes to fix. <span style="color: var(--c-err)">Red</span> nodes marks it as the end of traceroute - i.e. no further route.</p>
       <p><em>Layered</em> (the default) puts every node in the row of its hop, top down, with no physics: the path reads as the chain it is, the drawing is the same every time, and nodes can still be dragged. <em>Free</em> is the force layout, which finds its own shape. <em>Stop layout</em>, <em>Start layout</em> and <em>RTT lengths</em> drive the physics engine, so they apply to the free layout only and are greyed out in the layered one. In the free layout <em>RTT lengths</em> lets every edge ask for a length matching the minimum RTT its hop adds, on a log scale, so a site&rsquo;s routers gather and the long hauls stretch; switch it off for evenly spaced edges.</p>
 
@@ -3640,22 +3640,51 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         // between tabs with them whenever a tab has the focus - which it does
         // as soon as the user has clicked one. Its handler sits on the strip,
         // below the document, so it would run first and change the tab.
+        // A box rather than offsetParent, so the maximized view counts as shown.
+        const on_screen = function (sfx) {
+            const e = el(sfx);
+            if (!e) return null;
+            const r = e.getBoundingClientRect();
+            return (r.width > 0 && r.height > 0) ? e : null;
+        };
         document.addEventListener('keydown', function (ev) {
-            if (!tree || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+            if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
             const step = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[ev.key];
             if (!step) return;
             const t = ev.target;
             if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
-            const panel = el('topo');
-            if (!panel) return;
-            const r = panel.getBoundingClientRect();               // a box, so the maximized view counts too
-            if (r.width <= 0 || r.height <= 0) return;             // another sub-tab, or another tab
-            let scale, pos;
-            try { scale = tree.getScale(); pos = tree.getViewPosition(); } catch (_) { return; }
+
+            // The topology pans; Paths and Timeline, which are drawings in a
+            // scrolling pane, scroll - sideways along the chart, up and down
+            // through the pane.
+            let handled = false;
+            if (tree && on_screen('topo')) {
+                let scale, pos;
+                try { scale = tree.getScale(); pos = tree.getViewPosition(); } catch (_) { return; }
+                const px = (ev.shiftKey ? 260 : 90) / (scale || 1);  // shift moves a screenful at a time
+                try { tree.moveTo({ position: { x: pos.x + step[0] * px, y: pos.y + step[1] * px }, animation: false }); handled = true; } catch (_) {}
+            } else {
+                // Paths has two charts side by side on the same columns; move
+                // both, so they stay aligned however the scroll sync behaves.
+                const view = on_screen('paths') ? { pane: el('paths'), across: [el('paths-scroll1'), el('paths-scroll2')] }
+                           : on_screen('tline') ? { pane: el('tline'), across: [el('tline-scroll')] }
+                           : null;
+                if (view) {
+                    const px = ev.shiftKey ? 380 : 120;
+                    if (step[0]) {
+                        const lead = view.across[0];
+                        if (lead) {
+                            const to = Math.max(0, Math.min(lead.scrollWidth - lead.clientWidth, lead.scrollLeft + step[0] * px));
+                            view.across.forEach(function (sc) { if (sc) sc.scrollLeft = to; });
+                        }
+                    }
+                    if (step[1] && view.pane) view.pane.scrollTop += step[1] * px;
+                    handled = true;
+                }
+            }
+            if (!handled) return;
             ev.preventDefault();
             ev.stopPropagation();
-            const px = (ev.shiftKey ? 260 : 90) / (scale || 1);     // shift pans a screenful at a time
-            try { tree.moveTo({ position: { x: pos.x + step[0] * px, y: pos.y + step[1] * px }, animation: false }); } catch (_) {}
         }, true);
 
         // Previous / Next navigation

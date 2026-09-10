@@ -3723,9 +3723,9 @@ function open_heatmap_cell(url, from_host, to_host) {
 const _shortcuts = [
     { key: '?',   desc: 'Show this help' },
     { key: 'Esc', desc: 'Close any open modal or overlay' },
-    { key: '←',   desc: 'Previous period (pans the graph on the Topology tab)' },
-    { key: '→',   desc: 'Next period (pans the graph on the Topology tab)' },
-    { key: '↑ ↓', desc: 'Pan the graph on the Topology tab' },
+    { key: '←',   desc: 'Previous period (moves the traceroute views)' },
+    { key: '→',   desc: 'Next period (moves the traceroute views)' },
+    { key: '↑ ↓', desc: 'Move the traceroute views: pan the topology, scroll Paths and Timeline' },
     { key: 'T',   desc: 'Jump to today' },
     { key: 'R',   desc: 'Toggle auto-refresh' },
     { key: 'L',   desc: 'Toggle Real Locations' },
@@ -3733,12 +3733,12 @@ const _shortcuts = [
     { key: 'D',   desc: 'Cycle theme (light · dark · auto)' },
     { key: '/',   desc: 'Focus search' }
 ];
-// The traceroute topology takes the arrow keys while it is on screen, where
-// they pan the graph the way its own navigation buttons do. Everywhere else
-// they keep stepping the period. Measured from the box rather than
-// offsetParent, so it also holds in the maximized view.
+// The traceroute views take the arrow keys while one of them is on screen,
+// where they pan the topology or scroll the Paths and Timeline charts.
+// Everywhere else they keep stepping the period. Measured from the box rather
+// than offsetParent, so it also holds in the maximized view.
 function _topology_takes_arrows() {
-    var panes = document.querySelectorAll('.tracetree-topo');
+    var panes = document.querySelectorAll('.tracetree-topo, .tracetree-paths');
     for (var i = 0; i < panes.length; i++) {
         var r = panes[i].getBoundingClientRect();
         if (r.width > 0 && r.height > 0) return true;
