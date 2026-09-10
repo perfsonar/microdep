@@ -1251,6 +1251,11 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
     }
 
 
+    // Min-RTT spring lengths in the topology layout (#148): on unless the
+    // user switched them off, remembered across reloads.
+    let rtt_lengths = true;
+    try { rtt_lengths = localStorage.getItem('microdep-tracetree-rttlen') !== '0'; } catch (_) { /* private mode */ }
+
     // ── Node shading: how often a node was seen ───────────────────────
     // Deliberately neutral. Colour now carries meaning on the LINKS (minimum
     // RTT, traffic-light), so the nodes must not compete for it - they encode
@@ -1488,18 +1493,45 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
             for (let i = 1; i < palette.length; i++) limits.push(floor * i);
         }
 
+        // Preferred spring length from the same value, on the same log scale:
+        // a sub-millisecond hop asks for a short edge, a long-haul hop for a
+        // long one, so the force layout pulls a site's routers together and
+        // pushes the continents apart (#148). The springs only ask; node
+        // repulsion and label size still have a say, hence "preferred".
+        const lenLo = 60, lenHi = 320;
+        const lgF = Math.log10(floor), lgT = Math.log10(Math.max(top, floor * 10));
         for (const e of tree.edges) {
             let col = link_color_unknown;
             if (e.rtt_delta !== null) {
                 for (let i = limits.length - 1; i >= 0; i--) {
                     if (e.rtt_delta >= limits[i]) { col = palette[i]; break; }
                 }
+                e.rtt_len = Math.round(lenLo + (lenHi - lenLo) * Math.min(1, Math.max(0, (Math.log10(Math.max(e.rtt_delta, floor)) - lgF) / (lgT - lgF))));
+            } else {
+                e.rtt_len = null;
             }
+            if (rtt_lengths && e.rtt_len !== null) e.length = e.rtt_len; else delete e.length;
             // inherit:false is required - vis otherwise paints edges in the
             // colour of the node they leave, ignoring what we set here.
             e.color = { color: col, highlight: col, hover: col, inherit: false };
         }
         return { palette: palette, limits: limits };
+    }
+
+    // Switch the min-RTT spring lengths on or off on the graph on screen and
+    // let the layout settle again.
+    function apply_rtt_lengths() {
+        if (!tree || !topology || !topology.edges) return;
+        const upd = [];
+        topology.edges.forEach(function (e) {
+            upd.push({ id: e.id, length: (rtt_lengths && e.rtt_len !== null && e.rtt_len !== undefined) ? e.rtt_len : undefined });
+        });
+        topology.edges.update(upd);
+        try {
+            tree.setOptions({ physics: { enabled: true, barnesHut: physics_forces() } });
+            tree.once('stabilizationIterationsDone', function () { settle_layout(tree); });
+            tree.stabilize(400);
+        } catch (err) { console.log('apply_rtt_lengths: ' + err); }
     }
 
     function create_limits(nodes, colors) {
@@ -2012,6 +2044,16 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
     //  vis.Network — topology graph
     // ====================================================================
 
+    // The forces behind the layout. With min-RTT spring lengths on, the springs
+    // have to win over node repulsion for the lengths to show: measured on a
+    // 24-hop path, the default forces left the short/long hop lengths at
+    // 360/480 px (rank correlation with RTT 0.6), these at 170/300 px (0.86).
+    function physics_forces() {
+        return rtt_lengths
+            ? { gravitationalConstant: -4000,  centralGravity: 0.15, springLength: 170, springConstant: 0.2,  damping: 0.35, avoidOverlap: 0.2 }
+            : { gravitationalConstant: -12000, centralGravity: 0.15, springLength: 170, springConstant: 0.03, damping: 0.35, avoidOverlap: 0.6 };
+    }
+
     function plot_tree_json(data, divid, copy) {
         let opts = {
             physics: {
@@ -2020,14 +2062,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
                 // had settled, so it came out tangled and bunched up. Give it
                 // room to spread: stronger repulsion, longer springs, and enough
                 // iterations to actually converge.
-                barnesHut: {
-                    gravitationalConstant: -12000,
-                    centralGravity: 0.15,
-                    springLength: 170,
-                    springConstant: 0.03,
-                    damping: 0.35,
-                    avoidOverlap: 0.6
-                },
+                barnesHut: physics_forces(),
                 stabilization: { enabled: true, iterations: 300, updateInterval: 25 },
                 minVelocity: 0.75,
                 timestep: 0.35
@@ -3219,6 +3254,8 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
           <button class="knapp topo-btn" id="${id}-full">Full</button>
           <button class="knapp topo-btn" id="${id}-stop">Stop layout</button>
           <button class="knapp topo-btn" id="${id}-start">Start layout</button>
+          <button class="knapp topo-btn" id="${id}-rttlen" aria-pressed="${rtt_lengths ? 'true' : 'false'}"
+                  title="Let each edge ask for a length matching the minimum RTT its hop adds, so a site's routers gather and the long hauls stretch">RTT lengths</button>
         </div>
         <div id="${id}-legend"></div>
       </div>
@@ -3305,9 +3342,11 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
       varies port numbers and by hit different flows each time and causes the various load sharing paths in the network to be seen.
       That means it does not report a particular route, just samples of nodes available on the various paths to the destination.</p>
 
+      <p>The viewer opens on <em>Paths</em>; the sub-tab you leave it on is remembered for next time.</p>
       <h3>Topology</h3>
       <p>To construct a likely network topology we have connected nodes that appear in adjacent rows in a particular traceroute report, and then aggregating all single reports to an overall multipath-graph. One series of traceroutes is more likely to represent the state of the routing table at the time of execution, but routing can change any time so a true picture of the topology can not be constructed, and edges in the graph might not represent an actual network connection.</p>
       <p>Dashed lines means there are non-responding routers between nodes. Color scale is log(e) responses. Hover nodes to see links and corresponding table entry. Select node to scroll to table entry. Drag nodes to fix. <span style="color: var(--c-err)">Red</span> nodes marks it as the end of traceroute - i.e. no further route.</p>
+      <p><em>RTT lengths</em> lets every edge ask the layout for a length matching the minimum RTT its hop adds, on a log scale, so a site&rsquo;s routers gather and the long hauls stretch; switch it off for evenly spaced edges.</p>
 
       <h3>Paths</h3>
       <p>The same traceroutes laid out by hop: one lane per hop, ribbons between lanes as wide as the number of traceroutes that took that link, coloured by the minimum RTT the hop adds. The dominant route is the thickest band; alternatives peel off and rejoin around it. Runs of hops with no branching fold into one segment that opens on click. Click a route in the table to isolate it.</p>
@@ -3429,6 +3468,17 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
             });
         }
 
+        // Min-RTT spring lengths on / off
+        let rttlen_btn = el('rttlen');
+        if (rttlen_btn) {
+            rttlen_btn.addEventListener('click', function () {
+                rtt_lengths = !rtt_lengths;
+                rttlen_btn.setAttribute('aria-pressed', rtt_lengths ? 'true' : 'false');
+                try { localStorage.setItem('microdep-tracetree-rttlen', rtt_lengths ? '1' : '0'); } catch (_) {}
+                apply_rtt_lengths();
+            });
+        }
+
         // Previous / Next navigation
         let prev_btn = el('prev');
         if (prev_btn) {
@@ -3449,8 +3499,17 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
 
     if (!build_html()) return;
 
-    // Init jQuery UI tabs
-    $('#' + id + '-tabs').tabs();
+    // Init jQuery UI tabs. Paths opens first - it reads the routes better than
+    // the force layout - unless the user last left the viewer on another
+    // sub-tab, which is remembered (#148).
+    const subtab_index = function (sfx) {
+        const links = $('#' + id + '-tabs > ul > li > a');
+        for (let i = 0; i < links.length; i++) if (links.eq(i).attr('href') === '#' + id + '-' + sfx) return i;
+        return 0;
+    };
+    let remembered = 'paths';
+    try { remembered = localStorage.getItem('microdep-tracetree-subtab') || 'paths'; } catch (_) { /* private mode */ }
+    $('#' + id + '-tabs').tabs({ active: subtab_index(remembered) });
 
     // The timeline is irrelevant on the Docs sub-tab — hide it there and
     // restore it when the user switches back to a data-driven sub-tab.
@@ -3460,6 +3519,11 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
             const is_docs = ui.newPanel && ui.newPanel.attr('id') === id + '-docs';
             tl.style.display = is_docs ? 'none' : '';
         }
+        const sfx = ui.newPanel ? String(ui.newPanel.attr('id')).replace(id + '-', '') : '';
+        if (sfx) { try { localStorage.setItem('microdep-tracetree-subtab', sfx); } catch (_) {} }
+        // A topology laid out while its sub-tab was hidden has no usable size:
+        // reshape and fit it when the sub-tab is opened.
+        if (sfx === 'topo' && tree) setTimeout(function () { try { tree.redraw(); } catch (_) {} settle_layout(tree); }, 50);
         // The Paths view is drawn when it is opened: it needs the pane's real
         // width, and it would be wasted work to redraw it on every slice change
         // while it is hidden.
