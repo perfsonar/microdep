@@ -3723,8 +3723,9 @@ function open_heatmap_cell(url, from_host, to_host) {
 const _shortcuts = [
     { key: '?',   desc: 'Show this help' },
     { key: 'Esc', desc: 'Close any open modal or overlay' },
-    { key: '←',   desc: 'Previous period' },
-    { key: '→',   desc: 'Next period' },
+    { key: '←',   desc: 'Previous period (pans the graph on the Topology tab)' },
+    { key: '→',   desc: 'Next period (pans the graph on the Topology tab)' },
+    { key: '↑ ↓', desc: 'Pan the graph on the Topology tab' },
     { key: 'T',   desc: 'Jump to today' },
     { key: 'R',   desc: 'Toggle auto-refresh' },
     { key: 'L',   desc: 'Toggle Real Locations' },
@@ -3732,6 +3733,18 @@ const _shortcuts = [
     { key: 'D',   desc: 'Cycle theme (light · dark · auto)' },
     { key: '/',   desc: 'Focus search' }
 ];
+// The traceroute topology takes the arrow keys while it is on screen, where
+// they pan the graph the way its own navigation buttons do. Everywhere else
+// they keep stepping the period. Measured from the box rather than
+// offsetParent, so it also holds in the maximized view.
+function _topology_takes_arrows() {
+    var panes = document.querySelectorAll('.tracetree-topo');
+    for (var i = 0; i < panes.length; i++) {
+        var r = panes[i].getBoundingClientRect();
+        if (r.width > 0 && r.height > 0) return true;
+    }
+    return false;
+}
 function _is_typing_target(el) {
     if (!el) return false;
     var tag = (el.tagName || '').toUpperCase();
@@ -3768,8 +3781,8 @@ document.addEventListener('keydown', function (e) {
     if (e.ctrlKey || e.metaKey || e.altKey) return;   // don't fight Ctrl+R, Cmd+S, etc.
     switch (e.key) {
         case '?': _show_shortcuts_overlay(); e.preventDefault(); break;
-        case 'ArrowLeft': $('#prev').trigger('click'); e.preventDefault(); break;
-        case 'ArrowRight': if (!$('#next').prop('disabled')) $('#next').trigger('click'); e.preventDefault(); break;
+        case 'ArrowLeft': if (_topology_takes_arrows()) break; $('#prev').trigger('click'); e.preventDefault(); break;
+        case 'ArrowRight': if (_topology_takes_arrows()) break; if (!$('#next').prop('disabled')) $('#next').trigger('click'); e.preventDefault(); break;
         case 't': case 'T': $('#today').trigger('click'); break;
         case 'r': case 'R': $('#autorefresh_checkbox').trigger('click'); break;
         case 'l': case 'L': $('#reallocs_checkbox').trigger('click'); break;

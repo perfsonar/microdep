@@ -3345,6 +3345,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
       <p>The viewer opens on <em>Paths</em>; the sub-tab you leave it on is remembered for next time.</p>
       <h3>Topology</h3>
       <p>To construct a likely network topology we have connected nodes that appear in adjacent rows in a particular traceroute report, and then aggregating all single reports to an overall multipath-graph. One series of traceroutes is more likely to represent the state of the routing table at the time of execution, but routing can change any time so a true picture of the topology can not be constructed, and edges in the graph might not represent an actual network connection.</p>
+      <p>The arrow keys pan the graph while the Topology tab is on screen, the same as the buttons at the bottom left of the graph; hold shift to pan further per press.</p>
       <p>Dashed lines means there are non-responding routers between nodes. Color scale is log(e) responses. Hover nodes to see links and corresponding table entry. Select node to scroll to table entry. Drag nodes to fix. <span style="color: var(--c-err)">Red</span> nodes marks it as the end of traceroute - i.e. no further route.</p>
       <p><em>RTT lengths</em> lets every edge ask the layout for a length matching the minimum RTT its hop adds, on a log scale, so a site&rsquo;s routers gather and the long hauls stretch; switch it off for evenly spaced edges.</p>
 
@@ -3478,6 +3479,28 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
                 apply_rtt_lengths();
             });
         }
+
+        // Arrow keys pan the topology, like the buttons on the graph itself.
+        // vis can bind keys of its own, but only to the whole window (which
+        // would take the arrows away from the rest of the page) or to a canvas
+        // the user has clicked first. This listens while the Topology sub-tab
+        // is the one on screen, and stays out of the way of text fields.
+        document.addEventListener('keydown', function (ev) {
+            if (!tree || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+            const step = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[ev.key];
+            if (!step) return;
+            const t = ev.target;
+            if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+            const panel = el('topo');
+            if (!panel) return;
+            const r = panel.getBoundingClientRect();               // a box, so the maximized view counts too
+            if (r.width <= 0 || r.height <= 0) return;             // another sub-tab, or another tab
+            let scale, pos;
+            try { scale = tree.getScale(); pos = tree.getViewPosition(); } catch (_) { return; }
+            ev.preventDefault();
+            const px = (ev.shiftKey ? 260 : 90) / (scale || 1);     // shift pans a screenful at a time
+            try { tree.moveTo({ position: { x: pos.x + step[0] * px, y: pos.y + step[1] * px }, animation: false }); } catch (_) {}
+        });
 
         // Previous / Next navigation
         let prev_btn = el('prev');
