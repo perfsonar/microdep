@@ -3485,6 +3485,12 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         // would take the arrows away from the rest of the page) or to a canvas
         // the user has clicked first. This listens while the Topology sub-tab
         // is the one on screen, and stays out of the way of text fields.
+        //
+        // In the capture phase, and propagation stops once the key is used:
+        // the arrows are otherwise the tab strips' own, since jQuery UI moves
+        // between tabs with them whenever a tab has the focus - which it does
+        // as soon as the user has clicked one. Its handler sits on the strip,
+        // below the document, so it would run first and change the tab.
         document.addEventListener('keydown', function (ev) {
             if (!tree || ev.ctrlKey || ev.metaKey || ev.altKey) return;
             const step = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[ev.key];
@@ -3498,9 +3504,10 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
             let scale, pos;
             try { scale = tree.getScale(); pos = tree.getViewPosition(); } catch (_) { return; }
             ev.preventDefault();
+            ev.stopPropagation();
             const px = (ev.shiftKey ? 260 : 90) / (scale || 1);     // shift pans a screenful at a time
             try { tree.moveTo({ position: { x: pos.x + step[0] * px, y: pos.y + step[1] * px }, animation: false }); } catch (_) {}
-        });
+        }, true);
 
         // Previous / Next navigation
         let prev_btn = el('prev');
