@@ -1531,6 +1531,11 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
     // let the layout settle again.
     function apply_rtt_lengths() {
         if (!tree || !topology || !topology.edges) return;
+        // Spring lengths mean nothing without springs: the layered layout runs
+        // no physics, and switching it on there would scatter the rows it has
+        // just placed. The preference is kept and takes effect in the free
+        // layout.
+        if (topo_layout === 'layered') return;
         const upd = [];
         topology.edges.forEach(function (e) {
             upd.push({ id: e.id, length: (rtt_lengths && e.rtt_len !== null && e.rtt_len !== undefined) ? e.rtt_len : undefined });
@@ -2526,6 +2531,24 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         try { network.moveTo({ position: { x: (minx + maxx) / 2, y: miny + (ch / scale) / 2 - 70 }, scale: scale, animation: false }); } catch (_) { /* not ready */ }
     }
 
+    // Stop, start and the spring lengths all act on the physics engine, which
+    // the layered layout does not run. Grey them out there rather than let
+    // them scatter the rows.
+    function sync_topo_buttons() {
+        const layered = topo_layout === 'layered';
+        const titles = {
+            stop: 'Hold the layout still',
+            start: 'Let the layout settle again',
+            rttlen: "Let each edge ask for a length matching the minimum RTT its hop adds, so a site's routers gather and the long hauls stretch"
+        };
+        ['stop', 'start', 'rttlen'].forEach(function (k) {
+            const btn = el(k);
+            if (!btn) return;
+            btn.disabled = layered;
+            btn.title = layered ? 'Only in the Free layout - the layered one places the rows itself' : titles[k];
+        });
+    }
+
     // Switch between the layered and the free layout. vis cannot turn its
     // hierarchical layout on or off on a live network, so the graph is
     // rebuilt from what it currently shows.
@@ -2535,6 +2558,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         const lb = el('layered'), fb = el('free');
         if (lb) lb.setAttribute('aria-pressed', topo_layout === 'layered' ? 'true' : 'false');
         if (fb) fb.setAttribute('aria-pressed', topo_layout === 'free' ? 'true' : 'false');
+        sync_topo_buttons();
         if (tree && last_plot) {
             try { tree.destroy(); } catch (_) {}
             tree = null;
@@ -3352,18 +3376,29 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
       </div>
       <div class="tracetree-sidebar">
         <div class="topo-controls">
-          <button class="knapp topo-btn" id="${id}-fullscreen">Full screen</button>
-          <button class="knapp topo-btn" id="${id}-maximize">Maximize</button>
-          <button class="knapp topo-btn" id="${id}-simple">Simple</button>
-          <button class="knapp topo-btn" id="${id}-full">Full</button>
-          <button class="knapp topo-btn" id="${id}-layered" aria-pressed="${topo_layout === 'layered' ? 'true' : 'false'}"
-                  title="One row per hop, top down, the same every time; nodes can still be dragged">Layered</button>
-          <button class="knapp topo-btn" id="${id}-free" aria-pressed="${topo_layout === 'free' ? 'true' : 'false'}"
-                  title="Force layout: the graph finds its own shape">Free</button>
-          <button class="knapp topo-btn" id="${id}-stop">Stop layout</button>
-          <button class="knapp topo-btn" id="${id}-start">Start layout</button>
-          <button class="knapp topo-btn" id="${id}-rttlen" aria-pressed="${rtt_lengths ? 'true' : 'false'}"
-                  title="Let each edge ask for a length matching the minimum RTT its hop adds, so a site's routers gather and the long hauls stretch">RTT lengths</button>
+          <div class="topo-group">
+            <span class="topo-group-label">Size</span>
+            <button class="knapp topo-btn" id="${id}-fullscreen" title="Hand the graph the whole screen">Full screen</button>
+            <button class="knapp topo-btn" id="${id}-maximize" title="Hand the graph the whole tab, keeping the browser as it is">Maximize</button>
+          </div>
+          <div class="topo-group">
+            <span class="topo-group-label">Detail</span>
+            <button class="knapp topo-btn" id="${id}-simple" title="Drop unanswered hops, merge same-named nodes and remove local loops">Simple</button>
+            <button class="knapp topo-btn" id="${id}-full" title="Every hop as measured">Full</button>
+          </div>
+          <div class="topo-group">
+            <span class="topo-group-label">Layout</span>
+            <button class="knapp topo-btn" id="${id}-layered" aria-pressed="${topo_layout === 'layered' ? 'true' : 'false'}"
+                    title="One row per hop, top down, the same every time; nodes can still be dragged">Layered</button>
+            <button class="knapp topo-btn" id="${id}-free" aria-pressed="${topo_layout === 'free' ? 'true' : 'false'}"
+                    title="Force layout: the graph finds its own shape">Free</button>
+          </div>
+          <div class="topo-group">
+            <span class="topo-group-label">Forces</span>
+            <button class="knapp topo-btn" id="${id}-stop">Stop</button>
+            <button class="knapp topo-btn" id="${id}-start">Start</button>
+            <button class="knapp topo-btn" id="${id}-rttlen" aria-pressed="${rtt_lengths ? 'true' : 'false'}">RTT lengths</button>
+          </div>
         </div>
         <div id="${id}-legend"></div>
       </div>
@@ -3454,7 +3489,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
       <h3>Topology</h3>
       <p>To construct a likely network topology we have connected nodes that appear in adjacent rows in a particular traceroute report, and then aggregating all single reports to an overall multipath-graph. One series of traceroutes is more likely to represent the state of the routing table at the time of execution, but routing can change any time so a true picture of the topology can not be constructed, and edges in the graph might not represent an actual network connection.</p>
       <p>Dashed lines means there are non-responding routers between nodes. Color scale is log(e) responses. Hover nodes to see links and corresponding table entry. Select node to scroll to table entry. Drag nodes to fix. <span style="color: var(--c-err)">Red</span> nodes marks it as the end of traceroute - i.e. no further route.</p>
-      <p><em>Layered</em> (the default) puts every node in the row of its hop, top down, with no physics: the path reads as the chain it is, the drawing is the same every time, and nodes can still be dragged. <em>Free</em> is the force layout, which finds its own shape. In the free layout <em>RTT lengths</em> lets every edge ask for a length matching the minimum RTT its hop adds, on a log scale, so a site&rsquo;s routers gather and the long hauls stretch; switch it off for evenly spaced edges.</p>
+      <p><em>Layered</em> (the default) puts every node in the row of its hop, top down, with no physics: the path reads as the chain it is, the drawing is the same every time, and nodes can still be dragged. <em>Free</em> is the force layout, which finds its own shape. <em>Stop layout</em>, <em>Start layout</em> and <em>RTT lengths</em> drive the physics engine, so they apply to the free layout only and are greyed out in the layered one. In the free layout <em>RTT lengths</em> lets every edge ask for a length matching the minimum RTT its hop adds, on a log scale, so a site&rsquo;s routers gather and the long hauls stretch; switch it off for evenly spaced edges.</p>
 
       <h3>Paths</h3>
       <p>The same traceroutes laid out by hop: one lane per hop, ribbons between lanes as wide as the number of traceroutes that took that link, coloured by the minimum RTT the hop adds. The dominant route is the thickest band; alternatives peel off and rejoin around it. Runs of hops with no branching fold into one segment that opens on click. Click a route in the table to isolate it.</p>
@@ -3577,6 +3612,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         }
 
         // Layered / free layout
+        sync_topo_buttons();
         let layered_btn = el('layered'), free_btn = el('free');
         if (layered_btn) layered_btn.addEventListener('click', function () { if (topo_layout !== 'layered') set_topo_layout('layered'); });
         if (free_btn) free_btn.addEventListener('click', function () { if (topo_layout !== 'free') set_topo_layout('free'); });
