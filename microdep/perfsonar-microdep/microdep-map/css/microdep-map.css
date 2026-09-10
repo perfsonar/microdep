@@ -1964,7 +1964,9 @@ table.sortable th:not(.sorttable_sorted):not(.sorttable_sorted_reverse):not(.sor
 .tracetree-sidebar {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    /* the same step the labelled groups inside .topo-controls use, so the
+       legend's heading sits as far from what is above it as the others do */
+    gap: 14px;
     width: 100px;
     /* Keep the controls inside their grid cell: start at the top rather than
        being stretched/centred, never grow past the cell, and scroll when the
@@ -1990,6 +1992,11 @@ table.sortable th:not(.sorttable_sorted):not(.sorttable_sorted_reverse):not(.sor
     flex-direction: column;
     gap: 4px;
 }
+/* The scale carries a top margin of its own, from when it followed the
+   buttons with nothing in between; under a heading that would push it twice
+   as far from its label as the buttons are from theirs. The floating copy,
+   which has no heading, keeps it. */
+.topo-group .tracetree-scale { margin-top: 0; }
 .topo-group-label {
     font-size: .62rem;
     letter-spacing: .07em;
