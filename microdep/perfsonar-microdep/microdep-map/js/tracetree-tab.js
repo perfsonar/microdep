@@ -2258,21 +2258,28 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         const START = 'start';
         const is_unanswered = function (id) { return /\*$/.test(String(id)); };
 
-        // Which node does each id end up as? Same label - same node.
-        const by_label = {}, remap = {};
+        // Which node does each id end up as? Same label - same node. A hop that
+        // never answered keeps an id of its own: it is dropped from the drawing,
+        // but the walk below still has to pass through it.
+        const by_label = {}, merge = {};
         for (const node of data.nodes) {
             if (node.id === START || is_unanswered(node.id)) continue;
             const label = node.label || node.id;
             if (by_label[label] === undefined) by_label[label] = node.id;
-            remap[node.id] = by_label[label];
+            merge[node.id] = by_label[label];
         }
+        const merged = function (id) {
+            if (id === START) return START;
+            if (is_unanswered(id)) return '*' + id;      // its own, never merged
+            return merge[id];
+        };
 
         // Build the surviving nodes, folding the merged ones together.
         const kept = {};
         for (const node of data.nodes) {
             if (is_unanswered(node.id)) continue;
             if (node.id === START) { kept[START] = Object.assign({}, node); continue; }
-            const id = remap[node.id];
+            const id = merged(node.id);
             if (!kept[id]) {
                 kept[id] = Object.assign({}, node, { id: id });
             } else if (typeof node.n === 'number') {
@@ -2296,21 +2303,56 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
                 .forEach(function (n) { admitted[n.id] = n; });
         }
 
-        // Re-point the edges at the surviving nodes, dropping local loops and
-        // folding duplicates that the merge collapsed onto each other.
-        const edge_by_key = {};
+        // Adjacency over the merged ids, dropped nodes included: the walk needs
+        // them to find what lies on the far side.
+        const out = {};
         for (const edge of data.edges) {
-            const from = edge.from === START ? START : remap[edge.from];
-            const to   = edge.to   === START ? START : remap[edge.to];
-            if (!from || !to || from === to) continue;
-            if (!(from in admitted) || !(to in admitted)) continue;
+            const f = merged(edge.from), t = merged(edge.to);
+            if (!f || !t || f === t) continue;
+            (out[f] = out[f] || []).push({ to: t, edge: edge });
+        }
+
+        // Re-point the edges at the surviving nodes. Where a node was dropped -
+        // a hop that never answered, or one past the per-hop cap - the walk
+        // carries on through it to the next node that survives and links to
+        // that one instead, so removing a node cannot cut the graph in two
+        // (issue #175). Such a link is dashed, the way the full view marks a
+        // stretch with non-responding routers in it.
+        const MAX_SKIP = 8;                       // a run of dropped hops to cross
+        const edge_by_key = {};
+        const add = function (from, to, edge, bridged, value) {
+            if (from === to) return;
             const key = from + '\u0000' + to;
             if (!edge_by_key[key]) {
-                edge_by_key[key] = Object.assign({}, edge, { id: key, from: from, to: to });
-            } else if (typeof edge.value === 'number') {
-                edge_by_key[key].value = (edge_by_key[key].value || 0) + edge.value;
+                edge_by_key[key] = Object.assign({}, edge, { id: key, from: from, to: to, value: value });
+                if (bridged) {
+                    edge_by_key[key].dashes = true;
+                    edge_by_key[key].title = 'through hops that were dropped from this view';
+                }
+            } else {
+                if (typeof value === 'number') edge_by_key[key].value = (edge_by_key[key].value || 0) + value;
+                // a link seen both ways stays solid: it is a real hop somewhere
+                if (!bridged) { delete edge_by_key[key].dashes; delete edge_by_key[key].title; }
             }
+        };
+        for (const from in admitted) {
+            const seen = {};
+            const walk = function (at, depth, first_edge, value) {
+                if (depth > MAX_SKIP) return;
+                const links = out[at] || [];
+                for (const l of links) {
+                    const v = Math.min(value, typeof l.edge.value === 'number' ? l.edge.value : value);
+                    if (admitted[l.to]) {
+                        add(from, l.to, first_edge || l.edge, depth > 0, v);
+                    } else if (!seen[l.to]) {
+                        seen[l.to] = true;
+                        walk(l.to, depth + 1, first_edge || l.edge, v);
+                    }
+                }
+            };
+            walk(from, 0, null, Infinity);
         }
+        for (const k in edge_by_key) { if (!isFinite(edge_by_key[k].value)) delete edge_by_key[k].value; }
 
         return {
             nodes: Object.keys(admitted).map(function (k) { return admitted[k]; }),
