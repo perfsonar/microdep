@@ -1978,9 +1978,30 @@ table.sortable th:not(.sorttable_sorted):not(.sorttable_sorted_reverse):not(.sor
 .topo-controls {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 14px;
 }
 
+/* The sidebar holds four sets of buttons that do quite different things -
+   how big the graph is drawn, how much of it is shown, how it is laid out,
+   and the forces behind the free layout - so each set carries its own label,
+   the way the Paths controls do. */
+.topo-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.topo-group-label {
+    font-size: .62rem;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    color: var(--c-text-3);
+    font-weight: 600;
+    padding-left: 2px;
+}
+
+.topo-btn[aria-pressed="true"] { outline: 2px solid var(--c-accent); outline-offset: -2px; }
+.topo-btn:disabled { opacity: .4; cursor: default; }
+.topo-btn:disabled[aria-pressed="true"] { outline: none; }
 .topo-btn {
     width: 100% !important;
     font-size: .72rem !important;

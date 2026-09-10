@@ -1256,6 +1256,15 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
     let rtt_lengths = true;
     try { rtt_lengths = localStorage.getItem('microdep-tracetree-rttlen') !== '0'; } catch (_) { /* private mode */ }
 
+    // How the topology is laid out. "layered" puts every node in the row of
+    // its hop, top down, with no physics: the path reads as the chain it
+    // is, the drawing is the same every time, and the nodes can still be
+    // dragged. "free" is the force layout, which finds its own shape and
+    // tangles a long path. Remembered across reloads.
+    let topo_layout = 'layered';
+    try { topo_layout = localStorage.getItem('microdep-tracetree-topo') === 'free' ? 'free' : 'layered'; } catch (_) { /* private mode */ }
+    let last_plot = null;                  // what the topology shows, for a re-plot on a layout switch
+
     // ── Node shading: how often a node was seen ───────────────────────
     // Deliberately neutral. Colour now carries meaning on the LINKS (minimum
     // RTT, traffic-light), so the nodes must not compete for it - they encode
@@ -1522,6 +1531,11 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
     // let the layout settle again.
     function apply_rtt_lengths() {
         if (!tree || !topology || !topology.edges) return;
+        // Spring lengths mean nothing without springs: the layered layout runs
+        // no physics, and switching it on there would scatter the rows it has
+        // just placed. The preference is kept and takes effect in the free
+        // layout.
+        if (topo_layout === 'layered') return;
         const upd = [];
         topology.edges.forEach(function (e) {
             upd.push({ id: e.id, length: (rtt_lengths && e.rtt_len !== null && e.rtt_len !== undefined) ? e.rtt_len : undefined });
@@ -2055,8 +2069,13 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
     }
 
     function plot_tree_json(data, divid, copy) {
+        const layered = topo_layout === 'layered';
+        if (!copy) last_plot = { data: data, divid: divid };
+        // The layered layout places a node by its level: the hop it was first
+        // seen at, the sender at 0.
+        if (data && data.nodes) data.nodes.forEach(function (n) { n.level = n.hop || 0; });
         let opts = {
-            physics: {
+            physics: layered ? { enabled: false } : {
                 solver: 'barnesHut',
                 // 10 iterations was far too few - the graph was drawn before it
                 // had settled, so it came out tangled and bunched up. Give it
@@ -2067,7 +2086,15 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
                 minVelocity: 0.75,
                 timestep: 0.35
             },
-            layout: { improvedLayout: true },
+            layout: layered ? {
+                improvedLayout: false,
+                // One row per hop, top down, like the traceroute listing and the
+                // Paths view; "directed" orders the nodes within a row by where
+                // their edges come from, which keeps most crossings out. The
+                // spacing leaves room for a full host name per node.
+                hierarchical: { enabled: true, direction: 'UD', sortMethod: 'directed', levelSeparation: 120, nodeSpacing: 250, treeSpacing: 250,
+                                blockShifting: true, edgeMinimization: true, parentCentralization: true }
+            } : { improvedLayout: true },
             nodes: {
                 // Bigger boxes and type: at the zoom the whole topology fits
                 // into, the labels were the first thing to become unreadable.
@@ -2083,7 +2110,10 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
                 width: 0.5,
                 scaling: { min: 0.5, max: 3 },
                 selectionWidth: 2,
-                arrows: { middle: { enabled: true, scaleFactor: 0.8, type: 'arrow' } }
+                arrows: { middle: { enabled: true, scaleFactor: 0.8, type: 'arrow' } },
+                // Fixed curves in the layered layout: the "dynamic" ones add a
+                // support node per edge, which has no level to sit on.
+                smooth: layered ? { enabled: true, type: 'cubicBezier', forceDirection: 'vertical', roundness: 0.45 } : { enabled: true, type: 'dynamic' }
             },
             interaction: {
                 hover: true,
@@ -2434,8 +2464,106 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
             if (retries > 0) setTimeout(function () { settle_layout(network, retries - 1); }, 400);
             return;
         }
+        if (topo_layout === 'layered') { stagger_layered(network); view_layered(network); return; }
         spread_to_pane(network);
         anchor_start_node(network);
+    }
+
+    // vis puts every node of a hop at the same height, so two long host names
+    // in one row run into each other. Give a row as many lanes as it needs:
+    // walk it left to right and drop a node one lane lower whenever its box
+    // would touch the last one already placed in that lane. The rows are then
+    // re-stacked with a constant gap, which is wider than the lane step, so a
+    // hop still reads as one band.
+    function stagger_layered(network) {
+        let pos;
+        try { pos = network.getPositions(); } catch (_) { return; }
+        const ids = Object.keys(pos);
+        if (ids.length < 2) return;
+
+        const box = {};
+        let nh = 30;
+        for (const id of ids) {
+            let b;
+            try { b = network.getBoundingBox(id); } catch (_) { return; }
+            if (!b || !isFinite(b.left) || !isFinite(b.right)) return;
+            box[id] = b;
+            nh = Math.max(nh, b.bottom - b.top);
+        }
+
+        const rows = {};
+        for (const id of ids) { const k = Math.round(pos[id].y); (rows[k] = rows[k] || []).push(id); }
+        const keys = Object.keys(rows).map(Number).sort(function (a, b) { return a - b; });
+
+        const GAP_X = 18;                       // clear space between two names
+        const LANE = Math.round(nh) + 8;        // one lane below, boxes clear
+        const ROW_GAP = 130;                    // between one hop and the next
+        let cursor = keys[0];
+        const moves = [];
+        for (const k of keys) {
+            const arr = rows[k].slice().sort(function (a, b) { return pos[a].x - pos[b].x; });
+            const lane_right = [];
+            let lanes = 0;
+            for (const id of arr) {
+                let lane = 0;
+                while (lane_right[lane] !== undefined && box[id].left < lane_right[lane] + GAP_X) lane++;
+                lane_right[lane] = box[id].right;
+                if (lane > lanes) lanes = lane;
+                moves.push({ id: id, y: cursor + lane * LANE });
+            }
+            cursor += lanes * LANE + ROW_GAP;
+        }
+        for (const m of moves) { try { network.moveNode(m.id, pos[m.id].x, m.y); } catch (_) {} }
+    }
+
+    // The layered drawing of a long path is far taller than the pane. Fitting
+    // it whole would shrink the names past reading, so show it at the largest
+    // scale that fits its width, starting at the top, and let the user pan
+    // down the path the way the Paths view scrolls.
+    function view_layered(network) {
+        let pos, cw, ch;
+        try { pos = network.getPositions(); cw = network.canvas.frame.canvas.clientWidth; ch = network.canvas.frame.canvas.clientHeight; } catch (_) { return; }
+        const ids = Object.keys(pos);
+        if (!ids.length || !cw || !ch) return;
+        let minx = Infinity, maxx = -Infinity, miny = Infinity;
+        ids.forEach(function (i) { minx = Math.min(minx, pos[i].x); maxx = Math.max(maxx, pos[i].x); miny = Math.min(miny, pos[i].y); });
+        const scale = Math.max(0.4, Math.min(1, (cw - 40) / (maxx - minx + 300)));   // 300: room for the names at the edges
+        try { network.moveTo({ position: { x: (minx + maxx) / 2, y: miny + (ch / scale) / 2 - 70 }, scale: scale, animation: false }); } catch (_) { /* not ready */ }
+    }
+
+    // Stop, start and the spring lengths all act on the physics engine, which
+    // the layered layout does not run. Grey them out there rather than let
+    // them scatter the rows.
+    function sync_topo_buttons() {
+        const layered = topo_layout === 'layered';
+        const titles = {
+            stop: 'Hold the layout still',
+            start: 'Let the layout settle again',
+            rttlen: "Let each edge ask for a length matching the minimum RTT its hop adds, so a site's routers gather and the long hauls stretch"
+        };
+        ['stop', 'start', 'rttlen'].forEach(function (k) {
+            const btn = el(k);
+            if (!btn) return;
+            btn.disabled = layered;
+            btn.title = layered ? 'Only in the Free layout - the layered one places the rows itself' : titles[k];
+        });
+    }
+
+    // Switch between the layered and the free layout. vis cannot turn its
+    // hierarchical layout on or off on a live network, so the graph is
+    // rebuilt from what it currently shows.
+    function set_topo_layout(mode) {
+        topo_layout = mode === 'free' ? 'free' : 'layered';
+        try { localStorage.setItem('microdep-tracetree-topo', topo_layout); } catch (_) {}
+        const lb = el('layered'), fb = el('free');
+        if (lb) lb.setAttribute('aria-pressed', topo_layout === 'layered' ? 'true' : 'false');
+        if (fb) fb.setAttribute('aria-pressed', topo_layout === 'free' ? 'true' : 'false');
+        sync_topo_buttons();
+        if (tree && last_plot) {
+            try { tree.destroy(); } catch (_) {}
+            tree = null;
+            plot_tree_json(last_plot.data, last_plot.divid, false);
+        }
     }
 
     function anchor_start_node(network) {
@@ -3248,14 +3376,29 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
       </div>
       <div class="tracetree-sidebar">
         <div class="topo-controls">
-          <button class="knapp topo-btn" id="${id}-fullscreen">Full screen</button>
-          <button class="knapp topo-btn" id="${id}-maximize">Maximize</button>
-          <button class="knapp topo-btn" id="${id}-simple">Simple</button>
-          <button class="knapp topo-btn" id="${id}-full">Full</button>
-          <button class="knapp topo-btn" id="${id}-stop">Stop layout</button>
-          <button class="knapp topo-btn" id="${id}-start">Start layout</button>
-          <button class="knapp topo-btn" id="${id}-rttlen" aria-pressed="${rtt_lengths ? 'true' : 'false'}"
-                  title="Let each edge ask for a length matching the minimum RTT its hop adds, so a site's routers gather and the long hauls stretch">RTT lengths</button>
+          <div class="topo-group">
+            <span class="topo-group-label">Size</span>
+            <button class="knapp topo-btn" id="${id}-fullscreen" title="Hand the graph the whole screen">Full screen</button>
+            <button class="knapp topo-btn" id="${id}-maximize" title="Hand the graph the whole tab, keeping the browser as it is">Maximize</button>
+          </div>
+          <div class="topo-group">
+            <span class="topo-group-label">Detail</span>
+            <button class="knapp topo-btn" id="${id}-simple" title="Drop unanswered hops, merge same-named nodes and remove local loops">Simple</button>
+            <button class="knapp topo-btn" id="${id}-full" title="Every hop as measured">Full</button>
+          </div>
+          <div class="topo-group">
+            <span class="topo-group-label">Layout</span>
+            <button class="knapp topo-btn" id="${id}-layered" aria-pressed="${topo_layout === 'layered' ? 'true' : 'false'}"
+                    title="One row per hop, top down, the same every time; nodes can still be dragged">Layered</button>
+            <button class="knapp topo-btn" id="${id}-free" aria-pressed="${topo_layout === 'free' ? 'true' : 'false'}"
+                    title="Force layout: the graph finds its own shape">Free</button>
+          </div>
+          <div class="topo-group">
+            <span class="topo-group-label">Forces</span>
+            <button class="knapp topo-btn" id="${id}-stop">Stop</button>
+            <button class="knapp topo-btn" id="${id}-start">Start</button>
+            <button class="knapp topo-btn" id="${id}-rttlen" aria-pressed="${rtt_lengths ? 'true' : 'false'}">RTT lengths</button>
+          </div>
         </div>
         <div id="${id}-legend"></div>
       </div>
@@ -3346,7 +3489,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
       <h3>Topology</h3>
       <p>To construct a likely network topology we have connected nodes that appear in adjacent rows in a particular traceroute report, and then aggregating all single reports to an overall multipath-graph. One series of traceroutes is more likely to represent the state of the routing table at the time of execution, but routing can change any time so a true picture of the topology can not be constructed, and edges in the graph might not represent an actual network connection.</p>
       <p>Dashed lines means there are non-responding routers between nodes. Color scale is log(e) responses. Hover nodes to see links and corresponding table entry. Select node to scroll to table entry. Drag nodes to fix. <span style="color: var(--c-err)">Red</span> nodes marks it as the end of traceroute - i.e. no further route.</p>
-      <p><em>RTT lengths</em> lets every edge ask the layout for a length matching the minimum RTT its hop adds, on a log scale, so a site&rsquo;s routers gather and the long hauls stretch; switch it off for evenly spaced edges.</p>
+      <p><em>Layered</em> (the default) puts every node in the row of its hop, top down, with no physics: the path reads as the chain it is, the drawing is the same every time, and nodes can still be dragged. <em>Free</em> is the force layout, which finds its own shape. <em>Stop layout</em>, <em>Start layout</em> and <em>RTT lengths</em> drive the physics engine, so they apply to the free layout only and are greyed out in the layered one. In the free layout <em>RTT lengths</em> lets every edge ask for a length matching the minimum RTT its hop adds, on a log scale, so a site&rsquo;s routers gather and the long hauls stretch; switch it off for evenly spaced edges.</p>
 
       <h3>Paths</h3>
       <p>The same traceroutes laid out by hop: one lane per hop, ribbons between lanes as wide as the number of traceroutes that took that link, coloured by the minimum RTT the hop adds. The dominant route is the thickest band; alternatives peel off and rejoin around it. Runs of hops with no branching fold into one segment that opens on click. Click a route in the table to isolate it.</p>
@@ -3411,7 +3554,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
             }
             // The graph just changed size in a way no layout event covers.
             setTimeout(function () {
-                try { if (tree) { tree.redraw(); tree.fit(); } } catch (_) {}
+                try { if (tree) { tree.redraw(); settle_layout(tree); } } catch (_) {}
             }, 350);
         }
 
@@ -3467,6 +3610,12 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
                 }
             });
         }
+
+        // Layered / free layout
+        sync_topo_buttons();
+        let layered_btn = el('layered'), free_btn = el('free');
+        if (layered_btn) layered_btn.addEventListener('click', function () { if (topo_layout !== 'layered') set_topo_layout('layered'); });
+        if (free_btn) free_btn.addEventListener('click', function () { if (topo_layout !== 'free') set_topo_layout('free'); });
 
         // Min-RTT spring lengths on / off
         let rttlen_btn = el('rttlen');
