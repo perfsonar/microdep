@@ -3400,7 +3400,10 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
             <button class="knapp topo-btn" id="${id}-rttlen" aria-pressed="${rtt_lengths ? 'true' : 'false'}">RTT lengths</button>
           </div>
         </div>
-        <div id="${id}-legend"></div>
+        <div class="topo-group">
+          <span class="topo-group-label">Legend</span>
+          <div id="${id}-legend"></div>
+        </div>
       </div>
     </div>
     <div id="${id}-paths" class="tracetree-paths">
