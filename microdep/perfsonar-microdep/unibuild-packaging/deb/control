@@ -41,6 +41,9 @@ Depends: ${misc:Depends}, ${perl:Depends},
 # pytz
  python3-tz,
  python3-tzlocal,
+## corr-ana
+ libsearch-elasticsearch-perl
+# 
  perfsonar-microdep-enrichdbs,
  perfsonar-microdep-utils
 #Recommends: rabbitmq-server

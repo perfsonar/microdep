@@ -47,32 +47,87 @@ use constant {
 };
 
 # Global variables
-my $help = 0;
-my $gunzip = 0;
-my @matchfield;    # Name of field that needs to match for corrolation
-my @timefield;   # Name of field with time info to look for
-my @eventmatch;   # List of events required to correlate for report to be output
-my @peermatch;   # List of peers (from,to) relevant for corrolation window
-my $window_size = 60;           # Max time difference accepted for event corrolation
-my $inputbuffersize = 0;             # No of events to keep in sorted input buffer
+my $opt_help;
+my $opt_gunzip;
+my @opt_matchfield;    # Name of field that needs to match for corrolation
+my @opt_timefield;   # Name of field with time info to look for
+my @opt_eventmatch;   # List of events required to correlate for report to be output
+my @opt_peermatch;   # List of peers (from,to) relevant for corrolation window
+my $opt_window_size;           # Max time difference accepted for event corrolation
+my $opt_inputbuffersize;       # No of events to keep in sorted input buffer
+my $opt_pidfile = '';        # Name of process id file
+my $opt_url = '';            # Url to ES compatible source
+my $opt_daterange = '';      # ISO date range to filter on (local time zone if no zone is given).
+my $opt_follow = 0;          # True if first input file is to be followed
+my $opt_roundrobin = 0;      # True if cyclic read from sources is selected.
+my $opt_strict_eventorder = 0;    # True if strict order of matching events is required.
+my $opt_sleepinterval = 1;   # Timeperiod for re-reading file when followed.
+my $opt_config_file;         # Path to config file
+
 my @inputfile;                  # Filehandles for input files. 
 my @inputfile_raw;              # Filehandles for input files. 
 my @inputfile_ts;              # Latest timestamp read from sources
-my $pidfile = '';        # Name of process id file
-my $url = '';            # Url to ES compatible source
-my $daterange = '';      # ISO date range to filter on (local time zone if no zone is given).
-my $start_time = -1;     # Epoch start time.
-my $end_time = -1;       # Epoch end time.
+my $tz_local = localtime()->strftime("%z");  # Local timezone;
+substr($tz_local,3,0) = ":";                 # Insert ":" in timezone
+my $start_iso = '';      # ISO start time.
+my $end_iso = '';        # ISO end time.
+my $start_time = -1;      # Epoch start time.
+my $end_time = -1;        # Epoch end time.
 my $tryagain = 1;        # Flag to enable "tail -f" follow-behavior
-my $follow = 0;          # True if first input file is to be followed
-my $roundrobin = 0;      # True if cyclic read from sources is selected.
-my $strict_eventorder = 0;    # True if strict order of matching events is required.
-my $sleepinterval = 1;   # Timeperiod for re-reading file when followed.
+
+my $es;   # Elastich search object
 
 my $corr_event_name = 'correlation';    # Default name for discovered correlation event
 my %corr_events_window;   # A hash table of correlations windows, on for each unique set of match-field values
 my %corrsum_event;           # Hash table for accumulating summary info
 my @tot_uniq_events;      
+
+my $config={};           # Config loaded from file
+
+sub load_config {
+    # Parse config file and set option values.
+    my $config_file = shift;
+    
+    use YAML;
+    $config = YAML::LoadFile($config_file);
+    # Prepare list of supported options ( Copied from GetOptions!)
+    my %supported_options = (
+	"timefield=s" => \@opt_timefield,       # Array of names of time-fields. One for each given JSON input file. 
+	"follow" => \$opt_follow,               # follow source 
+	"roundrobin" => \$opt_roundrobin,       # Apply round robin read of input sources.
+	"gunzip"  => \$opt_gunzip,              # flag enabling gunzip of input 
+	"matchfield=s" => \@opt_matchfield,     # Name of field that needs to match for events to be corrolated. Option may be repeated.
+	"eventmatch=s" => \@opt_eventmatch,     # Name of event required in correlation. Option may be repeated.
+	"peer=s" => \@opt_peermatch,            # "<from>,<to>" peer relevant for corrocation. Option may be repeated. Default is all peers.
+	"strict"  => \$opt_strict_eventorder,   # flag enabling strict order of matching events
+	"windowsize=i" => \$opt_window_size,    # Max acceptable time difference for event corrolation
+	"buffersize=i" => \$opt_inputbuffersize,    # Max acceptable time difference for event corrolation
+	"interval=i" => \$opt_sleepinterval,    # Sleep interval between polls for new content
+	"pidfile=s"  => \$opt_pidfile,          # string for process id file
+	"url=s"  => \$opt_url,                  # Url string to Elastic Search compatible source (including credentials)
+	"date=s"  => \$opt_daterange,           # Filter on ISO date range (local time zone if none is given)
+	"conf=s"  => \$opt_config_file,         # Path to YAML config file.
+	"help"  => \$opt_help                  # flag for help message
+	); 
+    foreach my $opt (keys %{$config}) {
+	# Set option based on value from config file
+	if (exists $supported_options{$opt}) {
+	    if ( ! ${$supported_options{$opt}} ) {
+		# A boolean option not yet set. Apply value from config file.
+		${$supported_options{$opt}} = ( $config->{$opt} eq 'true' );
+	    }
+	} elsif (exists $supported_options{$opt . '=s'}) {
+	    if (! ${$supported_options{$opt . '=s'}} ) {
+		# A key-value option not yet set. Apply value from config file.
+		${$supported_options{$opt . '=s'}} = $config->{$opt};
+	    }
+	} else {
+	    # Unsupported config option
+	    warn "Unsupported option '$opt' in config file '$config_file'. Ignoring."
+	}
+    }
+}
+
 
 sub init_corrsum_event {
     # Clear accumumlated summary info
@@ -96,9 +151,9 @@ sub init_corrsum_event {
     
     # Add matchfields with values
     my @mf_value = split(" ", $matchfieldvalues);
-    @mf_value == @matchfield || die "Error: Match field value string differ form matchfield array.";
+    @mf_value == @opt_matchfield || die "Error: Match field value string differ form matchfield array.";
     for my $i (0...$#mf_value) { 
-	$corrsum_event{ $matchfieldvalues }{$matchfield[$i]} = $mf_value[$i];
+	$corrsum_event{ $matchfieldvalues }{$opt_matchfield[$i]} = $mf_value[$i];
     }
 }
 
@@ -108,13 +163,13 @@ sub clean_up {
     # Output summary events
     foreach my $key (keys %corrsum_event) {
 	# Prepare timestamp for specified date with local timesone
-	my $tz_local = localtime()->strftime("%z");  # Local timezone;
-	substr($tz_local,3,0) = ":";  # Insert ":" in timezone
 #	my $iso_time = $date . "T23:59:59.999" . $tz_local;  # ISO date with local timezone
 #	$corrsum_event{$key}{"timestamp"} = DateTime::Format::ISO8601->parse_datetime($iso_time)->epoch(); 
-#	$corrsum_event{$key}{"datetime"} = $iso_time;
-	$corrsum_event{$key}{"timestamp"} = $end_time;
-	$corrsum_event{$key}{"datetime"} = localtime($end_time)->strftime("%Y-%m-%dT%H:%M:%S") . $tz_local;
+	#	$corrsum_event{$key}{"datetime"} = $iso_time;
+	
+	my $end_ts = ($end_time >= 0 ? $end_time : localtime());  # Apply current time as end time if none is given.
+	$corrsum_event{$key}{"timestamp"} = $end_ts;
+	$corrsum_event{$key}{"datetime"} = localtime($end_ts)->strftime("%Y-%m-%dT%H:%M:%S") . $tz_local;
 	$corrsum_event{$key}{'@date'} = $corrsum_event{$key}{"datetime"};
 	$corrsum_event{$key}{'corr_count_uniq'} = @{ $corrsum_event{$key}{"tot_uniq_events"} };
 	$corrsum_event{$key}{'uniq_events'} = join(",", @{ $corrsum_event{$key}{"tot_uniq_events"} });
@@ -125,15 +180,15 @@ sub clean_up {
     }
     undef %corrsum_event;
 
-    if (!$url) {
+    if (!$opt_url) {
 	# Close all files
 	foreach (@inputfile) {
 	    close ($_);
 	}
     }
     # Release pidfile
-    if ( $pidfile ne "") {
-	unlink $pidfile;
+    if ( $opt_pidfile ne "") {
+	unlink $opt_pidfile;
     }
 }
 
@@ -141,10 +196,10 @@ sub clean_up {
 $SIG{HUP} = \&sighup_handler;
 $SIG{INT} = \&sigint_handler;
 sub sighup_handler{
-    if ($follow) {
+    if ($opt_follow) {
 	# Stop follow-file behavior and trigger restart of parsing file
 	$tryagain = 0;
-	if (!$url) {
+	if (!$opt_url) {
 	    foreach (@inputfile) {
 		close ($_);
 	    }
@@ -170,7 +225,7 @@ my $min_timestamp=0;    # For debugging
 sub get_next_source_to_read{
     # Select next source (file or ES index) to read from
 
-    if ($roundrobin) {
+    if ($opt_roundrobin) {
 	    # Apply cyclic selection of sources to read from
 	    return ($next_file_to_read + 1 ) % @inputfile;
     }
@@ -207,7 +262,7 @@ sub get_next_event{
     my $no_at_eof=0;
     my $new_event;
     while ($no_at_eof < @inputfile) {
-	if ( $url) {
+	if ( $opt_url) {
 	    my $doc;
 	    eval {
 		# Run in eval to mask out exceptions and avoid noise when no results are available
@@ -233,7 +288,7 @@ sub get_next_event{
     }	
     if( $new_event ) {
 	# Add some admin data to event
-	$new_event->{'me_timefield'} = ( $#timefield == $#inputfile ? $timefield[$next_file_to_read] : $timefield[0] );
+	$new_event->{'me_timefield'} = ( $#opt_timefield == $#inputfile ? $opt_timefield[$next_file_to_read] : $opt_timefield[0] );
 	$new_event->{'me_source'} = $ARGV[$next_file_to_read];
 	$new_event->{'me_srcidx'} = $next_file_to_read;
 	$inputfile_ts[$next_file_to_read] = $new_event->{$new_event->{'me_timefield'}};  # Latest read timestamp for source
@@ -269,7 +324,7 @@ sub get_matchfield_value_str{
     my $return_str = "";
     if (keys %{$input_hash} > 0) {
 	# None-empty input hash. Proceed to build value string.
-	foreach (@matchfield) {
+	foreach (@opt_matchfield) {
 	    if ( exists $input_hash->{$_} ) {
 		$return_str .= $input_hash->{$_} . " ";
 	    } else {
@@ -289,10 +344,10 @@ sub is_element_of {
 sub all_expected_events_present {
     # Test if all required events are present in given window
     my $window = shift;
-    my @not_found_event = @eventmatch;
-    if (@eventmatch > 0) {
+    my @not_found_event = @opt_eventmatch;
+    if (@opt_eventmatch > 0) {
 	foreach (@{ $window}) {
-	    if (! $strict_eventorder) {
+	    if (! $opt_strict_eventorder) {
 		for my $i (0 .. $#not_found_event) {
 		    if ($_->{'event_type'} eq $not_found_event[$i]) {
 			# Event found. Remove.
@@ -318,9 +373,9 @@ sub relevant_peer {
     # Input params: from (str) , to (str) 
     my $from = shift;
     my $to = shift; 
-    if ($#peermatch) {
+    if ($#opt_peermatch) {
 	# Required peers are specified. Perform check.
-	my %peermatchhash = map { $_ => 1 } @peermatch;
+	my %peermatchhash = map { $_ => 1 } @opt_peermatch;
 	if(! exists($peermatchhash{$from . "," . $to })) {
 	    # Not found, i.e. irrelevant peer.
 	    return 0;
@@ -329,32 +384,91 @@ sub relevant_peer {
     # Relevant peer (or all peers are relevant).
     return 1;
 }
-    
+
+sub init_search {
+    # Initiate scrolled search for relevant entries at given date for an index
+    my $index = shift;
+    my $tfield = shift;
+
+    # Prepare time fields for search
+    my $search_start = $start_time; 
+    my $search_end = ( $end_time >= 0 ? $end_time : 'now' );
+
+    my ($tfield_name, $tfield_type) = split(":",$tfield);
+    if ($tfield_type eq "iso") {
+	# Swap to iso time stamps
+	$search_start = $start_iso; 
+	$search_end = ( $end_iso ne "" ? $end_iso : 'now');
+    } elsif ($tfield_type ne "epoch") {
+	die "Error: Invalid time field type for '" . $tfield ."'.";
+    }
+    # Prepare filter for search. Add range first.
+    my @filter_clause = ( { range => { 
+				$tfield_name => {
+				    gte => $search_start,
+				    lte => $search_end
+				}
+			      }
+		   } );
+    my @should_clause;
+    foreach my $peer (@opt_peermatch) {
+	my ($from, $to) = split (',', $peer);
+        push @should_clause, { bool => { must => [
+					     { term => { from => $from }},
+					     { term => { to => $to }}
+					     ]} };
+    }
+    push @filter_clause, { bool => { should => @should_clause }};
+
+    # Prepare scroll query handel
+    my $scroll = $es->scroll_helper(
+	index => $index,
+	body => { 
+	    query  => {
+		bool => {
+		    filter => @filter_clause
+		}
+	    },
+	    sort => [
+		{
+		    $tfield => {
+			order => "asc",			    
+			unmapped_type => "boolean"
+		    }
+		}
+		],
+	});
+
+    return $scroll;
+}
+
 # #   M A I N   T H R E A D   # # 
 
 GetOptions (
-    "timefield=s" => \@timefield,       # Array of names of time-fields. One for each given JSON input file. 
-    "follow" => \$follow,               # follow source 
-    "roundrobin" => \$roundrobin,       # Apply round robin read of input sources.
-    "gunzip"  => \$gunzip,              # flag enabling gunzip of input 
-    "matchfield=s" => \@matchfield,     # Name of field that needs to match for events to be corrolated. Option may be repeated.
-    "eventmatch=s" => \@eventmatch,     # Name of event required in correlation. Option may be repeated.
-    "peer=s" => \@peermatch,            # "<from>,<to>" peer relevant for corrocation. Option may be repeated. Default is all peers.
-    "strict"  => \$strict_eventorder,   # flag enabling strict order of matching events
-    "windowsize=i" => \$window_size,    # Max acceptable time difference for event corrolation
-    "buffersize=i" => \$inputbuffersize,    # Max acceptable time difference for event corrolation
-    "interval=i" => \$sleepinterval,    # Sleep interval between polls for new content
-    "pidfile=s"  => \$pidfile,          # string for process id file
-    "url=s"  => \$url,                  # Url string to Elastic Search compatible source (including credentials)
-    "date=s"  => \$date,                # Filter on ISO date (UTC assumed)
-    "help"  => \$help)                  # flag for help message
-    or die("Error in command line arguments\n");
+    "timefield=s" => \@opt_timefield,       # Array of names of time-fields. One for each given JSON input file. 
+    "follow" => \$opt_follow,               # follow source 
+    "roundrobin" => \$opt_roundrobin,       # Apply round robin read of input sources.
+    "gunzip"  => \$opt_gunzip,              # flag enabling gunzip of input 
+    "matchfield=s" => \@opt_matchfield,     # Name of field that needs to match for events to be corrolated. Option may be repeated.
+    "eventmatch=s" => \@opt_eventmatch,     # Name of event required in correlation. Option may be repeated.
+    "peer=s" => \@opt_peermatch,            # "<from>,<to>" peer relevant for corrocation. Option may be repeated. Default is all peers.
+    "strict"  => \$opt_strict_eventorder,   # flag enabling strict order of matching events
+    "windowsize=i" => \$opt_window_size,    # Max acceptable time difference for event corrolation
+    "buffersize=i" => \$opt_inputbuffersize,    # Max acceptable time difference for event corrolation
+    "interval=i" => \$opt_sleepinterval,    # Sleep interval between polls for new content
+    "pidfile=s"  => \$opt_pidfile,          # string for process id file
+    "url=s"  => \$opt_url,                  # Url string to Elastic Search compatible source (including credentials)
+    "date=s"  => \$opt_daterange,           # Filter on ISO date range (local time zone if none is given)
+    "conf=s"  => \$opt_config_file,         # Path to YAML config file.
+    "help"  => \$opt_help                  # flag for help message
+    ) or die("Error in command line arguments\n");
 
-if ( $help || $#ARGV eq -1 ) {
+if ( $opt_help || $#ARGV eq -1 ) {
     # Show usage info
     my @scriptname = split /\//, $0;
-    print "Usage: $scriptname[-1] [ options ] [JSON-log-file [JSON-log-file ...] ]
+    print "Usage: $scriptname[-1] [ options ] JSON-log-file [JSON-log-file ...]
    -h             This help message.
+   -c filename    Load config file. Note: Commandline option override values in configfile.
    -g             Enable gunzip of input.
    -m fieldname   Name of field that needs to match for events to be corrolated. Option may be repeated.
    -e eventname   Name of event required in correlation. Option may be repeated.
@@ -368,9 +482,9 @@ if ( $help || $#ARGV eq -1 ) {
    -f             Follow input source. End date in -d option is ignored.
    -r             Apply round robin read of input sources. Default is to read from source of oldes event in queue.
    -u url         Url to elastic search compatible input source (including credentials).
-                  Index names are then expected rather than JSON filenames. Requires -d options to be set.
+                  Index names are then expected rather than JSON filenames.
    -d date-range  Filter on ISO date range (local time zone if none is given). A single date sets start date only.
-                  Two dates separated by '/' sets a range.  
+                  Two dates separated by '/' sets a range. Default is <today>T00:00:00/<today>T23:59:59. 
    -i integer     Sleep interval between polls for new content when -f is set. (Default 1 sec.)
    -p filename    Filename of process-id file.
    \n";
@@ -378,13 +492,36 @@ if ( $help || $#ARGV eq -1 ) {
     exit 1;
 }
 
-# Set some defaults
-@matchfield = ("to","from") if (!@matchfield);    # Name of field that needs to match for corrolation
-@timefield = ("timestamp:epoch") if (!@timefield);     # Name of field with time info to look for
-$start_time = ????
-$end_time = ????
+# Load options form config file (if any)
+if ($opt_config_file && -e $opt_config_file ) {
+    load_config( $opt_config_file );
+}
+# Set defaults for some options (if not already set).
+$opt_gunzip ||= 0;
+@opt_matchfield = ("to","from") if (!@opt_matchfield);      # Name of field that needs to match for corrolation
+@opt_timefield = ("timestamp:epoch") if (!@opt_timefield);  # Name of field with time info to look for
+$opt_window_size ||= 60;       # Max time difference accepted for event corrolation
+$opt_inputbuffersize ||= 0;    # No of events to keep in sorted input buffer
+$opt_pidfile ||= '';           # Name of process id file
+$opt_url ||= '';               # Url to ES compatible source
+$opt_daterange ||= '';         # ISO date range to filter on (local time zone if no zone is given).
+$opt_follow ||= 0;             # True if first input file is to be followed
+$opt_roundrobin ||= 0;         # True if cyclic read from sources is selected.
+$opt_strict_eventorder ||= 0;  # True if strict order of matching events is required.
+$opt_sleepinterval ||= 1;      # Timeperiod for re-reading file when followed.
 
-if ( $pidfile ne "" && open(my $pid_fh, ">", $pidfile) ) {
+# Prepare iso date range
+if ($opt_daterange eq '') {
+    $opt_daterange = localtime()->strftime("%Y-%m-%dT00:00:00") . $tz_local . '/' . localtime()->strftime("%Y-%m-%dT23:59:59") . $tz_local;
+}
+( $start_iso, $end_iso) = split("/", $opt_daterange);
+
+# Prepare epoch timestamps for range (and evaluate iso dates)
+$start_time = DateTime::Format::ISO8601->parse_datetime($start_iso)->epoch() || die "Error: Invalid start date in range.";
+if ($end_iso ne '') {
+    $end_time = DateTime::Format::ISO8601->parse_datetime($end_iso)->epoch() || die "Error: Invalid end date in range.";
+}
+if ( $opt_pidfile ne "" && open(my $pid_fh, ">", $opt_pidfile) ) {
     # Put current pid in file
     print $pid_fh "$$\n";
     close $pid_fh;
@@ -396,70 +533,23 @@ STARTPARSING:
 # Ensure all output is fully flushed.
 STDOUT->autoflush(1); 
 
-my $es;   # ES object
-
-if($url) {
+if($opt_url) {
     # Connect to ES
     $es = Search::Elasticsearch->new(
-	nodes => $url
+	nodes => $opt_url
 	);
-    die "Error: -d option required for ES sources" if (! $date);
-    
 }
 
 my $argc=0;
 foreach (@ARGV) {
-    if ($url) {
-	my $day_start = DateTime::Format::ISO8601->parse_datetime($date . "T00:00:00.000"); 
-	my $day_end = DateTime::Format::ISO8601->parse_datetime($date . "T23:59:59.999"); 
-#	my $day_start = $date . "T00:00:00.000";
-#	my $day_end = $date . "T23:59:59.999"; 
-	# Initiate (scrolled) search for all entries at given date for each index
-	my $tfield = ( $#timefield == $#ARGV ? $timefield[$argc] : $timefield[0] );
-	my ($tfield_name, $tfield_type) = split(":",$tfield);
-	my $scroll = $es->scroll_helper(
-	    index => $_,
-	    body => { 
-		query  => {
-		    bool => {
-			filter => [
-#			    {
-#				match_phrase => {
-#				    from  => "trondheim-mp"
-#				}
-#			    },
-#			    {
-#				match_phrase => {
-#				    to => "saopaulo-mp"
-#				}
-#			    },
-			    { range => { 
-				$tfield_name => {
-				    gte => $day_start->epoch(),
-				    lte => $day_end->epoch()
-#				    gte => $day_start,
-#				    lte => $day_end
-				}
-			      }
-			    }
-			    ]
-		    }
-		},
-		sort => [
-		    {
-#			$tfield => {
-			alfa_date => {
-			    order => "asc",			    
-			    unmapped_type => "boolean"
-			}
-		    }
-		    ],
-	    }
-	    );
-	push @inputfile, $scroll;
+    if ($opt_url) {
+	# Find time field for es index
+	my $tfield = ( $#opt_timefield == $#ARGV ? $opt_timefield[$argc] : $opt_timefield[0] );
+	# Init search for index
+	push @inputfile, init_search($_, $tfield);
     } else {
 	# Open each file given on commandline
-	if ( $gunzip ) {
+	if ( $opt_gunzip ) {
 	    # Open with decompression
 	    open (my $fh_raw, "$_ ") or die ("Error: Could not open file '$_'");
 	    push @inputfile_raw, $fh_raw;
@@ -481,7 +571,7 @@ while ($tryagain) {
     my $i=0;
     foreach (@inputfile) {
 
-	if ($url) {
+	if ($opt_url) {
 	    #print Dumper $_; exit;
 	    if (my $doc = $_->next) {
 		# Doc from search in index ready. Push to internal queue.
@@ -505,7 +595,7 @@ while ($tryagain) {
 	    ! exists $eventq[-1]{'me_srcidx'} or
 	    die ("Error: Admin field conflict") ) {
 	    # Add some admin data to event
-	    $eventq[-1]{'me_timefield'} = ( $#timefield == $#inputfile ? $timefield[$i] : $timefield[0] );
+	    $eventq[-1]{'me_timefield'} = ( $#opt_timefield == $#inputfile ? $opt_timefield[$i] : $opt_timefield[0] );
 	    $eventq[-1]{'me_source'} = $ARGV[$i];
 	    $eventq[-1]{'me_srcidx'} = $i;
 	    # Prepare for collection of summary info 
@@ -535,7 +625,7 @@ while ($tryagain) {
     my $prev_more_events=0;
     while ($more_events) {
 
-	if ($inputbuffersize > @inputfile && @eventq < $inputbuffersize && $more_events > $prev_more_events) {
+	if ($opt_inputbuffersize > @inputfile && @eventq < $opt_inputbuffersize && $more_events > $prev_more_events) {
 	    # Read one more event to fill up input buffer
 	    $prev_more_events=$more_events;
 	    $more_events = get_next_event(1);
@@ -574,7 +664,7 @@ while ($tryagain) {
 	    #Check if last events in window are sorted in time
 	    die "Error: Usorted buffer. Increase buffersize with -b." if (@eventq > 1 &&  $eventq[-1]{$eventq[-1]{'me_timefield'}} < $eventq[-2]{$eventq[-2]{'me_timefield'}});
 	    
-	    if ( ( $eventq[0]{$eventq[0]{'me_timefield'}} - $corr_events_window{ $matchfieldvalues }[0]{$corr_events_window{ $matchfieldvalues }[0]{'me_timefield'}} ) < $window_size) {
+	    if ( ( $eventq[0]{$eventq[0]{'me_timefield'}} - $corr_events_window{ $matchfieldvalues }[0]{$corr_events_window{ $matchfieldvalues }[0]{'me_timefield'}} ) < $opt_window_size) {
 		# Event correlates with events in window. Move to window buffer.
 		push @{ $corr_events_window{ $matchfieldvalues } }, $eventq[0];
 		$more_events = get_next_event();
@@ -656,7 +746,7 @@ while ($tryagain) {
 		my $newest_timestamp = $corr_events_window{ $matchfieldvalues }[-1]{$corr_events_window{ $matchfieldvalues }[-1]{'me_timefield'}};
 		my $oldest_timestamp = $corr_events_window{ $matchfieldvalues }[0]{$corr_events_window{ $matchfieldvalues }[0]{'me_timefield'}};
 		while ( $oldest_timestamp < $newest_timestamp ) { 
-		    last if ($newest_timestamp - $oldest_timestamp < $window_size);  # End loop
+		    last if ($newest_timestamp - $oldest_timestamp < $opt_window_size);  # End loop
 		    shift @{ $corr_events_window{ $matchfieldvalues }}; # Remove from head of queue
 		    $oldest_timestamp = $corr_events_window{ $matchfieldvalues }[0]{$corr_events_window{ $matchfieldvalues }[0]{'me_timefield'}};
 		}
@@ -664,16 +754,16 @@ while ($tryagain) {
 	}
     }
 
-    if ($follow) {
+    if ($opt_follow) {
 	# Sleep and retry reading at end of file
-	sleep($sleepinterval);
-	if ($url) {
+	sleep($opt_sleepinterval);
+	if ($opt_url) {
 	    # Reinitiate search in each index
 	    my $argc=0;
 	    foreach (@ARGV) {
 		my $start_ts = $inputfile_ts[$argc];
 		# Initiate (scrolled) search new entries index
-		my $tfield = ( $#timefield == $#ARGV ? $timefield[$argc] : $timefield[0] );
+		my $tfield = ( $#opt_timefield == $#ARGV ? $opt_timefield[$argc] : $opt_timefield[0] );
 		my $scroll = $es->scroll_helper(
 		    index => $_,
 		    body => { 
@@ -701,8 +791,8 @@ while ($tryagain) {
 			},
 			sort => [
 			    {
-#			$tfield => {
-				alfa_date => {
+				$tfield => {
+#				alfa_date => {
 				    order => "asc",			    
 				    unmapped_type => "boolean"
 				}
@@ -715,7 +805,7 @@ while ($tryagain) {
 	    }
 	} else {
 	    # Clear EOF condition for files given on commandline to reenable reading
-	    if ( $gunzip ) {
+	    if ( $opt_gunzip ) {
 		foreach (@inputfile_raw) {
 		    seek($_, 0, 1);  # Clear EOF condition on raw/compressed stream tigger new read attempt.
 		    $_->nextStream();
@@ -733,7 +823,7 @@ while ($tryagain) {
     }
 }
 
-if ($follow) {
+if ($opt_follow) {
     # File closed probably due to a SIGHUP. Restart parsing again... 
     $tryagain = 1;
     goto STARTPARSING;
