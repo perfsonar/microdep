@@ -34,7 +34,9 @@ use IO::Uncompress::Gunzip qw(gunzip $GunzipError) ;
 #use PerlIO::gzip;
 use Data::Dumper;
 use IO::Handle;
-use Search::Elasticsearch;
+#use Search::Elasticsearch;
+use LWP::UserAgent;
+use IO::Socket::SSL;
 use DateTime::Format::ISO8601;
 
 
@@ -49,31 +51,32 @@ use constant {
 # Global variables
 my $opt_help;
 my $opt_gunzip;
-my @opt_matchfield;    # Name of field that needs to match for corrolation
-my @opt_timefield;   # Name of field with time info to look for
-my @opt_eventmatch;   # List of events required to correlate for report to be output
-my @opt_peermatch;   # List of peers (from,to) relevant for corrolation window
-my $opt_window_size;           # Max time difference accepted for event corrolation
-my $opt_inputbuffersize;       # No of events to keep in sorted input buffer
-my $opt_pidfile = '';        # Name of process id file
-my $opt_url = '';            # Url to ES compatible source
-my $opt_daterange = '';      # ISO date range to filter on (local time zone if no zone is given).
-my $opt_follow = 0;          # True if first input file is to be followed
-my $opt_roundrobin = 0;      # True if cyclic read from sources is selected.
-my $opt_strict_eventorder = 0;    # True if strict order of matching events is required.
-my $opt_sleepinterval = 1;   # Timeperiod for re-reading file when followed.
-my $opt_config_file;         # Path to config file
+my @opt_matchfield;         # Name of field that needs to match for corrolation
+my @opt_timefield;          # Name of field with time info to look for
+my @opt_eventmatch;         # List of events required to correlate for report to be output
+my @opt_peermatch;          # List of peers (from,to) relevant for corrolation window
+my $opt_window_size;        # Max time difference accepted for event corrolation
+my $opt_inputbuffersize;    # No of events to keep in sorted input buffer
+my $opt_pidfile;;           # Name of process id file
+my $opt_url;                # Url to ES compatible source
+my $opt_daterange;          # ISO date range to filter on (local time zone if no zone is given).
+my $opt_follow;             # True if first input file is to be followed
+my $opt_roundrobin;         # True if cyclic read from sources is selected.
+my $opt_strict_eventorder;  # True if strict order of matching events is required.
+my $opt_sleepinterval;      # Timeperiod for re-reading file when followed.
+my $opt_config_file;        # Path to config file
+my $opt_verbose;            # Verbose flag
 
-my @inputfile;                  # Filehandles for input files. 
-my @inputfile_raw;              # Filehandles for input files. 
-my @inputfile_ts;              # Latest timestamp read from sources
+my @inputfile;              # Filehandles for input files. 
+my @inputfile_raw;          # Filehandles for input files. 
+my @inputfile_ts;           # Latest timestamp read from sources
 my $tz_local = localtime()->strftime("%z");  # Local timezone;
 substr($tz_local,3,0) = ":";                 # Insert ":" in timezone
-my $start_iso = '';      # ISO start time.
-my $end_iso = '';        # ISO end time.
-my $start_time = -1;      # Epoch start time.
-my $end_time = -1;        # Epoch end time.
-my $tryagain = 1;        # Flag to enable "tail -f" follow-behavior
+my $start_iso = '';         # ISO start time.
+my $end_iso = '';           # ISO end time.
+my $start_time = -1;        # Epoch start time.
+my $end_time = -1;          # Epoch end time.
+my $tryagain = 1;           # Flag to enable "tail -f" follow-behavior
 
 my $es;   # Elastich search object
 
@@ -107,7 +110,8 @@ sub load_config {
 	"url=s"  => \$opt_url,                  # Url string to Elastic Search compatible source (including credentials)
 	"date=s"  => \$opt_daterange,           # Filter on ISO date range (local time zone if none is given)
 	"conf=s"  => \$opt_config_file,         # Path to YAML config file.
-	"help"  => \$opt_help                  # flag for help message
+	"verbose"  => \$opt_verbose,            # Flag for outputting more info
+	"help"  => \$opt_help                   # Flag for help message
 	); 
     foreach my $opt (keys %{$config}) {
 	# Set option based on value from config file
@@ -151,7 +155,7 @@ sub init_corrsum_event {
     
     # Add matchfields with values
     my @mf_value = split(" ", $matchfieldvalues);
-    @mf_value == @opt_matchfield || die "Error: Match field value string differ form matchfield array.";
+    scalar @mf_value == scalar @opt_matchfield || die "Error: Missmatch in num of match fields and match field values.";
     for my $i (0...$#mf_value) { 
 	$corrsum_event{ $matchfieldvalues }{$opt_matchfield[$i]} = $mf_value[$i];
     }
@@ -266,7 +270,8 @@ sub get_next_event{
 	    my $doc;
 	    eval {
 		# Run in eval to mask out exceptions and avoid noise when no results are available
-		$doc = $fh->next;
+		#$doc = $fh->next;
+		$doc = get_next_from_search($fh);
 	    };
 	    if ($doc) {
 		# New doc ready
@@ -288,7 +293,10 @@ sub get_next_event{
     }	
     if( $new_event ) {
 	# Add some admin data to event
-	$new_event->{'me_timefield'} = ( $#opt_timefield == $#inputfile ? $opt_timefield[$next_file_to_read] : $opt_timefield[0] );
+	my $me_timefield = ( $#opt_timefield == $#inputfile ? $opt_timefield[$next_file_to_read] : $opt_timefield[0] );
+	my ($me_tfname, $me_tftype) = split(":",$me_timefield);    # Separate field name and type
+	$new_event->{'me_timefield'} = $me_tfname;
+	$new_event->{'me_timefield_type'} = $me_tftype;
 	$new_event->{'me_source'} = $ARGV[$next_file_to_read];
 	$new_event->{'me_srcidx'} = $next_file_to_read;
 	$inputfile_ts[$next_file_to_read] = $new_event->{$new_event->{'me_timefield'}};  # Latest read timestamp for source
@@ -328,7 +336,7 @@ sub get_matchfield_value_str{
 	    if ( exists $input_hash->{$_} ) {
 		$return_str .= $input_hash->{$_} . " ";
 	    } else {
-		print STDERR "Warning: Missing hash key '" . $_ . "' in input hash to get_matchfiled_value_str().\n"
+		print STDERR "Warning: Missing hash key '" . $_ . "' in input hash to get_matchfield_value_str().\n"
 	    }
 	}
     }
@@ -385,61 +393,113 @@ sub relevant_peer {
     return 1;
 }
 
+my %search_cache;    # Cached line from scrolled search. Required since initiating scrolled search also return min one document/record.
+
 sub init_search {
     # Initiate scrolled search for relevant entries at given date for an index
     my $index = shift;
     my $tfield = shift;
+    my $search_start = shift;
+    my $search_end = shift;
 
+    my $scroll_id = '';    # Return value
+    
     # Prepare time fields for search
-    my $search_start = $start_time; 
-    my $search_end = ( $end_time >= 0 ? $end_time : 'now' );
+    $search_start = $start_time; 
+    $search_end = ( $search_end >= 0 ? $search_end : 'now' );
 
     my ($tfield_name, $tfield_type) = split(":",$tfield);
     if ($tfield_type eq "iso") {
-	# Swap to iso time stamps
-	$search_start = $start_iso; 
-	$search_end = ( $end_iso ne "" ? $end_iso : 'now');
+	# Swap to iso time stamps with quotes
+	$search_start = '"' . $start_iso . '"'; 
+	$search_end = ( $end_iso ne "" ? '"' . $end_iso . '"' : '"now"');
     } elsif ($tfield_type ne "epoch") {
 	die "Error: Invalid time field type for '" . $tfield ."'.";
     }
     # Prepare filter for search. Add range first.
-    my @filter_clause = ( { range => { 
-				$tfield_name => {
-				    gte => $search_start,
-				    lte => $search_end
-				}
-			      }
-		   } );
-    my @should_clause;
+    my $filter_clause =  ' { "range": { "' . $tfield_name . '": { "gte": ' . $search_start . ', "lte": ' . $search_end . '}}}';
+    my $should_clause = '';
+    # Add from-to peer matching (if any)
     foreach my $peer (@opt_peermatch) {
 	my ($from, $to) = split (',', $peer);
-        push @should_clause, { bool => { must => [
-					     { term => { from => $from }},
-					     { term => { to => $to }}
-					     ]} };
+	$should_clause .= "," if ( $should_clause ne "");  # Add comman between peer match filters
+        $should_clause .=  '{ "bool": { "must": [ { "term": { "from": "' . $from . '" }}, { "term": { "to": "' . $to . '"}}]}}';
     }
-    push @filter_clause, { bool => { should => @should_clause }};
-
-    # Prepare scroll query handel
-    my $scroll = $es->scroll_helper(
-	index => $index,
-	body => { 
-	    query  => {
-		bool => {
-		    filter => @filter_clause
-		}
-	    },
-	    sort => [
-		{
-		    $tfield => {
-			order => "asc",			    
-			unmapped_type => "boolean"
+    if ( $should_clause ne "") {
+	$filter_clause .= ', { "bool": { "should": [ ' . $should_clause . ' ] }}';
+    }
+    
+    # Prepare final json query to post 
+    my $query_data = '{ "query": { "bool": { "filter": [ ' . $filter_clause . ' ]}}, "sort": [ {"' . $tfield_name . '": "asc"} ], "size": 1 }';
+    my $query_req = LWP::UserAgent->new;
+    $query_req->ssl_opts( verify_hostname => 0, SSL_verify_mode => IO::Socket::SSL::SSL_VERIFY_NONE);  # Accept any SSl cert
+    # Init scroll search with context life time similar to opt_sleepinterval
+    my $search_resp = $query_req->post($opt_url . '/' . $index . '/_search?scroll=' . $opt_sleepinterval. 's', 'Content-Type' => 'application/json', Content => $query_data );
+    if (defined $search_resp) {
+	print "Search respons for ", $index, ":\n", Dumper($search_resp) if ($opt_verbose);
+	my $search_result = decode_json $search_resp->{'_content'};
+	if (%{$search_result}) {
+	    if ($search_result->{'_scroll_id'}) {
+		# Valid scroll search
+		$scroll_id = $search_result->{'_scroll_id'};
+		if ($search_result->{'hits'}->{'total'}{'value'} > 0) {
+		    # Valid search results
+		    if ($search_result->{'hits'}->{'hits'}[0]->{'_source'}) {
+			$search_cache{$scroll_id} = $search_result->{'hits'}->{'hits'}[0];
+			return $scroll_id;
 		    }
 		}
-		],
-	});
+	    }
+	}
+    }
 
-    return $scroll;
+    # Scroll search init failed.
+    print "Error: Initialisation of scroll search for index ", $index, " on ", $opt_url, " failed.\n";
+    return ''
+}
+
+sub get_next_from_search {
+    # Return next document from scrolled search initiated by init_search
+
+    my $scroll_id = shift;
+    $scroll_id ne '' || return '';   # Exit on blank scroll id
+
+    if (exists($search_cache{$scroll_id}) ) {
+	# Doc/record in cache. Return doc.
+	my $doc_to_return = $search_cache{$scroll_id};
+	delete $search_cache{$scroll_id};
+	return $doc_to_return;
+    }
+    # Fetch next doc
+   
+    # Prepare json query for scroll search with context life time similar to opt_sleepinterval
+    my $query_data = '{ "scroll_id": "' . $scroll_id . '", "scroll": "' . $opt_sleepinterval . 's" }';
+    my $query_req = LWP::UserAgent->new;
+    $query_req->ssl_opts( verify_hostname => 0, SSL_verify_mode => IO::Socket::SSL::SSL_VERIFY_NONE);  # Accept any SSl cert
+    my $search_resp = $query_req->post($opt_url . '/_search/scroll', 'Content-Type' => 'application/json', Content => $query_data );
+    if (defined $search_resp) {
+	print "Search respons:\n", Dumper($search_resp) if ($opt_verbose);
+	my $search_result = decode_json $search_resp->{'_content'};
+	if (%{$search_result} && $search_result->{'hits'}->{'total'}{'value'} > 0 && $search_result->{'hits'}->{'hits'}[0]->{'_source'}) {
+	    # Valid results. Return.
+	    return $search_result->{'hits'}->{'hits'}[0];
+	}
+	# No results. Attempt to clean up scroll.
+	my $delete_resp = $query_req->delete($opt_url . '/_search/scroll/' .  $scroll_id );
+	if (defined $delete_resp) {
+	    print "Delete respons:\n", Dumper($delete_resp) if ($opt_verbose);
+	    my $delete_result = decode_json $delete_resp->{'_content'};
+	    if (%{$delete_result} && $delete_result->{'status'} eq 'success') {
+		# Return empty.
+		return '';
+	    }
+	}
+	print "Warning: Cleaning up scroll search for " . $scroll_id, " on ", $opt_url, " failed.\n" if ($opt_verbose);
+	return '';
+    }
+    # Something went wrong
+    print "Warning: Fetching scroll search results for scroll_id", $scroll_id, " on ", $opt_url, " failed.\n" if ($opt_verbose);
+    return '';
 }
 
 # #   M A I N   T H R E A D   # # 
@@ -460,7 +520,8 @@ GetOptions (
     "url=s"  => \$opt_url,                  # Url string to Elastic Search compatible source (including credentials)
     "date=s"  => \$opt_daterange,           # Filter on ISO date range (local time zone if none is given)
     "conf=s"  => \$opt_config_file,         # Path to YAML config file.
-    "help"  => \$opt_help                  # flag for help message
+    "verbose"  => \$opt_verbose,            # Flag for outputting more info
+    "help"  => \$opt_help                   # Flag for help message
     ) or die("Error in command line arguments\n");
 
 if ( $opt_help || $#ARGV eq -1 ) {
@@ -487,9 +548,10 @@ if ( $opt_help || $#ARGV eq -1 ) {
                   Two dates separated by '/' sets a range. Default is <today>T00:00:00/<today>T23:59:59. 
    -i integer     Sleep interval between polls for new content when -f is set. (Default 1 sec.)
    -p filename    Filename of process-id file.
+   -v             Be verbose.
    \n";
-    
-    exit 1;
+
+    exit 1; 
 }
 
 # Load options form config file (if any)
@@ -508,7 +570,7 @@ $opt_daterange ||= '';         # ISO date range to filter on (local time zone if
 $opt_follow ||= 0;             # True if first input file is to be followed
 $opt_roundrobin ||= 0;         # True if cyclic read from sources is selected.
 $opt_strict_eventorder ||= 0;  # True if strict order of matching events is required.
-$opt_sleepinterval ||= 1;      # Timeperiod for re-reading file when followed.
+$opt_sleepinterval ||= 5;      # Timeperiod for re-reading file when followed.
 
 # Prepare iso date range
 if ($opt_daterange eq '') {
@@ -533,12 +595,15 @@ STARTPARSING:
 # Ensure all output is fully flushed.
 STDOUT->autoflush(1); 
 
-if($opt_url) {
-    # Connect to ES
-    $es = Search::Elasticsearch->new(
-	nodes => $opt_url
-	);
-}
+#if($opt_url) {
+#    # Connect to ES
+#    $es = Search::Elasticsearch->new(
+#	nodes => $opt_url,
+#	cnx_pool => 'Sniff',
+#	log_to => 'Stderr'
+#	);
+#    print Dumper($es) if ($opt_verbose);
+#}
 
 my $argc=0;
 foreach (@ARGV) {
@@ -546,7 +611,7 @@ foreach (@ARGV) {
 	# Find time field for es index
 	my $tfield = ( $#opt_timefield == $#ARGV ? $opt_timefield[$argc] : $opt_timefield[0] );
 	# Init search for index
-	push @inputfile, init_search($_, $tfield);
+	push @inputfile, init_search($_, $tfield, $start_time, $end_time);
     } else {
 	# Open each file given on commandline
 	if ( $opt_gunzip ) {
@@ -573,7 +638,8 @@ while ($tryagain) {
 
 	if ($opt_url) {
 	    #print Dumper $_; exit;
-	    if (my $doc = $_->next) {
+	    #if (my $doc = $_->next) {
+	    if (my $doc = get_next_from_search($_)) {
 		# Doc from search in index ready. Push to internal queue.
 		#print Dumper $doc->{'_source'}; exit;
 		push @eventq, $doc->{'_source'};
@@ -762,45 +828,9 @@ while ($tryagain) {
 	    my $argc=0;
 	    foreach (@ARGV) {
 		my $start_ts = $inputfile_ts[$argc];
-		# Initiate (scrolled) search new entries index
+		# Initiate (scrolled) search for new entries in index (from last read till now)
 		my $tfield = ( $#opt_timefield == $#ARGV ? $opt_timefield[$argc] : $opt_timefield[0] );
-		my $scroll = $es->scroll_helper(
-		    index => $_,
-		    body => { 
-			query  => {
-			    bool => {
-				filter => [
-#			    {
-#				match_phrase => {
-#				    from  => "trondheim-mp"
-#				}
-#			    },
-#			    {
-#				match_phrase => {
-#				    to => "saopaulo-mp"
-#				}
-#			    },
-				    { range => { 
-					$tfield => {
-					    gte => $start_ts
-					}
-				      }
-				    }
-				    ]
-			    }
-			},
-			sort => [
-			    {
-				$tfield => {
-#				alfa_date => {
-				    order => "asc",			    
-				    unmapped_type => "boolean"
-				}
-			    }
-			    ],
-		    }
-		    );
-		$inputfile[$argc] = $scroll;
+		$inputfile[$argc] = init_search($_, $tfield,  $inputfile_ts[$argc], -1);
 		$argc++;
 	    }
 	} else {
