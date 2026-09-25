@@ -51,6 +51,7 @@ use constant {
 # Global variables
 my $opt_help;
 my $opt_gunzip;
+my $opt_corr_event_name;     # Name for discovered correlation event
 my @opt_matchfield;         # Name of field that needs to match for corrolation
 my @opt_timefield;          # Name of field with time info to look for
 my @opt_eventmatch;         # List of events required to correlate for report to be output
@@ -59,6 +60,7 @@ my $opt_window_size;        # Max time difference accepted for event corrolation
 my $opt_inputbuffersize;    # No of events to keep in sorted input buffer
 my $opt_pidfile;;           # Name of process id file
 my $opt_url;                # Url to ES compatible source
+my $opt_cachesize;          # Max num of docs/records to keep in cache 
 my $opt_daterange;          # ISO date range to filter on (local time zone if no zone is given).
 my $opt_follow;             # True if first input file is to be followed
 my $opt_roundrobin;         # True if cyclic read from sources is selected.
@@ -74,13 +76,12 @@ my $tz_local = localtime()->strftime("%z");  # Local timezone;
 substr($tz_local,3,0) = ":";                 # Insert ":" in timezone
 my $start_iso = '';         # ISO start time.
 my $end_iso = '';           # ISO end time.
-my $start_time = -1;        # Epoch start time.
-my $end_time = -1;          # Epoch end time.
+my $start_time = 0;         # Epoch start time.
+my $end_time = 0;           # Epoch end time.
 my $tryagain = 1;           # Flag to enable "tail -f" follow-behavior
 
-my $es;   # Elastich search object
+my $search_cache = {};           # Ref to hash of cached docs from search. (To limit num of search requests to archives.)
 
-my $corr_event_name = 'correlation';    # Default name for discovered correlation event
 my %corr_events_window;   # A hash table of correlations windows, on for each unique set of match-field values
 my %corrsum_event;           # Hash table for accumulating summary info
 my @tot_uniq_events;      
@@ -98,7 +99,8 @@ sub load_config {
 	"timefield=s" => \@opt_timefield,       # Array of names of time-fields. One for each given JSON input file. 
 	"follow" => \$opt_follow,               # follow source 
 	"roundrobin" => \$opt_roundrobin,       # Apply round robin read of input sources.
-	"gunzip"  => \$opt_gunzip,              # flag enabling gunzip of input 
+	"gunzip"  => \$opt_gunzip,              # flag enabling gunzip of input.
+	"name"  => \$opt_corr_event_name,       # Event type name for output correlation events. 
 	"matchfield=s" => \@opt_matchfield,     # Name of field that needs to match for events to be corrolated. Option may be repeated.
 	"eventmatch=s" => \@opt_eventmatch,     # Name of event required in correlation. Option may be repeated.
 	"peer=s" => \@opt_peermatch,            # "<from>,<to>" peer relevant for corrocation. Option may be repeated. Default is all peers.
@@ -108,6 +110,7 @@ sub load_config {
 	"interval=i" => \$opt_sleepinterval,    # Sleep interval between polls for new content
 	"pidfile=s"  => \$opt_pidfile,          # string for process id file
 	"url=s"  => \$opt_url,                  # Url string to Elastic Search compatible source (including credentials)
+	"cache=s"  => \$opt_cachesize,          # Max num of docs/records to keep in cache
 	"date=s"  => \$opt_daterange,           # Filter on ISO date range (local time zone if none is given)
 	"conf=s"  => \$opt_config_file,         # Path to YAML config file.
 	"verbose"  => \$opt_verbose,            # Flag for outputting more info
@@ -171,7 +174,7 @@ sub clean_up {
 #	$corrsum_event{$key}{"timestamp"} = DateTime::Format::ISO8601->parse_datetime($iso_time)->epoch(); 
 	#	$corrsum_event{$key}{"datetime"} = $iso_time;
 	
-	my $end_ts = ($end_time >= 0 ? $end_time : localtime());  # Apply current time as end time if none is given.
+	my $end_ts = ($end_time >= 0 ? $end_time : time());  # Apply current time as end time if none is given.
 	$corrsum_event{$key}{"timestamp"} = $end_ts;
 	$corrsum_event{$key}{"datetime"} = localtime($end_ts)->strftime("%Y-%m-%dT%H:%M:%S") . $tz_local;
 	$corrsum_event{$key}{'@date'} = $corrsum_event{$key}{"datetime"};
@@ -227,101 +230,125 @@ my $min_timestamp=0;    # For debugging
     
 
 sub get_next_source_to_read{
-    # Select next source (file or ES index) to read from
+    # Select index of next source (file or ES index) to read from
+    my $exclude = shift;  # Exclude indices in list
 
     if ($opt_roundrobin) {
-	    # Apply cyclic selection of sources to read from
-	    return ($next_file_to_read + 1 ) % @inputfile;
+	my $next_idx;
+	for (my $i = 1; $i <= @inputfile; $i++) {
+	    # Apply cyclic selection of sources.
+	    $next_idx = ($next_file_to_read + $i ) % @inputfile;
+	    # Return if not excluded
+	    return $next_idx if ( ! grep( /^$next_idx$/, @{$exclude}));
+	}
+	# No next source available
+	die "Error: No next source available.\n"
     }
     
     my $oldest_ts = 0;
-    my $oldest_idx = 0;
+    my $oldest_idx = -1;
     for my $i (0 .. $#inputfile_ts) {
+	next if ( grep( /^$i$/, @{$exclude})); 	# Skip if excluded
 	if (! $oldest_ts || $inputfile_ts[$i] < $oldest_ts) {
 	    # Select source which has the  oldest timestamp among all sources
 	    $oldest_ts = $inputfile_ts[$i];
 	    $oldest_idx = $i;
 	}
     }
-    return $oldest_idx;
+    die "Error: No next source available.\n" if ($oldest_idx == -1);
 
+    return $oldest_idx;
 }
 
 sub get_next_event{
     # Remove and replace oldest event in queue
 
     my $fill_q = shift;
-    my $old_event = $eventq[0];
+    my $old_event = $eventq[0];  # Store head of queue
     
     if (! $fill_q) {
 	# Remove head of queue
 	shift @eventq;
     }
-
-    # Select file/source to read
-    $next_file_to_read = get_next_source_to_read();
-    my $fh = $inputfile[$next_file_to_read];
-
+    
     my $line="";
-    my $no_at_eof=0;
+    my @at_eof;
     my $new_event;
-    while ($no_at_eof < @inputfile) {
+    while (@at_eof < @inputfile) {
+	# Select file/source to read
+	$next_file_to_read = get_next_source_to_read(\@at_eof);
+	my $fh = $inputfile[$next_file_to_read];
 	if ( $opt_url) {
-	    my $doc;
-	    eval {
-		# Run in eval to mask out exceptions and avoid noise when no results are available
-		#$doc = $fh->next;
-		$doc = get_next_from_search($fh);
-	    };
-	    if ($doc) {
+	    #	    my $doc;
+	    #	    eval {
+	    # Run in eval to mask out exceptions and avoid noise when no results are available
+	    #$doc = $fh->next;
+	    my $doc = get_next_from_search($fh);
+#	    };
+	    if (!$doc) {
+		# At end of index (EOF). Try next file/source.
+		push @at_eof, $fh;
+		next;
+	    } else {
 		# New doc ready
 		$new_event = $doc->{'_source'};
-		last;
 	    }
 	} else {
-	    if ( defined($line = <$fh>) ) {
+	    if ( ! defined($line = <$fh>) ) {
+		# End of file. Try next file/source.
+		push @at_eof, $fh;
+		next;
+	    } else {
 		# Line read from file. Parse.
 		$new_event = decode_json $line;
-		last;
 	    }
 	}
-	# File / index at EOF. Try next.
-	$no_at_eof++;
-	# Apply cyclic selection of sources to read from
-	$next_file_to_read = ($next_file_to_read + 1 ) % @inputfile;
-	$fh = $inputfile[$next_file_to_read];
+	if( $new_event ) {
+	    # Enure epoch timestamp for event by adding admin fields
+	    my $timefield = ( $#opt_timefield == $#inputfile ? $opt_timefield[$next_file_to_read] : $opt_timefield[0] );
+	    my ($tf_name, $tf_type) = split(":",$timefield);
+	    if ($tf_type eq "iso") {
+		$new_event->{'me_timestamp'} = DateTime::Format::ISO8601->parse_datetime()->epoch($eventq[-1]{$tf_name});
+		if (!$new_event->{'me_timestamp'}) {
+		    # Timestamp conversion failed. Skip.
+		    print STDERR "Error: Unrecognized timestamp in document from source " . $ARGV[$next_file_to_read] . ". Skipping.\n" if ($opt_verbose);
+		    $new_event = undef;
+		    next;
+		}
+	    } elsif ($tf_type eq "epoch") {
+		$new_event->{'me_timestamp'} = $new_event->{$tf_name};
+	    } else {
+		print STDERR "Error: Unrecognized timestamp format '" . $tf_type . "'. Skipping doc/record.\n" if ($opt_verbose);
+		$new_event = undef;
+		next;
+	    }
+	    # Add some more admin data to event
+	    $new_event->{'me_source'} = $ARGV[$next_file_to_read];
+	    $new_event->{'me_srcidx'} = $next_file_to_read;
+	    $new_event->{'me_matchall'} = 'match_all';           # Add a field common for all analysed records/docs   
+	    $inputfile_ts[$next_file_to_read] = $new_event->{'me_timestamp'};  # Latest read timestamp for source
+	    my $event_added = 0;
+	    for my $e (0 .. $#eventq) {
+		if ($new_event->{'me_timestamp'} < $eventq[$e]{'me_timestamp'}) {
+		    # Insert new event into queue
+		    splice(@eventq, $e, 0, $new_event);
+		    $event_added = 1;
+		    last;
+		}
+	    }
+	    if (! $event_added) {
+		# Add new event at end of queue
+		push @eventq, $new_event;
+	    }
+	    
+	    #DEBUG
+	    if (! $fill_q && $new_event->{'me_timestamp'} < $old_event->{'me_timestamp'}) {
+		print STDERR "Warning: New event is older than last analysed event. Increase buffer with -b.  Source: ". $new_event->{'me_source'} . " Timestamp: " . $new_event->{'timestamp'} . " Peer: ". $new_event->{'from'} . "," . $new_event->{'to'}  .  "\n";
+	    }
+	    # Done adding a new event
+	    last;
+	}
     }	
-    if( $new_event ) {
-	# Add some admin data to event
-	my $me_timefield = ( $#opt_timefield == $#inputfile ? $opt_timefield[$next_file_to_read] : $opt_timefield[0] );
-	my ($me_tfname, $me_tftype) = split(":",$me_timefield);    # Separate field name and type
-	$new_event->{'me_timefield'} = $me_tfname;
-	$new_event->{'me_timefield_type'} = $me_tftype;
-	$new_event->{'me_source'} = $ARGV[$next_file_to_read];
-	$new_event->{'me_srcidx'} = $next_file_to_read;
-	$inputfile_ts[$next_file_to_read] = $new_event->{$new_event->{'me_timefield'}};  # Latest read timestamp for source
-	my $event_added = 0;
-	for my $e (0 .. $#eventq) {
-	    if ($new_event->{$new_event->{'me_timefield'}} < $eventq[$e]{$eventq[$e]{'me_timefield'}}) {
-		# Insert new event into queue
-		splice(@eventq, $e, 0, $new_event);
-		$event_added = 1;
-		last;
-	    }
-	}
-	if (! $event_added) {
-	    # Add new event at end of queue
-	    push @eventq, $new_event;
-	}
-	
-	#DEBUG
-	if (! $fill_q  && $new_event->{'timestamp'} < $old_event->{'timestamp'}) {
-	    print STDERR "Warning: New event is older than last analysed event. Increase buffer with -b.  Source: ". $new_event->{'me_source'} . " Timestamp: " . $new_event->{'timestamp'} . " Peer: ". $new_event->{'from'} . "," . $new_event->{'to'}  .  "\n";
-	} else {
-#	    print STDERR "OK\n";
-	}	    
-    }
-    
     # Return no of events in queue
     return @eventq; 
 }
@@ -331,7 +358,6 @@ sub get_matchfield_value_str{
     my $input_hash = shift;
     my $return_str = "";
     if (keys %{$input_hash} > 0) {
-	# None-empty input hash. Proceed to build value string.
 	foreach (@opt_matchfield) {
 	    if ( exists $input_hash->{$_} ) {
 		$return_str .= $input_hash->{$_} . " ";
@@ -339,7 +365,7 @@ sub get_matchfield_value_str{
 		print STDERR "Warning: Missing hash key '" . $_ . "' in input hash to get_matchfield_value_str().\n"
 	    }
 	}
-    }
+    } 	
     return $return_str;
 }
 
@@ -393,21 +419,20 @@ sub relevant_peer {
     return 1;
 }
 
-my %search_cache;    # Cached line from scrolled search. Required since initiating scrolled search also return min one document/record.
-
 sub init_search {
-    # Initiate scrolled search for relevant entries at given date for an index
-    my $index = shift;
-    my $tfield = shift;
-    my $search_start = shift;
-    my $search_end = shift;
-
-    my $scroll_id = '';    # Return value
+    # Initiate search to Openseach/Elastic search for relevant entries at given date for an index
+    my $index = shift;       # Search index name
+    my $tfield = shift;      # Timefield name:type
+    my $start_time = shift;  # Epoch start time
+    my $end_time = shift;    # Epoch end time
+    my $start_iso = shift;   # Iso start time
+    my $end_iso = shift;     # Iso end time
+    
+    # Apply epoch time as default
+    my $search_start = $start_time; 
+    my $search_end = $end_time;
     
     # Prepare time fields for search
-    $search_start = $start_time; 
-    $search_end = ( $search_end >= 0 ? $search_end : 'now' );
-
     my ($tfield_name, $tfield_type) = split(":",$tfield);
     if ($tfield_type eq "iso") {
 	# Swap to iso time stamps with quotes
@@ -416,91 +441,193 @@ sub init_search {
     } elsif ($tfield_type ne "epoch") {
 	die "Error: Invalid time field type for '" . $tfield ."'.";
     }
-    # Prepare filter for search. Add range first.
-    my $filter_clause =  ' { "range": { "' . $tfield_name . '": { "gte": ' . $search_start . ', "lte": ' . $search_end . '}}}';
-    my $should_clause = '';
-    # Add from-to peer matching (if any)
-    foreach my $peer (@opt_peermatch) {
-	my ($from, $to) = split (',', $peer);
-	$should_clause .= "," if ( $should_clause ne "");  # Add comman between peer match filters
-        $should_clause .=  '{ "bool": { "must": [ { "term": { "from": "' . $from . '" }}, { "term": { "to": "' . $to . '"}}]}}';
-    }
-    if ( $should_clause ne "") {
-	$filter_clause .= ', { "bool": { "should": [ ' . $should_clause . ' ] }}';
-    }
+
+    die "Error: Index '" . $index . "' appears twice. " if (exists($search_cache->{$index}) );
+
+    $search_cache->{$index} = { 'tfield_name' => $tfield_name, 'tfield_type' => $tfield_type,
+				    'start_time' => $search_start, 'range_start' => 'gte',
+				    'end_time' => $search_end, 'range_end' => 'lte',
+				    'hits' => [] };
     
-    # Prepare final json query to post 
-    my $query_data = '{ "query": { "bool": { "filter": [ ' . $filter_clause . ' ]}}, "sort": [ {"' . $tfield_name . '": "asc"} ], "size": 1 }';
-    my $query_req = LWP::UserAgent->new;
-    $query_req->ssl_opts( verify_hostname => 0, SSL_verify_mode => IO::Socket::SSL::SSL_VERIFY_NONE);  # Accept any SSl cert
-    # Init scroll search with context life time similar to opt_sleepinterval
-    my $search_resp = $query_req->post($opt_url . '/' . $index . '/_search?scroll=' . $opt_sleepinterval. 's', 'Content-Type' => 'application/json', Content => $query_data );
-    if (defined $search_resp) {
-	print "Search respons for ", $index, ":\n", Dumper($search_resp) if ($opt_verbose);
-	my $search_result = decode_json $search_resp->{'_content'};
-	if (%{$search_result}) {
-	    if ($search_result->{'_scroll_id'}) {
-		# Valid scroll search
-		$scroll_id = $search_result->{'_scroll_id'};
-		if ($search_result->{'hits'}->{'total'}{'value'} > 0) {
-		    # Valid search results
-		    if ($search_result->{'hits'}->{'hits'}[0]->{'_source'}) {
-			$search_cache{$scroll_id} = $search_result->{'hits'}->{'hits'}[0];
-			return $scroll_id;
-		    }
+    fill_search_cache($index);
+    
+    return $index;
+}
+    
+sub fill_search_cache {
+    # Fill search cache for index
+    my $index = shift;
+
+    if (! exists($search_cache->{$index}) ) {
+        die "Error: No cache for index " . $index . ".";
+    }
+
+    my $num_in_cache = scalar @{$search_cache->{$index}->{'hits'}};
+    my $num_to_load = $opt_cachesize - $num_in_cache;
+    if ($num_to_load > 0 ) {
+	# Query for more docs / records
+
+	my $start_time = $search_cache->{$index}->{'start_time'};
+	my $range_start = $search_cache->{$index}->{'range_start'};
+	my $end_time = $search_cache->{$index}->{'end_time'};
+	if (!$end_time) {
+	    if( $search_cache->{$index}{'tfield_type'} eq 'iso' ) {
+		$end_time = '"now"';         # Apply 'now' when unspecifield iso end time
+	    } else {
+		$end_time = time();   # Apply current epoch time when unspecifield epoch end time
+	    }
+	}
+	# Prepare filter for search. Add range first.
+	my $filter_clause =  ' { "range": { "' . $search_cache->{$index}->{'tfield_name'} . '": { "' . $range_start. '": ' . $start_time . ', "lte": ' . $end_time . '}}}';
+	my $should_clause = '';
+	# Add from-to peer matching (if any)
+	foreach my $peer (@opt_peermatch) {
+	    my ($from, $to) = split (',', $peer);
+	    $should_clause .= "," if ( $should_clause ne "");  # Add comman between peer match filters
+	    $should_clause .=  '{ "bool": { "must": [ { "term": { "from": "' . $from . '" }}, { "term": { "to": "' . $to . '"}}]}}';
+	}
+	if ( $should_clause ne "") {
+	    $filter_clause .= ', { "bool": { "should": [ ' . $should_clause . ' ] }}';
+	}
+	
+	# Prepare final json query to post 
+	my $query_data = '{ "query": { "bool": { "filter": [ ' . $filter_clause . ' ]}}, "sort": [ {"' . $search_cache->{$index}->{'tfield_name'} . '": "asc"} ], "size": ' . $num_to_load . ' }';
+	my $query_req = LWP::UserAgent->new;
+	$query_req->ssl_opts( verify_hostname => 0, SSL_verify_mode => IO::Socket::SSL::SSL_VERIFY_NONE);  # Accept any SSl cert
+	# Init search with size equal to max cache
+	my $search_resp = $query_req->post($opt_url . '/' . $index . '/_search', 'Content-Type' => 'application/json', Content => $query_data );
+	if (defined $search_resp) {
+	    print STDERR "Search respons for ", $index, ":\n", Dumper($search_resp) if ($opt_verbose);
+	    my $search_result = decode_json $search_resp->{'_content'};
+	    if (%{$search_result} && $search_result->{'hits'}) {
+		if ( $search_result->{'hits'}->{'total'}{'value'} > 0 && $search_result->{'hits'}->{'hits'}) {
+		    # Valid search. Add results to cache.
+		    push @{$search_cache->{$index}->{'hits'}}, @{$search_result->{'hits'}->{'hits'}};
+
+		    # Update start time for future cache fill requests
+		    $search_cache->{$index}->{'start_time'} = $search_cache->{$index}->{'hits'}[-1]->{'_source'}->{$search_cache->{$index}{'tfield_name'}};
+		    $search_cache->{$index}->{'range_start'} =  "gt" ;  # (... to avoid duplicates.)
+
+		    # Return num of docs / records in cache
+		    return scalar @{$search_cache->{$index}->{'hits'}}; 
+		} else {
+		    # Valid search but no docs found.
+		    return 0;
 		}
 	    }
 	}
-    }
 
-    # Scroll search init failed.
-    print "Error: Initialisation of scroll search for index ", $index, " on ", $opt_url, " failed.\n";
-    return ''
+	# Search init failed.
+	print STDERR "Error: Search in index ", $index, " on ", $opt_url, " failed.\n";
+	return 0
+    }
+    # Cache already full
+    print STDERR "Warning: Search cache already full for index " . $index . "\n" if ($opt_verbose);
+    return scalar @{$search_cache->{$index}};   # Return num of docs / records in cache
 }
+
 
 sub get_next_from_search {
-    # Return next document from scrolled search initiated by init_search
+    # Return next document from search initiated by init_search
 
-    my $scroll_id = shift;
-    $scroll_id ne '' || return '';   # Exit on blank scroll id
+    my $index = shift;
+    $index ne '' || return '';   # Exit on blank index
 
-    if (exists($search_cache{$scroll_id}) ) {
-	# Doc/record in cache. Return doc.
-	my $doc_to_return = $search_cache{$scroll_id};
-	delete $search_cache{$scroll_id};
-	return $doc_to_return;
+    if (! exists($search_cache->{$index})) {
+	print STDERR "Error: Search for '" . $index . "' not initialized.\n";
+	return 0;
     }
-    # Fetch next doc
-   
-    # Prepare json query for scroll search with context life time similar to opt_sleepinterval
-    my $query_data = '{ "scroll_id": "' . $scroll_id . '", "scroll": "' . $opt_sleepinterval . 's" }';
-    my $query_req = LWP::UserAgent->new;
-    $query_req->ssl_opts( verify_hostname => 0, SSL_verify_mode => IO::Socket::SSL::SSL_VERIFY_NONE);  # Accept any SSl cert
-    my $search_resp = $query_req->post($opt_url . '/_search/scroll', 'Content-Type' => 'application/json', Content => $query_data );
-    if (defined $search_resp) {
-	print "Search respons:\n", Dumper($search_resp) if ($opt_verbose);
-	my $search_result = decode_json $search_resp->{'_content'};
-	if (%{$search_result} && $search_result->{'hits'}->{'total'}{'value'} > 0 && $search_result->{'hits'}->{'hits'}[0]->{'_source'}) {
-	    # Valid results. Return.
-	    return $search_result->{'hits'}->{'hits'}[0];
-	}
-	# No results. Attempt to clean up scroll.
-	my $delete_resp = $query_req->delete($opt_url . '/_search/scroll/' .  $scroll_id );
-	if (defined $delete_resp) {
-	    print "Delete respons:\n", Dumper($delete_resp) if ($opt_verbose);
-	    my $delete_result = decode_json $delete_resp->{'_content'};
-	    if (%{$delete_result} && $delete_result->{'status'} eq 'success') {
-		# Return empty.
-		return '';
-	    }
-	}
-	print "Warning: Cleaning up scroll search for " . $scroll_id, " on ", $opt_url, " failed.\n" if ($opt_verbose);
-	return '';
+    if( ! @{$search_cache->{$index}->{'hits'}} ) {
+	# No docs in cache. Attempt to fetch some. 
+	fill_search_cache($index);
     }
-    # Something went wrong
-    print "Warning: Fetching scroll search results for scroll_id", $scroll_id, " on ", $opt_url, " failed.\n" if ($opt_verbose);
-    return '';
+    if( @{$search_cache->{$index}->{'hits'}} > 0) {
+	# Cache for index has entries.
+	return shift @{$search_cache->{$index}->{'hits'}};
+    }
+    # No docs found.
+    return 0;
 }
+
+sub report_correlation {
+    # Generate and output report on events in entry of @corr_events_window 
+    my $matchfieldvalues = shift;
+    
+    my $t_local = localtime($corr_events_window{ $matchfieldvalues }[0]{'me_timestamp'});
+
+    # Prepare basics event structure
+    my %corr_event = (
+	'event_type' => $opt_corr_event_name,
+	'timestamp' => $corr_events_window{ $matchfieldvalues }[0]{'me_timestamp'},
+	'duration' => $corr_events_window{ $matchfieldvalues }[-1]{'me_timestamp'} - $corr_events_window{ $matchfieldvalues }[0]{'me_timestamp'},
+	'corr_count' => scalar @{ $corr_events_window{ $matchfieldvalues } },
+	'@date' => $t_local->strftime("%Y-%m-%dT%H:%M:%S%z"),  # ISO date with local timezone
+	'datetime' => $t_local->strftime("%Y-%m-%dT%H:%M:%S%z"),  # ISO date with local timezone
+	);
+		    
+    my $events_correlating = "";
+    my @uniq_event_types = ();
+    my @uniq_source_files = ();
+    # Browse through all events in window and copy data into new correlation event
+    for my $w (0 .. $#{ $corr_events_window{ $matchfieldvalues } } ) {
+	if ( exists $corr_events_window{ $matchfieldvalues }[$w]{'event_type'} ) {
+	    # Register event types
+	    my $event_type = $corr_events_window{ $matchfieldvalues }[$w]{'event_type'};
+	    $events_correlating .= $event_type . ", ";
+	    push @uniq_event_types, $event_type if (! is_element_of($event_type, @uniq_event_types));
+	    foreach my $key (keys %{$corr_events_window{ $matchfieldvalues }[$w]}) {
+		if (! exists $corr_event{$key} ) {
+		    # Copy event details (but don't overwriting anyting)
+		    $corr_event{$key} = $corr_events_window{ $matchfieldvalues }[$w]{$key};
+		}
+	    }
+	    # Register unique sourcefiles
+	    my $sourcefile = $corr_events_window{ $matchfieldvalues }[$w]{'me_source'};
+	    push @uniq_source_files, $sourcefile if (! is_element_of($sourcefile, @uniq_source_files));
+	} else {
+	    print STDERR "Warning: Correlating event does not contain expected field 'event_type'. Skipping.\n";
+	}
+    }
+    # Add list of events found to correlate
+    if ($events_correlating) {
+	chop $events_correlating;
+	chop $events_correlating;
+    }
+    $corr_event{'events_corr'} = $events_correlating;
+    $corr_event{'corr_count_uniq'} = @uniq_event_types;
+    $corr_event{'corr_count_src'} = @uniq_source_files;
+    # Clean up admin fields
+    delete $corr_event{'me_timestamp'};
+    delete $corr_event{'me_timestamp'};
+    delete $corr_event{'me_source'};
+    delete $corr_event{'me_srcidx'};
+    delete $corr_event{'me_matchall'};
+    
+    # Output
+    print encode_json(\%corr_event), "\n";
+    
+    # Update summary info
+    #if (! exists $corrsum_event{ $matchfieldvalues }) {
+    # Init summary structure 
+    #init_corrsum_event($matchfieldvalues);
+    #}
+    $corrsum_event{ $matchfieldvalues }{"timestamp_start"}=$corr_events_window{ $matchfieldvalues }[0]{'me_timestamp'};
+    $corrsum_event{ $matchfieldvalues }{"timestamp_end"}=$corr_events_window{ $matchfieldvalues }[-1]{'me_timestamp'};
+    #$corrsum_event{ $matchfieldvalues }{"timestamp"}=$corrsum_event{ $matchfieldvalues }{"timestamp_end"};
+    $corrsum_event{ $matchfieldvalues }{"count"}++;
+    $corrsum_event{ $matchfieldvalues }{"corr_count"} += $corr_event{'corr_count'};
+    # Update collection of unique event types
+    foreach (@uniq_event_types) {
+	push @{ $corrsum_event{ $matchfieldvalues }{"tot_uniq_events"} }, $_ if (! is_element_of($_, @{ $corrsum_event{ $matchfieldvalues }{"tot_uniq_events"} } ));
+    }
+    $corrsum_event{ $matchfieldvalues }{'sum_duration'} += $corr_event{'duration'};
+    $corrsum_event{ $matchfieldvalues }{'sum_tloss'} += $corr_event{'tloss'} if ( exists $corr_event{'tloss'} );
+    $corrsum_event{ $matchfieldvalues }{'max_tloss'} = $corr_event{'tloss'} if ( exists $corr_event{'tloss'} && $corr_event{'tloss'} > $corrsum_event{ $matchfieldvalues }{'max_tloss'});
+    $corrsum_event{ $matchfieldvalues }{'avg_duration'} = $corrsum_event{ $matchfieldvalues }{'sum_duration'} / $corrsum_event{ $matchfieldvalues }{"corr_count"};
+    $corrsum_event{ $matchfieldvalues }{'corr_count_src'} = @uniq_source_files if ( $corrsum_event{ $matchfieldvalues }{'corr_count_src'} < @uniq_source_files);
+}
+
+
 
 # #   M A I N   T H R E A D   # # 
 
@@ -509,6 +636,7 @@ GetOptions (
     "follow" => \$opt_follow,               # follow source 
     "roundrobin" => \$opt_roundrobin,       # Apply round robin read of input sources.
     "gunzip"  => \$opt_gunzip,              # flag enabling gunzip of input 
+    "name"  => \$opt_corr_event_name,       # Event type name for output correlation events. 
     "matchfield=s" => \@opt_matchfield,     # Name of field that needs to match for events to be corrolated. Option may be repeated.
     "eventmatch=s" => \@opt_eventmatch,     # Name of event required in correlation. Option may be repeated.
     "peer=s" => \@opt_peermatch,            # "<from>,<to>" peer relevant for corrocation. Option may be repeated. Default is all peers.
@@ -518,6 +646,7 @@ GetOptions (
     "interval=i" => \$opt_sleepinterval,    # Sleep interval between polls for new content
     "pidfile=s"  => \$opt_pidfile,          # string for process id file
     "url=s"  => \$opt_url,                  # Url string to Elastic Search compatible source (including credentials)
+    "cache=s"  => \$opt_cachesize,          # Max num of docs/records to keep in cache
     "date=s"  => \$opt_daterange,           # Filter on ISO date range (local time zone if none is given)
     "conf=s"  => \$opt_config_file,         # Path to YAML config file.
     "verbose"  => \$opt_verbose,            # Flag for outputting more info
@@ -527,28 +656,30 @@ GetOptions (
 if ( $opt_help || $#ARGV eq -1 ) {
     # Show usage info
     my @scriptname = split /\//, $0;
-    print "Usage: $scriptname[-1] [ options ] JSON-log-file [JSON-log-file ...]
-   -h             This help message.
-   -c filename    Load config file. Note: Commandline option override values in configfile.
-   -g             Enable gunzip of input.
-   -m fieldname   Name of field that needs to match for events to be corrolated. Option may be repeated.
-   -e eventname   Name of event required in correlation. Option may be repeated.
-   --peer from,to Peer of node names (comman separated) relevant for corrolation. Option may be repeated.
-                  Default is all peers. 
-   -s             Strict order of events given by -e is required. 
+    print "Usage:  $scriptname[-1] [ options ] JSON-log-file [JSON-log-file ...]
+   -h              This help message.
+   --conf filename Load config file. Note: Commandline option override values in configfile.
+   -g              Enable gunzip of input.
+   -n event-name   Name of event type for correlation events.
+   -m fieldname    Name of field that needs to match for events to be corrolated. Option may be repeated. 
+   -e eventname    Name of event required in correlation. Option may be repeated.
+   --peer from,to  Peer of node names (comman separated) relevant for corrolation. Option may be repeated.
+                   Default is all peers. 
+   -s              Strict order of events given by -e is required. 
    -t fieldname[:iso|epoch]   Name of timefield and timefield type (colon separated). Type is either 'iso'
-                  or 'epoch'. Default is 'epoch'. Option may be repeated according to no of input files.
-   -w seconds     Width of time window (in seconds) to be interpreted as corrolated events.
-   -b integer     No of events to read and sort in input buffer. Default is no of files specified.
-   -f             Follow input source. End date in -d option is ignored.
-   -r             Apply round robin read of input sources. Default is to read from source of oldes event in queue.
-   -u url         Url to elastic search compatible input source (including credentials).
-                  Index names are then expected rather than JSON filenames.
-   -d date-range  Filter on ISO date range (local time zone if none is given). A single date sets start date only.
-                  Two dates separated by '/' sets a range. Default is <today>T00:00:00/<today>T23:59:59. 
-   -i integer     Sleep interval between polls for new content when -f is set. (Default 1 sec.)
-   -p filename    Filename of process-id file.
-   -v             Be verbose.
+                   or 'epoch'. Default is 'epoch'. Option may be repeated according to no of input files.
+   -w seconds      Width of time window (in seconds) to be interpreted as corrolated events.
+   -b integer      No of events to read and sort in input buffer. Default is no of files specified.
+   -f              Follow input source. End date in -d option is ignored.
+   -r              Apply round robin read of input sources. Default is to read from source of oldes event in queue.
+   -u url          Url to elastic search compatible input source (including credentials).
+                   Index names are then expected rather than JSON filenames.
+   --cache integer Max num of docs/records to keep in cache.
+   -d date-range   Filter on ISO date range (local time zone if none is given). A single date sets start date only.
+                   Two dates separated by '/' sets a range. Default is <today>T00:00:00/<today>T23:59:59. 
+   -i integer      Sleep interval between polls for new content when -f is set. (Default 1 sec.)
+   -p filename     Filename of process-id file.
+   -v              Be verbose.
    \n";
 
     exit 1; 
@@ -560,12 +691,14 @@ if ($opt_config_file && -e $opt_config_file ) {
 }
 # Set defaults for some options (if not already set).
 $opt_gunzip ||= 0;
-@opt_matchfield = ("to","from") if (!@opt_matchfield);      # Name of field that needs to match for corrolation
+$opt_corr_event_name ||= 'correlation';                     # Default name for discovered correlation event
+@opt_matchfield = ("me_matchall") if (!@opt_matchfield);    # Name of field that needs to match for corrolation
 @opt_timefield = ("timestamp:epoch") if (!@opt_timefield);  # Name of field with time info to look for
-$opt_window_size ||= 60;       # Max time difference accepted for event corrolation
+$opt_window_size ||= 60;       # Max time difference in seconds accepted for event corrolation
 $opt_inputbuffersize ||= 0;    # No of events to keep in sorted input buffer
 $opt_pidfile ||= '';           # Name of process id file
 $opt_url ||= '';               # Url to ES compatible source
+$opt_cachesize ||= 100;        # Max num of doec / records kept in cache
 $opt_daterange ||= '';         # ISO date range to filter on (local time zone if no zone is given).
 $opt_follow ||= 0;             # True if first input file is to be followed
 $opt_roundrobin ||= 0;         # True if cyclic read from sources is selected.
@@ -574,15 +707,25 @@ $opt_sleepinterval ||= 5;      # Timeperiod for re-reading file when followed.
 
 # Prepare iso date range
 if ($opt_daterange eq '') {
-    $opt_daterange = localtime()->strftime("%Y-%m-%dT00:00:00") . $tz_local . '/' . localtime()->strftime("%Y-%m-%dT23:59:59") . $tz_local;
+    # Set range with current time as start date and no end date
+    $opt_daterange = localtime()->strftime("%Y-%m-%dT%H:%M:%S") . $tz_local ;
 }
 ( $start_iso, $end_iso) = split("/", $opt_daterange);
 
+if (! ( $start_iso =~ /Z|[+\-]\d{2}:?\d{2}$/) ) {
+    # Timezone missing. Add local.
+    $start_iso .= $tz_local;
+}
 # Prepare epoch timestamps for range (and evaluate iso dates)
 $start_time = DateTime::Format::ISO8601->parse_datetime($start_iso)->epoch() || die "Error: Invalid start date in range.";
-if ($end_iso ne '') {
+$end_iso = ($opt_follow ? '' : $end_iso);   # Clear end time to follow input source 
+if ($end_iso) {
+    if (! ( $end_iso =~ /Z|[+\-]\d{2}:?\d{2}$/) ) {
+	# Timezone missing. Add local.
+	$end_iso .= $tz_local;
+    }
     $end_time = DateTime::Format::ISO8601->parse_datetime($end_iso)->epoch() || die "Error: Invalid end date in range.";
-}
+} 
 if ( $opt_pidfile ne "" && open(my $pid_fh, ">", $opt_pidfile) ) {
     # Put current pid in file
     print $pid_fh "$$\n";
@@ -611,7 +754,7 @@ foreach (@ARGV) {
 	# Find time field for es index
 	my $tfield = ( $#opt_timefield == $#ARGV ? $opt_timefield[$argc] : $opt_timefield[0] );
 	# Init search for index
-	push @inputfile, init_search($_, $tfield, $start_time, $end_time);
+	push @inputfile, init_search($_, $tfield, $start_time, $end_time, $start_iso, $end_iso);
     } else {
 	# Open each file given on commandline
 	if ( $opt_gunzip ) {
@@ -656,18 +799,37 @@ while ($tryagain) {
 	    $i++;
 	    next;
 	}
-	if (! exists $eventq[-1]{'me_timefield'} &&
+	if (! exists $eventq[-1]{'me_timestamp'} &&
 	    ! exists $eventq[-1]{'me_source'} &&
-	    ! exists $eventq[-1]{'me_srcidx'} or
+	    ! exists $eventq[-1]{'me_srcidx'} &&
+	    ! exists $eventq[-1]{'me_matchall'} or
 	    die ("Error: Admin field conflict") ) {
-	    # Add some admin data to event
-	    $eventq[-1]{'me_timefield'} = ( $#opt_timefield == $#inputfile ? $opt_timefield[$i] : $opt_timefield[0] );
+	    # Enure epoch timestamp for event
+	    my $timefield = ( $#opt_timefield == $#inputfile ? $opt_timefield[$i] : $opt_timefield[0] );
+	    my ($tf_name, $tf_type) = split(":", $timefield);
+	    if ($tf_type eq "iso") {
+		$eventq[-1]{'me_timestamp'} = DateTime::Format::ISO8601->parse_datetime()->epoch($eventq[-1]{$tf_name});
+		if (!$eventq[-1]{'me_timestamp'}) {
+		    # Timestamp conversion failed. Skip.
+		    print STDERR "Error: Unrecognized timestamp in document from source " . $ARGV[$i] . ". Skipping.\n" if ($opt_verbose);
+		    pop @eventq;
+		    next;
+		}
+	    } elsif ($tf_type eq "epoch") {
+		$eventq[-1]{'me_timestamp'} = $eventq[-1]{$tf_name};
+	    } else {
+		print STDERR "Error: Unrecognized timestamp format '" . $tf_type . "'. Skipping doc/record.\n" if ($opt_verbose);
+		pop @eventq;
+		next;
+	    }
+	    # Add some more admin data to event
 	    $eventq[-1]{'me_source'} = $ARGV[$i];
 	    $eventq[-1]{'me_srcidx'} = $i;
+	    $eventq[-1]{'me_matchall'} = 'match_all';      # Add a field common for all analysed records/docs   
 	    # Prepare for collection of summary info 
 	    init_corrsum_event( get_matchfield_value_str($eventq[-1]));   
 	}
-	$inputfile_ts[$i] = $eventq[-1]{$eventq[-1]{'me_timefield'}};  # Latest read timestamp for source
+	$inputfile_ts[$i] = $eventq[-1]{'me_timestamp'};  # Latest read timestamp for source
 	$i++;
     }
     
@@ -677,7 +839,7 @@ while ($tryagain) {
 	# Loop until no elements are swapped.
 	$done=1;
 	for my $e (0..$#eventq-1) {
-	    if ($eventq[$e]{$eventq[$e]{'me_timefield'}} > $eventq[$e+1]{$eventq[$e+1]{'me_timefield'}}) {
+	    if ($eventq[$e]{'me_timestamp'} > $eventq[$e+1]{'me_timestamp'}) {
 		# Swap elements
 		@eventq[$e,$e+1]=@eventq[$e+1,$e];
 		# Loop again
@@ -728,111 +890,46 @@ while ($tryagain) {
 	    }
 	} else {
 	    #Check if last events in window are sorted in time
-	    die "Error: Usorted buffer. Increase buffersize with -b." if (@eventq > 1 &&  $eventq[-1]{$eventq[-1]{'me_timefield'}} < $eventq[-2]{$eventq[-2]{'me_timefield'}});
+	    die "Error: Usorted buffer. Increase buffersize with -b." if (@eventq > 1 &&  $eventq[-1]{'me_timestamp'} < $eventq[-2]{'me_timestamp'});
 	    
-	    if ( ( $eventq[0]{$eventq[0]{'me_timefield'}} - $corr_events_window{ $matchfieldvalues }[0]{$corr_events_window{ $matchfieldvalues }[0]{'me_timefield'}} ) < $opt_window_size) {
-		# Event correlates with events in window. Move to window buffer.
-		push @{ $corr_events_window{ $matchfieldvalues } }, $eventq[0];
-		$more_events = get_next_event();
-	    } else {
+	    if ( ( $eventq[0]{'me_timestamp'} - $corr_events_window{ $matchfieldvalues }[0]{'me_timestamp'} ) > $opt_window_size) {
 		# Event is outside correlation window.
 		if (@{ $corr_events_window{ $matchfieldvalues }} > 1 && all_expected_events_present($corr_events_window{ $matchfieldvalues }) ) {
 		    # More than one event correlate. Report.
-		    my $t_local = localtime($corr_events_window{ $matchfieldvalues }[0]{$corr_events_window{ $matchfieldvalues }[0]{'me_timefield'}});
-		    
-		    my %corr_event = (
-			'event_type' => $corr_event_name,
-			'timestamp' => $corr_events_window{ $matchfieldvalues }[0]{$corr_events_window{ $matchfieldvalues }[0]{'me_timefield'}},
-			'duration' => $corr_events_window{ $matchfieldvalues }[-1]{$corr_events_window{ $matchfieldvalues }[-1]{'me_timefield'}} - $corr_events_window{ $matchfieldvalues }[0]{$corr_events_window{ $matchfieldvalues }[0]{'me_timefield'}},
-			'corr_count' => scalar @{ $corr_events_window{ $matchfieldvalues } },
-			'@date' => $t_local->strftime("%Y-%m-%dT%H:%M:%S%z"),  # ISO date with local timezone
-			'datetime' => $t_local->strftime("%Y-%m-%dT%H:%M:%S%z"),  # ISO date with local timezone
-			);
-		    
-		    my $events_correlating = "";
-		    my @uniq_event_types = ();
-		    my @uniq_source_files = ();
-		    # Browse through all events in window and copy data into new correlation event
-		    for my $w (0 .. $#{ $corr_events_window{ $matchfieldvalues } } ) {
-			if ( exists $corr_events_window{ $matchfieldvalues }[$w]{'event_type'} ) {
-			    # Register event types
-			    my $event_type = $corr_events_window{ $matchfieldvalues }[$w]{'event_type'};
-			    $events_correlating .= $event_type . ", ";
-			    push @uniq_event_types, $event_type if (! is_element_of($event_type, @uniq_event_types));
-			    foreach my $key (keys %{$corr_events_window{ $matchfieldvalues }[$w]}) {
-				if (! exists $corr_event{$key} ) {
-				    # Copy event details (but don't overwriting anyting)
-				    $corr_event{$key} = $corr_events_window{ $matchfieldvalues }[$w]{$key};
-				}
-			    }
-			    # Register unique sourcefiles
-			    my $sourcefile = $corr_events_window{ $matchfieldvalues }[$w]{'me_source'};
-			    push @uniq_source_files, $sourcefile if (! is_element_of($sourcefile, @uniq_source_files));
-			} else {
-			    print "Warning: Corrolating event does not contain expected field 'event_type'. Skipping.\n";
-			}
-		    }
-		    # Add list of events found to correlate
-		    if ($events_correlating) {
-			chop $events_correlating;
-			chop $events_correlating;
-		    }
-		    $corr_event{'events_corr'} = $events_correlating;
-		    $corr_event{'corr_count_uniq'} = @uniq_event_types;
-		    $corr_event{'corr_count_src'} = @uniq_source_files;
-		    
-		    
-		    # Output
-		    print encode_json(\%corr_event), "\n";
-		    
-		    # Update summary info
-		    #if (! exists $corrsum_event{ $matchfieldvalues }) {
-			# Init summary structure 
-			#init_corrsum_event($matchfieldvalues);
-		    #}
-		    $corrsum_event{ $matchfieldvalues }{"timestamp_start"}=$corr_events_window{ $matchfieldvalues }[0]{$corr_events_window{ $matchfieldvalues }[0]{'me_timefield'}};
-		    $corrsum_event{ $matchfieldvalues }{"timestamp_end"}=$corr_events_window{ $matchfieldvalues }[-1]{$corr_events_window{ $matchfieldvalues }[-1]{'me_timefield'}};
-		    #$corrsum_event{ $matchfieldvalues }{"timestamp"}=$corrsum_event{ $matchfieldvalues }{"timestamp_end"};
-		    $corrsum_event{ $matchfieldvalues }{"count"}++;
-		    $corrsum_event{ $matchfieldvalues }{"corr_count"} += $corr_event{'corr_count'};
-		    # Update collection of unique event types
-		    foreach (@uniq_event_types) {
-			push @{ $corrsum_event{ $matchfieldvalues }{"tot_uniq_events"} }, $_ if (! is_element_of($_, @{ $corrsum_event{ $matchfieldvalues }{"tot_uniq_events"} } ));
-		    }
-		    $corrsum_event{ $matchfieldvalues }{'sum_duration'} += $corr_event{'duration'};
-		    $corrsum_event{ $matchfieldvalues }{'sum_tloss'} += $corr_event{'tloss'} if ( exists $corr_event{'tloss'} );
-		    $corrsum_event{ $matchfieldvalues }{'max_tloss'} = $corr_event{'tloss'} if ( exists $corr_event{'tloss'} && $corr_event{'tloss'} > $corrsum_event{ $matchfieldvalues }{'max_tloss'});
-		    $corrsum_event{ $matchfieldvalues }{'avg_duration'} = $corrsum_event{ $matchfieldvalues }{'sum_duration'} / $corrsum_event{ $matchfieldvalues }{"corr_count"};
-		    $corrsum_event{ $matchfieldvalues }{'corr_count_src'} = @uniq_source_files if ( $corrsum_event{ $matchfieldvalues }{'corr_count_src'} < @uniq_source_files);
+		    report_correlation( $matchfieldvalues );
 		}
+		    
 		# Add new event 
-		push @{ $corr_events_window{ $matchfieldvalues }}, $eventq[0];
-		$more_events = get_next_event();
+		#push @{ $corr_events_window{ $matchfieldvalues }}, $eventq[0];
+		#$more_events = get_next_event();
 		# Clear out too old events from window
-		my $newest_timestamp = $corr_events_window{ $matchfieldvalues }[-1]{$corr_events_window{ $matchfieldvalues }[-1]{'me_timefield'}};
-		my $oldest_timestamp = $corr_events_window{ $matchfieldvalues }[0]{$corr_events_window{ $matchfieldvalues }[0]{'me_timefield'}};
+		my $newest_timestamp = $eventq[0]{'me_timestamp'};
+		my $oldest_timestamp = $corr_events_window{ $matchfieldvalues }[0]{'me_timestamp'};
 		while ( $oldest_timestamp < $newest_timestamp ) { 
 		    last if ($newest_timestamp - $oldest_timestamp < $opt_window_size);  # End loop
 		    shift @{ $corr_events_window{ $matchfieldvalues }}; # Remove from head of queue
-		    $oldest_timestamp = $corr_events_window{ $matchfieldvalues }[0]{$corr_events_window{ $matchfieldvalues }[0]{'me_timefield'}};
+		    $oldest_timestamp = $corr_events_window{ $matchfieldvalues }[0]{'me_timestamp'};
 		}
 	    }
+	    # Add new event 
+	    push @{ $corr_events_window{ $matchfieldvalues }}, $eventq[0];
+	    $more_events = get_next_event();
 	}
     }
-
+    # Do a final check for correlating events (in case the very last collection of input events all correlate.)
+    foreach my $matchfieldvalues (keys %corr_events_window) {
+	if (@{ $corr_events_window{ $matchfieldvalues }} > 1 && all_expected_events_present($corr_events_window{ $matchfieldvalues }) ) {
+	    # More than one event correlate. Report.
+	    report_correlation( $matchfieldvalues );
+	}
+    }
+    
     if ($opt_follow) {
 	# Sleep and retry reading at end of file
 	sleep($opt_sleepinterval);
 	if ($opt_url) {
-	    # Reinitiate search in each index
-	    my $argc=0;
-	    foreach (@ARGV) {
-		my $start_ts = $inputfile_ts[$argc];
-		# Initiate (scrolled) search for new entries in index (from last read till now)
-		my $tfield = ( $#opt_timefield == $#ARGV ? $opt_timefield[$argc] : $opt_timefield[0] );
-		$inputfile[$argc] = init_search($_, $tfield,  $inputfile_ts[$argc], -1);
-		$argc++;
-	    }
+	    # Continue searching
+	    next;
 	} else {
 	    # Clear EOF condition for files given on commandline to reenable reading
 	    if ( $opt_gunzip ) {
