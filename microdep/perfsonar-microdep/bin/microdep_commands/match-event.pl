@@ -908,7 +908,12 @@ while ($tryagain) {
 		while ( $oldest_timestamp < $newest_timestamp ) { 
 		    last if ($newest_timestamp - $oldest_timestamp < $opt_window_size);  # End loop
 		    shift @{ $corr_events_window{ $matchfieldvalues }}; # Remove from head of queue
-		    $oldest_timestamp = $corr_events_window{ $matchfieldvalues }[0]{'me_timestamp'};
+		    if ( @{ $corr_events_window{ $matchfieldvalues }} ) {  
+			$oldest_timestamp = $corr_events_window{ $matchfieldvalues }[0]{'me_timestamp'};
+		    } else {
+			# Window is empty
+			last;
+		    }
 		}
 	    }
 	    # Add new event 
