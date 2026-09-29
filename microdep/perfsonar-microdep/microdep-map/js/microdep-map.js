@@ -2295,16 +2295,25 @@ function get_topology(source = "archive"){
 		if (!jQuery.isEmptyObject(result.error)) {
 		    console.log("        (\"" + result.error.msg  + "\")");
 		}
+		clear_map_data("Failed to fetch data from archive");
 		return;
 	    }
 	    var topology = [];
 	    if (! result.aggregations.peer.buckets.length) {
+		// A date with nothing measured used to be logged and nothing
+		// more, so the previous date's links, colours, legend and data
+		// stayed on screen as if they belonged to the date now selected
+		// (issue #183).
 		console.log("No topology data returned from archive.");
+		clear_map_data("No " + (event_desc[parms.event] || parms.event) + " data for " + $("#datepicker").val() + " " + $("#period_input").val());
 	    } else {
 		for (var p=0; p < result.aggregations.peer.buckets.length; p++) { topology.push(result.aggregations.peer.buckets[p].key.split("_")); }
 		draw_topology( topology ); get_connections();
 	    }
-	}).fail( function(e, textStatus, error ) { console.log("failed to get data from server :" + textStatus + ", " + error); });
+	}).fail( function(e, textStatus, error ) {
+	    console.log("failed to get data from server :" + textStatus + ", " + error);
+	    clear_map_data("Failed to reach the archive (" + textStatus + ")");
+	});
 	break;
     }
 }
@@ -2337,6 +2346,24 @@ function _hub_point() {
         if (points[i].id === hubId && points[i].lat != null) return points[i];
     }
     return null;
+}
+
+// Take the map back to "nothing to show". The lines, the data they were drawn
+// from, the legend and the details panel all describe the date that was
+// selected when they arrived, so none of them may outlive a move to a date
+// that has no measurements (issue #183).
+function clear_map_data(reason) {
+    remove_links(links);
+    summary = []; last_hits = []; aggregates = [];
+    var panel = document.getElementById('link-panel');
+    if (panel) panel.classList.add('hidden');
+    currentPanelLink = null;
+    highlightedLink = null;
+    $("#legend").html("");
+    _set_map_empty_state(true);
+    if (reason) $("#error").html(hhmmss(new Date()) + " : " + reason + ";;");
+    $("#status").html("");
+    if (typeof window._microdep_mark_refreshed === 'function') window._microdep_mark_refreshed();
 }
 
 function draw_topology(topo){
