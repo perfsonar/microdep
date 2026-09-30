@@ -406,14 +406,9 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
         const start_iso = new Date(t_start * 1000).toISOString();
         const end_iso   = new Date(t_end   * 1000).toISOString();
 
-        // NB: keep the FULL archive base (mahost) everywhere below, including on
-        // the peer buttons. get-tracetests.pl needs the complete base URL; given
-        // only the origin it answers "Resource not found." (plain text), which
-        // then fails to parse as JSON (issue #118).
-//        const fetch_url = '/pstracetree/get-tracetests.pl?' + verify_SSL_qs('') +
-        const fetch_url = 'get-tracetests.pl?' + verify_SSL_qs('') +
-                          (params.verify_SSL !== undefined ? '&' : '') +
-                          'mahost=' + encodeURIComponent(mahost) +
+        // get-tracetests.pl queries the archive mapconfig.yml gives the network:
+        // it takes no archive address, nor any TLS setting, from the page.
+        const fetch_url = 'get-tracetests.pl?net=' + encodeURIComponent(params.net) +
                           '&start=' + encodeURIComponent(start_iso) +
                           '&end='   + encodeURIComponent(end_iso) +
                           (params.ip_version ? '&ip_version=' + encodeURIComponent(params.ip_version) : '');
@@ -709,8 +704,8 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
         $('#' + id + '-tabs').tabs({ active: 0 });
 
         tracetree_tab(inner_id, p_from, p_to, t_start, t_end, {
+            net:         params.net,
             mahost:      mahost,
-            verify_SSL:  params.verify_SSL,
             api:         api,
             ip_version:  params.ip_version,
             leaf_status: params.leaf_status

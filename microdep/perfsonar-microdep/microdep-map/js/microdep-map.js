@@ -80,7 +80,7 @@ document.addEventListener('microdep-tracetree-pair', function (e) {
         startEpoch: d.startEpoch,
         endEpoch: d.endEpoch,
         options: prev.options || {
-            net: d.net, mahost: d.mahost, verify_SSL: 0,
+            net: d.net, mahost: d.mahost,
             api: d.api, ip_version: d.ip_version
         }
     });
@@ -722,7 +722,6 @@ function open_tree_tab(host) {
     var opts = {
 	net: parms.net,
 	mahost: 'https://localhost:9200/',
-	verify_SSL: 0,
 	api: 'opensearch',
 	ip_version: net_ip_version[parms.net],
 	from_adr: name_to_ip[host] || '',
@@ -1604,7 +1603,6 @@ function link_popup(link){
 	    var routesOpts = {
 		net: parms.net,
 		mahost: 'https://localhost:9200/',
-		verify_SSL: 0,
 		api: 'opensearch',
 		// Follow the selected network's IP version, so Net-6 shows v6
 		// traceroutes instead of always falling back to v4 (issue #127).
@@ -3272,8 +3270,7 @@ function fetch_real_path(from, to, start_epoch, end_epoch) {
     var fromList = name_to_ip[from] ? (from + ',' + name_to_ip[from]) : from;
     var toList   = name_to_ip[to]   ? (to   + ',' + name_to_ip[to])   : to;
     var url = 'get-tracetests.pl' +
-              '?mahost=' + encodeURIComponent((conffile[parms.net] && conffile[parms.net].archive) || 'https://localhost/opensearch') +
-              '&verify_SSL=0' +
+              '?net='   + encodeURIComponent(parms.net) +
               '&from='  + encodeURIComponent(fromList) +
               '&to='    + encodeURIComponent(toList) +
               '&start=' + encodeURIComponent(start_iso) +
@@ -4665,7 +4662,6 @@ function init_map(){
 	    var menuRoutesOpts = {
 		net: parms.net,
 		mahost: 'https://localhost:9200/',
-		verify_SSL: 0,
 		api: 'opensearch',
 		ip_version: net_ip_version[parms.net]
 	    };
