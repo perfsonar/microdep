@@ -19,7 +19,7 @@
 
 use strict;
 use CGI qw/:standard -debug/;
-use CGI::Carp qw(fatalsToBrowser);
+use CGI::Carp;   # fatal errors go to the web server's error log, not to the browser
 use Config::General;
 use Log::Log4perl qw(get_logger :easy :levels);
 use Net::IP;
