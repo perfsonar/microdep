@@ -75,8 +75,8 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
     const params = {
         from:       from,
         to:         to,
+        net:        options.net     || '',
         mahost:     options.mahost  || '',
-        verify_SSL: options.verify_SSL,
         api:        options.api     || '',
         'ip-version': options.ip_version,     // unset = all versions (issue #127)
         start:      time_start,
@@ -1764,7 +1764,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
             n_slice.slice_no = slice_no;
             tr_slice_show(n_slice);
         } else {
-            fetch_and_plot_json(n_slice, params.mahost);
+            fetch_and_plot_json(n_slice);
         }
         in_slice = n_slice;
         slices.push(n_slice);
@@ -2080,15 +2080,15 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
     //  Data fetching
     // ====================================================================
 
-    function fetch_and_plot_json(slice, base) {
+    function fetch_and_plot_json(slice) {
         show_awaiting(true);
         show_time_info(slice);
         in_slice = slice;
 
         let url;
 
-//        url = '/pstracetree/get-tracetests.pl?mahost=' + encodeURIComponent(base)
-        url = 'get-tracetests.pl?mahost=' + encodeURIComponent(base)
+        // The archive is the one mapconfig.yml gives the network
+        url = 'get-tracetests.pl?net=' + encodeURIComponent(params.net)
             + '&from=' + encodeURIComponent(params.from)
             + '&to=' + encodeURIComponent(params.to)
             + '&start=' + encodeURIComponent(params.start)
@@ -2097,9 +2097,6 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
             // allows: one request may carry every peer of a host
             + '&slim=1&size=10000';
 
-        if (params.verify_SSL !== undefined) {
-            url += '&verify_SSL=' + params.verify_SSL;
-        }
         if (params['ip-version']) {
             url += '&ip_version=' + encodeURIComponent(params['ip-version']);
         }
@@ -3409,7 +3406,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
             n_slice.slice_no = compute_slice_count(range);
             tr_slice_show(n_slice);
         } else {
-            fetch_and_plot_json(n_slice, params.mahost);
+            fetch_and_plot_json(n_slice);
         }
         slices.push(n_slice);
     }
@@ -3902,6 +3899,6 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
 
     // Start loading data
     if (params.mahost) {
-        fetch_and_plot_json(mother, params.mahost);
+        fetch_and_plot_json(mother);
     }
 }
