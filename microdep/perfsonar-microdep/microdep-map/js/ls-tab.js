@@ -30,6 +30,7 @@
  */
 
 import { tracetree_tab } from "./tracetree-tab.js";
+import { escapeHtml } from "./map-lib.js";
 
 export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
 
@@ -359,14 +360,14 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
             let trees = '';
             Object.keys(by_src).sort().forEach(function (src) {
                 if (by_src[src].length < 2) return;
-                trees += '<button class="knapp ls-pair-btn" data-action="os-tree" data-server="' + mahost + '"' +
-                         ' data-from="' + src + '" data-to="' + by_src[src].join(',') + '"' +
+                trees += '<button class="knapp ls-pair-btn" data-action="os-tree" data-server="' + escapeHtml(mahost) + '"' +
+                         ' data-from="' + escapeHtml(src) + '" data-to="' + escapeHtml(by_src[src].join(',')) + '"' +
                          ' data-start="' + t_start + '" data-end="' + t_end + '"' +
-                         ' title="Every route from ' + src + ' in one picture">All ' + by_src[src].length + ' peers of ' + src + '</button>';
+                         ' title="Every route from ' + escapeHtml(src) + ' in one picture">All ' + by_src[src].length + ' peers of ' + escapeHtml(src) + '</button>';
             });
             // "Show selected" opens the checked pairs: one as a pair, several
             // (of one source) as a tree of just those peers.
-            const selected_btn = '<button class="knapp ls-pair-btn" data-action="os-selected" data-server="' + mahost + '"' +
+            const selected_btn = '<button class="knapp ls-pair-btn" data-action="os-selected" data-server="' + escapeHtml(mahost) + '"' +
                                  ' data-start="' + t_start + '" data-end="' + t_end + '" id="' + id + '-show-selected" disabled' +
                                  ' title="Tick pairs in the list, then show them: one as a pair, several of one source as a tree">Show selected</button>';
             const tree_bar = pair_list.length ? '<div class="ls-tree-bar">' + selected_btn + trees + '</div>' : '';
@@ -387,7 +388,7 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
                     el('trace').innerHTML =
                         '<div class="center-text" style="padding:40px">' +
                           '<p>No traceroute peer pair matching ' +
-                            '<strong>' + params.from + '</strong> → <strong>' + params.to + '</strong> ' +
+                            '<strong>' + escapeHtml(params.from) + '</strong> → <strong>' + escapeHtml(params.to) + '</strong> ' +
                             'was found in this archive.</p>' +
                           '<p style="color:var(--c-text-3);font-size:.85rem">Pick a pair from the <em>Peers</em> tab to view its topology.</p>' +
                         '</div>';
@@ -396,7 +397,7 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
         }).fail(function (jqxhr, textStatus, error) {
             const msg = "Failed to get " + url + " (" + textStatus + ", " + error + ")";
             console.log("ls_tab: " + msg);
-            el('peers').innerHTML = '<h4 class="center-text">' + msg + '</h4>';
+            el('peers').innerHTML = '<h4 class="center-text">' + escapeHtml(msg) + '</h4>';
         });
     }
 
@@ -432,6 +433,8 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
             const seen = {};
             const pair_list = [];
 
+            // The peer names are the archive's own strings: escaped wherever
+            // they go into the markup below.
             const buckets = (results && results.aggregations && results.aggregations.peers && results.aggregations.peers.buckets) || [];
             for (let r = 0; r < buckets.length; r++) {
                 const peer_from = buckets[r].key[0];
@@ -443,11 +446,11 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
 
                 const tu = new Date(buckets[r].timestamp.value);
                 body += '<tr>' +
-                          '<td class="ls-check"><input type="checkbox" class="ls-pick" data-from="' + peer_from + '" data-to="' + peer_to + '" aria-label="Select ' + pair_key + '"></td>' +
+                          '<td class="ls-check"><input type="checkbox" class="ls-pick" data-from="' + escapeHtml(peer_from) + '" data-to="' + escapeHtml(peer_to) + '" aria-label="Select ' + escapeHtml(pair_key) + '"></td>' +
                           '<td>' + tu.toLocaleDateString() + 'T' + tu.toLocaleTimeString() + '</td>' +
-                          '<td><button class="knapp ls-pair-btn" data-action="os-pair" data-server="' + mahost + '"' +
-                            ' data-from="' + peer_from + '" data-to="' + peer_to + '"' +
-                            ' data-start="' + t_start + '" data-end="' + t_end + '">' + pair_key + '</button></td>' +
+                          '<td><button class="knapp ls-pair-btn" data-action="os-pair" data-server="' + escapeHtml(mahost) + '"' +
+                            ' data-from="' + escapeHtml(peer_from) + '" data-to="' + escapeHtml(peer_to) + '"' +
+                            ' data-start="' + t_start + '" data-end="' + t_end + '">' + escapeHtml(pair_key) + '</button></td>' +
                         '</tr>';
             }
 
@@ -458,14 +461,14 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
             let trees = '';
             Object.keys(by_src).sort().forEach(function (src) {
                 if (by_src[src].length < 2) return;
-                trees += '<button class="knapp ls-pair-btn" data-action="os-tree" data-server="' + mahost + '"' +
-                         ' data-from="' + src + '" data-to="' + by_src[src].join(',') + '"' +
+                trees += '<button class="knapp ls-pair-btn" data-action="os-tree" data-server="' + escapeHtml(mahost) + '"' +
+                         ' data-from="' + escapeHtml(src) + '" data-to="' + escapeHtml(by_src[src].join(',')) + '"' +
                          ' data-start="' + t_start + '" data-end="' + t_end + '"' +
-                         ' title="Every route from ' + src + ' in one picture">All ' + by_src[src].length + ' peers of ' + src + '</button>';
+                         ' title="Every route from ' + escapeHtml(src) + ' in one picture">All ' + by_src[src].length + ' peers of ' + escapeHtml(src) + '</button>';
             });
             // "Show selected" opens the checked pairs: one as a pair, several
             // (of one source) as a tree of just those peers.
-            const selected_btn = '<button class="knapp ls-pair-btn" data-action="os-selected" data-server="' + mahost + '"' +
+            const selected_btn = '<button class="knapp ls-pair-btn" data-action="os-selected" data-server="' + escapeHtml(mahost) + '"' +
                                  ' data-start="' + t_start + '" data-end="' + t_end + '" id="' + id + '-show-selected" disabled' +
                                  ' title="Tick pairs in the list, then show them: one as a pair, several of one source as a tree">Show selected</button>';
             const tree_bar = pair_list.length ? '<div class="ls-tree-bar">' + selected_btn + trees + '</div>' : '';
@@ -494,7 +497,7 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
                 } else {
                     el('trace').innerHTML =
                         '<div class="center-text" style="padding:40px">' +
-                          '<p>No traceroutes from <strong>' + params.from + '</strong> were found in this archive for the selected period.</p>' +
+                          '<p>No traceroutes from <strong>' + escapeHtml(params.from) + '</strong> were found in this archive for the selected period.</p>' +
                           '<p style="color:var(--c-text-3);font-size:.85rem">Traceroutes are recorded by the host that runs them, so a tree needs the archive of that host.</p>' +
                         '</div>';
                 }
@@ -511,7 +514,7 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
                     el('trace').innerHTML =
                         '<div class="center-text" style="padding:40px">' +
                           '<p>No traceroute data matching ' +
-                            '<strong>' + params.from + '</strong> → <strong>' + params.to + '</strong> ' +
+                            '<strong>' + escapeHtml(params.from) + '</strong> → <strong>' + escapeHtml(params.to) + '</strong> ' +
                             'was found in this archive for the selected period.</p>' +
                           '<p style="color:var(--c-text-3);font-size:.85rem">Pick a pair from the <em>Peers</em> tab, or widen the date range.</p>' +
                         '</div>';
@@ -520,13 +523,13 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
         }).fail(function (jqxhr, textStatus, error) {
             const msg = "Failed to get " + fetch_url + " (" + textStatus + ", " + error + ")";
             console.log("ls_tab: " + msg);
-            el('peers').innerHTML = '<h4 class="center-text">' + msg + '</h4>';
+            el('peers').innerHTML = '<h4 class="center-text">' + escapeHtml(msg) + '</h4>';
             // Don't leave the Traceroute spinner spinning on a failed fetch.
             if (params.from && params.to) {
                 el('trace').innerHTML =
                     '<div class="center-text" style="padding:40px">' +
                       '<p>Failed to load traceroute data.</p>' +
-                      '<p style="color:var(--c-text-3);font-size:.85rem">' + msg + '</p>' +
+                      '<p style="color:var(--c-text-3);font-size:.85rem">' + escapeHtml(msg) + '</p>' +
                     '</div>';
             }
         });
@@ -799,7 +802,7 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
             el('trace').innerHTML =
                 '<div class="center-text" style="padding:40px">' +
                   '<div class="spinner"></div>' +
-                  '<p>Resolving peer pair for ' + params.from + ' → ' + params.to + '…</p>' +
+                  '<p>Resolving peer pair for ' + escapeHtml(params.from) + ' → ' + escapeHtml(params.to) + '…</p>' +
                 '</div>';
         } else {
             // Opened without a pair (the map's "Routes" menu entry): show the

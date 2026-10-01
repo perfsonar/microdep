@@ -56,9 +56,11 @@ export function heatmap(div, hits, property, get_color, threshes, title, templat
         lookup[rec.from + "\u0000" + rec.to] = rec[property];
     }
 
+    // The template is a URL, and the arguments are host names from the
+    // archive: encoded, so that none of them can add or change a parameter.
     function expand_template(s, args) {
         if (!s) return null;
-        return s.replace(/\{(\d+)\}/g, (m, n) => args[n] !== undefined ? args[n] : m);
+        return s.replace(/\{(\d+)\}/g, (m, n) => args[n] !== undefined ? encodeURIComponent(args[n]) : m);
     }
 
     function fmt_val(v) {
