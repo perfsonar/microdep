@@ -243,12 +243,14 @@ export function add_tab(type, title, num_tabs, html){
 
     let divid='tab' + num_tabs;
 
+    // The title is text - host names and URL parameters end up in it - so it
+    // is escaped; `html` is the panel's markup and goes in as it is.
     // IMPORTANT: use a direct-child selector (`> ul`) so we only target the
     // top-level tab-nav. Without it, jQuery would append the new <li> to
     // every nested <ul> inside main#tabs (the LS-tab nav, the tracetree-tab
     // nav etc.), producing phantom duplicates of the new tab.
     let new_tab=$("main#tabs > ul").append(
-        "<li><a href='#" + divid + "' title='" + title + "'>#" + num_tabs + ' ' + title + "</a>"
+        "<li><a href='#" + divid + "' title='" + escapeHtml(title) + "'>#" + num_tabs + ' ' + escapeHtml(title) + "</a>"
 	    + '<span class="ui-icon ui-icon-close" role="presentation">Remove Tab</span>'
 	    +"</li>"
     );
