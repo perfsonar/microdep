@@ -356,8 +356,16 @@ systemctl start perfsonar-microdep-hourly-aggregator.timer || true
 systemctl daemon-reload || true
 
 if [ ! -f /etc/perfsonar/microdep/microdep-ana-archive.json ]; then
-    # Prepare default logstash archive config for analytic results
-    /usr/lib/perfsonar/bin/microdep_commands/psconfig_archive_ana.sh > /etc/perfsonar/microdep/microdep-ana-archive.json || true
+    # Prepare default logstash archive config for analytic results.
+    # It holds the credentials for the archive, so it is never created
+    # readable by others.
+    ( umask 077; /usr/lib/perfsonar/bin/microdep_commands/psconfig_archive_ana.sh > /etc/perfsonar/microdep/microdep-ana-archive.json ) || true
+fi
+if [ -f /etc/perfsonar/microdep/microdep-ana-archive.json ]; then
+    # Readable by root and by the analysers (they run as perfsonar), and by
+    # nobody else. Also corrects a file left world-readable by an earlier version.
+    chown root:perfsonar /etc/perfsonar/microdep/microdep-ana-archive.json
+    chmod 0640 /etc/perfsonar/microdep/microdep-ana-archive.json
 fi
 
 # Reload web server config
