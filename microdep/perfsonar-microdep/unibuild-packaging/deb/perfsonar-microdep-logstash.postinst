@@ -23,8 +23,12 @@ case "$1" in
 	groupadd -r perfsonar 2> /dev/null || true
 	useradd -g perfsonar -r -s /sbin/nologin -c "perfSONAR User" -d /tmp perfsonar 2> /dev/null || true
 
-	# Fix permissions 
-	chown -R perfsonar:perfsonar /usr/lib/perfsonar/logstash/microdep_pipeline
+	# Fix permissions
+	# The pipeline files belong to root: Logstash only reads them. Earlier
+	# versions of this script handed the folder to perfsonar, and dpkg leaves
+	# the owner of an existing folder alone, so it is set back here.
+	chown -R root:root /usr/lib/perfsonar/logstash/microdep_pipeline
+	# The analysers run as perfsonar and write their output here
 	chown perfsonar:perfsonar /var/lib/logstash/microdep/
 
 	# Add Microdep to Opensearch setup (including Logstash) 
