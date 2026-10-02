@@ -25,7 +25,7 @@ usage () {
     echo "-H DB-hostname  Hostname for DB server. Default '$DBHOST'"
     echo "-P DB-port      Hostname for DB server. Default $MSPORT for mysql and $PGPORT for postgres."
     echo "-l              List databases only."
-    echo "-d              Drop DB first (if it exists) before creating new."
+    echo "-d              Drop DB first (if it exists) before creating new. Without it a DB that exists is kept."
     echo "-D              Drop DB only (if it exists) and do not create new."
     echo "-s              Be silent"
 
@@ -148,21 +148,34 @@ if [ $DROPONLY ]; then
     exit 0
 fi
 
-# Create new db
-msg -n "Creating databasbase $DBNAME..."
-exit_code=0
+# Is the db there? It is when it was not to be dropped: on an upgrade, for one.
+EXISTS=""
 if [ $DBTYPE = "mysql" ]; then
-    sudo mysqladmin -h $DBHOST -P $MSPORT create $DBNAME
-    exit_code=$?;
+    sudo mysqlshow -h $DBHOST -P $MSPORT $DBNAME 2> /dev/null | grep -q "| Tables |" && EXISTS=y
 elif [ $DBTYPE = "postgres" ]; then
-    su postgres -c "createdb $DBHOST -p $PGPORT $DBNAME"
-    exit_code=$?;
+    su postgres -c "psql $DBHOST -p $PGPORT -w -c \"\\l $DBNAME\"" 2> /dev/null | grep -q "(1 row)" && EXISTS=y
 fi
-if [ $exit_code -gt 0 ]; then
-    msg "Error: Failed creating DB."
-    exit 1 
+
+if [ "$EXISTS" ]; then
+    # Keep it, with what the analysis has stored in it
+    msg "Database $DBNAME exists and is kept."
+else
+    # Create new db
+    msg -n "Creating databasbase $DBNAME..."
+    exit_code=0
+    if [ $DBTYPE = "mysql" ]; then
+	sudo mysqladmin -h $DBHOST -P $MSPORT create $DBNAME
+	exit_code=$?;
+    elif [ $DBTYPE = "postgres" ]; then
+	su postgres -c "createdb $DBHOST -p $PGPORT $DBNAME"
+	exit_code=$?;
+    fi
+    if [ $exit_code -gt 0 ]; then
+	msg "Error: Failed creating DB."
+	exit 1 
+    fi
+    msg "done."
 fi
-msg "done."
    
 
 # Password for the user: the one given with -p, or else the one kept in the
@@ -201,9 +214,16 @@ FLUSH PRIVILEGES;
 " > $SQLCMD
     sudo mysql -h $DBHOST -P $MSPORT $DBNAME < $SQLCMD
 elif [ $DBTYPE = "postgres" ]; then
+    # (A role that owns the tables of a kept db cannot be dropped and made anew:
+    # it gets the password set instead.)
     echo "
-    DROP ROLE IF EXISTS $USERNAME;
-    CREATE ROLE $USERNAME WITH PASSWORD '$PASSWD' LOGIN;
+    DO \$do\$ BEGIN
+        IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = lower('$USERNAME')) THEN
+            ALTER ROLE $USERNAME WITH PASSWORD '$PASSWD' LOGIN;
+        ELSE
+            CREATE ROLE $USERNAME WITH PASSWORD '$PASSWD' LOGIN;
+        END IF;
+    END \$do\$;
     GRANT ALL ON DATABASE $DBNAME TO $USERNAME;
     GRANT CREATE ON SCHEMA public TO $USERNAME;
     GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO $USERNAME;

@@ -23,13 +23,21 @@ case "$1" in
 	groupadd -r perfsonar 2> /dev/null || true
 	useradd -g perfsonar -r -s /sbin/nologin -c "perfSONAR User" -d /tmp perfsonar 2> /dev/null || true
 
-	# Prepare DB for trace analyser (ignore errors)
-        /usr/lib/perfsonar/bin/microdep_commands/create_new_db.sh -s -t postgres -d routingmonitor || true
-	# Fix access to db
-	if [ -f /etc/postgresql/15/main/pg_hba.conf ]; then
-	    /usr/lib/perfsonar/bin/microdep_commands/fix-pgsql-access.sh -i /etc/postgresql/15/main/pg_hba.conf || true
-	    systemctl reload postgresql || true
+	# Prepare DB for trace analyser (ignore errors). The DB of an earlier version
+	# is kept, with what the analysis has learned: only a first installation
+	# starts from an empty one.
+	if [ -z "$2" ]; then
+	    /usr/lib/perfsonar/bin/microdep_commands/create_new_db.sh -s -t postgres -d routingmonitor || true
+	else
+	    /usr/lib/perfsonar/bin/microdep_commands/create_new_db.sh -s -t postgres routingmonitor || true
 	fi
+	# Fix access to db (whatever the version of PostgreSQL)
+	for PGHBA in /etc/postgresql/*/main/pg_hba.conf; do
+	    if [ -f "$PGHBA" ]; then
+		/usr/lib/perfsonar/bin/microdep_commands/fix-pgsql-access.sh -i "$PGHBA" || true
+		systemctl reload postgresql || true
+	    fi
+	done
 
 	# Enable executing of microdep ana scripts if SElinux is enabled
 	if [ -f /sbin/restorecon ]; then
