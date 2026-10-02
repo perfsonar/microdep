@@ -122,7 +122,7 @@ param = {
     'maxprocs': 1,                # Max no of parallel processes in batch mode
     'topoevents': 0,              # Flag to enable detection and output of topology events
     'topointerval': 3600,         # Min no of seconds between topology events
-    'pslookup': '',               # API of perfSONAR Lookup Service, e.g. http://35.223.142.206/lookup/_search. Empty means no lookup.
+    'pslookup': 'http://35.223.142.206/lookup/_search',  # API of perfSONAR Lookup Service. Empty or 'off' means no lookup.
                                   # (The service answers over plain http only, and every address seen is sent to it.)
     'pslookupwait': 3600,         # Min no of seconds to wait between refreshing info fetched from pslookup-service
     'ipv6': 0,                    # Flag enabling ipv6 address parsing
@@ -413,7 +413,7 @@ def parse_cmd(param):
     cmdparser.add_argument('--maxprocs', '-m', help='Max no of processes in batch mode. Default is ' + str(param['maxprocs']) + '.')
     cmdparser.add_argument('--topoevents', '-t', action='count', help='Detect and output events when topology changes are detected.')
     cmdparser.add_argument('--topointerval', help='Min no of seconds between topology events. Default is ' + str(param['topointerval']) + '.')
-    cmdparser.add_argument('--pslookup', help='Source of perfSONAR Lookup Service hosts. Default is none, i.e. no lookup.')
+    cmdparser.add_argument('--pslookup', help='Source of perfSONAR Lookup Service hosts, or \'off\' for no lookup. Default is ' + param['pslookup'] + '.')
     cmdparser.add_argument('--pslookupwait', help='Min interval between attempts to fetch info from ps-lookup service. Default is ' + str(param['pslookupwait']) + '.')
     cmdparser.add_argument('--ipv6', '-6', action='count', help='Enable parsing of ipv6 addresses.')
     cmdparser.add_argument('--followinterval', help='No of seconds to wait between requests for data from openseach archive. Default is ' + str(param['followinterval']) + '.')
@@ -454,6 +454,10 @@ def parse_cmd(param):
         if (args.__dict__[p] and p in param):
             # New value from commandline. Update parameter
             param[p] = args.__dict__[p]
+
+    if str(param['pslookup']).lower() == 'off':
+        # No lookup of positions
+        param['pslookup'] = ''
 
     if param['live'] > 0 or len(param['file']) > 0 or param['date'] or param['pssrc']:
         # Minimim params given, continue
