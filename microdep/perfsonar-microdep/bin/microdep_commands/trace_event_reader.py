@@ -121,10 +121,12 @@ param = {
     'maxprocs': 1,                # Max no of parallel processes in batch mode
     'topoevents': 0,              # Flag to enable detection and output of topology events
     'topointerval': 3600,         # Min no of seconds between topology events
-    'pslookup': 'http://35.223.142.206/lookup/_search',  # API of perfSONAR Lookup Service
+    'pslookup': '',               # API of perfSONAR Lookup Service, e.g. http://35.223.142.206/lookup/_search. Empty means no lookup.
+                                  # (The service answers over plain http only, and every address seen is sent to it.)
     'pslookupwait': 3600,         # Min no of seconds to wait between refreshing info fetched from pslookup-service
     'ipv6': 0,                    # Flag enabling ipv6 address parsing
     'followinterval': 10,          # No of seconds to wait between requests for data from openseach archive
+    'pssrcverify': 1,             # Check the certificate of a https data source (pssrc). A source on this host is never checked.
     'config': ''                  # Path to configuration file. Note that commandline options override config file.               
 }
 
@@ -409,10 +411,11 @@ def parse_cmd(param):
     cmdparser.add_argument('--maxprocs', '-m', help='Max no of processes in batch mode. Default is ' + str(param['maxprocs']) + '.')
     cmdparser.add_argument('--topoevents', '-t', action='count', help='Detect and output events when topology changes are detected.')
     cmdparser.add_argument('--topointerval', help='Min no of seconds between topology events. Default is ' + str(param['topointerval']) + '.')
-    cmdparser.add_argument('--pslookup', help='Source of perfSONAR Lookup Service hosts. Default is ' + param['pslookup'] + '.')
+    cmdparser.add_argument('--pslookup', help='Source of perfSONAR Lookup Service hosts. Default is none, i.e. no lookup.')
     cmdparser.add_argument('--pslookupwait', help='Min interval between attempts to fetch info from ps-lookup service. Default is ' + str(param['pslookupwait']) + '.')
     cmdparser.add_argument('--ipv6', '-6', action='count', help='Enable parsing of ipv6 addresses.')
     cmdparser.add_argument('--followinterval', help='No of seconds to wait between requests for data from openseach archive. Default is ' + str(param['followinterval']) + '.')
+    cmdparser.add_argument('--pssrcverify', help='Set to 0 to accept any certificate from a https data source. Default is ' + str(param['pssrcverify']) + '.')
     cmdparser.add_argument('--config', help='Path to configuration file. Note that commandline options overrides config file settings.')
 
     # Run parser
@@ -698,6 +701,9 @@ class Resolver:
 
         return ip
 
+    # Seconds to wait for the lookup service before going on without its answer
+    PSLOOKUP_TIMEOUT = 10
+
     def refresh_geopos(self, ip):
         """ Attempt to fetch geopos-info from perfsonar's lookupservice.
             Lookup frequency is trottled.
@@ -738,7 +744,7 @@ class Resolver:
             query_req = urllib.request.Request(opensearch_api, data=bytes(json.dumps(query_data), encoding='utf-8') )
             query_req.add_header('Content-Type', 'application/json')
             try:
-                pslookup_str = urllib.request.urlopen(query_req).read()
+                pslookup_str = urllib.request.urlopen(query_req, timeout=self.PSLOOKUP_TIMEOUT).read()
                 if param['verbose'] > 3:
                     print("pslookup-data:")
                     print(pslookup_str)
@@ -757,7 +763,7 @@ class Resolver:
                         ]}}, 'size': 1}
                         query_req = urllib.request.Request(opensearch_api, data=bytes(json.dumps(query_data), encoding='utf-8') )
                         query_req.add_header('Content-Type', 'application/json')
-                        pslookup_str = urllib.request.urlopen(query_req).read()
+                        pslookup_str = urllib.request.urlopen(query_req, timeout=self.PSLOOKUP_TIMEOUT).read()
                         if param['verbose'] > 3:
                             print("pslookup-data:")
                             print(pslookup_str)
@@ -765,7 +771,9 @@ class Resolver:
                         if pslookup and pslookup['hits'] and pslookup['hits']['total']['value'] > 0:
                             # Parent host found. Store position if available
                             self.store_geopos(ip, pslookup['hits']['hits'][0]['_source'])
-            except urllib.error.URLError:
+            except (OSError, ValueError, KeyError, IndexError, TypeError):
+                # No answer, or one that cannot be read (OSError covers URLError
+                # and a timeout): go on without a position from the lookup.
                 pass
 
             # Set refresh interval for geopos info.
@@ -2745,6 +2753,16 @@ def pscheduler_testid(element):
 
     return testid
 
+def pssrc_ssl_context(url):
+    """ SSL context for reading from a https data source. The certificate is
+        checked, unless the source is on this host (the name localhost never
+        matches the host's certificate) or pssrcverify is switched off.
+    """
+    host = urlparse(url).hostname or ''
+    if not int(param['pssrcverify']) or host in ('localhost', '::1') or host.startswith('127.'):
+        return ssl._create_unverified_context()
+    return ssl.create_default_context()
+
 def opensearch_read(opensearch_api, mode, thread):
     """
     Read traceroute records via Opensearch API
@@ -2763,15 +2781,16 @@ def opensearch_read(opensearch_api, mode, thread):
 
     # Parent process. No need to read from pipe
     os.close(pssrc_r)
-        
+
+    ssl_context = pssrc_ssl_context(opensearch_api)
+    cert_failure_reported = False
+
     try:
         while True:
             # Loop until interrupted
             search_query = { 'query': { 'range': { '@timestamp': { 'gt':  date_last_read_rec } } }, 'size': 600, 'sort': [ {'@timestamp': {'order': 'asc'}} ]}
             query_req = urllib.request.Request(opensearch_api + '/pscheduler_raw_trace/_search', data=bytes(json.dumps(search_query), encoding='utf-8') )
             query_req.add_header('Content-Type', 'application/json')
-            # Prepare to ignore SSL cert errors
-            ssl_context = ssl._create_unverified_context()
             # Run query
             result_str="{}"
             try:
@@ -2780,6 +2799,13 @@ def opensearch_read(opensearch_api, mode, thread):
             except urllib.error.HTTPError as e:
                 if param['verbose'] > 0:
                     print("Warning: Request for Opensearch url " + e.url + " failed, will retry (" + str(e) + ").")
+            except urllib.error.URLError as e:
+                if not isinstance(e.reason, ssl.SSLCertVerificationError):
+                    raise
+                if not cert_failure_reported:
+                    # Trying again will not help, so say it once whatever the verbosity
+                    print("Error: The certificate of " + opensearch_api + " could not be verified (" + str(e.reason) + "). Set pssrcverify to 0 to read from it anyway.")
+                    cert_failure_reported = True
             if param['verbose'] > 3:
                 print("Data from Opensearch API:")
                 print(result_str)

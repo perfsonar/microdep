@@ -38,10 +38,12 @@
 #maxprocs: 1                # Max no of parallel processes in batch mode
 #topoevents: 0              # Flag to enable detection and output of topology events
 #topointerval: 3600         # Min no of seconds between topology events
-#pslookup: 'http://35.223.142.206/lookup/_search'  # API of perfSONAR Lookup Service
+#pslookup: ''               # API of perfSONAR Lookup Service, e.g. 'http://35.223.142.206/lookup/_search'. Empty means no lookup.
+                            # (The service answers over plain http only, and every address seen is sent to it.)
 #pslookupwait: 3600         # Min no of seconds to wait between refreshing info fetched from pslookup-service
 #ipv6: 0                    # Flag enabling ipv6 address parsing
 #followinterval: 10         # No of seconds to wait between requests for data from openseach archive
+#pssrcverify: 1             # Check the certificate of a https data source (pssrc). A source on this host is never checked.
 #config: ''                 # Path to configuration file (this one). Note that commandline options override config file.               
 
 ## perfSONAR Microdep settings
