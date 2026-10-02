@@ -918,10 +918,20 @@ sub read_owamp_ua {
 
 
 sub owamp_ana($){
+    # Analyse one batch of results. A batch that cannot be read, or that does
+    # not have the expected shape, is reported and skipped: it must not stop
+    # the analysis of the batches that follow.
+    my $payload=shift;
+    eval { owamp_ana_batch($payload); 1 }
+	or warn "Skipping a batch of results that could not be analysed: " . ( ( split /\n/, "$@" )[0] || "unknown error" ) . "\n";
+}
+
+sub owamp_ana_batch {
     my $payload=shift;
 
     # Batch of json data ready for analysis
     my $data = decode_json($payload);
+    die "not a json object\n" unless ( ref $data eq 'HASH' );
     print Dumper($data) if $opt_debug > 3;
 
 
@@ -931,6 +941,9 @@ sub owamp_ana($){
 
 #	(my $src, my $dst)=($data->{'test'}->{'spec'}->{'source-node'}, $data->{'test'}->{'spec'}->{'dest-node'} );
 	(my $src, my $dst)=($data->{'test'}->{'spec'}->{'source'}, $data->{'test'}->{'spec'}->{'dest'} );
+	# A flow is identified by its two ends: without both there is nothing to analyse
+	die "no source or destination in the test spec\n"
+	    if ( ! defined $src || ! defined $dst || ref $src || ref $dst || $src eq '' || $dst eq '' );
 
 	my $ip_version = $data->{'test'}->{'spec'}->{'ip-version'} || 4;
 
@@ -1042,8 +1055,9 @@ sub read_owamp_follow{
 		print "owamp data from ", $url_str, ":\n", Dumper($owamp_resp) if $opt_debug > 3;
 		if ($owamp_resp->{'_rc'} == 200) {
 		    # Successfull request. Decode response.
-		    $owamp_data = decode_json $owamp_resp->{'_content'};
-		    if (%{$owamp_data} && $owamp_data->{'hits'} && $owamp_data->{'hits'}->{'total'}{'value'} > 0 ) {
+		    # (An answer that is not json is taken as no records, and asked for again next round)
+		    $owamp_data = eval { decode_json $owamp_resp->{'_content'} };
+		    if (ref $owamp_data eq 'HASH' && $owamp_data->{'hits'} && $owamp_data->{'hits'}->{'total'}{'value'} > 0 ) {
 			# Record/docs found
 			foreach $result (@{$owamp_data->{'hits'}->{'hits'}}) {
 			    # Analyse each result-set found
