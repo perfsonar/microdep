@@ -1020,10 +1020,16 @@ function update_legend(title, threshes){
 	    + colors[i] + ">" + _v + "</button></td>";
     }
     if (! jQuery.isEmptyObject(conffile[parms.net].dashboardURL)) {
-	html += '<td><button class=knapp title="Database dashboard" onclick=\'window.open("' + conffile[parms.net].dashboardURL + '", "_blank");\'>Dashboard</button>';
+	html += '<td><button class=knapp id="dashboard" title="Database dashboard">Dashboard</button>';
     }
     html +=  "</tr></table>";
     $("#legend").html(html);
+
+    // (Bound here and not written into the markup as an onclick: the content
+    // security policy of the map allows no script written into a page.)
+    $("#dashboard").click(  function () {
+	window.open(conffile[parms.net].dashboardURL, "_blank");
+    });
 
     $("#farge0").click(  function () {
 	only_links_by_color(empty_color);
