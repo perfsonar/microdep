@@ -1,5 +1,5 @@
 // prepare charts
-import { parms, conffile, 
+import { parms, conffile, net_names,
 	 get_parms, get_config, update_props, add_tab, update_url, escapeHtml,
 	 colors, make_palette,
 	 prop_desc, prop_names, make_prop_select,
@@ -77,7 +77,7 @@ function make_curve(tab_id, property, start, end){
 	+ "&start=" + adjust_to_timezone(start) + "&end=" + adjust_to_timezone(end)
 	+ "&from=" + parms.from + "&to=" + parms.to;
 
-    let title = parms.title.length !== 0 ? parms.title : "From " + parms.from + " to " + parms.to;
+    let title = parms.title ? parms.title : "From " + parms.from + " to " + parms.to;
     if (parms.debug) console.log(url);
 
     $.getJSON( url,
@@ -136,11 +136,32 @@ function title_state(){
 
 
 
+// What a curve cannot be drawn without. Returns what the page address lacks,
+// or an empty string.
+function address_problem(){
+    if ( net_names.indexOf(parms.net) < 0 )
+	return "names no measurement network of this map";
+    const events = conffile[parms.net].event_type || {};
+    if ( ! Object.prototype.hasOwnProperty.call(events, parms.event) || events[parms.event].enable == "false" )
+	return "names no event type of this network";
+    if ( isNaN( new Date(parms.start) ) || isNaN( new Date(parms.end) ) )
+	return "gives no period (start and end)";
+    return "";
+}
+
 // initialization
 function init_module(){
     $("#tabs").tabs();
-    let title = 'title' in  parms ? parms.title : "From " + parms.from + " to " + parms.to;
+    let title = parms.title ? parms.title : "From " + parms.from + " to " + parms.to;
     $("#tittel").text(title);   // from the URL: shown as text, never as markup
+
+    // Say what is wrong in the status line, instead of stopping at the first
+    // value that is not there and leaving the page empty.
+    const problem = address_problem();
+    if ( problem ) {
+	$("#error").text("No curve can be drawn: the address of this page " + problem + ".");
+	return;
+    }
 
     // prop_names = conffile.prop_names_list[ parms.event ];
     //prop_names = prop_names_list[ parms.event ];
