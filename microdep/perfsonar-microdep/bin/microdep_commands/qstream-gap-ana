@@ -376,7 +376,7 @@ if ($opt_owamp){
 	    # Inititate rereading logic for perfsonar input
 	    read_owamp_follow($opt_owamp, $opt_followinterval);
 	} else {
-	    read_owamp_curl($opt_owamp);
+	    read_owamp_url($opt_owamp);
 	}
     } elsif ($opt_owamp =~ /^amqp.*:\/\//) {
 	read_owamp_rabbitmq($opt_owamp);
@@ -889,34 +889,19 @@ sub read_owamp_file{
 }
 
 
-sub read_owamp_curl{
+sub read_owamp_url{
+    # Read the results once from a url. The url comes from the command line
+    # or the config file: it is fetched by the script itself and does not
+    # pass through a shell.
     my $url=shift;
-    $data=`curl -k -s $url`;
-    read_owamp_json( $data);
-}
-
-sub read_owamp {
-    my $url=shift;
-    $ENV{'PERL_LWP_SSL_VERIFY_HOSTNAME'} = 0;
-    $ENV{PERL_NET_HTTPS_SSL_SOCKET_CLASS} = 'Net::SSL';
-    my $resp=get($url);
-    if ( $resp){
-	read_owamp_json($resp);
-    } else {
-	printf 'error getting url:' . $url . " code: " . $!; 
-    }
-}
-sub read_owamp_ua {
-    my $url=shift;
-    $ENV{'PERL_LWP_SSL_VERIFY_HOSTNAME'} = 0;
-    $ENV{PERL_NET_HTTPS_SSL_SOCKET_CLASS} = 'Net::SSL';
     my $ua = LWP::UserAgent->new;
-    $ua->ssl_opts( verify_hostname => 0); # certs don't verify in ps-land
-    My $resp = $ua->get($url);
+    $ua->ssl_opts( verify_hostname => 0, SSL_verify_mode => IO::Socket::SSL::SSL_VERIFY_NONE);  # Accept any SSl cert
+    my $resp = $ua->get($url);
     if ( $resp->is_success ){
 	read_owamp_json( $resp->content);
     } else {
-	print $resp->content;
+	( my $shown = $url ) =~ s{://[^/@\s]*@}{://...@};   # no credentials in the log
+	warn "Could not read " . $shown . " : " . $resp->status_line . "\n";
     }
 }
 
