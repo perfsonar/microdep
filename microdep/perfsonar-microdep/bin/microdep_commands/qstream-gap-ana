@@ -138,7 +138,8 @@ $opt_v ||= 0;          # Flag: Be verbose
 $opt_version ||= 0;    # Flag: Show version
 $opt_topoevents ||= 0;       # Flag: Enable toplogy events
 $opt_topointerval ||= 3600;  # Min interval between topology events
-$opt_pslookup ||= "http://35.223.142.206/lookup/_search";  # API of perfSONAR Lookup Service;
+$opt_pslookup ||= "";         # API of perfSONAR Lookup Service, e.g. http://35.223.142.206/lookup/_search. Empty means no lookup.
+                             # (The service answers over plain http only, and every address seen is sent to it.)
 $opt_pslookup_wait ||= 3600; # Min interval between attempts to fetch info from ps-lookup service
 $opt_ipv6 ||= 0;             # Flag to turn on ipv6 packet analysis
 $opt_follow ||= 0;           # Flag to turn on rereading of owamp input source 
@@ -224,7 +225,7 @@ Options
   -batchsize n         Override batch size (packet count) expected when reading owamp subsession data sets
   -topoevents	       Enable output of topology events whenever a topology change is detected. Requires -json. 
   -topointerval n      Min interval (sec) between topology events. Default is $opt_topointerval
-  -pslookup url        Source url for perfSONAR lookup service hosts. Default is $opt_pslookup
+  -pslookup url        Source url for perfSONAR lookup service hosts. Default is none, i.e. no lookup.
   -wait seconds        Min no of seconds to wait between refreshing info fetched from pslookup-service. Default is $opt_pslookup_wait
   -ipv6                Analyse ipv6 packets (and ignore ipv4). Default is the opposite.
   -conf filename       Filename to config file. Note that config file overrides CLI options.
@@ -731,6 +732,18 @@ sub store_geopos{
     $geopos{$ip}{'ip'} = $ip;
 }
 
+sub pslookup_query {
+    # Post a query to the lookup service. Returns the decoded answer, or undef
+    # when there is none that can be read: no connection, an error status, or
+    # something that is not json. The analysis then goes on without a position.
+    my ($agent, $url, $query_data, $ip) = @_;
+    my $resp = $agent->post($url, 'Content-Type' => 'application/json', Content => $query_data );
+    print "pslookup for ", $ip, ":\n", Dumper($resp) if $opt_debug > 3;
+    return undef unless ( defined $resp && $resp->is_success );
+    my $answer = eval { decode_json( $resp->content ) };
+    return ( ref $answer eq 'HASH' ) ? $answer : undef;
+}
+
 sub validate_ip{
     # Check validity of ip-address (ipv4 and ipv6), and attempt to fix if possible
     # Attempt to find geo-position also
@@ -781,57 +794,47 @@ sub validate_ip{
 	    }
 	}
     }
-    if (! exists($geopos{$ip}) || $geopos{$ip}{'refresh'} < time() ) {
+    if ( $opt_pslookup && ( ! exists($geopos{$ip}) || $geopos{$ip}{'refresh'} < time() ) ) {
 	# Attempt to fetch geo coordinates from perfSONAR's Lookup Service
 	my $opensearch_api = $opt_pslookup;
-	# Prepare to post json query to fetch host or interface record/document matching current ip
-	my $query_data = '{ "query": { "bool": { "filter": [
-  	     { "bool": { "should": [
-       	       { "bool": { "must" : [
-	         {"term": {"type": "host" }},
-	         {"term": {"host-name": "' . $ip . '"}}
-       	       ]}},
-       	       { "bool": { "must" : [
-                 {"term": {"type": "interface"}},
-	         {"term": {"interface-addresses": "' . $ip . '"}}
-               ]}}
-  	     ]}},
-  	     {"range": {"expires": {"gt": "now" }}}
-	   ]}}, "sort": [ {"type": "asc"} ], "size": 1 }';
-#	my $query_data = '{ "query": { "bool": { "should": [
-#{ "bool": { "must": [ {"term": {"type": "host"}}, {"term": {"host-name": "' . $ip . '"}}]}},
-#{ "bool": { "must": [ {"term": {"type": "interface"}}, {"term": {"interface-addresses": "' . $ip . '"}}]}} 
-#        ], "filter": [{"range": {"expires": {"gt": "now"}}}]}}, "size": 1}';
-	# Run query
-	my $query_req = LWP::UserAgent->new;
-	my $pslookup_resp = $query_req->post($opensearch_api, 'Content-Type' => 'application/json', Content => $query_data );
-	if (defined $pslookup_resp) {
-	    print "pslookup for ", $ip, ":\n", Dumper($pslookup_resp) if $opt_debug > 3;
-	    $pslookup = decode_json $pslookup_resp->{'_content'};
-	    if (%{$pslookup} && $pslookup->{'hits'} && $pslookup->{'hits'}->{'total'}{'value'} > 0) {
-		# Valied respons. Check type.
-		if ($pslookup->{'hits'}->{'hits'}[0]->{'_source'}->{'type'}[0] eq "host") {
-		    # Host record/document found. Store geopos from document.
+	# Prepare to post json query to fetch host or interface record/document matching current ip.
+	# The query is built as a structure and then encoded, so the address is
+	# data in it whatever the address holds.
+	my $query_data = encode_json( { "query" => { "bool" => { "filter" => [
+	     { "bool" => { "should" => [
+	       { "bool" => { "must" => [
+	         { "term" => { "type" => "host" } },
+	         { "term" => { "host-name" => "$ip" } }
+	       ] } },
+	       { "bool" => { "must" => [
+	         { "term" => { "type" => "interface" } },
+	         { "term" => { "interface-addresses" => "$ip" } }
+	       ] } }
+	     ] } },
+	     { "range" => { "expires" => { "gt" => "now" } } }
+	   ] } }, "sort" => [ { "type" => "asc" } ], "size" => 1 } );
+	# Run query. With a time limit: a service that does not answer must not hold up the analysis.
+	my $query_req = LWP::UserAgent->new( timeout => 10 );
+	my $pslookup = pslookup_query($query_req, $opensearch_api, $query_data, $ip);
+	if ($pslookup && $pslookup->{'hits'} && $pslookup->{'hits'}->{'total'}{'value'} > 0) {
+	    # Valied respons. Check type.
+	    if ($pslookup->{'hits'}->{'hits'}[0]->{'_source'}->{'type'}[0] eq "host") {
+		# Host record/document found. Store geopos from document.
+		store_geopos($ip, $pslookup->{'hits'}->{'hits'}[0]->{'_source'});
+	    } elsif ($pslookup->{'hits'}->{'hits'}[0]->{'_source'}->{'type'}[0] eq "interface" && $pslookup->{'hits'}->{'hits'}[0]->{'_source'}->{'uri'}) {
+		# Interface with ip found. Apply uri to find parent host for interface.
+		$query_data = encode_json( { "query" => { "bool" => { "filter" => [
+		    { "term" => { "type" => "host" } },
+		    { "term" => { "host-net-interfaces" => $pslookup->{'hits'}->{'hits'}[0]->{'_source'}->{'uri'} } },
+		    { "range" => { "expires" => { "gt" => "now" } } }
+		  ] } }, "size" => 1 } );
+		$pslookup = pslookup_query($query_req, $opensearch_api, $query_data, $ip);
+		if ($pslookup && $pslookup->{'hits'} && $pslookup->{'hits'}->{'total'}{'value'} > 0 && $pslookup->{'hits'}->{'hits'}[0]->{'_source'} ) {
+		    # Parent host found. Store position if available.
 		    store_geopos($ip, $pslookup->{'hits'}->{'hits'}[0]->{'_source'});
-		} elsif ($pslookup->{'hits'}->{'hits'}[0]->{'_source'}->{'type'}[0] eq "interface" && $pslookup->{'hits'}->{'hits'}[0]->{'_source'}->{'uri'}) {
-		    # Interface with ip found. Apply uri to find parent host for interface.
-		    $query_data = '{ "query": { "bool": { "filter": [
-		        {"term": {"type": "host"}},
-     		        {"term": {"host-net-interfaces": "' . $pslookup->{'hits'}->{'hits'}[0]->{'_source'}->{'uri'} . '"}},
-		        {"range": {"expires": {"gt": "now"}}}
- 		      ]}}, "size": 1}';
-		    $pslookup_resp = $query_req->post($opensearch_api, 'Content-Type' => 'application/json', Content => $query_data );
-		    if (defined $pslookup_resp) {
-			print "pslookup for ", $ip, ":\n", Dumper($pslookup_resp) if $opt_debug > 3;
-			$pslookup = decode_json $pslookup_resp->{'_content'};
-			if (%{$pslookup} && $pslookup->{'hits'} && $pslookup->{'hits'}->{'total'}{'value'} > 0 && $pslookup->{'hits'}->{'hits'}[0]->{'_source'} ) {
-			    # Parent host found. Store position if available.
-			    store_geopos($ip, $pslookup->{'hits'}->{'hits'}[0]->{'_source'});
-			}
-		    }
 		}
 	    }
-	}	
+	}
 	# Set refresh interval for geopos info.
 	$geopos{$ip}{'refresh'} = time() + $opt_pslookup_wait;
     }
