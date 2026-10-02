@@ -10,7 +10,7 @@
 # the same opensearch index as the raw gap events. The frontend
 # sparkline can then query event_type=gapsum_h for ~24 buckets/day
 # of `down_ppm` (etc.) instead of the single daily gapsum record
-# qstream-gap-ana emits at service-restart time.
+# qstream-gap-ana emits (see its -sumperiod option).
 #
 # This is a deliberately non-invasive companion to qstream-gap-ana:
 # we do NOT modify the live daemon's accumulation/emit logic, so the

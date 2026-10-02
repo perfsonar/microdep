@@ -56,8 +56,6 @@ bin/microdep_commands/microdep-hourly-aggregator.pl
 bin/microdep_commands/microdep-opensearch-guard.sh
 scripts/perfsonar-microdep-gap-ana.service
 scripts/perfsonar-microdep-trace-ana.service
-scripts/perfsonar-microdep-restart.service
-scripts/perfsonar-microdep-restart.timer
 scripts/perfsonar-microdep-hourly-aggregator.service
 scripts/perfsonar-microdep-hourly-aggregator.timer
 scripts/perfsonar-microdep-opensearch-guard.service

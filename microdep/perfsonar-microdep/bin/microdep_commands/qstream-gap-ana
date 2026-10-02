@@ -53,7 +53,8 @@ my ($opt_h, $opt_help, $opt_id, $opt_slep,
     $opt_change_factor, $opt_v, $opt_version,
     $opt_topoevents, $opt_topointerval,
     $opt_pslookup, $opt_pslookup_wait, $opt_ipv6,
-    $opt_follow, $opt_followinterval, $opt_config_file );
+    $opt_follow, $opt_followinterval, $opt_config_file,
+    $opt_sumperiod );
 
 # Fetch options (if any) from commandline
 GetOptions( 'h' => \$opt_h, 'help' => \$opt_help, 'id=s' => \$opt_id, 'slep=s' => \$opt_slep, 
@@ -67,7 +68,8 @@ GetOptions( 'h' => \$opt_h, 'help' => \$opt_help, 'id=s' => \$opt_id, 'slep=s' =
 	    'change_factor=s' => \$opt_change_factor, 'v' => \$opt_v, 'version' => \$opt_version,
 	    'topoevents' => \$opt_topoevents, 'topointerval=s' => \$opt_topointerval,
 	    'pslookup=s' => \$opt_pslookup, 'wait=s' => \$opt_pslookup_wait, 'ipv6' =>\$opt_ipv6,
-	    'follow' => \$opt_follow, 'followinterval=s' => \$opt_followinterval, 'conf=s' =>\$opt_config_file
+	    'follow' => \$opt_follow, 'followinterval=s' => \$opt_followinterval, 'conf=s' =>\$opt_config_file,
+	    'sumperiod=s' => \$opt_sumperiod
     ) or $opt_h = 1;   # (Output help text on failure)
 
 if ( ! $opt_h && ! $opt_help && -e $opt_config_file ) {
@@ -87,7 +89,8 @@ if ( ! $opt_h && ! $opt_help && -e $opt_config_file ) {
 	    'change_factor=s' => \$opt_change_factor, 'v' => \$opt_v, 'version' => \$opt_version,
 	    'topoevents' => \$opt_topoevents, 'topointerval=s' => \$opt_topointerval,
 	    'pslookup=s' => \$opt_pslookup, 'wait=s' => \$opt_pslookup_wait, 'ipv6' =>\$opt_ipv6,
-	    'follow' => \$opt_follow, 'followinterval=s' => \$opt_followinterval, 'conf=s' =>\$opt_config_file
+	    'follow' => \$opt_follow, 'followinterval=s' => \$opt_followinterval, 'conf=s' =>\$opt_config_file,
+	    'sumperiod=s' => \$opt_sumperiod
 	); 
     foreach my $opt (keys %{$config}) {
 	# Set option based on value from config file
@@ -145,6 +148,12 @@ $opt_pslookup_wait ||= 3600; # Min interval between attempts to fetch info from 
 $opt_ipv6 ||= 0;             # Flag to turn on ipv6 packet analysis
 $opt_follow ||= 0;           # Flag to turn on rereading of owamp input source 
 $opt_followinterval ||= 10;  # Reread interval of owamp input source
+$opt_sumperiod = 86400 if ( ! defined $opt_sumperiod || $opt_sumperiod eq '' );  # Interval of summary records while following an input source
+$opt_sumperiod = 0 if ( lc($opt_sumperiod) eq "off" );  # 0 or "off": summary records only when the analysis is terminated
+if ( $opt_sumperiod !~ /^\d+$/ || $opt_sumperiod > 86400 ) {
+    warn "Summary period '$opt_sumperiod' is not a number of seconds up to 86400. Applying 86400.\n";
+    $opt_sumperiod = 86400;
+}
 $opt_config_file ||= '';     # Filename of configfile
 
 # Misc global variables
@@ -184,6 +193,12 @@ my %owamp_batch;      # Memory for sequence numbers data for owamp sessions. App
 
 my $last_topoevent = time(); # Epoch time when last topology event was output
 
+# Summary records
+my %sum_flows=();    # Flows heard from in the current summary period
+my %sum_packets=();  # Count of packets analysed per flow in the current summary period
+my %sum_t0=();       # Start of the current summary of a flow, once the flow has had a summary record
+my $sum_next=0;      # End of the current summary period (epoch). 0 when summaries are output at termination only.
+
 my $pslookuphost;               # Ref to hash of perfSONAR Lookup Service hosts;
 my $config={};           # Config loaded from file
 
@@ -195,7 +210,7 @@ Analyses for gaps in packet logs (crude logs or owamp data from pscheduler).
 When gaps are found a list of statistical qos parameters is output as text or json.
 Linear regression statistics are also output to indicate the delay trend around a gap. 
 Curves visualizing the delay change before and after a gap may also be generated.
-Summary statistics are ouput when analysis is terminated.
+Summary statistics are ouput when analysis is terminated, and at intervals while an input source is followed (see -sumperiod).
 
 Options
   -h -help             Help message
@@ -216,6 +231,10 @@ Options
   -owamp url           Get json owamp data from pscheduler (http://) og from rabbit message queue (ampq://)
   -follow	       Reread input source at intervals and analyse newly arrived packets. Applys only for http* owamp url. (To follow files apply '| tail -f'.)   	       
   -followinterval n    Interval for rereading input source. Default is $opt_followinterval sec.       	       
+  -sumperiod secs      Interval for summary statistics while an input source is followed (-follow, or a message queue).
+                       Each summary covers its own interval, and the analysis carries on. The intervals follow the clock
+                       in local time: with 3600 they end on the hour, with 86400 at midnight. 0 or 'off' gives summary
+                       statistics at termination only. Default is $opt_sumperiod sec.
   -json file           Enable events output in JSON format to given file or to destination specified in file via perfsonar's JSON achive spec format. 
   -jitter secs         Emit jitter statistics at intervals. Default is $opt_jitter sec.
   -v		       Be verbose.
@@ -387,9 +406,7 @@ if ($opt_owamp){
     read_crude();
 }
 
-foreach $id ( keys %t0 ) {
-    $duration{$id}=$last_tx{$id}-$t0{$id};
-}
+update_durations();
 
 
 if ( $opt_v ){
@@ -437,9 +454,7 @@ exit(0);
 ################################################################################
 sub handle_signals(){
     # Update duration of each flow
-    foreach $id ( keys %t0 ) {
-	$duration{$id}=$last_tx{$id}-$t0{$id};
-    }
+    update_durations();
     # Make and output summary
     make_summary();
     # while ( $#ARGV >= 0) { printf "Got signal %s\n", shift @ARGV }
@@ -457,6 +472,52 @@ sub make_summary(){
 	emit_summary_json();
 	close JSON;
     }
+}
+
+sub update_durations {
+    # How long each flow has lasted: since its previous summary record, or else since its first packet
+    foreach $id ( keys %t0 ) {
+	$duration{$id}=$last_tx{$id}-( defined $sum_t0{$id} ? $sum_t0{$id} : $t0{$id} );
+    }
+}
+
+sub next_sum_time {
+    # End of the summary period that $now lies in. The periods follow the clock in
+    # local time: each day is divided into periods from midnight on, so with 3600
+    # they end on the hour and with 86400 at midnight.
+    my ($now, $period) = @_;
+    my ($mday, $mon, $year) = (localtime($now))[3,4,5];
+    my $midnight = POSIX::mktime(0, 0, 0, $mday, $mon, $year, 0, 0, -1);
+    my $next_midnight = POSIX::mktime(0, 0, 0, $mday + 1, $mon, $year, 0, 0, -1);
+    return $next_midnight if ( $period >= 86400 );
+    my $end = $midnight + ( int( ($now - $midnight) / $period ) + 1 ) * $period;
+    return $end < $next_midnight ? $end : $next_midnight;
+}
+
+sub check_sumperiod {
+    # When the current summary period has ended: output the summary records and start a new period.
+    # (Called before a batch of results is analysed, and at intervals while none arrive.)
+    return if ( ! $sum_next || time() < $sum_next );
+    update_durations();
+    if ($opt_json){
+	emit_summary_json($sum_next);
+    } else {
+	reset_summary($_) foreach ( keys %sum_flows );
+    }
+    $sum_next = next_sum_time(time(), $opt_sumperiod);
+}
+
+sub reset_summary {
+    # Start the summary of a flow anew: its counters, its limits on the number of events, and its
+    # place among the flows heard from (so a topology event is output when it is next heard from).
+    # This is what the analysis used to be restarted for every night. What the analysis has learned
+    # of the flow (packet window, sequence numbers, addresses) is kept.
+    my $id = shift;
+    delete $$_{$id} foreach ( \%nsmall_gaps, \%nbig_gaps, \%small_gaps, \%small_time, \%big_time, \%resets,
+			      \%late_n, \%late_sum, \%late_ss, \%dupl, \%reorder, \%dttl_count, \%least_delay,
+			      \%jitter_obs, \%dropped_gaps, \%n_gaps, \%n_small_graphs, \%n_big_graphs,
+			      \%sum_packets, \%sum_flows );
+    $sum_t0{$id} = $last_tx{$id} if defined $last_tx{$id};
 }
 
 
@@ -511,12 +572,15 @@ sub GetOwampDataFromEsmond($$$$$) {
 #name           id              dns                             ip
 
 sub emit_summary_json{
-    
+    # Output a summary record for each flow heard from in the current summary period.
+    # When called with the end of a summary period, the summary of each flow also starts anew.
+    my $period_end = shift;
+
 #    foreach $id ( sort keys %npackets){
-    foreach $id ( sort keys %src_adr){
+    foreach $id ( sort keys %sum_flows){
 	my $latems=0;
 	$latems=$late_sum{$id}/$late_n{$id} if $late_n{$id} > 0;
-	my $down_pmm=0;
+	my $down_ppm=0;
 	if ( $duration{$id} > 0 ){
 	    $down_ppm = 10**6 * ($small_time{$id} + $big_time{$id}) / $duration{$id};
 	}
@@ -566,9 +630,19 @@ sub emit_summary_json{
 	    $json{"dropped_$gap_type"}=$dropped_gaps{$id}{$gap_type};
 	}
 
-	my $sum_time = $ptx{$id} || time();  # Ensure valid timestamp for summary records  
+	if ( defined $last_tx{$id} ){
+	    # The time span the record covers
+	    $$json{"t_first"} = int( defined $sum_t0{$id} ? $sum_t0{$id} : $t0{$id} );
+	    $$json{"t_last"} = int( $last_tx{$id} );
+	}
+
+	my $sum_time = ( $sum_packets{$id} && $ptx{$id} ) || time();  # Ensure valid timestamp for summary records
+	# A record for a summary period is not to be dated after the end of that period
+	$sum_time = $period_end - 0.001 if ( $period_end && $sum_time >= $period_end );
 #	emit_json( $json, $id, $ptx{$id} );
-	emit_json( $json, $id, $sum_time );
+	my $delivered = emit_json( $json, $id, $sum_time );
+	# Start anew, unless the record could not be delivered: the next one then covers this period as well
+	reset_summary($id) if ( $period_end && $delivered );
     } 
 }
 
@@ -636,12 +710,15 @@ sub emit_json{
 		    warn "Failed to send JSON document to" . $archive_spec->{'data'}->{'_url'}; 
 		}
 		# Success!
+		return 1;
 	    }
 	}
     } else {
 	# Output to filehandle
 	print JSON $coder->encode($new ) ."\n" || warn "JSON print failed : $!";
+	return 1;
     }
+    return 0;   # Not delivered
 }
 
 ################################################################################
@@ -959,9 +1036,10 @@ sub owamp_ana_batch {
 	
 	# Record/update source and dest data 
 	$opt_id = $src . "_" . $dst;   # Set global id for flow since analyze_packet() also can rely on this
-	my $new_flow = ! $src_adr{$opt_id} || ! $dst_adr{$opt_id} ;
+	my $new_flow = ! $sum_flows{$opt_id};   # Not yet heard from in the current summary period
 	$src_adr{$opt_id}=validate_ip($src) if ! $src_adr{$opt_id} ;
 	$dst_adr{$opt_id}=validate_ip($dst) if ! $dst_adr{$opt_id} ;
+	$sum_flows{$opt_id}=1;
 	$src_name{$opt_id}=get_name($src_adr{$opt_id});
 	$dst_name{$opt_id}=get_name($dst_adr{$opt_id});
 
@@ -973,7 +1051,7 @@ sub owamp_ana_batch {
 	    }
 	    if (time() - $last_topoevent > $opt_topointerval) {
 		# Output topology events for all observed src + dst pair
-		foreach my $id_ (keys  %src_adr) {
+		foreach my $id_ (keys %sum_flows) {
 		    emit_topology_json($id_);
 		}
 		$last_topoevent = time();
@@ -1051,8 +1129,10 @@ sub read_owamp_follow{
 	$url_str .= "/pscheduler_raw_latencybg/_search";
 	my $query_req = LWP::UserAgent->new;
 	$query_req->ssl_opts( verify_hostname => 0, SSL_verify_mode => IO::Socket::SSL::SSL_VERIFY_NONE);  # Accept any SSl cert
+	$sum_next = next_sum_time(time(), $opt_sumperiod) if $opt_sumperiod;
 	while( 1 ) {
 	    # Loop until interrupted
+	    check_sumperiod();
 	    my $search_query = owamp_search_query($date_last_read_rec); 
 	    my $owamp_resp = $query_req->post($url_str, 'Content-Type' => 'application/json', Content => $search_query );
 	    if (defined $owamp_resp) {
@@ -1065,6 +1145,7 @@ sub read_owamp_follow{
 			# Record/docs found
 			foreach $result (@{$owamp_data->{'hits'}->{'hits'}}) {
 			    # Analyse each result-set found
+			    check_sumperiod();
 			    owamp_ana(encode_json($result->{'_source'}));
 			    # Ensure only new recordes are fetch in next loop
 			    $date_last_read_rec = $result->{'_source'}->{'@timestamp'};
@@ -1167,6 +1248,7 @@ sub read_owamp_rabbitmq{
 					# Analyse message payload
 					$payload = $msg->{body}->payload;
 					print "Read data from rmq. Analysing...\n" if $opt_debug > 2;
+					check_sumperiod();
 					owamp_ana($payload);
 				    }
 				    # Tell "main loop" to stop waiting for more, i.e. consume only single message
@@ -1187,6 +1269,7 @@ sub read_owamp_rabbitmq{
 				# Analyse message payload
 				$payload = $msg->{body}->payload;
 				print "Read data from rmq. Analysing...\n" if $opt_debug > 2;
+				check_sumperiod();
 				owamp_ana($payload);
 			    }
 			    # Tell "main loop" to stop waiting for more, i.e. consume only single message
@@ -1232,11 +1315,21 @@ sub read_owamp_rabbitmq{
 		);
 	},
 	on_failure => $rmq_cv,
+	# A connection that is closed or lost later on ends the reading as well. (Without this
+	# the script stayed, waiting for messages that would never come.)
+	on_close => $rmq_cv,
+	on_read_failure => $rmq_cv,
 	);
     
+    # A summary period may end while no messages arrive, so the clock is looked at regularly as well
+    $sum_next = next_sum_time(time(), $opt_sumperiod) if $opt_sumperiod;
+    my $sum_timer;
+    $sum_timer = AnyEvent->timer( after => 10, interval => 10, cb => \&check_sumperiod ) if $opt_sumperiod;
+
     # Subroutine "main loop" - wait for consumption to complete 
     print "Waiting for rmq input...\n" if $opt_debug > 2;
     $rmq_cv->recv;
+    warn "Reading from Rabbit message queue has ended (the connection failed or was closed).\n";
 }
 
 
@@ -1304,9 +1397,10 @@ sub analyze_packet {
 	$id=get_name($src);
     }
 
-    my $new_flow = ! $src_adr{$id} || ! $dst_adr{$id} ;
+    my $new_flow = ! $sum_flows{$id};   # Not yet heard from in the current summary period
     $src_adr{$id}=$src if ! $src_adr{$id} ;
     $dst_adr{$id}=$dst if ! $dst_adr{$id} ;
+    $sum_flows{$id}=1;
     $src_name{$id}=get_name($src);
     $dst_name{$id}=get_name($dst);
 
@@ -1318,7 +1412,7 @@ sub analyze_packet {
 	}
 	if (time() - $last_topoevent > $opt_topointerval) {
 	    # Output topology events for all observed src + dst pair
-	    foreach my $id_ (keys  %src_adr) {
+	    foreach my $id_ (keys %sum_flows) {
 		emit_topology_json($id_);
 	    }
 	    $last_topoevent = time();
@@ -1336,6 +1430,7 @@ sub analyze_packet {
     $last_tx{$id}=$tx;
     
     $npackets{$id}++;
+    $sum_packets{$id}++;
     my $dt=0;
     my $bufferit=1;
     
