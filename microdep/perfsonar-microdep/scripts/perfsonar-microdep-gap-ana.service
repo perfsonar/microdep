@@ -7,12 +7,16 @@ Type=simple
 User=perfsonar
 Group=perfsonar
 # Run analysis for both ipv4 and ipv6
+# If either of the two ends, the unit fails and systemd starts both again.
+# (A plain "wait" returned success once both were gone, and went on waiting
+# while one was, so an analyser that stopped stayed stopped.)
 ExecStart=/bin/bash -c ' \
   /usr/lib/perfsonar/bin/microdep_commands/qstream-gap-ana -conf /etc/perfsonar/microdep/microdep-gap-ana.yml & \
   /usr/lib/perfsonar/bin/microdep_commands/qstream-gap-ana -conf /etc/perfsonar/microdep/microdep-gap-ana.yml -ipv6 & \
-  wait \
+  wait -n; exit 1 \
 '
 Restart=on-failure
+RestartSec=30
 
 [Install]
 WantedBy=multi-user.target
