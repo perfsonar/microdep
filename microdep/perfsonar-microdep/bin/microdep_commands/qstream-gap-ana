@@ -608,7 +608,12 @@ sub emit_json{
 	my $archive_resp;
 	# Prepare header (incl. auth type and content type)
 	$deliver_agent->default_header( %{$archive_spec->{'data'}->{'_headers'}} );
-	if ( ! $archive_spec->{'data'}->{'verfify-ssl'}) {
+	# The certificate of the archive is checked unless the spec says not to
+	# ("verify-ssl": false, as the specs perfSONAR generates do). The key was
+	# misspelled here, so the setting was never read and no certificate was
+	# ever checked.
+	my $verify_ssl = $archive_spec->{'data'}->{'verify-ssl'};
+	if ( defined $verify_ssl && ! $verify_ssl ) {
 	     # Accept any SSl cert
 	    $deliver_agent->ssl_opts( verify_hostname => 0, SSL_verify_mode => IO::Socket::SSL::SSL_VERIFY_NONE); 
 	}
