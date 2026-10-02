@@ -35,6 +35,15 @@ case "$1" in
 	if [ -f /sbin/restorecon ]; then
 	    /sbin/restorecon -irv /usr/lib/perfsonar/bin/microdep_commands/
 	fi
+
+	# The nightly restart of the analysis is gone: summary records are now output at
+	# intervals by the analysis itself. Clear away the timer of an earlier version.
+	if [ -d /run/systemd/system ]; then
+	    systemctl stop perfsonar-microdep-restart.timer > /dev/null 2>&1 || true
+	fi
+	if [ -x /usr/bin/deb-systemd-helper ]; then
+	    deb-systemd-helper purge perfsonar-microdep-restart.timer perfsonar-microdep-restart.service > /dev/null 2>&1 || true
+	fi
     ;;
 
     abort-upgrade|abort-remove|abort-deconfigure)

@@ -44,6 +44,9 @@
 #pslookupwait: 3600         # Min no of seconds to wait between refreshing info fetched from pslookup-service
 #ipv6: 0                    # Flag enabling ipv6 address parsing
 #followinterval: 10         # No of seconds to wait between requests for data from openseach archive
+#sumperiod: 86400           # No of seconds between summary records when reading from a perfSONAR data source (pssrc). Each record
+                            # covers its own period, and the analysis carries on. The periods follow the clock in local time: with
+                            # 3600 they end on the hour, with 86400 at midnight. 0 gives summary records at termination only.
 #pssrcverify: 1             # Check the certificate of a https data source (pssrc). A source on this host is never checked.
 #config: ''                 # Path to configuration file (this one). Note that commandline options override config file.               
 

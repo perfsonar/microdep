@@ -93,6 +93,8 @@ f_csensitivity = 1 #Amount of traceroutes in an anomalous report before printing
 CE_DELTA_LIMIT = 3.0          # Level of change in ce-level for a hop to consider a route change to have happened.
 HOPDIST_INIT_WINDOW = 2500    # Min no of probes seen for a hop to consider its host distribution to be representativ
 
+HTTP_TIMEOUT = 60             # Max no of seconds to wait for an answer when reading from a data source or delivering an event record
+
 # Set default paramenter values
 param = {
     'file':'',    # Path to traceroutes source
@@ -127,6 +129,8 @@ param = {
     'pslookupwait': 3600,         # Min no of seconds to wait between refreshing info fetched from pslookup-service
     'ipv6': 0,                    # Flag enabling ipv6 address parsing
     'followinterval': 10,          # No of seconds to wait between requests for data from openseach archive
+    'sumperiod': 86400,           # No of seconds between summary records when reading from a perfSONAR data source (pssrc).
+                                  # 0 means summary records at termination only.
     'pssrcverify': 1,             # Check the certificate of a https data source (pssrc). A source on this host is never checked.
     'config': ''                  # Path to configuration file. Note that commandline options override config file.               
 }
@@ -347,20 +351,33 @@ class Tracesummary:
         return ret_dict
 
     
-    def print_all_pairs(self, thread=0):
+    def print_all_pairs(self, thread=0, period_end=0):
         # Output summary for all src-dst pairs
+        # When called with the end of a summary period, the summary of each pair also starts anew:
+        # the pair is entered again (and its topology event output) when it is next heard from.
+        # This is what the analysis used to be restarted for every night. What the analysis has
+        # learned of the routes is kept.
         backup_current_pair = self.current_pair
-        for pair in self.summary.keys():
+        for pair in list(self.summary.keys()):
             p_list = [
                 pair,
                 self.summary[pair]["t_first"],
                 self.summary[pair]["t_last"]
             ]
+            # A record for a summary period is not to be dated after the end of that period
+            t_sum = self.summary[pair]["t_last"]
+            if period_end and t_sum >= period_end:
+                t_sum = period_end - 1
             # Output summary for src dest pair
             self.set_current_pair(pair, self.summary[pair]["t_last"])
-            printAlert( thread, self.summary[pair]['route_type'], p_list, self.summary[pair]["t_last"], "summary")
+            delivered = printAlert( thread, self.summary[pair]['route_type'], p_list, t_sum, "summary")
+            if period_end and delivered:
+                # (A record that could not be delivered is kept: the next one then covers this period as well)
+                del self.summary[pair]
         # Restore current pair    
-        self.current_pair = backup_current_pair
+        self.current_pair = backup_current_pair if backup_current_pair in self.summary else ""
+        if period_end:
+            self.parse_errors = 0
 
     def print_topology(self, thread=0):
         # Output topology discovery event for all src-dst pairs
@@ -417,6 +434,7 @@ def parse_cmd(param):
     cmdparser.add_argument('--pslookupwait', help='Min interval between attempts to fetch info from ps-lookup service. Default is ' + str(param['pslookupwait']) + '.')
     cmdparser.add_argument('--ipv6', '-6', action='count', help='Enable parsing of ipv6 addresses.')
     cmdparser.add_argument('--followinterval', help='No of seconds to wait between requests for data from openseach archive. Default is ' + str(param['followinterval']) + '.')
+    cmdparser.add_argument('--sumperiod', help='No of seconds between summary records when reading from a perfSONAR data source (--pssrc). Each record covers its own period, and the analysis carries on. The periods follow the clock in local time: with 3600 they end on the hour, with 86400 at midnight. 0 or \'off\' gives summary records at termination only. Default is ' + str(param['sumperiod']) + '.')
     cmdparser.add_argument('--pssrcverify', help='Set to 0 to accept any certificate from a https data source. Default is ' + str(param['pssrcverify']) + '.')
     cmdparser.add_argument('--config', help='Path to configuration file. Note that commandline options overrides config file settings.')
 
@@ -458,6 +476,16 @@ def parse_cmd(param):
     if str(param['pslookup']).lower() == 'off':
         # No lookup of positions
         param['pslookup'] = ''
+
+    # The summary period is a number of seconds up to a day, where 0 (or 'off') means at termination only
+    try:
+        sumperiod = 0 if str(param['sumperiod']).lower() in ('off', 'false') else int(param['sumperiod'])
+        if sumperiod < 0 or sumperiod > 86400:
+            raise ValueError
+        param['sumperiod'] = sumperiod
+    except ValueError:
+        print("Warning: Summary period '" + str(param['sumperiod']) + "' is not a number of seconds up to 86400. Applying 86400.")
+        param['sumperiod'] = 86400
 
     if param['live'] > 0 or len(param['file']) > 0 or param['date'] or param['pssrc']:
         # Minimim params given, continue
@@ -1049,6 +1077,7 @@ def createJSON(alert):
                 print(json.dumps(alert) + "\n")
             outfile.write(json.dumps(alert) + "\n")
             outfile.close()
+        return True
 
     else:
         # Prepare to deliver json object via http
@@ -1061,21 +1090,27 @@ def createJSON(alert):
             # Accept any SSl cert, i.e. ignore SSL cert errors 
             ssl_context = ssl._create_unverified_context()
         # Run deliver request
+        # A delivery that fails is reported and the record is lost, but the analysis goes on:
+        # the receiver may just be restarting.
+        delivered = False
         try:
-            archive_resp = urllib.request.urlopen(delivery_req, context=ssl_context)
-            result_str = archive_resp.read()
+            archive_resp = urllib.request.urlopen(delivery_req, context=ssl_context, timeout=HTTP_TIMEOUT)
+            result_str = archive_resp.read().decode('utf8')
             if param['verbose'] > 3:
                 print("Reponse when archiving to " + archive_spec['data']['_url'] + ":\n" )
                 print(result_str)
-            if result_str.decode('utf8') != "ok":
-                # Something went wrong
-                if param['verbose'] > 0:
-                    printf ("Warning: Failed to deliver event data via url '" + url + "'. Got return value '" + result_str + "'.") 
-            # Success!    
+            # Success!
+            delivered = True
+            if result_str != "ok" and param['verbose'] > 0:
+                # (The record has been received, but the answer is not the usual one)
+                print("Warning: Unexpected answer when delivering event data via url '" + archive_spec['data']['_url'] + "': '" + result_str + "'.")
         except urllib.error.HTTPError as e:
             # Something went wrong
-            if param['verbose'] > 0:
-                printf ("Warning: Failed to deliver event data via url '" + e.url + "'. Got return code " + str(e.code) + ".") 
+            print("Warning: Failed to deliver event data via url '" + archive_spec['data']['_url'] + "'. Got return code " + str(e.code) + ".")
+        except (urllib.error.URLError, OSError) as e:
+            # E.g. nothing listens there at the moment, or no answer came in time
+            print("Warning: Failed to deliver event data via url '" + archive_spec['data']['_url'] + "' (" + str(e) + ").")
+        return delivered
 
 #Translates from encoding of end states
 
@@ -1360,8 +1395,7 @@ def printAlert(threadid, tr_type, n, time, mode, normal=None, new=None):
 
         alert.update(tracesummary.get_all())  # Add all summary variables to alert dictionary
 
-        createJSON(alert)
-        return
+        return createJSON(alert)
         
     if mode == "topology":
         # Output topology-discovery event
@@ -2535,6 +2569,21 @@ def read(path, srchost, srcdate, mode="batch", thread=0, starttime=0):
     PS_LOGLINE = 3
     PS_ENDED = 4
     
+    def analyze_parsed():
+        # The lines of a traceroute run have all been read: analyse it
+        if "src" in traceroutes[time] and "dst" in traceroutes[time]:
+            if len(traceroutes[time]["result"]) > traceroutes[time]["maxhops"]:
+                # Update maxhops
+                traceroutes[time]["maxhops"] = len(traceroutes[time]["result"])
+
+            if param['verbose'] > 2:
+                print ("New traceroute run found at time ", time ,", analysing...")
+            analyze(traceroutes[time], time, cursor)
+
+        else:
+            # Source or destination info missing. Traceroute is incomplete. Skip.
+            tracesummary.parse_error()
+
     try:
         parser_state = PS_INIT
         while parser_state != PS_ENDED:
@@ -2561,6 +2610,17 @@ def read(path, srchost, srcdate, mode="batch", thread=0, starttime=0):
                 # Empty or corrupt line (or no line at all). Skip
                 continue
 
+            if mode == "pssrc" and word[0] == "sumperiod" and len(word) > 1 and word[1].isdigit():
+                # The reading process tells that a summary period has ended (see sumperiod_tick())
+                if parser_state in [PS_STARTLINE, PS_LOGLINE]:
+                    # The traceroute run read last is complete, and belongs to the period that has ended
+                    analyze_parsed()
+                parser_state = PS_INIT
+                time = 0
+                # Output the summary records, and start the summary of each pair anew
+                tracesummary.print_all_pairs(thread, int(word[1]))
+                continue
+
             if word[0] == "ps_testid":
                 # Strip off perfsonar test id
                 ps_testid = word[1]
@@ -2585,18 +2645,7 @@ def read(path, srchost, srcdate, mode="batch", thread=0, starttime=0):
                 # Start line found
                 if parser_state in [PS_STARTLINE, PS_LOGLINE]:
                     # Parsing of previous traceroute run has completed
-                    if "src" in traceroutes[time] and "dst" in traceroutes[time]:
-                        if len(traceroutes[time]["result"]) > traceroutes[time]["maxhops"]:
-                            # Update maxhops
-                            traceroutes[time]["maxhops"] = len(traceroutes[time]["result"])
-
-                        if param['verbose'] > 2:
-                            print ("New traceroute run found at time ", time ,", analysing...")
-                        analyze(traceroutes[time], time, cursor)
-
-                    else:
-                        # Source or destination info missing. Traceroute is incomplete. Skip.
-                        tracesummary.parse_error()
+                    analyze_parsed()
                 elif parser_state == PS_INIT:
                     # First line of log file. Prepare for parsing of traceroute run
                     pass
@@ -2604,6 +2653,7 @@ def read(path, srchost, srcdate, mode="batch", thread=0, starttime=0):
                 parser_state = PS_STARTLINE
                 # Initializes for new traceroute
                 time = int(word[0])  
+                traceroutes.clear()    # (Only the run being read is kept: the earlier ones have been analysed)
                 traceroutes[time] = {}
                 if MICRODEPLOG:
                     traceroutes[time]["src"] = resolver.get_ip(srchost)
@@ -2783,6 +2833,42 @@ def pssrc_ssl_context(url):
         return ssl._create_unverified_context()
     return ssl.create_default_context()
 
+sumperiod_end = 0   # End of the current summary period (epoch), once a reading process keeps track of it
+
+def sumperiod_end_after(now, period):
+    """
+    End of the summary period that 'now' lies in. The periods follow the clock in
+    local time: each day is divided into periods from midnight on, so with 3600
+    they end on the hour and with 86400 at midnight.
+    """
+    day = time.localtime(now)
+    midnight = time.mktime((day.tm_year, day.tm_mon, day.tm_mday, 0, 0, 0, 0, 0, -1))
+    next_midnight = time.mktime((day.tm_year, day.tm_mon, day.tm_mday + 1, 0, 0, 0, 0, 0, -1))
+    if period >= 86400:
+        return next_midnight
+    return min(midnight + (int((now - midnight) / period) + 1) * period, next_midnight)
+
+def sumperiod_tick():
+    """
+    Tell the analysis process when a summary period has ended, so it outputs the
+    summary records and starts a new period. Called by the reading process before
+    a record is forwarded, and at intervals while none arrive.
+    """
+    global sumperiod_end
+    if not param['sumperiod']:
+        return
+    now = time.time()
+    if sumperiod_end and now >= sumperiod_end:
+        # (On a line of its own, whatever the record forwarded last ended with)
+        pssrc_pipe_input.write("\nsumperiod " + str(int(sumperiod_end)) + "\n")
+        try:
+            pssrc_pipe_input.flush()
+        except:
+            # Ignore flush errors
+            pass
+    if not sumperiod_end or now >= sumperiod_end:
+        sumperiod_end = sumperiod_end_after(now, param['sumperiod'])
+
 def opensearch_read(opensearch_api, mode, thread):
     """
     Read traceroute records via Opensearch API
@@ -2808,13 +2894,17 @@ def opensearch_read(opensearch_api, mode, thread):
     try:
         while True:
             # Loop until interrupted
+            if os.waitpid(pid, os.WNOHANG)[0] != 0:
+                # The analysis process has ended on its own
+                break
+            sumperiod_tick()
             search_query = { 'query': { 'range': { '@timestamp': { 'gt':  date_last_read_rec } } }, 'size': 600, 'sort': [ {'@timestamp': {'order': 'asc'}} ]}
             query_req = urllib.request.Request(opensearch_api + '/pscheduler_raw_trace/_search', data=bytes(json.dumps(search_query), encoding='utf-8') )
             query_req.add_header('Content-Type', 'application/json')
             # Run query
             result_str="{}"
             try:
-                response = urllib.request.urlopen(query_req, context=ssl_context)
+                response = urllib.request.urlopen(query_req, context=ssl_context, timeout=HTTP_TIMEOUT)
                 result_str = response.read()
             except urllib.error.HTTPError as e:
                 if param['verbose'] > 0:
@@ -2872,6 +2962,7 @@ def opensearch_read(opensearch_api, mode, thread):
                         print("Warning: Skipping a record from " + opensearch_api + " that could not be read (" + type(e).__name__ + ": " + str(e) + ").")
                         continue
                     # Forward to analysis process
+                    sumperiod_tick()
                     pssrc_pipe_input.write(data)
                     if param["verbose"] > 3:
                         print("Wrote to pipe: '" + data + "'")
@@ -2890,8 +2981,11 @@ def opensearch_read(opensearch_api, mode, thread):
     except (KeyboardInterrupt, SystemExit) as e :
         # Wait for analysis child process to exit
         os.wait()
-    
-    return 
+        return
+
+    # Nothing is analysed any more, so there is no point in reading on
+    print("Error: The analysis process has ended. Ending the reading process as well.")
+    sys.exit(1)
     
 def amqp_read(url, mode, thread):
     """ 
@@ -2979,6 +3073,16 @@ def amqp_read(url, mode, thread):
 
     # Parent process. No need to read from pipe
     os.close(pssrc_r)
+
+    def amqp_read_timer():
+        # At intervals also while no messages arrive: has the analysis process ended, or a summary period?
+        if os.waitpid(pid, os.WNOHANG)[0] != 0:
+            channel.stop_consuming()
+            return
+        sumperiod_tick()
+        connection.call_later(10, amqp_read_timer)
+
+    connection.call_later(10, amqp_read_timer)
         
     try:
         channel.start_consuming()
@@ -2986,6 +3090,11 @@ def amqp_read(url, mode, thread):
     except (KeyboardInterrupt, SystemExit) as e :
         # Wait for analysis child process to exit
         os.wait()
+        return
+
+    # Nothing is analysed any more, so there is no point in reading on
+    print("Error: The analysis process has ended. Ending the reading process as well.")
+    sys.exit(1)
 
 def amqp_read_callback(_ch, _method, _properties, body):
     """
@@ -3042,6 +3151,7 @@ def amqp_read_message(body):
     # Forward to queue
     data = "ps_testid " + testid + " " + starttime + " " + element["run"]["result-full"][0]["diags"]
     #data = starttime + " " + element["run"]["result-full"][0]["diags"]
+    sumperiod_tick()
     pssrc_pipe_input.write(data)
     if param["verbose"] > 3:
         print("Wrote to pipe: '" + data + "'")
