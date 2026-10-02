@@ -39,7 +39,7 @@
 #maxprocs: 1                # Max no of parallel processes in batch mode
 #topoevents: 0              # Flag to enable detection and output of topology events
 #topointerval: 3600         # Min no of seconds between topology events
-#pslookup: ''               # API of perfSONAR Lookup Service, e.g. 'http://35.223.142.206/lookup/_search'. Empty means no lookup.
+#pslookup: 'http://35.223.142.206/lookup/_search'  # API of perfSONAR Lookup Service. Empty or 'off' means no lookup.
                             # (The service answers over plain http only, and every address seen is sent to it.)
 #pslookupwait: 3600         # Min no of seconds to wait between refreshing info fetched from pslookup-service
 #ipv6: 0                    # Flag enabling ipv6 address parsing
