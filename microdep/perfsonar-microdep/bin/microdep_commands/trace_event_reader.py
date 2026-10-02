@@ -2541,8 +2541,10 @@ def read(path, srchost, srcdate, mode="batch", thread=0, starttime=0):
             else:
                 line = str(p.stdout.readline(), 'UTF8')
 
-            if not line and mode in ["batch", "nosummary"]:
+            if not line and mode in ["batch", "nosummary", "pssrc"]:
                 # No more input. End of parsing.
+                # (For "pssrc" the pipe only ends when the reading process is gone.
+                # Without this the loop went on reading nothing, at full speed.)
                 parser_state = PS_ENDED
                 continue
 
@@ -2814,36 +2816,57 @@ def opensearch_read(opensearch_api, mode, thread):
                 if param['verbose'] > 0:
                     print("Warning: Request for Opensearch url " + e.url + " failed, will retry (" + str(e) + ").")
             except urllib.error.URLError as e:
-                if not isinstance(e.reason, ssl.SSLCertVerificationError):
-                    raise
-                if not cert_failure_reported:
-                    # Trying again will not help, so say it once whatever the verbosity
-                    print("Error: The certificate of " + opensearch_api + " could not be verified (" + str(e.reason) + "). Set pssrcverify to 0 to read from it anyway.")
-                    cert_failure_reported = True
+                if isinstance(e.reason, ssl.SSLCertVerificationError):
+                    if not cert_failure_reported:
+                        # Trying again will not help, so say it once whatever the verbosity
+                        print("Error: The certificate of " + opensearch_api + " could not be verified (" + str(e.reason) + "). Set pssrcverify to 0 to read from it anyway.")
+                        cert_failure_reported = True
+                elif param['verbose'] > 0:
+                    # E.g. the archive is restarting
+                    print("Warning: Request for Opensearch url " + opensearch_api + " failed, will retry (" + str(e) + ").")
+            except OSError as e:
+                # E.g. the connection was lost while reading the answer
+                if param['verbose'] > 0:
+                    print("Warning: Reading from Opensearch url " + opensearch_api + " failed, will retry (" + str(e) + ").")
             if param['verbose'] > 3:
                 print("Data from Opensearch API:")
                 print(result_str)
-            results = json.loads(result_str)
-            if results and results['hits'] and results['hits']['total']['value'] > 0:
+            try:
+                results = json.loads(result_str)
+                hits = results['hits']['hits'] if results and results['hits'] and results['hits']['total']['value'] > 0 else []
+            except (ValueError, KeyError, TypeError) as e:
+                print("Warning: Answer from " + opensearch_api + " could not be read, will retry (" + type(e).__name__ + ": " + str(e) + ").")
+                results = None
+                hits = []
+            if hits:
                 # Record/doc found
-                for r in results['hits']['hits']:
-		    # Analyse each result-set/element found
-                    element = r["_source"]
-                
-                    # Add to resolver
-                    resolver.add(element["test"]["spec"]["source"])
-                    resolver.add(element["test"]["spec"]["dest"])
+                for r in hits:
+		    # Analyse each result-set/element found.
+                    # A record that cannot be read is reported and skipped: it
+                    # must not stop the reading of the records that follow.
+                    try:
+                        element = r["_source"]
 
-                    if element["test"]["type"] != "raw_trace":
-                        # Ignore results from other test types
-                        if param['verbose'] > 2:
-                            print ("Unrelevant test-type '%s' found. Ignoring." % (element["test"]["type"]))
-                        return
-    
-                    # Get timestamp
-                    starttime  = str(int(isodate.parse_datetime(element["pscheduler"]["start_time"]).timestamp()))
-                    # Add some header data
-                    data = starttime + " " + element["result-full"][0]["diags"]
+                        # Ensure only new recordes are fetch in next loop
+                        date_last_read_rec = element["@timestamp"]
+
+                        # Add to resolver
+                        resolver.add(element["test"]["spec"]["source"])
+                        resolver.add(element["test"]["spec"]["dest"])
+
+                        if element["test"]["type"] != "raw_trace":
+                            # Ignore results from other test types
+                            if param['verbose'] > 2:
+                                print ("Unrelevant test-type '%s' found. Ignoring." % (element["test"]["type"]))
+                            continue
+
+                        # Get timestamp
+                        starttime  = str(int(isodate.parse_datetime(element["pscheduler"]["start_time"]).timestamp()))
+                        # Add some header data
+                        data = starttime + " " + element["result-full"][0]["diags"]
+                    except (ValueError, KeyError, IndexError, TypeError, AttributeError) as e:
+                        print("Warning: Skipping a record from " + opensearch_api + " that could not be read (" + type(e).__name__ + ": " + str(e) + ").")
+                        continue
                     # Forward to analysis process
                     pssrc_pipe_input.write(data)
                     if param["verbose"] > 3:
@@ -2854,14 +2877,11 @@ def opensearch_read(opensearch_api, mode, thread):
                         # Ignore flush errors
                         pass
 
-		    # Ensure only new recordes are fetch in next loop
-                    date_last_read_rec = element["@timestamp"]
-
-            elif param["verbose"] > 1:
+            elif results is not None and param["verbose"] > 1:
                 print( "Warning: Missing response from " + opensearch_api + " ." )
 
 	    # Wait and try again
-            time.sleep(param["followinterval"])
+            time.sleep(float(param["followinterval"]))   # (a value given on the command line arrives as text)
 
     except (KeyboardInterrupt, SystemExit) as e :
         # Wait for analysis child process to exit
@@ -2965,15 +2985,26 @@ def amqp_read(url, mode, thread):
 
 def amqp_read_callback(_ch, _method, _properties, body):
     """
-    Callback function for Rabbit message queue reader
+    Callback function for Rabbit message queue reader.
+    A message that cannot be read is reported and skipped: it must not stop
+    the reading of the messages that follow.
+    """
+    # Acknowledge the rmq-message manually
+    _ch.basic_ack(delivery_tag=_method.delivery_tag)
+
+    try:
+        amqp_read_message(body)
+    except (ValueError, KeyError, IndexError, TypeError, AttributeError) as e:
+        print("Warning: Skipping a message from the queue that could not be read (" + type(e).__name__ + ": " + str(e) + ").")
+
+def amqp_read_message(body):
+    """
+    Forward one traceroute test result from the message queue to the analysis process
     """
     if param['verbose'] > 4:
         print ("Element fetched from Rabbit mq:")
         print("%s" % (body.decode("ascii")))
 
-    # Acknowledge the rmq-message manually
-    _ch.basic_ack(delivery_tag=_method.delivery_tag)
-    
     element = json.loads(body.decode("ascii")) 
 
     # Add to resolver
