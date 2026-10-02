@@ -29,7 +29,8 @@
 #dbtype: 'mysql'            # Database type. 'mysql' and 'postgresql' supported.
 #dbname: 'routingmonitor'   # Name of database for anomality parameters
 #dbuser: 'traceroute'       # User name for db access
-#dbpasswd: 'NeeLeoth9e'     # Password for db access
+#dbpasswd: ''               # Password for db access. If empty, the one kept in dbpasswdfile is applied
+#dbpasswdfile: '/etc/perfsonar/microdep/dbpasswd'    # File holding the password for db access (written by create_new_db.sh)
 #dbhost: 'localhost'        # Host name for db access
 #dbclear: 0                 # Clear db before running
 #help: false                # Help text flag

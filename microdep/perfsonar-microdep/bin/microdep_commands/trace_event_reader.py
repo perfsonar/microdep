@@ -112,7 +112,8 @@ param = {
     'dbtype': 'mysql',            # Database type. 'mysql' and 'postgresql' supported.
     'dbname': 'routingmonitor',   # Name of database for anomality parameters
     'dbuser': 'traceroute',       # User name for db access
-    'dbpasswd': 'NeeLeoth9e',     # Password for db access
+    'dbpasswd': '',               # Password for db access. If empty, the one kept in dbpasswdfile is applied
+    'dbpasswdfile': '/etc/perfsonar/microdep/dbpasswd',    # File holding the password for db access (written by create_new_db.sh)
     'dbhost': 'localhost',        # Host name for db access
     'dbclear': 0,                 # Clear db before running
     'help': False,                # Help text flag
@@ -401,7 +402,8 @@ def parse_cmd(param):
     cmdparser.add_argument('--dbtype', help='Database type. \'mysql\' and \'postgresql\' supported. Default is ' + param['dbtype'] + '.')
     cmdparser.add_argument('--dbname', help='Name of anomality parameter DB. Default is ' + param['dbname'] + '.')
     cmdparser.add_argument('--dbuser', help='User name for db access. Default is ' + param['dbuser'] + '.')
-    cmdparser.add_argument('--dbpasswd', help='Password for db access. Default is ' + param['dbpasswd'] + '.')
+    cmdparser.add_argument('--dbpasswd', help='Password for db access. Default is the one kept in the file given by --dbpasswdfile.')
+    cmdparser.add_argument('--dbpasswdfile', help='File holding the password for db access. Default is ' + param['dbpasswdfile'] + '.')
     cmdparser.add_argument('--dbhost', help='Host name for db access. Default is ' + param['dbhost'] + '.')
     cmdparser.add_argument('--dbclear', '-c', action='count', help='Clear database before running.')
     cmdparser.add_argument('--verbose', '-v', action='count', help='Verbose output to stderr. Apply multiple to increase level.')
@@ -458,6 +460,18 @@ def parse_cmd(param):
         cmdparser.print_help()
         sys.exit()
 
+def db_password(param):
+    """ The password for db access: the one given, or else the one kept in the password file
+    """
+    if param['dbpasswd']:
+        return param['dbpasswd']
+    try:
+        with open(param['dbpasswdfile'], 'r') as file:
+            return file.readline().strip()
+    except OSError as err:
+        print("Error: No password for db access. Failed reading " + param['dbpasswdfile'] + ": " + str(err))
+        sys.exit()
+
 def connect_db(param):
     """ Connect to anomality parameter DB
     """
@@ -466,7 +480,7 @@ def connect_db(param):
         connection = MySQLdb.connect(
             host=param['dbhost'],
             user=param['dbuser'],
-            passwd=param['dbpasswd'],
+            passwd=db_password(param),
             db=param['dbname'],
         )
         list_cursor = connection.cursor()
@@ -478,7 +492,7 @@ def connect_db(param):
         connection = psycopg2.connect(
             host=param['dbhost'],
             user=param['dbuser'],
-            password=param['dbpasswd'],
+            password=db_password(param),
             dbname=param['dbname']
             )
         list_cursor = connection.cursor()
