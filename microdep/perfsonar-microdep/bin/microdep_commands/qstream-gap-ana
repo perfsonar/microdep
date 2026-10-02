@@ -73,6 +73,7 @@ GetOptions( 'h' => \$opt_h, 'help' => \$opt_help, 'id=s' => \$opt_id, 'slep=s' =
 if ( ! $opt_h && ! $opt_help && -e $opt_config_file ) {
     # A config file is available. Parse it and set option values.
     use YAML;
+    $YAML::LoadBlessed = 0;   # Plain data only, no objects of a class named in the file (the default since YAML 1.25)
     $config = YAML::LoadFile($opt_config_file);
     # Prepare list of supported options ( Copied for GetOptions() above!)
     my %supported_options = (
@@ -306,20 +307,24 @@ if ( $opt_json){
 	if ($@) {
 	    # No valid json (or spec) found.
 	    undef $archive_spec;
-	} elsif ( ! $archive_spec->{'archiver'} eq "http" ) {
-	    print "No HTTP archiver archiver specified in JSON object:", Dumper($archive_spec) if $opt_debug > 3;
-	    # No valid spec found.
+	} elsif ( ref $archive_spec ne 'HASH' || ! defined $archive_spec->{'archiver'} ) {
+	    print "No archiver specified in JSON object:", Dumper($archive_spec) if $opt_debug > 3;
+	    # Json, but no spec (an output file that holds a single record, for one).
 	    undef $archive_spec;
-	} elsif ( ! $archive_spec->{'data'}->{'_url'} =~ /logstash-ana/ ) {
-	    print "No valid archiver url found in JSON object:", Dumper($archive_spec) if $opt_debug > 3;
-	    # No valid spec found.
-	    undef $archive_spec;
+	} elsif ( $archive_spec->{'archiver'} ne "http" ) {
+	    # A spec, but for an archiver this script cannot deliver to. It is
+	    # not a file to append the events to either.
+	    die "The archive spec in $json is for the archiver '" . $archive_spec->{'archiver'} . "', only 'http' can be used\n";
+	} elsif ( $archive_spec->{'data'}->{'_url'} !~ /logstash-ana/ ) {
+	    # A spec for another destination has always been used as it is (this
+	    # test never applied), and still is. It is likely a mistake, so say so.
+	    warn "The archive spec in $json does not deliver to logstash-ana\n";
 	}
 	close SPECFILE;
     }
     if (! defined $archive_spec) {
 	# Open file as destination for output (append mode).
-	open JSON, ">>$json" || die  "Could not open $json ; $!";
+	open(JSON, '>>', $json) or die "Could not open $json : $!\n";
 	JSON->autoflush(1);
     }
     # $coder = JSON::XS->new->ascii->pretty->allow_nonref;
@@ -648,7 +653,7 @@ sub emit_json{
 
 sub get_addresses {
     $file=shift;
-    if ( open ADRS, "<$file" ){
+    if ( open ADRS, '<', $file ){
 	# Read the whole file and check if it contains perfsonar psconfig json data
 	read ADRS, my $psconfig_content_str, -s ADRS;
 	my $psconfig_content;
@@ -677,7 +682,7 @@ sub get_addresses {
 
 sub get_names {
     $file=shift;
-    if ( open NAMES, "<$file" ){
+    if ( open NAMES, '<', $file ){
 	while(<NAMES>){
 	    next if /^\s*#/;
 	    my ($name, $user, $dns, $ip)=split;
@@ -879,7 +884,7 @@ sub read_owamp_json($){
 
 sub read_owamp_file{
     my $file=shift;
-    open OWAMP, "<$file" || die 'Could not open ' . $file . ' because ' . $!;
+    open(OWAMP, '<', $file) or die 'Could not open ' . $file . ' because ' . $! . "\n";
 
     while(<OWAMP>){
 	chomp();
