@@ -113,7 +113,7 @@ sub load_config {
 	"cache=s"  => \$opt_cachesize,          # Max num of docs/records to keep in cache
 	"date=s"  => \$opt_daterange,           # Filter on ISO date range (local time zone if none is given)
 	"conf=s"  => \$opt_config_file,         # Path to YAML config file.
-	"verbose"  => \$opt_verbose,            # Flag for outputting more info
+	"verbose+"  => \$opt_verbose,           # Flag for outputting more info. May be repeated.
 	"help"  => \$opt_help                   # Flag for help message
 	); 
     foreach my $opt (keys %{$config}) {
@@ -127,6 +127,16 @@ sub load_config {
 	    if (! ${$supported_options{$opt . '=s'}} ) {
 		# A key-value option not yet set. Apply value from config file.
 		${$supported_options{$opt . '=s'}} = $config->{$opt};
+	    }
+	} elsif (exists $supported_options{$opt . '=i'}) {
+	    if (! ${$supported_options{$opt . '=i'}} ) {
+		# A key-value option not yet set. Apply value from config file.
+		${$supported_options{$opt . '=i'}} = $config->{$opt};
+	    }
+	} elsif (exists $supported_options{$opt . '+'}) {
+	    if (! ${$supported_options{$opt . '+'}} ) {
+		# A key-value option not yet set. Apply value from config file.
+		${$supported_options{$opt . '+'}} = $config->{$opt};
 	    }
 	} else {
 	    # Unsupported config option
@@ -263,14 +273,9 @@ sub get_next_source_to_read{
 sub get_next_event{
     # Remove and replace oldest event in queue
 
-    my $fill_q = shift;          # If true, do not remove head of queue, i.e. keep filling queue.
+#    my $fill_q = shift;          # If true, do not remove head of queue, i.e. keep filling queue.
 
     my $old_event = $eventq[0];  # Store head of queue
-    
-    if (! $fill_q) {
-	# Remove head of queue
-	shift @eventq;
-    }
     
     my $line="";
     my @at_eof;
@@ -356,31 +361,38 @@ sub get_next_event{
 	    $new_event->{'me_source'} = $ARGV[$next_file_to_read];
 	    $new_event->{'me_srcidx'} = $next_file_to_read;
 	    $inputfile_ts[$next_file_to_read] = $new_event->{'me_timestamp'};  # Latest read timestamp for source
-	    my $event_added = 0;
+	    my $event_added_in_slot = -1;
 	    for my $e (0 .. $#eventq) {
 		if ($new_event->{'me_timestamp'} < $eventq[$e]{'me_timestamp'}) {
 		    # Insert new event into queue
 		    splice(@eventq, $e, 0, $new_event);
-		    $event_added = 1;
+		    $event_added_in_slot = $e;
 		    last;
 		}
 	    }
-	    if (! $event_added) {
+	    if ($event_added_in_slot == -1) {
 		# Add new event at end of queue
 		push @eventq, $new_event;
 	    }
 	    
+	    if (@eventq > $opt_inputbuffersize) {
+		if ($event_added_in_slot == 0) {
+		    # New events from input sources is older than oldest event in input queue. Longer queue probably required. 
+		    print STDERR "Warning: Unsorted input. New event is lost as it is older than oldest event in input buffer. Increase buffer size with -b.\n";
+		    print STDERR "Lost input event: src ". $new_event->{'me_source'} . " timestamp " . $new_event->{'timestamp'} . " peer ". $new_event->{'from'} . "," . $new_event->{'to'}  .  "\n" if ($opt_verbose);
+		}
+		
+		# Event input queue to long. Remove head of queue (slot 0). 
+		shift @eventq;
+	    }
+
 	    # Prepare summary event if relevant
 	    my $matchfieldvalues = get_matchfield_value_str($eventq[-1]);
 	    if ($matchfieldvalues && ! exists $corrsum_event{ $matchfieldvalues }) {
 		# Init summary structure
 		init_corrsum_event($matchfieldvalues);
 	    }
-	    
-	    if (! $fill_q && keys %{$old_event} && $new_event->{'me_timestamp'} < $old_event->{'me_timestamp'}) {
-		# Events read from input sources seem to be too much out of order with respect input event queue size.
-		print STDERR "Warning: Unsorted input. New event is older than last analysed event. Increase input buffer with -b to ensure sorting.  Source: ". $new_event->{'me_source'} . " Timestamp: " . $new_event->{'timestamp'} . " Peer: ". $new_event->{'from'} . "," . $new_event->{'to'}  .  "\n";
-	    }
+
 	    # Done adding a new event
 	    last;
 	}
@@ -480,7 +492,7 @@ sub init_search {
 
     die "Error: Index '" . $index . "' appears twice. " if (exists($search_cache->{$index}) );
 
-    $search_cache->{$index} = { 'tfield_name' => $tfield_name, 'tfield_type' => $tfield_type,
+    $search_cache->{$index} = { 'query_time' => 0, 'tfield_name' => $tfield_name, 'tfield_type' => $tfield_type,
 				    'start_time' => $search_start, 'range_start' => 'gte',
 				    'end_time' => $search_end, 'range_end' => 'lte',
 				    'hits' => [] };
@@ -489,20 +501,25 @@ sub init_search {
     
     return $index;
 }
-    
+
 sub fill_search_cache {
     # Fill search cache for index
     my $index = shift;
-
+    
     if (! exists($search_cache->{$index}) ) {
         die "Error: No cache for index " . $index . ".";
     }
-
+    
+    if ($search_cache->{$index}->{'query_time'} + $opt_sleepinterval > time() ) {
+	# To short time since last query.
+	return scalar @{$search_cache->{$index}->{'hits'}};  # Return num of docs / records in cache
+    }
+    
     my $num_in_cache = scalar @{$search_cache->{$index}->{'hits'}};
     my $num_to_load = $opt_cachesize - $num_in_cache;
     if ($num_to_load > 0 ) {
 	# Query for more docs / records
-
+	
 	my $start_time = $search_cache->{$index}->{'start_time'};
 	my $range_start = $search_cache->{$index}->{'range_start'};
 	my $end_time = $search_cache->{$index}->{'end_time'};
@@ -528,13 +545,13 @@ sub fill_search_cache {
 	
 	# Prepare final json query to post 
 	my $query_data = '{ "query": { "bool": { "filter": [ ' . $filter_clause . ' ]}}, "sort": [ {"' . $search_cache->{$index}->{'tfield_name'} . '": "asc"} ], "size": ' . $num_to_load . ' }';
-	#print STDERR "QUERY DATA: $query_data\n";
+	print STDERR "QUERY DATA: $query_data\n" if ($opt_verbose > 1);
 	my $query_req = LWP::UserAgent->new;
 	$query_req->ssl_opts( verify_hostname => 0, SSL_verify_mode => IO::Socket::SSL::SSL_VERIFY_NONE);  # Accept any SSl cert
 	# Init search with size equal to max cache
 	my $search_resp = $query_req->post($opt_url . '/' . $index . '/_search', 'Content-Type' => 'application/json', Content => $query_data );
 	if (defined $search_resp) {
-	    print STDERR "Search respons for ", $index, ":\n", Dumper($search_resp) if ($opt_verbose);
+	    print STDERR "Search respons for ", $index, ":\n", Dumper($search_resp) if ($opt_verbose > 2);
 	    my $search_result = decode_json $search_resp->{'_content'};
 	    if (%{$search_result} && $search_result->{'hits'}) {
 		if ( $search_result->{'hits'}->{'total'}{'value'} > 0 && $search_result->{'hits'}->{'hits'}) {
@@ -545,6 +562,9 @@ sub fill_search_cache {
 		    $search_cache->{$index}->{'start_time'} = $search_cache->{$index}->{'hits'}[-1]->{'_source'}->{$search_cache->{$index}{'tfield_name'}};
 		    $search_cache->{$index}->{'range_start'} =  "gt" ;  # (... to avoid duplicates.)
 
+		    # Update query time
+		    $search_cache->{$index}->{'query_time'} =  time() ; 
+		    
 		    # Return num of docs / records in cache
 		    return scalar @{$search_cache->{$index}->{'hits'}}; 
 		} else {
@@ -560,7 +580,7 @@ sub fill_search_cache {
     }
     # Cache already full
     print STDERR "Warning: Search cache already full for index " . $index . "\n" if ($opt_verbose);
-    return scalar @{$search_cache->{$index}};   # Return num of docs / records in cache
+    return scalar @{$search_cache->{$index}->{'hits'}};  # Return num of docs / records in cache
 }
 
 
@@ -691,7 +711,7 @@ GetOptions (
     "cache=s"  => \$opt_cachesize,          # Max num of docs/records to keep in cache
     "date=s"  => \$opt_daterange,           # Filter on ISO date range (local time zone if none is given)
     "conf=s"  => \$opt_config_file,         # Path to YAML config file.
-    "verbose"  => \$opt_verbose,            # Flag for outputting more info
+    "verbose+"  => \$opt_verbose,           # Flag for outputting more info. May be repeated.
     "help"  => \$opt_help                   # Flag for help message
     ) or die("Error in command line arguments\n");
 
@@ -721,7 +741,7 @@ if ( $opt_help || $#ARGV eq -1 ) {
                    Two dates separated by '/' sets a range. Default is <today>T00:00:00/<today>T23:59:59. 
    -i integer      Sleep interval between polls for new content when -f is set. (Default 1 sec.)
    -p filename     Filename of process-id file.
-   -v              Be verbose.
+   -v              Be verbose. Repeat to increase amount on info.
    \n";
 
     exit 1; 
@@ -815,44 +835,45 @@ my $curpos;
 
 while ($tryagain) {   
 
+    # Fetch event (if any) from input source
+#    my $input_queue_size= get_next_event();  
 
-    # Update correlation window
-    my $more_events=1;
-    my $prev_more_events=0;
-    while ($more_events) {
+    # Pull event from input queue, update correlation windows and check for correlations.
+#    while ($input_queue_size > 0) {
+    my $prev_input_queue_size = 0;
+    while (get_next_event()) {
 
-#	if ($opt_inputbuffersize > @inputfile && @eventq < $opt_inputbuffersize && $more_events > $prev_more_events) {
-	if (@eventq < $opt_inputbuffersize && $more_events > $prev_more_events) {
-	    # Read one more event to fill up input buffer
-	    $prev_more_events=$more_events;
-	    $more_events = get_next_event(1);
-	    next;
-	}
-	
+	while ($prev_input_queue_size < @eventq && @eventq < $opt_inputbuffersize ) {
+	    # Input queue is a bit short. Attempt to fill more events into it before starting analysis.
+	    # (Filling the input queue helps with getting events sorted.)
+	    $prev_input_queue_size = @eventq;
+	    get_next_event();
+	}		
+
 	my $matchfieldvalues = get_matchfield_value_str($eventq[0]);
 	if (! $matchfieldvalues ) {
 	    # No values for matchfields in head of event queue, i.e. nothing to do.
 	    print STDERR "Warning: No matchfields in record/doc. Skipping." if ($opt_verbose);
-	    $more_events = get_next_event();
+#	    $input_queue_size = get_next_event();
 	    next;
 	}
 	if (! exists $corr_events_window{ $matchfieldvalues }) {
 	    # Add first element in window for matchfield value set
 	    $corr_events_window{ $matchfieldvalues } = ();
 	    push @{ $corr_events_window{ $matchfieldvalues } }, $eventq[0];
-	    $more_events = get_next_event();
+	    shift @eventq;   # Remove processed event from input queue 
 	} else {
-	    #Check if last events in window are sorted in time
-	    die "Error: Usorted buffer. Increase buffersize with -b." if (@eventq > 1 &&  $eventq[-1]{'me_timestamp'} < $eventq[-2]{'me_timestamp'});
-	    
+	    #Check if last events in window are sorted in time. THIS IS HANDLED BY get_next_event().
+	    #die "Error: Usorted input buffer. Increase buffersize with -b." if (@eventq > 1 &&  $eventq[-1]{'me_timestamp'} < $eventq[-2]{'me_timestamp'});
+
 	    if ( ( $eventq[0]{'me_timestamp'} - $corr_events_window{ $matchfieldvalues }[0]{'me_timestamp'} ) > $opt_window_size) {
-		# Event is outside correlation window.
+		# Input event is outside correlation window.
 		if (@{ $corr_events_window{ $matchfieldvalues }} > 1 && all_expected_events_present($corr_events_window{ $matchfieldvalues }) ) {
 		    # More than one event correlate. Report.
 		    report_correlation( $matchfieldvalues );
 		}
 
-		# Clear out too old events from window
+		# Clear out too old events from correlation window
 		my $newest_timestamp = $eventq[0]{'me_timestamp'};
 		my $oldest_timestamp = $corr_events_window{ $matchfieldvalues }[0]{'me_timestamp'};
 		while ( $oldest_timestamp < $newest_timestamp ) { 
@@ -868,7 +889,7 @@ while ($tryagain) {
 	    }
 	    # Add new event 
 	    push @{ $corr_events_window{ $matchfieldvalues }}, $eventq[0];
-	    $more_events = get_next_event();
+	    shift @eventq;   # Remove processed event from input queue 
 	}
     }
     # Do a final check for correlating events (in case the very last collection of input events all correlate.)
