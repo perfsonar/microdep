@@ -29,6 +29,8 @@ use YAML;
 use JSON;
 use POSIX qw(strftime);
 use Getopt::Long;
+use LWP::UserAgent;
+use IO::Socket::SSL;
 
 # ----- options -----
 my $opt_index    = 'microdep_gap_ana';
@@ -56,12 +58,14 @@ my $config_path = "/etc/perfsonar/microdep/microdep-config.yml";
 my $esurl = $opt_esurl;
 if ( ! $esurl ) {
     my $cfg = -r $config_path ? YAML::LoadFile($config_path) : {};
-    $esurl = $cfg->{opensearch_url} || 'http://localhost:9200';
+    # (Without the config file: where the analysers read from as well. The archive
+    # does not answer plain http on port 9200, which used to be the fallback.)
+    $esurl = $cfg->{opensearch_url} || 'https://localhost/opensearch';
     # NB: we use the same URL the rest of the microdep stack uses
     # (typically https://localhost/opensearch — an apache reverse-proxy
     # rule that forwards to opensearch without requiring auth, mirroring
-    # what elastic-get-date-type.pl relies on). curl's --insecure flag
-    # tolerates the self-signed cert.
+    # what elastic-get-date-type.pl relies on). The certificate is not
+    # checked, which tolerates the self-signed cert.
 }
 print STDERR "microdep-hourly-aggregator: opensearch URL = $esurl\n" if $opt_verbose;
 
@@ -151,9 +155,7 @@ sub process_bucket {
 }, $start_iso, $end_iso );
 
     my $url = "$esurl/$opt_index/_search";
-    # -k tolerates self-signed certs on https endpoints; harmless on http.
-    # The query is heredoc'd into stdin to avoid quoting hell on the cmdline.
-    my $resp = run_curl($url, $query);
+    my $resp = post_json($url, $query);
     my $data = eval { decode_json($resp) };
     if ( $@ || ! $data ) {
         warn "Failed to decode opensearch response: $@\nResponse was: $resp\n";
@@ -231,45 +233,24 @@ sub num {
     return $v + 0;
 }
 
-# Post a JSON body to the given URL, return the response body. Captures
-# curl's stderr too so we can see TLS / connect errors in --verbose mode
-# (without it the silent failure mode is "empty response, malformed JSON
-# decode error" — useless for debugging). The response body and the
-# http status code are written to separate tempfiles so we don't have
-# to invent an in-band separator (curl's -w doesn't expand \xNN escapes,
-# only printf-style ones, so trying to split on RS at the boundary leaks
-# the literal "\x1e" into the body).
-sub run_curl {
+# Post a JSON body to the given URL, return the response body.
+# The request is made by the script itself. (It used to go through curl,
+# started by a shell: the address stood in a command line, and the query and
+# the answer in files in /tmp with names anyone could tell beforehand.)
+sub post_json {
     my ($url, $body) = @_;
-    my $tmp_in   = "/tmp/microdep-hourly-aggregator-$$.in.json";
-    my $tmp_out  = "/tmp/microdep-hourly-aggregator-$$.out.json";
-    my $tmp_err  = "/tmp/microdep-hourly-aggregator-$$.err";
-    open(my $fh, ">", $tmp_in) or die "tmpfile: $!";
-    print $fh $body;
-    close $fh;
-    # -sS silent except for errors; -k tolerate self-signed; -o writes
-    # body to a file; -w '%{http_code}' returns *just* the status code
-    # on stdout, free of the body.
-    my $cmd = qq{curl -sS -k -X POST -H "Content-Type: application/json" }
-            . qq{-w '%{http_code}' -o $tmp_out "$url" --data-binary \@$tmp_in 2>$tmp_err};
-    print STDERR "microdep-hourly-aggregator: $cmd\n" if $opt_verbose;
-    my $http_code = `$cmd`;
-    my $exit = $? >> 8;
-    chomp($http_code) if defined $http_code;
-    my $stderr = slurp($tmp_err);
-    my $body_resp = slurp($tmp_out);
-    unlink $tmp_in; unlink $tmp_out; unlink $tmp_err;
-    if ( $exit != 0 || $http_code !~ /^2/ ) {
-        warn "microdep-hourly-aggregator: curl failed (exit=$exit http=$http_code): $stderr\n";
+    my $ua = LWP::UserAgent->new( timeout => 60 );
+    # The certificate of the archive is not checked, as before (curl -k): the
+    # usual address is https://localhost/opensearch, and the certificate there
+    # is issued for the host's name, not for localhost.
+    $ua->ssl_opts( verify_hostname => 0, SSL_verify_mode => IO::Socket::SSL::SSL_VERIFY_NONE );
+    print STDERR "microdep-hourly-aggregator: POST $url\n" if $opt_verbose;
+    my $resp = $ua->post( $url, 'Content-Type' => 'application/json', Content => $body );
+    my $body_resp = $resp->content;
+    $body_resp = '' unless defined $body_resp;
+    if ( ! $resp->is_success ) {
+        warn "microdep-hourly-aggregator: request failed (" . $resp->status_line . ")\n";
     }
-    print STDERR "microdep-hourly-aggregator: http=$http_code, body length=" . length($body_resp) . "\n" if $opt_verbose;
+    print STDERR "microdep-hourly-aggregator: http=" . $resp->code . ", body length=" . length($body_resp) . "\n" if $opt_verbose;
     return $body_resp;
-}
-
-sub slurp {
-    my $path = shift;
-    return '' unless -r $path;
-    open(my $fh, "<", $path) or return '';
-    local $/; my $c = <$fh>; close $fh;
-    return defined $c ? $c : '';
 }
