@@ -436,6 +436,10 @@ exit(0);
 
 ################################################################################
 sub handle_signals(){
+    # The summary is written once. When its unit is stopped the script gets the
+    # signal twice: systemd repeats it for what is still running once the shell
+    # that started the script is gone. A second one must not start all over.
+    $SIG{$_} = 'IGNORE' foreach qw(HUP INT PIPE TERM);
     # Update duration of each flow
     foreach $id ( keys %t0 ) {
 	$duration{$id}=$last_tx{$id}-$t0{$id};
