@@ -138,8 +138,9 @@ $opt_v ||= 0;          # Flag: Be verbose
 $opt_version ||= 0;    # Flag: Show version
 $opt_topoevents ||= 0;       # Flag: Enable toplogy events
 $opt_topointerval ||= 3600;  # Min interval between topology events
-$opt_pslookup ||= "";         # API of perfSONAR Lookup Service, e.g. http://35.223.142.206/lookup/_search. Empty means no lookup.
+$opt_pslookup ||= "http://35.223.142.206/lookup/_search";  # API of perfSONAR Lookup Service. "off" means no lookup.
                              # (The service answers over plain http only, and every address seen is sent to it.)
+$opt_pslookup = "" if ( lc($opt_pslookup) eq "off" );
 $opt_pslookup_wait ||= 3600; # Min interval between attempts to fetch info from ps-lookup service
 $opt_ipv6 ||= 0;             # Flag to turn on ipv6 packet analysis
 $opt_follow ||= 0;           # Flag to turn on rereading of owamp input source 
@@ -225,7 +226,7 @@ Options
   -batchsize n         Override batch size (packet count) expected when reading owamp subsession data sets
   -topoevents	       Enable output of topology events whenever a topology change is detected. Requires -json. 
   -topointerval n      Min interval (sec) between topology events. Default is $opt_topointerval
-  -pslookup url        Source url for perfSONAR lookup service hosts. Default is none, i.e. no lookup.
+  -pslookup url        Source url for perfSONAR lookup service hosts, or 'off' for no lookup. Default is $opt_pslookup
   -wait seconds        Min no of seconds to wait between refreshing info fetched from pslookup-service. Default is $opt_pslookup_wait
   -ipv6                Analyse ipv6 packets (and ignore ipv4). Default is the opposite.
   -conf filename       Filename to config file. Note that config file overrides CLI options.
