@@ -1,7 +1,7 @@
 /**
  * ls-tab.js — ES6 module refactored from perfsonar-tracetree/js/ls.js
  *
- * Renders the lookup-service browser (Measurement Archives, Peers, Traceroute)
+ * Renders the traceroute browser (Peers, Traceroute)
  * inside a single container element so it can be embedded as one of the
  * microdep-map tabs.
  *
@@ -27,6 +27,7 @@
  *
  * Changelog:
  * 2026-06-17 otto.wittner@sikt.no - The Measurement archive tab has been removed, but there are still obsolete code all over the place.
+ * 2026-10-02 - That obsolete code has been removed: the lookup service, the list of measurement archives and the esmond API.
  */
 
 import { tracetree_tab } from "./tracetree-tab.js";
@@ -36,23 +37,12 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
 
     const id = div_id;
 
-    // ── Local state ──────────────────────────────────────────────────────
-    let measurements = [];           // Esmond measurement objects
-    let tr_events = [];              // matching event-types entries
-    let ma_list = [];                // MA host metadata
-
-    // Default LS host (was hard-coded in ls.js)
-    const DEFAULT_LS = 'https://ps-west.es.net/lookup/activehosts.json';
-
     // Params bag (was global urlParams in ls.js)
     const params = {
         from:        from,
         to:          to,
         net:         options.net        || '',
         mahost:      options.mahost     || '',
-        verify_SSL:  options.verify_SSL,
-        api:         options.api        || '',
-        stime:       options.stime,
         // Empty/absent means "all versions" (the config allows that) - only
         // filter when the network actually pins one (issue #127).
         ip_version:  options.ip_version,
@@ -84,11 +74,6 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
     // ── Helpers ──────────────────────────────────────────────────────────
     function el(suffix) {
         return document.getElementById(id + '-' + suffix);
-    }
-
-    function verify_SSL_qs(prefix) {
-        if (params.verify_SSL === undefined || params.verify_SSL === null) return '';
-        return prefix + 'verify_SSL=' + params.verify_SSL;
     }
 
     // Forgiving matcher for the search box. Each whitespace-separated term
@@ -132,12 +117,6 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
             for (let j = 0; j < cells.length; j++) rowText += ' ' + cells[j].textContent;
             rows[i].style.display = fuzzy_match(filter, rowText) ? '' : 'none';
         }
-    }
-
-    // Append query string to a URL using the right separator (?/&).
-    function append_qs(url, qs) {
-        if (!qs) return url;
-        return url + (url.indexOf('?') >= 0 ? '&' : '?') + qs;
     }
 
     // Find the archive's pair entry for the requested `want_from`/`want_to`.
@@ -202,203 +181,6 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
         const peers = []; const seen = {};
         hits.forEach(p => { if (p.from === src && !seen[p.to]) { seen[p.to] = true; peers.push(p.to); } });
         return { from: src, peers: peers.sort() };
-    }
-
-    // ── Fetch list of LS-discovered MA hosts ────────────────────────────
-    function fetch_ls(ls_url) {
-        ma_list = [];
-        // The activehosts.json endpoint returns a static list — no query
-        // params needed. (The original ls.js appended them with a stray '&'.)
-        const cors_url = append_qs(
-            '/pstracetree/cors.pl',
-            (params.verify_SSL !== undefined ? 'verify_SSL=' + params.verify_SSL + '&' : '') +
-            'method=GET&url=' + encodeURIComponent(ls_url)
-        );
-
-        $.getJSON(cors_url, function (loc) {
-            if (loc && loc.hosts && loc.hosts.length) {
-                $.each(loc.hosts, function (index, host) {
-                    fetch_ma(host.locator);
-                });
-            } else {
-                el('ma').innerHTML = '<h4 class="center-text">No LS hosts found at ' + ls_url + '.</h4>';
-            }
-        }).fail(function (jqxhr, textStatus, error) {
-            const detail = textStatus + ' (' + (jqxhr.status || '?') + ')' +
-                           (error ? ', ' + error : '');
-            console.log('ls_tab: failed to get ' + ls_url + ' — ' + detail);
-            el('ma').innerHTML =
-                '<h4 class="center-text">Could not fetch MA list.</h4>' +
-                '<p class="center-text" style="font-family:var(--font-mono);font-size:.78rem">' +
-                  'URL: ' + ls_url + '<br>Error: ' + detail +
-                '</p>' +
-                '<p class="center-text">The lookup-service host may be unreachable or blocked from the perfSONAR server.</p>';
-        });
-    }
-
-    // ── Fetch a single MA's service list and append rows to the MA table ─
-    function fetch_ma(loc) {
-        const url = append_qs(loc, 'type=service&service-type=ma');
-        const cors_url = append_qs(
-            '/pstracetree/cors.pl',
-            (params.verify_SSL !== undefined ? 'verify_SSL=' + params.verify_SSL + '&' : '') +
-            'method=GET&url=' + encodeURIComponent(url)
-        );
-
-        $.getJSON(cors_url, function (mas) {
-            // Ensure container has the table skeleton
-            let table = document.getElementById(id + '-ma-table');
-            if (!table) {
-                el('ma').innerHTML =
-                    '<div class="ls-toolbar">' +
-                      '<input type="text" class="ls-search-input" id="' + id + '-ma-search" placeholder="Search measurement archives...">' +
-                    '</div>' +
-                    '<table id="' + id + '-ma-table" class="sortable ls-table">' +
-                      '<thead><tr><th>Service<th>Location<th>Country<th>URLs</thead>' +
-                      '<tbody></tbody>' +
-                    '</table>';
-                document.getElementById(id + '-ma-search')
-                    .addEventListener('keyup', function () {
-                        search_table(id + '-ma-search', id + '-ma-table');
-                    });
-                table = document.getElementById(id + '-ma-table');
-            }
-
-            const tbody = table.querySelector('tbody');
-            $.each(mas, function (index, ma) {
-                if (!ma['psservice-eventtypes'] ||
-                    ma['psservice-eventtypes'].indexOf('packet-trace') < 0) return;
-
-                const tr = document.createElement('tr');
-                tr.innerHTML =
-                    '<td>' + (ma['service-name']      || '') + '</td>' +
-                    '<td>' + (ma['location-sitename'] || '') + '</td>' +
-                    '<td>' + (ma['location-country']  || '') + '</td>' +
-                    '<td></td>';
-                const linkCell = tr.querySelector('td:last-child');
-                $.each(ma['service-locator'], function (ix, base) {
-                    const srv = base.split('/').slice(0, 3).join('/');
-                    const btn = document.createElement('button');
-                    btn.className = 'knapp';
-                    btn.textContent = srv;
-                    btn.title = 'Browse traceroutes from this archive';
-                    btn.addEventListener('click', function () {
-                        fetch_base(base, start_time, end_time);
-                        $('#' + id + '-tabs').tabs({ active: 1 });
-                    });
-                    linkCell.appendChild(btn);
-                    linkCell.appendChild(document.createTextNode(' '));
-                });
-                tbody.appendChild(tr);
-            });
-
-            if (typeof sorttable !== 'undefined') {
-                sorttable.makeSortable(table);
-            }
-        }).fail(function (jqxhr, textStatus, error) {
-            console.log("ls_tab: failed to fetch MA " + loc + " (" + textStatus + ", " + error + ")");
-        });
-    }
-
-    // ── Esmond API: list traceroutes within a time range ────────────────
-    function fetch_base(url, t_start, t_end) {
-        if (t_end === undefined) t_end = t_start + 24 * 3600;
-
-        const server = url.split('/').slice(0, 3).join('/');
-        if (url.slice(-1) !== '/') url += '/';
-        const fetch_url_raw = url + '&tool-name=pscheduler/traceroute';
-        const cors_url = '/pstracetree/cors.pl?' + verify_SSL_qs('') + (params.verify_SSL !== undefined ? '&' : '') +
-                         'method=GET&url=' + encodeURIComponent(fetch_url_raw);
-
-        const start = new Date(t_start * 1000);
-        const end   = new Date(t_end   * 1000);
-
-        const head =
-            '<div class="ls-toolbar">' +
-              '<input type="text" class="ls-search-input" id="' + id + '-peer-search" placeholder="Search peers...">' +
-              '<label>From <input type="text" id="' + id + '-dp-from" class="ls-date-input" size="12" value="' + start.toLocaleDateString() + '"></label>' +
-              '<label>To <input type="text" id="' + id + '-dp-to" class="ls-date-input" size="12" value="' + end.toLocaleDateString() + '"></label>' +
-            '</div>';
-        const tableHead =
-            '<table id="' + id + '-peer-table" class="sortable ls-table">' +
-              '<thead><tr><th>Time updated<th>Peers list</thead><tbody>';
-        const tableTail = '</tbody></table>';
-
-        $.getJSON(cors_url, function (events) {
-            let body = '';
-            const seen = {};
-            const pair_list = []; // for matching against params.from/to
-
-            $.each(events, function (index, event) {
-                if (event['pscheduler-test-type'] !== 'trace') return;
-                $.each(event['event-types'], function (ix, evt) {
-                    if (evt['event-type'] !== 'packet-trace') return;
-                    if (evt['time-updated'] < t_start || evt['time-updated'] >= t_end) return;
-
-                    measurements.push(evt);
-                    const mno = measurements.length - 1;
-                    tr_events.push(event);
-                    const peer_from = event['input-source'];
-                    const peer_to   = event['input-destination'];
-                    const pair_key  = peer_from + ' - ' + peer_to;
-                    if (seen[pair_key]) return;
-                    seen[pair_key] = true;
-                    pair_list.push({ from: peer_from, to: peer_to, mno: mno });
-
-                    const tu = new Date(evt['time-updated'] * 1000);
-                    body += '<tr>' +
-                              '<td>' + tu.toLocaleDateString() + 'T' + tu.toLocaleTimeString() + '</td>' +
-                              '<td><button class="knapp ls-pair-btn" data-action="esmond-pair" data-server="' + server + '" data-mno="' + mno + '">' + pair_key + '</button></td>' +
-                            '</tr>';
-                });
-            });
-
-            // One button per source with several peers: every route from that
-            // host in one tree.
-            const by_src = {};
-            pair_list.forEach(function (p) { (by_src[p.from] = by_src[p.from] || []).push(p.to); });
-            let trees = '';
-            Object.keys(by_src).sort().forEach(function (src) {
-                if (by_src[src].length < 2) return;
-                trees += '<button class="knapp ls-pair-btn" data-action="os-tree" data-server="' + escapeHtml(mahost) + '"' +
-                         ' data-from="' + escapeHtml(src) + '" data-to="' + escapeHtml(by_src[src].join(',')) + '"' +
-                         ' data-start="' + t_start + '" data-end="' + t_end + '"' +
-                         ' title="Every route from ' + escapeHtml(src) + ' in one picture">All ' + by_src[src].length + ' peers of ' + escapeHtml(src) + '</button>';
-            });
-            // "Show selected" opens the checked pairs: one as a pair, several
-            // (of one source) as a tree of just those peers.
-            const selected_btn = '<button class="knapp ls-pair-btn" data-action="os-selected" data-server="' + escapeHtml(mahost) + '"' +
-                                 ' data-start="' + t_start + '" data-end="' + t_end + '" id="' + id + '-show-selected" disabled' +
-                                 ' title="Tick pairs in the list, then show them: one as a pair, several of one source as a tree">Show selected</button>';
-            const tree_bar = pair_list.length ? '<div class="ls-tree-bar">' + selected_btn + trees + '</div>' : '';
-
-            if (pair_list.length) {
-                el('peers').innerHTML = head + tree_bar + tableHead + body + tableTail;
-            } else {
-                el('peers').innerHTML = head + '<h4 class="center-text">No traceroutes found in this archive for the selected period.</h4>';
-            }
-            wire_peers_tab(url, t_start, t_end, /*esmond=*/true);
-
-            // Auto-trigger best-matching pair (see find_matching_pair docs).
-            if (params.from && params.to && pair_list.length) {
-                const match = find_matching_pair(pair_list, params.from, params.to, params.from_adr, params.to_adr);
-                if (match) {
-                    open_tracetree_esmond(server, match.mno);
-                } else {
-                    el('trace').innerHTML =
-                        '<div class="center-text" style="padding:40px">' +
-                          '<p>No traceroute peer pair matching ' +
-                            '<strong>' + escapeHtml(params.from) + '</strong> → <strong>' + escapeHtml(params.to) + '</strong> ' +
-                            'was found in this archive.</p>' +
-                          '<p style="color:var(--c-text-3);font-size:.85rem">Pick a pair from the <em>Peers</em> tab to view its topology.</p>' +
-                        '</div>';
-                }
-            }
-        }).fail(function (jqxhr, textStatus, error) {
-            const msg = "Failed to get " + url + " (" + textStatus + ", " + error + ")";
-            console.log("ls_tab: " + msg);
-            el('peers').innerHTML = '<h4 class="center-text">' + escapeHtml(msg) + '</h4>';
-        });
     }
 
     // ── OpenSearch API: list traceroutes within a time range ────────────
@@ -478,7 +260,7 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
             } else {
                 el('peers').innerHTML = head + '<h4 class="center-text">No traceroutes found in this archive for the selected period.</h4>';
             }
-            wire_peers_tab(mahost, t_start, t_end, /*esmond=*/false);
+            wire_peers_tab(mahost, t_start, t_end);
 
             // Resolve the Traceroute pane for the requested pair, using the
             // exact strings as stored in the archive (microdep may pass a
@@ -536,7 +318,7 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
     }
 
     // ── Wire up search box, datepickers, sortable, pair buttons ─────────
-    function wire_peers_tab(base_or_mahost, t_start, t_end, esmond) {
+    function wire_peers_tab(mahost, t_start, t_end) {
         // Search filter
         const search = document.getElementById(id + '-peer-search');
         if (search) {
@@ -557,8 +339,7 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
             }).on('change', function () {
                 const ns = new Date($from.val()) / 1000;
                 const ne = new Date($to.val()) / 1000;
-                if (esmond) fetch_base(base_or_mahost, ns, ne);
-                else        fetch_base_os(base_or_mahost, ns, ne);
+                fetch_base_os(mahost, ns, ne);
             });
         }
         if ($to.length) {
@@ -569,8 +350,7 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
             }).on('change', function () {
                 const ns = new Date($from.val()) / 1000;
                 const ne = new Date($to.val()) / 1000;
-                if (esmond) fetch_base(base_or_mahost, ns, ne);
-                else        fetch_base_os(base_or_mahost, ns, ne);
+                fetch_base_os(mahost, ns, ne);
             });
         }
 
@@ -594,9 +374,7 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
             if (!btn) return;
             ev.preventDefault();
             ev.stopPropagation();
-            if (btn.dataset.action === 'esmond-pair') {
-                open_tracetree_esmond(btn.dataset.server, parseInt(btn.dataset.mno, 10));
-            } else if (btn.dataset.action === 'os-pair') {
+            if (btn.dataset.action === 'os-pair') {
                 open_tracetree_os(
                     btn.dataset.server,
                     btn.dataset.from,
@@ -666,14 +444,6 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
     }
 
     // ── Open the Traceroute tab and render via tracetree_tab() ──────────
-    function open_tracetree_esmond(server, mno) {
-        const evt = tr_events[mno];
-        const meas = measurements[mno];
-        if (!evt || !meas) return;
-        const base = server + meas['base-uri'];
-        render_tracetree(base, evt['input-source'], evt['input-destination'], start_time, end_time, /*api=*/'esmond');
-    }
-
     function open_tracetree_os(server, peer_from, peer_to, t_start, t_end, extra) {
         render_tracetree(server, peer_from, peer_to, t_start, t_end, /*api=*/'opensearch', extra);
     }
@@ -730,7 +500,7 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
         }));
     }
 
-    // ── Build the outer 3-tab structure ─────────────────────────────────
+    // ── Build the outer 2-tab structure ─────────────────────────────────
     function build_html() {
         const container = document.getElementById(id);
         if (!container) {
@@ -760,67 +530,29 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
     $('#' + id + '-tabs').tabs();
     init_pair_delegation();
 
-    /*
-    if (params.mahost) {
-        // We already know the MA — populate Peers from it.
-        const base = params.mahost.startsWith('http')
-            ? params.mahost
-            : 'https://' + params.mahost;
-
-        // MA tab: keep a button to fetch the public MA list on demand.
-        // Display a nicer name when the underlying CGI talks to localhost.
-        let display_host = base;
-        try {
-            const u = new URL(base);
-            if (u.hostname === 'localhost' || u.hostname === '127.0.0.1') {
-                display_host = 'Local archive (' + window.location.hostname + ')';
-            }
-            } catch (_) {
-	    // ignore parse errors
-            }
-
-        el('ma').innerHTML =
-            '<div class="ls-empty">' +
-              '<p>Currently browsing measurement archive:<br><strong>' + display_host + '</strong></p>' +
-              '<button class="knapp" id="' + id + '-fetch-ls">Fetch public MA list</button>' +
+    // If from/to are known (typical case when launched from the microdep
+    // map), preselect the Traceroute sub-tab and show a spinner. The actual
+    // topology load is deferred until the Peers fetch returns, so we can
+    // resolve the *exact* peer-name strings stored in OpenSearch (the
+    // microdep map sometimes uses a slightly different form than what the
+    // archive recorded — exact-string match on from/to is required by the
+    // backend or the hop graph comes back empty).
+    if (params.from && params.to) {
+        $('#' + id + '-tabs').tabs({ active: 0 });
+        el('trace').innerHTML =
+            '<div class="center-text" style="padding:40px">' +
+              '<div class="spinner"></div>' +
+              '<p>Resolving peer pair for ' + escapeHtml(params.from) + ' → ' + escapeHtml(params.to) + '…</p>' +
             '</div>';
-        document.getElementById(id + '-fetch-ls')
-            .addEventListener('click', function () {
-                el('ma').innerHTML = '<h2 class="center-text">Loading MA list…</h2>';
-                fetch_ls(DEFAULT_LS);
-            });
-*/
-        // If from/to are known (typical case when launched from the microdep
-        // map), preselect the Traceroute sub-tab and show a spinner. The actual
-        // topology load is deferred until the Peers fetch returns, so we can
-        // resolve the *exact* peer-name strings stored in OpenSearch (the
-        // microdep map sometimes uses a slightly different form than what the
-        // archive recorded — exact-string match on from/to is required by the
-        // backend or the hop graph comes back empty).
-        if (params.from && params.to) {
-            $('#' + id + '-tabs').tabs({ active: 0 });
-            el('trace').innerHTML =
-                '<div class="center-text" style="padding:40px">' +
-                  '<div class="spinner"></div>' +
-                  '<p>Resolving peer pair for ' + escapeHtml(params.from) + ' → ' + escapeHtml(params.to) + '…</p>' +
-                '</div>';
-        } else {
-            // Opened without a pair (the map's "Routes" menu entry): show the
-            // Peers list, which is what the user came for (issue #124).
-            $('#' + id + '-tabs').tabs({ active: 1 });
-            el('peers').innerHTML =
-                '<div class="center-text" style="padding:40px">' +
-                  '<div class="spinner"></div><p>Loading traceroute peers…</p>' +
-                '</div>';
-        }
+    } else {
+        // Opened without a pair (the map's "Routes" menu entry): show the
+        // Peers list, which is what the user came for (issue #124).
+        $('#' + id + '-tabs').tabs({ active: 1 });
+        el('peers').innerHTML =
+            '<div class="center-text" style="padding:40px">' +
+              '<div class="spinner"></div><p>Loading traceroute peers…</p>' +
+            '</div>';
+    }
 
-//        if (params.api === 'opensearch') {
-//            fetch_base_os(base, start_time, end_time);
-            fetch_base_os(params.mahost, start_time, end_time);
-//        } else {
-//            fetch_base(base + '/esmond/perfsonar/archive/', start_time, end_time);
-//        }
-//    } else {
-//        fetch_ls(DEFAULT_LS);
-//    }
+    fetch_base_os(params.mahost, start_time, end_time);
 }
