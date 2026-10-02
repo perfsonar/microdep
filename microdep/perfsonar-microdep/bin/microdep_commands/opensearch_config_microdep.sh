@@ -11,6 +11,11 @@ OPENSEARCH_SECURITY_CONFIG=${OPENSEARCH_CONFIG_DIR}/opensearch-security
 PASSWORD_FILE=/etc/perfsonar/opensearch/auth_setup.out
 LEGACY_INDICES="dragonlab dragonlab_jitter dragonlab_routemon dragonlab_correvents"
 MICRODEP_INDICES="microdep_gap_ana microdep_trace_ana microdep_corr_ana"
+ROLES_YML=/usr/lib/perfsonar/archive/config/roles.yml
+ROLES_PATCH=/usr/lib/perfsonar/archive/config/microdep_roles_yml_patch
+# The roles that get access to the Microdep indices: the one Logstash writes with,
+# and the one for reading (which is also the one of users that have not logged in)
+MICRODEP_ROLES="pscheduler_logstash pscheduler_reader"
 
 usage () {
     echo "Usage: `basename $0` [options] [opensearch-host-url]"
@@ -73,6 +78,19 @@ os_curl () {
     local pass=${ADMIN_PASS//\\/\\\\}
     pass=${pass//\"/\\\"}
     printf 'user = "admin:%s"\n' "$pass" | curl -K - -k "$@"
+}
+
+roles_with_microdep () {
+    # Output the roles file read from standard input, with the lines of the patch file
+    # (the pattern of the Microdep indices) in the roles named in $1 and in no other
+    # role. In those roles they go after the pattern of the prometheus indices.
+    awk -v wanted=" $1 " -v patchfile="$ROLES_PATCH" '
+        BEGIN { while ((getline line < patchfile) > 0) if (line != "") { patch[++n] = line; ispatch[line] = 1 } }
+        /^[^ \t#]/ { role = $0; sub(/:.*/, "", role) }
+        ($0 in ispatch) { next }
+        { print }
+        /prometheus_?\*/ && index(wanted, " " role " ") { for (i = 1; i <= n; i++) print patch[i] }
+    '
 }
 
 wait_opensearch_api () {
@@ -153,13 +171,15 @@ if [ "$REMOVE" ]; then
 	    systemctl restart logstash.service || true
 	fi
 	# Remove read/write access to Microdep opensearch indices
-	if [ -e /usr/lib/perfsonar/archive/config/roles.yml -a -e /usr/lib/perfsonar/archive/config/microdep_roles_yml_patch ]; then
+	if [ -e $ROLES_YML -a -e $ROLES_PATCH ]; then
 	    msg "Removing read/write access to Microdep indices in Opensearch..."
 	    TMPROLESYML=$(mktemp)
-	    grep -v -x -F -f /usr/lib/perfsonar/archive/config/microdep_roles_yml_patch /usr/lib/perfsonar/archive/config/roles.yml > $TMPROLESYML && mv $TMPROLESYML /usr/lib/perfsonar/archive/config/roles.yml
+	    # (The file is written in place, so it keeps its owner and mode)
+	    roles_with_microdep "" < $ROLES_YML > $TMPROLESYML && [ -s $TMPROLESYML ] && cat $TMPROLESYML > $ROLES_YML
+	    rm -f $TMPROLESYML
 	    # Refresh config of opensearch security
 	    if [ -e $OPENSEARCH_SECURITY_CONFIG/roles.yml ]; then
-		cp -f /usr/lib/perfsonar/archive/config/roles.yml $OPENSEARCH_SECURITY_CONFIG/roles.yml
+		cp -f $ROLES_YML $OPENSEARCH_SECURITY_CONFIG/roles.yml
 		OPENSEARCH_JAVA_HOME=/usr/share/opensearch/jdk bash ${OPENSEARCH_SECURITY_PLUGIN}/tools/securityadmin.sh -cd ${OPENSEARCH_SECURITY_CONFIG} -icl -nhnv -cacert ${OPENSEARCH_CONFIG_DIR}/root-ca.pem -cert ${OPENSEARCH_CONFIG_DIR}/admin.pem -key ${OPENSEARCH_CONFIG_DIR}/admin-key.pem
 	    fi
 	fi
@@ -195,22 +215,25 @@ if [ -e /etc/logstash/pipelines.yml -a -e /etc/perfsonar/microdep/logstash/micro
     systemctl restart logstash.service || true
 fi
 
-# Add read and write accesses to Microdep opensearch indices
-if [ -e /usr/lib/perfsonar/archive/config/roles.yml -a -e /usr/lib/perfsonar/archive/config/microdep_roles_yml_patch ]; then
-    if ! grep -q -x -F -f /usr/lib/perfsonar/archive/config/microdep_roles_yml_patch /usr/lib/perfsonar/archive/config/roles.yml; then
-	# Microdep index missing. Add.
+# Add read and write accesses to Microdep opensearch indices: to the roles that need
+# them, and to no other. (They used to be added to every role with access to the
+# prometheus indices, so a file left by an earlier version is put right as well.)
+if [ -e $ROLES_YML -a -e $ROLES_PATCH ]; then
+    TMPROLESYML=$(mktemp)
+    if roles_with_microdep "$MICRODEP_ROLES" < $ROLES_YML > $TMPROLESYML && [ -s $TMPROLESYML ] && ! cmp -s $TMPROLESYML $ROLES_YML; then
+	# Access to the Microdep indices is missing, or is not where it should be. Fix.
 	wait_opensearch
 	msg "Adding read and write access to Micordep indices..."
-	sed -i '/prometheus\*/r /usr/lib/perfsonar/archive/config/microdep_roles_yml_patch' /usr/lib/perfsonar/archive/config/roles.yml
-	sed -i '/prometheus_\*/r /usr/lib/perfsonar/archive/config/microdep_roles_yml_patch' /usr/lib/perfsonar/archive/config/roles.yml
+	cat $TMPROLESYML > $ROLES_YML   # (written in place, so the file keeps its owner and mode)
 	# Refresh config of opensearch security
 	if [ -e $OPENSEARCH_SECURITY_CONFIG/roles.yml ]; then
-	    cp -f /usr/lib/perfsonar/archive/config/roles.yml $OPENSEARCH_SECURITY_CONFIG/roles.yml
+	    cp -f $ROLES_YML $OPENSEARCH_SECURITY_CONFIG/roles.yml
 	    OPENSEARCH_JAVA_HOME=/usr/share/opensearch/jdk bash ${OPENSEARCH_SECURITY_PLUGIN}/tools/securityadmin.sh -cd ${OPENSEARCH_SECURITY_CONFIG} -icl -nhnv -cacert ${OPENSEARCH_CONFIG_DIR}/root-ca.pem -cert ${OPENSEARCH_CONFIG_DIR}/admin.pem -key ${OPENSEARCH_CONFIG_DIR}/admin-key.pem
 	else
 	    msg "Warning: Missing file $OPENSEARCH_SECURITY_CONFIG/roles.yml. Is Opensearch installed?"
 	fi
     fi
+    rm -f $TMPROLESYML
 fi
 
 
