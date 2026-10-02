@@ -12,7 +12,6 @@ microdep-map/js/microdep-map.js
 microdep-map/js/stats.js
 microdep-map/js/tracetree-tab.js
 bin/microdep_commands/elastic-get-date-type.pl
-bin/microdep_commands/yaml-to-json.cgi
 bin/microdep_commands/get-mapconfig.cgi
 bin/microdep_commands/get-tracetests.pl
 bin/microdep_commands/hopgeo.pl
