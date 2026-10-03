@@ -167,6 +167,13 @@ IP6_RE = '''(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|
 # Make sure SIGTERM also triggers exception handeling
 def sigterm_handler(_signo, _stack_frame):
     # Raises SystemExit(0) on SIGTERM
+    # Further signals are ignored: what is done on the way out (the state is
+    # stored, the summary records are output) must not be cut short by a
+    # second one. When its unit is stopped the script does get the signal
+    # twice: systemd repeats it for what is still running once the shell
+    # that started the script is gone.
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)
+    signal.signal(signal.SIGHUP, signal.SIG_IGN)
     sys.exit(0)
 
 signal.signal(signal.SIGTERM, sigterm_handler)
