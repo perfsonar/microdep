@@ -82,6 +82,30 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────
+    // The date fields of the Peers list hold days as yyyy-mm-dd, as the date
+    // field of the map does, and a day starts at midnight UTC, as it does when
+    // the map hands a period in. (The fields were filled in the date format of
+    // the browser but read as month/day/year: with day/month order another
+    // period was fetched, and with other formats none.)
+    const DAY_FORMAT = 'yy-mm-dd';      // as jQuery UI's datepicker names it
+    function day_text(epoch) {
+        return new Date(epoch * 1000).toISOString().substring(0, 10);
+    }
+
+    // Runs before a changed date field is read: a day typed by hand is brought
+    // to the form above (2026-9-5 becomes 2026-09-05), and when the text is no
+    // day the one shown before is put back and nothing is fetched.
+    function tidy_day_field(ev) {
+        let day = null;
+        try { day = $.datepicker.parseDate(DAY_FORMAT, this.value); } catch (_) { /* not a day */ }
+        if (day) {
+            this.value = $.datepicker.formatDate(DAY_FORMAT, day);
+        } else {
+            this.value = this.defaultValue;
+            ev.stopImmediatePropagation();
+        }
+    }
+
     function el(suffix) {
         return document.getElementById(id + '-' + suffix);
     }
@@ -414,14 +438,11 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
                           '&end='   + encodeURIComponent(end_iso) +
                           (params.ip_version ? '&ip_version=' + encodeURIComponent(params.ip_version) : '');
 
-        const start = new Date(t_start * 1000);
-        const end   = new Date(t_end   * 1000);
-
         const head =
             '<div class="ls-toolbar">' +
               '<input type="text" class="ls-search-input" id="' + id + '-peer-search" placeholder="Search peers...">' +
-              '<label>From <input type="text" id="' + id + '-dp-from" class="ls-date-input" size="12" value="' + start.toLocaleDateString() + '"></label>' +
-              '<label>To <input type="text" id="' + id + '-dp-to" class="ls-date-input" size="12" value="' + end.toLocaleDateString() + '"></label>' +
+              '<label>From <input type="text" id="' + id + '-dp-from" class="ls-date-input" size="12" value="' + day_text(t_start) + '"></label>' +
+              '<label>To <input type="text" id="' + id + '-dp-to" class="ls-date-input" size="12" value="' + day_text(t_end) + '"></label>' +
             '</div>';
         const tableHead =
             '<table id="' + id + '-peer-table" class="sortable ls-table">' +
@@ -549,9 +570,12 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
         // Date pickers (jQuery UI)
         const $from = $('#' + id + '-dp-from');
         const $to   = $('#' + id + '-dp-to');
+        // (bound first, so it runs before the handlers below read the fields)
+        $from.add($to).on('change', tidy_day_field);
         if ($from.length) {
             $from.datepicker({
-                defaultDate: new Date(t_start * 1000),
+                dateFormat: DAY_FORMAT,
+                defaultDate: day_text(t_start),
                 changeMonth: true,
                 numberOfMonths: 1
             }).on('change', function () {
@@ -563,7 +587,8 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
         }
         if ($to.length) {
             $to.datepicker({
-                defaultDate: new Date(t_end * 1000),
+                dateFormat: DAY_FORMAT,
+                defaultDate: day_text(t_end),
                 changeMonth: true,
                 numberOfMonths: 1
             }).on('change', function () {
