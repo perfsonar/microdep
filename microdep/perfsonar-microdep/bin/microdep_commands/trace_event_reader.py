@@ -2259,51 +2259,55 @@ def rttCompare(traceroute, cursor, unique_pair, time):
 '''
     
 DB_STRINGFIELDS=[ 'unique_pair', 'report', 'destinations', 'normal', 'memory']
-    
-def build_sql_insert(state, table):
-    """ Prepare a SQL INSERT command for traceroute state data
+
+# The columns of the state tables. The values of a state record go to the
+# database as parameters of the statement, so a value is stored as it is,
+# whatever characters it holds (a name with an apostrophe in it, say).
+# Table and column names cannot be parameters: only the names listed here
+# go into the text of a statement.
+DB_TABLE_FIELDS = {
+    'routes': [ 'unique_pair', 'success', 'failed', 'partialfail', 'anomaly', 'normal', 'count', 'report', 'bookmark' ],
+    'jumps':  [ 'unique_pair', 'hop', 'destinations', 'frequencies', 'count', 'normal', 'memory', 'anomaly', 'trcrt', 'betweens', 'cross_entropy', 'timestamp' ]
+}
+
+def sql_state_fields(state, table):
+    """ The fields of a state record that are columns of the table
     """
-    insert_fields = "("
-    insert_values = "("
-    for field in state:
-        insert_fields += field + ", "
-        if field in DB_STRINGFIELDS:
-            insert_values += "'" + str(state[field]).strip() + "', "
-        else:
-            insert_values += str(state[field]) + ", "
-    insert_fields = insert_fields[:-2] + ")" 
-    insert_values = insert_values[:-2] + ")" 
-    return_str = 'INSERT INTO ' + table + ' ' + insert_fields + " values " + insert_values
-    #print(return_str)
-    return return_str
+    fields = [ field for field in state if field in DB_TABLE_FIELDS[table] ]
+    if len(fields) != len(state):
+        print("Error: State fields without a column in table '" + table + "' are not stored: " + ", ".join(sorted(set(state) - set(fields))))
+    return fields
+
+def sql_state_value(state, field):
+    """ The value of a state field as it is stored: text fields as trimmed strings
+    """
+    if field in DB_STRINGFIELDS:
+        return str(state[field]).strip()
+    return state[field]
+
+def build_sql_insert(state, table):
+    """ Prepare a SQL INSERT command for traceroute state data.
+    Returns the statement, with a placeholder per value, and the list of values.
+    """
+    fields = sql_state_fields(state, table)
+    return_str = 'INSERT INTO ' + table + ' (' + ", ".join(fields) + ") values (" + ", ".join(['%s'] * len(fields)) + ")"
+    values = [ sql_state_value(state, field) for field in fields ]
+    #print(return_str, values)
+    return return_str, values
 
 def build_sql_update(state, table, cond_keys):
-    """ Prepare a SQL UPDATE command for traceroute state data
+    """ Prepare a SQL UPDATE command for traceroute state data.
+    Returns the statement, with a placeholder per value, and the list of values.
     """
-    update_key_values = ""
-    for field in state:
-        if not field in cond_keys:
-            if field in DB_STRINGFIELDS:
-                # Add quotes to strings
-                update_key_values += field + " = '" + str(state[field]).strip() + "', "
-            else:
-                update_key_values += field + " = " + str(state[field]) + ", "
-    update_key_values = update_key_values[:-2]
+    fields = [ field for field in sql_state_fields(state, table) if not field in cond_keys ]
     # Prepare conditions
-    cond_str = " WHERE "
-    for field in cond_keys:
-        cond_str += field + " = "
-        if field in DB_STRINGFIELDS:
-            cond_str += "'" + state[field] + "'"
-        else:
-            cond_str +=  str(state[field]) 
-        cond_str += " AND "
-    cond_str = cond_str[:-5]
-    
-    return_str = "UPDATE " + table + " SET " + update_key_values + cond_str
+    cond_fields = [ field for field in cond_keys if field in DB_TABLE_FIELDS[table] ]
+    return_str = "UPDATE " + table + " SET " + ", ".join([ field + " = %s" for field in fields ]) \
+        + " WHERE " + " AND ".join([ field + " = %s" for field in cond_fields ])
+    values = [ sql_state_value(state, field) for field in fields ] + [ state[field] for field in cond_fields ]
     if param["verbose"] > 3:
-        print(return_str)
-    return return_str
+        print(return_str, values)
+    return return_str, values
 
 # State storage for analysis    
 traceroute_analysis_state_routes = {}                  # State for route-end-state-analysis
@@ -2328,24 +2332,24 @@ def flush_analysis_state(cursor):
         if traceroute_analysis_state_current_unique_pair_is_new:
             # Insert "route" state in DB (i.e. end-state analysis results)
             if  len(traceroute_analysis_state_routes)>0:
-                cursor.execute( build_sql_insert(traceroute_analysis_state_routes, "routes") )
+                cursor.execute( *build_sql_insert(traceroute_analysis_state_routes, "routes") )
                 # Insert "jumps" state in DB (i.e. per hop analysis results)
             for hop in traceroute_analysis_state_jumps:
-                cursor.execute( build_sql_insert(hop, "jumps") )
+                cursor.execute( *build_sql_insert(hop, "jumps") )
             traceroute_analysis_state_current_unique_pair_is_new = False 
         else:
             # Update DB for end-state analysis
             if  len(traceroute_analysis_state_routes)>0:
-                cursor.execute( build_sql_update(traceroute_analysis_state_routes, "routes", ['unique_pair']) )
+                cursor.execute( *build_sql_update(traceroute_analysis_state_routes, "routes", ['unique_pair']) )
             # Update DB for per-hop-analysis
             for hop in traceroute_analysis_state_jumps:
-                cursor.execute( "SELECT unique_pair, hop FROM jumps WHERE unique_pair = '" + hop['unique_pair'] + "' AND hop = " + str(hop['hop']) )
+                cursor.execute( "SELECT unique_pair, hop FROM jumps WHERE unique_pair = %s AND hop = %s", (hop['unique_pair'], hop['hop']) )
                 if cursor.rowcount == 0:
                     # Row is non-exitant. Insert new row instead
-                    cursor.execute( build_sql_insert(hop, "jumps") )
+                    cursor.execute( *build_sql_insert(hop, "jumps") )
                 else:
                     # Udate row
-                    cursor.execute( build_sql_update(hop, "jumps", ['unique_pair', 'hop']) )
+                    cursor.execute( *build_sql_update(hop, "jumps", ['unique_pair', 'hop']) )
             
         cursor.execute(('COMMIT'));
 
