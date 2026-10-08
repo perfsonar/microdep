@@ -1007,7 +1007,7 @@ function prop_title(prop) {
 function update_legend(title, threshes){
     var html="<table border=1 align=center id=legend> ";
     html+="<tr align=center>";
-    html+='<th><button class=knapp id="farge0" title="Push to hide/show grey links">' + title + '</button>';
+    html+='<th><button class=knapp id="farge0" title="Push to hide/show grey links">' + escapeHtml(title) + '</button>';
     var i;
     var lower=threshes.slice();
     lower.unshift(0);
@@ -1017,7 +1017,7 @@ function update_legend(title, threshes){
 	if (typeof _v === 'number' && !isNaN(_v)) _v = Math.round(_v * 100) / 100;
 	html += "<td width=200>" +
 	    "<button class=knapp title='Push to hide/show other links' style=width:100%" + " id=legend" + i + " bgcolor="
-	    + colors[i] + ">" + _v + "</button></td>";
+	    + colors[i] + ">" + escapeHtml(_v) + "</button></td>";
     }
     if (! jQuery.isEmptyObject(conffile[parms.net].dashboardURL)) {
 	html += '<td><button class=knapp id="dashboard" title="Database dashboard">Dashboard</button>';
@@ -1920,7 +1920,7 @@ function make_tooltip_v2(fromHost, toHost, link){
 		    // Config `descr` as a mouse-over help text on the row (issue #108).
 		    var help1 = (prop_long_desc[parms.event] && prop_long_desc[parms.event][sum_var])
 			? ' title="' + escapeHtml(prop_long_desc[parms.event][sum_var]) + '"' : '';
-		    tip+= '<tr' + help1 + '><td>' + prop_desc[parms.event][sum_var] + '<td align=right>' + prop_value;
+		    tip+= '<tr' + help1 + '><td>' + escapeHtml(prop_desc[parms.event][sum_var]) + '<td align=right>' + prop_value;
 		    nrows++;
 		}
 	    }
@@ -1932,7 +1932,7 @@ function make_tooltip_v2(fromHost, toHost, link){
 		    var sum_key = conffile[parms.net].event_type[parms.event].summary_event_type;
 		    var help2 = (prop_long_desc[sum_key] && prop_long_desc[sum_key][sum_var])
 			? ' title="' + escapeHtml(prop_long_desc[sum_key][sum_var]) + '"' : '';
-		    tip+= '<tr' + help2 + '><td>' + prop_desc[sum_key][sum_var] + '<td align=right>' + prop_value;
+		    tip+= '<tr' + help2 + '><td>' + escapeHtml(prop_desc[sum_key][sum_var]) + '<td align=right>' + prop_value;
 		    nrows++;
 		}
 	    }
@@ -1957,7 +1957,7 @@ function link_tooltip( title, link, prop){
 	if ( selected_date_is_today_or_future() ) {
 	    event = parms.event
 	}
-	var tip='<b>' + escapeHtml(title) + '</b>' + "<p>" + prop_desc[event][prop] + ": " ;
+	var tip='<b>' + escapeHtml(title) + '</b>' + "<p>" + escapeHtml(prop_desc[event][prop]) + ": " ;
 	if ( typeof(val) !== "string" ){
 	    tip += val.toFixed(1);
 	    if ( prop === "down_ppm" && typeof link[prop] == 'number' ){
@@ -1995,7 +1995,7 @@ function gap_list( from, to, hits, lines, sort_type){
 		    if (typeof prop_long_desc[etype][conffile[parms.net].event_type[etype].popup.table[col]] != "undefined") {
 			title_text = prop_long_desc[etype][conffile[parms.net].event_type[etype].popup.table[col]];
 		    }
-		    html += "<th  title='" + title_text + "'>" + prop_desc[etype][conffile[parms.net].event_type[etype].popup.table[col]];
+		    html += "<th  title='" + escapeHtml(title_text) + "'>" + escapeHtml(prop_desc[etype][conffile[parms.net].event_type[etype].popup.table[col]]);
 		}
 		html += "</thead>";
 	    }
@@ -4402,11 +4402,11 @@ function check_asymmetry(report, div_id){
 		html+='</td>';
 	    }
 	    html+='</table>';
-	    html += "<p>The above analysis is based on " + prop_desc[event_sum_type[parms.event]][ parms.property ] + " data sets.</p>";
+	    html += "<p>The above analysis is based on " + escapeHtml(prop_desc[event_sum_type[parms.event]][ parms.property ]) + " data sets.</p>";
 	} else { html+= '<h2>No missing flows for ' + escapeHtml(title_state()) + '</h2>'; }
     } else {
 	if (diff.length > 0) {
-	    html+='<div class="tab-header-row"><h2>Asymmetry in ' + prop_desc[event_sum_type[parms.event]][parms.property] + ' for ' + escapeHtml(title_state()) + '</h2>' + _csv_button_html(div_id + '_table', 'asymmetry') + '</div>';
+	    html+='<div class="tab-header-row"><h2>Asymmetry in ' + escapeHtml(prop_desc[event_sum_type[parms.event]][parms.property]) + ' for ' + escapeHtml(title_state()) + '</h2>' + _csv_button_html(div_id + '_table', 'asymmetry') + '</div>';
 	    html += '<table id=' + div_id + '_table border=1 class=sortable><thead title="Click to sort on column"><tr>';
 	    html += '<th class="summary-link-header">' + fromIcon + 'From<br>' + toIcon + 'To';
 	    html += '<th align=right>From→To<th align=right>To→From<th align=right>Diff</tr></thead>';
@@ -4422,7 +4422,7 @@ function check_asymmetry(report, div_id){
 		html+='<td align=right>' + aval + '<td align=right>' + bval + '<td align=right>' + diffval;
 	    }
 	    html+='</table>';
-	} else { html+= '<h2>No asymmetry found in ' + prop_desc[event_sum_type[parms.event]][parms.property] + ' for ' + escapeHtml(title_state()) + '</h2>'; }
+	} else { html+= '<h2>No asymmetry found in ' + escapeHtml(prop_desc[event_sum_type[parms.event]][parms.property]) + ' for ' + escapeHtml(title_state()) + '</h2>'; }
     }
     return(html);
 }
@@ -4442,7 +4442,7 @@ function report_summary(div_id){
 	    for ( const prop of prop_names[event_sum_type[parms.event]]){
 		var desc = prop_desc[event_sum_type[parms.event]][prop] || prop;
 		var longDesc = prop_long_desc[event_sum_type[parms.event]][prop] || '';
-		html+='<th align=right title="' + longDesc + ' - Click to sort" class="summary-prop-header">' + desc;
+		html+='<th align=right title="' + escapeHtml(longDesc) + ' - Click to sort" class="summary-prop-header">' + escapeHtml(desc);
 	    }
 	    html+='</tr></thead><tbody>'; header_missing=false;
 	}
