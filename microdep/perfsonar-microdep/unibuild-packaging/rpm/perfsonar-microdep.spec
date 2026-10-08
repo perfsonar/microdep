@@ -500,7 +500,6 @@ systemctl reload httpd.service || true
 %{microdep_web_dir}/fonts
 %{microdep_web_dir}/geo
 %attr(0755,root,root) %{command_base}/elastic-get-date-type.pl
-%attr(0755,root,root) %{command_base}/yaml-to-json.cgi
 %attr(0755,root,root) %{command_base}/get-mapconfig.cgi
 %attr(0755,root,root) %{command_base}/get-tracetests.pl
 %attr(0755,root,root) %{command_base}/hopgeo.pl
