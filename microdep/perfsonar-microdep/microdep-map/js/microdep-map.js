@@ -4598,7 +4598,9 @@ function title_state(){
 }
 
 function init_map(){
-    if ( parms.net){ $("#network").val(parms.net); } else { parms.net = $("#network").val(); }
+    // A network the configuration does not have (an old bookmark, a mistyped
+    // address) counts as not given: the map opens on the default network.
+    if ( parms.net && net_names.indexOf(parms.net) > -1 ){ $("#network").val(parms.net); } else { parms.net = $("#network").val(); }
     update_props();
     // Colour-blind-safe palette (#5): persisted across sessions in localStorage.
     var _cbfOn = false;

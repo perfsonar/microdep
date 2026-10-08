@@ -368,7 +368,14 @@ export function get_parms() {
         .split("&")
         .forEach(function (item) {
 	    tmp = item.split("=");
-	    parms[tmp[0]] = decodeURIComponent( tmp[1] );
+	    // decodeURIComponent throws on a value that is not valid percent-encoding
+	    // (a stray "%"). Such a parameter counts as not given, so that the page
+	    // still opens.
+	    try {
+		parms[tmp[0]] = decodeURIComponent( tmp[1] );
+	    } catch (e) {
+		console.log("Parameter '" + tmp[0] + "' of the page address cannot be decoded and is ignored");
+	    }
         });
     // return new_parms;
 }
