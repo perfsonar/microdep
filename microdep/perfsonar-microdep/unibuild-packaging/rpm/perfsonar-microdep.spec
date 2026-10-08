@@ -322,8 +322,13 @@ rm -rf %{buildroot}
 ###   P o s t  i n s t a l l   a c t i o n s 
 
 %post ana
-# Create db
-%{command_base}/create_new_db.sh -s -t postgres -d routingmonitor
+# Create db. The db of an earlier version is kept, with what the analysis has
+# learned: only a first installation starts from an empty one.
+if [ "$1" -gt 1 ]; then
+    %{command_base}/create_new_db.sh -s -t postgres routingmonitor
+else
+    %{command_base}/create_new_db.sh -s -t postgres -d routingmonitor
+fi
 # Fix access to db
 if [ -f /var/lib/pgsql/data/pg_hba.conf ]; then
     %{command_base}/fix-pgsql-access.sh -i /var/lib/pgsql/data/pg_hba.conf
