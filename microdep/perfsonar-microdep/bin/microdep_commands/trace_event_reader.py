@@ -43,7 +43,7 @@ import math
 import geoip2.database
 import socket
 #import pika
-from urllib.parse import urlparse, parse_qsl
+from urllib.parse import urlparse, parse_qsl, unquote
 import urllib.request
 import ssl
 from io import StringIO
@@ -102,7 +102,7 @@ param = {
     'live': 0,    # Flag for live analysis
     'all': 0,     # Flag to enable processing of older-than-latest traceroutes
     'tcp': 0,     # Flag to enable processing tcptraceroute files
-    'pssrc': '',  # Url to perfsonar data source, amqp://<user:passwd@localhost>/<vhost>/queue=<traceroute> or, https://<archive-host>/opensearch 
+    'pssrc': '',  # Url to perfsonar data source, amqp://<user>:<passwd>@<host>:<port>/?exchange=<name>&queue=<name> or, https://<archive-host>/opensearch 
     'path': '/var/lib/microdep/my-network/data',             # Path to apply when searching based on date               
     'reportpath': '/var/lib/microdep/my-network/report/mp',  # Path to apply for output files when searching based on date               
     'reportpostpath': 'trace-ana',                             # Finale path level to add below reportpath,  source host and date               
@@ -409,7 +409,7 @@ def parse_cmd(param):
     cmdparser.add_argument('--live', '-l', action='count', help='Run live analysis on todays date.')
     cmdparser.add_argument('--all', '-a', action='count', help='Process all traceoutes, also older than last processed (according to db)')
     cmdparser.add_argument('--tcp', '-T', action='count', help='Look for tcptraceroute files.')
-    cmdparser.add_argument('--pssrc', help='URL to perfsonar data source. http(s) and amqp(s) are supported.')
+    cmdparser.add_argument('--pssrc', help='URL to perfsonar data source. http(s) and amqp are supported.')
     cmdparser.add_argument('--path', '-p', help='Base path to apply when searching based on date. Default is ' + param['path'] + '.')
     cmdparser.add_argument('--reportpath', '-r', help='Base path to apply when storing output for date based input. Default is ' + param['reportpath'] + '.')
     cmdparser.add_argument('--reportpostpath', '-R', help='Finale path level to add below reportpath, source host and date. Default is ' + param['reportpostpath'] + '.')
@@ -421,7 +421,7 @@ def parse_cmd(param):
     cmdparser.add_argument('--dbtype', help='Database type. \'mysql\' and \'postgresql\' supported. Default is ' + param['dbtype'] + '.')
     cmdparser.add_argument('--dbname', help='Name of anomality parameter DB. Default is ' + param['dbname'] + '.')
     cmdparser.add_argument('--dbuser', help='User name for db access. Default is ' + param['dbuser'] + '.')
-    cmdparser.add_argument('--dbpasswd', help='Password for db access. Default is the one kept in the file given by --dbpasswdfile.')
+    cmdparser.add_argument('--dbpasswd', help='Password for db access. Default is the one kept in the file given by --dbpasswdfile, which is the better place: an option shows in the process list.')
     cmdparser.add_argument('--dbpasswdfile', help='File holding the password for db access. Default is ' + param['dbpasswdfile'] + '.')
     cmdparser.add_argument('--dbhost', help='Host name for db access. Default is ' + param['dbhost'] + '.')
     cmdparser.add_argument('--dbclear', '-c', action='count', help='Clear database before running.')
@@ -3008,19 +3008,21 @@ def amqp_read(url, mode, thread):
     if pssrc_url.scheme != "amqp":
         print("Error: Unsupported message protocol '" + pssrc_url.scheme  + "'")
         sys.exit(1)
-    netloc = pssrc_url.netloc.split("@")
-    if len(netloc)>1:      
-        # Extract credentials
-        creds = netloc[0].split(":")
-        if len(creds)>1:
-            (rmq_param["user"], rmq_param["passwd"]) = creds 
-        netloc.pop(0)
-    # Extract host and port
-    hostloc = netloc[0].split(":")
-    if len(hostloc)>1:
-        (rmq_param["host"], rmq_param["post"]) = hostloc
-    if len(hostloc)==1 and hostloc[0] != "" :
-        rmq_param["host"] = hostloc[0]
+    # Credentials, host and port as the url parser finds them. (They were split
+    # by hand on "@" and ":", which stopped on a password holding either and on
+    # an IPv6 address, and the port went to a misspelled key: 5672 was always used.)
+    try:
+        if pssrc_url.username:
+            rmq_param["user"] = unquote(pssrc_url.username)
+        if pssrc_url.password:
+            rmq_param["passwd"] = unquote(pssrc_url.password)
+        if pssrc_url.hostname:
+            rmq_param["host"] = pssrc_url.hostname
+        if pssrc_url.port:
+            rmq_param["port"] = pssrc_url.port
+    except ValueError:
+        print("Error: The url of the message queue has no usable port")
+        sys.exit(1)
     # Get queue specs
     if pssrc_url.path: 
         rmq_param["vhost"] = pssrc_url.path 
@@ -3032,7 +3034,7 @@ def amqp_read(url, mode, thread):
 
     if param['verbose'] > 2:
         print("Connecting to Rabbit message queue applying:'");
-        pprint(rmq_param)
+        pprint(dict(rmq_param, passwd="..."))   # (the password is not for the log)
             
     # Connect to Rabbitmq server
     connection = pika.BlockingConnection(
