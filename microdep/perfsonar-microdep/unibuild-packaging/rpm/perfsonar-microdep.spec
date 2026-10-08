@@ -181,8 +181,11 @@ A collection of handy utilities to apply when working with Microdep analytic dat
 # Stop services (ignore failures)
 systemctl stop perfsonar-microdep-gap-ana.service || true
 systemctl stop perfsonar-microdep-trace-ana.service || true
-systemctl stop perfsonar-microdep-restart.timer || true
 systemctl stop perfsonar-microdep-hourly-aggregator.timer || true
+# The nightly restart of the analysis is gone: summary records are now output at
+# intervals by the analysis itself. Clear away the timer of an earlier version.
+systemctl stop perfsonar-microdep-restart.timer 2> /dev/null || true
+systemctl disable perfsonar-microdep-restart.timer 2> /dev/null || true
 
 %pre enrichdbs
 /usr/sbin/groupadd -r perfsonar 2> /dev/null || :
@@ -338,11 +341,9 @@ fi
 systemctl daemon-reload || true
 systemctl enable perfsonar-microdep-gap-ana.service || true
 systemctl enable perfsonar-microdep-trace-ana.service || true
-systemctl enable perfsonar-microdep-restart.timer || true
 systemctl enable perfsonar-microdep-hourly-aggregator.timer || true
 systemctl start perfsonar-microdep-gap-ana.service || true
 systemctl start perfsonar-microdep-trace-ana.service || true
-systemctl start perfsonar-microdep-restart.timer || true
 systemctl start perfsonar-microdep-hourly-aggregator.timer || true
 
 %post logstash
@@ -402,7 +403,6 @@ fi
 # Stop services (ignore failures)
 systemctl stop perfsonar-microdep-gap-ana.service || true
 systemctl stop perfsonar-microdep-trace-ana.service || true
-systemctl stop perfsonar-microdep-restart.timer || true
 systemctl stop perfsonar-microdep-hourly-aggregator.timer || true
 
 %preun logstash
@@ -449,8 +449,6 @@ systemctl reload httpd.service || true
 %license %{doc_base}/LICENSE-ana
 %{_unitdir}/perfsonar-microdep-gap-ana.service
 %{_unitdir}/perfsonar-microdep-trace-ana.service
-%{_unitdir}/perfsonar-microdep-restart.service
-%{_unitdir}/perfsonar-microdep-restart.timer
 %{_unitdir}/perfsonar-microdep-hourly-aggregator.service
 %{_unitdir}/perfsonar-microdep-hourly-aggregator.timer
 %attr(0755,root,root) %{command_base}/qstream-gap-ana

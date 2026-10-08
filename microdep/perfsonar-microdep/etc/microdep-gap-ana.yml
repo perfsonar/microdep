@@ -25,6 +25,9 @@
 #owamp: ""             # Url to source of json owamp data. Protocols supported: http, https, ampq, ampqs.
 #follow: false	       # Reread input source at intervals and analyse newly arrived packets. Applys only for owamp http* urls.
 #followinterval: 10     # Interval in seconds for rereading input source.
+#sumperiod: 86400       # Interval in seconds for summary statistics while an input source is followed. Each summary covers its own
+                        # interval, and the analysis carries on. The intervals follow the clock in local time: with 3600 they end
+                        # on the hour, with 86400 at midnight. 0 gives summary statistics at termination only.
 #json: ""               # Output event data in JSON format to given file or to destination specified in file via perfsonar's JSON achive spec format.
 #jitter: 600            # Emit jitter statistics at given interval, in seconds, in addition to burst events.
 #v: false               # Be verbose.

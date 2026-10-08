@@ -320,7 +320,13 @@
 		"t_delay" : {
 		    "type" : "double"
 		},
+		"t_first" : {
+		    "type" : "long"
+		},
 		"t_jit" : {
+		    "type" : "long"
+		},
+		"t_last" : {
 		    "type" : "long"
 		},
 		"t_min_d" : {
