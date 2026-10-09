@@ -166,6 +166,12 @@ IP6_RE = '''(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|
         |1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]
         |1{0,1}[0-9]){0,1}[0-9]))'''
 
+IP4_PATTERN = re.compile(IP4_RE, re.VERBOSE)   # (the pattern is written over several lines)
+
+def is_ipv4(text):
+    """ True if text is an IPv4 address
+    """
+    return IP4_PATTERN.match(str(text)) is not None
 
 
 # Make sure SIGTERM also triggers exception handeling
@@ -1514,13 +1520,13 @@ def compare(current, normal):
             for x in diff:
                 if x == "*":
                     points += 0.2
-                elif len(x.split(".")) == 4:
+                elif is_ipv4(x):
 
                     #Checks if address is in the same network
                     #Following https://link.springer.com/chapter/10.1007/978-3-319-04918-2_7
                     for y in normal:
                         same = False
-                        if len(y.split(".")) == 4:
+                        if is_ipv4(y):
                             if x.split(".")[-2] == y.split(".")[-2]:
                                 same = True
 
@@ -1544,13 +1550,13 @@ def compare(current, normal):
             for x in diff:
                 if x == "*":
                     points += 0.1
-                elif len(x.split(".")) == 4:
+                elif is_ipv4(x):
 
                     #Checks if address is in the same network
                     #Following https://link.springer.com/chapter/10.1007/978-3-319-04918-2_7
                     for y in current:
                         same = False
-                        if len(y.split(".")) == 4:
+                        if is_ipv4(y):
                             if x.split(".")[-2] == y.split(".")[-2]:
                                 same = True
 
@@ -1756,7 +1762,7 @@ def findLastIp(traceroute, dest):
     for i in range(len(traceroute)-1, -1, -1):
         # Scan from last probe and backwards
         for j in range(len(traceroute[i])-1,-1,-1):
-            if len(traceroute[i][j].split(".")) == 4 or re.search(IP6_RE, traceroute[i][j]) and param["ipv6"]:
+            if is_ipv4(traceroute[i][j]) or re.search(IP6_RE, traceroute[i][j]) and param["ipv6"]:
                 return traceroute[i][j], i+1
                 
     # No ips found (all "*" or errormsgs)
@@ -1834,7 +1840,7 @@ def errorCheck(traceroute, unique_pair, time, analysis_state):
             ipseen = str(probe).strip()
             lastip = destination                     # Set dst-ip as last-ip since this is the one making traceroute terminate  
             tracesummary.count('probes_to_dst')
-        elif len(str(probe).strip().split(".")) == 4 or re.search(IP6_RE, str(probe).strip()) and param["ipv6"]:
+        elif is_ipv4(str(probe).strip()) or re.search(IP6_RE, str(probe).strip()) and param["ipv6"]:
             # Count stopped routes at none-desitantion addresses (ipv4 or ipv6)
             other += 1
             ipseen = str(probe).strip()
@@ -2711,7 +2717,6 @@ def read(path, srchost, srcdate, mode="batch", thread=0, starttime=0):
 
                 new_ip_found_and_added = False
                 for w in word[1:]:
-                    w_dotsplit = w.split(".")
                     if w == "ms":
                         # RTT unit found. Ignore
                         pass
@@ -2728,7 +2733,7 @@ def read(path, srchost, srcdate, mode="batch", thread=0, starttime=0):
                             else:
                                 tracesummary.parse_error()
                         new_ip_found_and_added = False
-                    elif len(w_dotsplit) == 4 and (d.isdigit() for d in w_dotsplit):
+                    elif is_ipv4(w):
                         # IPv4 address found
                         adresses.append(w)
                         new_ip_found_and_added = True
