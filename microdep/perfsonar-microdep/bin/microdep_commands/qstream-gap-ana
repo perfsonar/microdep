@@ -723,9 +723,11 @@ sub emit_json{
 	    }
 	}
     } else {
-	# Output to filehandle
-	print JSON $coder->encode($new ) ."\n" || warn "JSON print failed : $!";
-	return 1;
+	# Output to filehandle. A record that could not be written counts as not
+	# delivered, like one the receiver did not take.
+	return 1 if print JSON $coder->encode($new ) ."\n";
+	warn "JSON print failed : $!\n";
+	JSON->clearerr;   # (the file handle keeps its error otherwise, and every later print would count as failed)
     }
     return 0;   # Not delivered
 }
