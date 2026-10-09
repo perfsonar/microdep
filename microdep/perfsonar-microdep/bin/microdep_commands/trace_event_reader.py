@@ -1048,13 +1048,16 @@ def createJSON(alert):
         except ValueError:
             # No valid json (or spec) found.
             archive_spec = None
-        if archive_spec and archive_spec['archiver']:
+        if not isinstance(archive_spec, dict) or not archive_spec.get('archiver'):
+            # Json, but no spec (an output file that holds a single record, for one).
+            archive_spec = None
+        else:
             if archive_spec['archiver'] != "http":
                 if param["verbose"] > 2:
                     print ("No HTTP archiver specified in JSON object: " + json.dumps(archive_spec))
                 # No valid spec found.
                 archive_spec = None
-            elif not ( archive_spec['data'] and archive_spec['data']['_url'] and re.match(".*/logstash-ana", archive_spec['data']['_url']) ):
+            elif not ( isinstance(archive_spec.get('data'), dict) and isinstance(archive_spec['data'].get('_url'), str) and re.match(".*/logstash-ana", archive_spec['data']['_url']) ):
                 if param["verbose"] > 2:
                     print ("No valid archiver url found in JSON object: " + json.dumps(archive_spec))
                 # No valid spec found.
