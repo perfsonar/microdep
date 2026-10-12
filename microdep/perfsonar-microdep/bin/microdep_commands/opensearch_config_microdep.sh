@@ -13,6 +13,8 @@ LEGACY_INDICES="dragonlab dragonlab_jitter dragonlab_routemon dragonlab_correven
 MICRODEP_INDICES="microdep_gap_ana microdep_trace_ana microdep_corr_ana"
 ROLES_YML=/usr/lib/perfsonar/archive/config/roles.yml
 ROLES_PATCH=/usr/lib/perfsonar/archive/config/microdep_roles_yml_patch
+PIPELINES_YML=/etc/logstash/pipelines.yml
+PIPELINES_PATCH=/etc/perfsonar/microdep/logstash/microdep-pipelines.yml
 # The roles that get access to the Microdep indices: the one Logstash writes with,
 # and the one for reading (which is also the one of users that have not logged in)
 MICRODEP_ROLES="pscheduler_logstash pscheduler_reader"
@@ -93,6 +95,37 @@ roles_with_microdep () {
     '
 }
 
+# The Microdep pipeline is handled as the entry it is: the list item that names
+# pipeline.id "microdep", with the lines indented under it. (It used to be added
+# and removed by comparing single lines, and a line such as
+# "pipeline.ecs_compatibility: disabled" stands in the entries of other pipelines
+# too. That only went well because the Microdep line has a space at its end.)
+microdep_pipeline_in () {
+    # Output the Microdep entry of the pipelines file $1 (nothing when it has none)
+    awk '
+        function flush(   i) { if (microdep) for (i = 1; i <= n; i++) print item[i]; n = 0; microdep = 0 }
+        /^- / { flush(); initem = 1 }
+        initem && !/^- / && !/^[ \t]/ { flush(); initem = 0 }
+        initem { item[++n] = $0; if ($0 ~ /^(- |[ \t]+)pipeline\.id:[ \t]*"?microdep"?[ \t]*$/) microdep = 1 }
+        END { flush() }
+    ' "$1"
+}
+
+pipelines_without_microdep () {
+    # Output the pipelines file read from standard input without the Microdep entry
+    # and without the comment lines of the Microdep file
+    awk -v patchfile="$PIPELINES_PATCH" '
+        BEGIN { while ((getline line < patchfile) > 0) if (line ~ /^#/) comment[line] = 1 }
+        function flush(   i) { if (!microdep) for (i = 1; i <= n; i++) print item[i]; n = 0; microdep = 0 }
+        /^- / { flush(); initem = 1 }
+        initem && !/^- / && !/^[ \t]/ { flush(); initem = 0 }
+        initem { item[++n] = $0; if ($0 ~ /^(- |[ \t]+)pipeline\.id:[ \t]*"?microdep"?[ \t]*$/) microdep = 1; next }
+        ($0 in comment) { next }
+        { print }
+        END { flush() }
+    '
+}
+
 wait_opensearch_api () {
     # Wait for Opensearch API to start
     msg "Waiting for opensearch API to start..."
@@ -163,11 +196,12 @@ fi
 if [ "$REMOVE" ]; then
     if [ "$REMOVE" = "config" -o "$REMOVE" = "all" ]; then
 	# Clean up pipeline for logstash
-	if [ -e /etc/logstash/pipelines.yml -a -e /etc/perfsonar/microdep/logstash/microdep-pipelines.yml ]; then
+	if [ -e $PIPELINES_YML -a -e $PIPELINES_PATCH ]; then
 	    msg "Removing Microdep pipeline from Logstash..."
 	    TMPPIPELINE=$(mktemp)
-	    cp /etc/logstash/pipelines.yml $TMPPIPELINE
-	    grep -v -x -F -f /etc/perfsonar/microdep/logstash/microdep-pipelines.yml $TMPPIPELINE > /etc/logstash/pipelines.yml 
+	    # (The file is written in place, so it keeps its owner and mode)
+	    pipelines_without_microdep < $PIPELINES_YML > $TMPPIPELINE && cat $TMPPIPELINE > $PIPELINES_YML
+	    rm -f $TMPPIPELINE
 	    systemctl restart logstash.service || true
 	fi
 	# Remove read/write access to Microdep opensearch indices
@@ -209,9 +243,15 @@ if [ "$REMOVE" ]; then
 fi
 
 # Enable Microdep pipeline for logstash (by adding content of /etc/perfsonar/microdep/microdep-pipelines.yml if not already present)
-if [ -e /etc/logstash/pipelines.yml -a -e /etc/perfsonar/microdep/logstash/microdep-pipelines.yml ]; then
+if [ -e $PIPELINES_YML -a -e $PIPELINES_PATCH ]; then
     msg "Adding Microdep pipeline to Logstash..."
-    grep -q -x -F -f /etc/perfsonar/microdep/logstash/microdep-pipelines.yml /etc/logstash/pipelines.yml || ( cat /etc/perfsonar/microdep/logstash/microdep-pipelines.yml >> /etc/logstash/pipelines.yml )
+    # An entry that is there as the Microdep file has it is left where it is. One
+    # that is missing, or differs, is taken out and put at the end anew.
+    if [ "$(microdep_pipeline_in $PIPELINES_YML)" != "$(microdep_pipeline_in $PIPELINES_PATCH)" ]; then
+	TMPPIPELINE=$(mktemp)
+	pipelines_without_microdep < $PIPELINES_YML > $TMPPIPELINE && cat $PIPELINES_PATCH >> $TMPPIPELINE && cat $TMPPIPELINE > $PIPELINES_YML
+	rm -f $TMPPIPELINE
+    fi
     systemctl restart logstash.service || true
 fi
 
