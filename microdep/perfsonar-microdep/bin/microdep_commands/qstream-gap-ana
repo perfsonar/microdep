@@ -1511,7 +1511,7 @@ sub analyze_packet {
 		$late_ss{$id}+=$dt*$dt;
 	    } elsif ( $dseq > (-$maxseqreorder) ){ # reordered
 		$reorder{$id}++;
-		undef $lost{$id}{$seq};
+		$lost{$id}=1;   # (an entry of the table as well, before)
 		$bufferit=0;
 	    } else { # reset
 		$resets{$id}++;
@@ -1548,10 +1548,11 @@ sub analyze_packet {
 		    $small_gaps{$id} += $dseq-1;
 		    $small_time{$id} += $tx - $ptx{$id} - &p_interval($id);
 		}
-		# note which packets are lost
-		foreach $lost ( $pseq{$id}+1 .. $seq-1 ){
-		    $lost{$id}{$lost}=1;
-		}
+		# note that packets are lost. (Every lost packet used to get an entry in a
+		# table here, of which only "is there any" was ever asked. For a long
+		# outage, or a record with an odd sequence number, that was millions of
+		# entries.)
+		$lost{$id}=1;
 		$gap_end{$id}=$_;
 		$gap_end_seq{$id}=$seq;
 	    }
@@ -1902,13 +1903,10 @@ sub rx{
 sub emit_stats{
     my $id=shift;
 
-    my @lostseq= ();
-    @lostseq= keys %{$lost{$id}}; #  if %lost{$id};
-
 #    print "head###########\n",@{$head{$id}}, "tail ####\n",@{$tail{$id}};
 #    printf "head %3d %s  tail  %3d %s\n", $#{$head{$id}}+1, &report_delay($head{$id}),   
 
-    if ( $#lostseq >= 0 ){ # still lost packets later (reorder)
+    if ( $lost{$id} ){ # still lost packets later (reorder)
 	my $h=shift(@{$head{$id}});
 	my $t=shift(@{$tail{$id}});
 	$print_line .= sprintf "head %s  tail  %s %5d\n", $$h{line}, $$t{line}, shift(@{$dttl{$id}});
@@ -1922,7 +1920,7 @@ sub emit_stats{
 #    $get_tail{$id}=0;
 #    $ntail{$id}=0;
     $tail{$id}=();
-    $lost{$id}=();
+    $lost{$id}=0;
 
 }
 
