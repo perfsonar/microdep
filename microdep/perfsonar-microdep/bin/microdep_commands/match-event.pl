@@ -636,7 +636,7 @@ sub report_correlation {
 	    push @uniq_event_types, $event_type if (! is_element_of($event_type, @uniq_event_types));
 	    foreach my $key (keys %{$corr_events_window{ $matchfieldvalues }[$w]}) {
 		if (! exists $corr_event{$key} ) {
-		    # Copy event details (but don't overwriting anyting)
+		    # Copy event details (but don't overwriting anyting) THIS STRATEGY FOR AGGREGATION IS QUESTIONALBLE... DISCUSS WITH BRANKO.
 		    $corr_event{$key} = $corr_events_window{ $matchfieldvalues }[$w]{$key};
 		}
 	    }
