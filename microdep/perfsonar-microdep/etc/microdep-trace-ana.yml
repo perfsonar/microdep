@@ -17,7 +17,7 @@
 #live: false    # Flag to enable live (real-time) analysis
 #all: false     # Flag to enable processing of older-than-latest traceroutes
 #tcp: false     # Flag to enable processing tcptraceroute files
-#pssrc: ''      # Url to perfsonar data source, amqp://<user:passwd@localhost>/<vhost>/queue=<traceroute> or, https://<archive-host>/opensearch 
+#pssrc: ''      # Url to perfsonar data source, amqp://<user>:<passwd>@<host>:<port>/?exchange=<name>&queue=<name> or, https://<archive-host>/opensearch 
 #path: '/var/lib/microdep/my-network/data'              # Path to apply when searching based on date               
 #reportpath: '/var/lib/microdep/my-network/report/mp'   # Path to apply for output files when searching based on date               
 #reportpostpath: 'trace-ana'      # Finale path level to add below reportpath, source host and date, e.g. '/var/lib/microdep/report/mp/my-host/2026-01-01/trace-ana'
@@ -29,7 +29,8 @@
 #dbtype: 'mysql'            # Database type. 'mysql' and 'postgresql' supported.
 #dbname: 'routingmonitor'   # Name of database for anomality parameters
 #dbuser: 'traceroute'       # User name for db access
-#dbpasswd: 'NeeLeoth9e'     # Password for db access
+#dbpasswd: ''               # Password for db access. If empty, the one kept in dbpasswdfile is applied
+#dbpasswdfile: '/etc/perfsonar/microdep/dbpasswd'    # File holding the password for db access (written by create_new_db.sh)
 #dbhost: 'localhost'        # Host name for db access
 #dbclear: 0                 # Clear db before running
 #help: false                # Help text flag
@@ -38,10 +39,15 @@
 #maxprocs: 1                # Max no of parallel processes in batch mode
 #topoevents: 0              # Flag to enable detection and output of topology events
 #topointerval: 3600         # Min no of seconds between topology events
-#pslookup: 'http://35.223.142.206/lookup/_search'  # API of perfSONAR Lookup Service
+#pslookup: 'http://35.223.142.206/lookup/_search'  # API of perfSONAR Lookup Service. Empty or 'off' means no lookup.
+                            # (The service answers over plain http only, and every address seen is sent to it.)
 #pslookupwait: 3600         # Min no of seconds to wait between refreshing info fetched from pslookup-service
 #ipv6: 0                    # Flag enabling ipv6 address parsing
 #followinterval: 10         # No of seconds to wait between requests for data from openseach archive
+#sumperiod: 86400           # No of seconds between summary records when reading from a perfSONAR data source (pssrc). Each record
+                            # covers its own period, and the analysis carries on. The periods follow the clock in local time: with
+                            # 3600 they end on the hour, with 86400 at midnight. 0 gives summary records at termination only.
+#pssrcverify: 1             # Check the certificate of a https data source (pssrc). A source on this host is never checked.
 #config: ''                 # Path to configuration file (this one). Note that commandline options override config file.               
 
 ## perfSONAR Microdep settings

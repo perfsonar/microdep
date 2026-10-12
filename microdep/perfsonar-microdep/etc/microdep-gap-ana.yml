@@ -25,6 +25,9 @@
 #owamp: ""             # Url to source of json owamp data. Protocols supported: http, https, ampq, ampqs.
 #follow: false	       # Reread input source at intervals and analyse newly arrived packets. Applys only for owamp http* urls.
 #followinterval: 10     # Interval in seconds for rereading input source.
+#sumperiod: 86400       # Interval in seconds for summary statistics while an input source is followed. Each summary covers its own
+                        # interval, and the analysis carries on. The intervals follow the clock in local time: with 3600 they end
+                        # on the hour, with 86400 at midnight. 0 gives summary statistics at termination only.
 #json: ""               # Output event data in JSON format to given file or to destination specified in file via perfsonar's JSON achive spec format.
 #jitter: 600            # Emit jitter statistics at given interval, in seconds, in addition to burst events.
 #v: false               # Be verbose.
@@ -35,7 +38,8 @@
 #batchsize: 0           # When >0 overrides detected batch size (packet count) when reading owamp subsession data sets.
 #topoevents: false      # Enable output of topology events whenever a topology change is detected. Requires -json. 
 #topointerval: 3600     # Min interval (sec) between topology events.
-#pslookup: "http://35.223.142.206/lookup/_search"  # Source url for perfSONAR lookup service. 
+#pslookup: "http://35.223.142.206/lookup/_search"  # Source url for perfSONAR lookup service. "off" means no lookup.
+                        # (The service answers over plain http only, and every address seen is sent to it.)
 #wait:  3600            # Min no of seconds to wait between refreshing info fetched from pslookup-service. 
 #ipv6: false            # Analyse ipv6 packets (and ignore ipv4).
 #conf: ""               # Filename to config file, i.e. THIS FILE. Note that CLI options override options for file.

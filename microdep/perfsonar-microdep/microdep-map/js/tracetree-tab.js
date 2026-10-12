@@ -24,6 +24,7 @@
  *   - copy_tree() — empty stub in original.
  */
 import { ink_on } from './graph.js';
+import { escapeHtml } from './map-lib.js';
 
 
 export function tracetree_tab(div_id, from, to, time_start, time_end, options = {}) {
@@ -75,8 +76,8 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
     const params = {
         from:       from,
         to:         to,
+        net:        options.net     || '',
         mahost:     options.mahost  || '',
-        verify_SSL: options.verify_SSL,
         api:        options.api     || '',
         'ip-version': options.ip_version,     // unset = all versions (issue #127)
         start:      time_start,
@@ -1407,8 +1408,9 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         return s;
     }
 
+    // `val` is what the archive holds for the hop (its name is a PTR record)
     function trf(label, val) {
-        return '<tr><th>' + label + '<td>' + val;
+        return '<tr><th>' + label + '<td>' + escapeHtml(val);
     }
 
     function txtf(label, val, decimals) {
@@ -1764,7 +1766,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
             n_slice.slice_no = slice_no;
             tr_slice_show(n_slice);
         } else {
-            fetch_and_plot_json(n_slice, params.mahost);
+            fetch_and_plot_json(n_slice);
         }
         in_slice = n_slice;
         slices.push(n_slice);
@@ -2080,15 +2082,15 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
     //  Data fetching
     // ====================================================================
 
-    function fetch_and_plot_json(slice, base) {
+    function fetch_and_plot_json(slice) {
         show_awaiting(true);
         show_time_info(slice);
         in_slice = slice;
 
         let url;
 
-//        url = '/pstracetree/get-tracetests.pl?mahost=' + encodeURIComponent(base)
-        url = 'get-tracetests.pl?mahost=' + encodeURIComponent(base)
+        // The archive is the one mapconfig.yml gives the network
+        url = 'get-tracetests.pl?net=' + encodeURIComponent(params.net)
             + '&from=' + encodeURIComponent(params.from)
             + '&to=' + encodeURIComponent(params.to)
             + '&start=' + encodeURIComponent(params.start)
@@ -2097,9 +2099,6 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
             // allows: one request may carry every peer of a host
             + '&slim=1&size=10000';
 
-        if (params.verify_SSL !== undefined) {
-            url += '&verify_SSL=' + params.verify_SSL;
-        }
         if (params['ip-version']) {
             url += '&ip_version=' + encodeURIComponent(params['ip-version']);
         }
@@ -2766,8 +2765,10 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
                 hops = '';
             }
             phop = point.hop;
-            html += '<tr id="' + point.address + '"><td>' + hops + '</td>'
-                + '<td>' + point.router + '</td>'
+            // Router names are PTR records and the rest comes from the archive
+            // too, so every text cell is escaped.
+            html += '<tr id="' + escapeHtml(point.address) + '"><td>' + hops + '</td>'
+                + '<td>' + escapeHtml(point.router) + '</td>'
                 + '<td class="num">' + point.avg.toFixed(1) + '</td>'
                 + '<td class="num">' + point.min.toFixed(1) + '</td>'
                 + '<td class="num">' + point.max.toFixed(1) + '</td>'
@@ -2775,15 +2776,15 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
             html += '<td class="num">';
             if (point.hop !== phop) {
                 if (data.loss[point.hop])
-                    html += data.loss[point.hop];
+                    html += escapeHtml(data.loss[point.hop]);
                 else
                     html += '0';
             }
             html += '<td class="num">' + point.seen + '</td>'
-                + '<td>' + point.address + '</td>'
-                + '<td>' + point.first_seen + '</td>'
-                + '<td>' + point.last_seen + '</td>'
-                + '<td>' + point.return_report + '</td>'
+                + '<td>' + escapeHtml(point.address) + '</td>'
+                + '<td>' + escapeHtml(point.first_seen) + '</td>'
+                + '<td>' + escapeHtml(point.last_seen) + '</td>'
+                + '<td>' + escapeHtml(point.return_report) + '</td>'
                 + '</tr>';
         });
         html += '</tbody></table>';
@@ -3118,7 +3119,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
                 const hop = c.by_ttl[ttl];
                 const ip = (hop && hop.ip) ? hop.ip : '—';
                 const rtt = (hop && hop.rtt !== undefined) ? hop.rtt.toFixed(1) : '—';
-                html += '<td class="addr">' + ip + '</td>';
+                html += '<td class="addr">' + escapeHtml(ip) + '</td>';
                 html += '<td class="num">' + rtt + '</td>';
             });
             html += '</tr>';
@@ -3140,8 +3141,8 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         for (const hop of shot.val) {
             if (hop.ttl > last_ttl) break;
             html += '<tr>' +
-                      '<td>' + hop.ttl + '</td>' +
-                      '<td>' + (hop.ip !== undefined ? hop.ip : '') + '</td>' +
+                      '<td>' + escapeHtml(hop.ttl) + '</td>' +
+                      '<td>' + escapeHtml(hop.ip) + '</td>' +
                       '<td class="num">' + (hop.rtt !== undefined ? hop.rtt.toFixed(1) : '') + '</td>' +
                     '</tr>';
         }
@@ -3409,7 +3410,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
             n_slice.slice_no = compute_slice_count(range);
             tr_slice_show(n_slice);
         } else {
-            fetch_and_plot_json(n_slice, params.mahost);
+            fetch_and_plot_json(n_slice);
         }
         slices.push(n_slice);
     }
@@ -3902,6 +3903,6 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
 
     // Start loading data
     if (params.mahost) {
-        fetch_and_plot_json(mother, params.mahost);
+        fetch_and_plot_json(mother);
     }
 }

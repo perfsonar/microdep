@@ -80,7 +80,7 @@ document.addEventListener('microdep-tracetree-pair', function (e) {
         startEpoch: d.startEpoch,
         endEpoch: d.endEpoch,
         options: prev.options || {
-            net: d.net, mahost: d.mahost, verify_SSL: 0,
+            net: d.net, mahost: d.mahost,
             api: d.api, ip_version: d.ip_version
         }
     });
@@ -327,7 +327,7 @@ function restoreOneTab(spec) {
         const bustedUrl = spec.url + sep + '_t=' + Date.now();
         const iframe_html =
             '<div class="curve-iframe-wrap">' +
-                '<iframe class="curve-iframe" src="' + bustedUrl + '" frameborder="0" sandbox="allow-scripts allow-same-origin"></iframe>' +
+                '<iframe class="curve-iframe" src="' + escapeHtml(bustedUrl) + '" frameborder="0" sandbox="allow-scripts allow-same-origin"></iframe>' +
             '</div>';
         add_tab('div', spec.title, before, iframe_html);
         tabSpecs.set('tab' + before, spec);
@@ -722,7 +722,6 @@ function open_tree_tab(host) {
     var opts = {
 	net: parms.net,
 	mahost: 'https://localhost:9200/',
-	verify_SSL: 0,
 	api: 'opensearch',
 	ip_version: net_ip_version[parms.net],
 	from_adr: name_to_ip[host] || '',
@@ -782,19 +781,22 @@ function make_markers ( network, points, focus) {
 	var id=points[i].id;
 	var marker = L.marker ([points[i].lat, points[i].lon]).addTo(clustergroup[network]);
 	bounds.extend(marker.getLatLng());
-	marker.bindTooltip( points[i].name, {permanent: false, className: "my-label", offset: [0, 0] });
-	var html = '<br><a href="#" class=trigger id="' + id + '">Focus on</a>' +
-	           '<br><a href="#" class="tree-trigger" data-host="' + id + '" title="Every traceroute from this host in one tree">Routes to all peers</a>';
+	// Names and ids come from the archive: Leaflet takes a string as HTML, so
+	// they are escaped on the way into the tooltip and the popup.
+	marker.bindTooltip( escapeHtml(points[i].name), {permanent: false, className: "my-label", offset: [0, 0] });
+	var html = '<br><a href="#" class=trigger id="' + escapeHtml(id) + '">Focus on</a>' +
+	           '<br><a href="#" class="tree-trigger" data-host="' + escapeHtml(id) + '" title="Every traceroute from this host in one tree">Routes to all peers</a>';
 	var url;
 	if (points[i].url){
 	    url = points[i].url;
 	} else {
 	    url = "http://" + id;
 	}
-	marker.bindPopup("<b><a href=\"" + url + "\">" + "Home for " + id + "</a></b>"+html);
-	$("#" + id ).on('click', "a.trigger", function(e){
-	    focus_links( e.id, 'flip' );
-	});
+	marker.bindPopup("<b><a href=\"" + escapeHtml(url) + "\">" + "Home for " + escapeHtml(id) + "</a></b>"+html);
+	// The "Focus on" click is handled by the delegated a.trigger handler on
+	// #mapid (init_map). A handler bound here through a selector made of the
+	// host name never matched anything, and a name that is not a valid
+	// selector made jQuery throw, which stopped the markers being drawn.
 	marker.on('popupopen', function (e) {
 	    var a = e.popup.getElement().querySelector('a.tree-trigger');
 	    if (a) a.addEventListener('click', function (ev) { ev.preventDefault(); open_tree_tab(a.dataset.host); e.target.closePopup(); });
@@ -1005,7 +1007,7 @@ function prop_title(prop) {
 function update_legend(title, threshes){
     var html="<table border=1 align=center id=legend> ";
     html+="<tr align=center>";
-    html+='<th><button class=knapp id="farge0" title="Push to hide/show grey links">' + title + '</button>';
+    html+='<th><button class=knapp id="farge0" title="Push to hide/show grey links">' + escapeHtml(title) + '</button>';
     var i;
     var lower=threshes.slice();
     lower.unshift(0);
@@ -1015,13 +1017,19 @@ function update_legend(title, threshes){
 	if (typeof _v === 'number' && !isNaN(_v)) _v = Math.round(_v * 100) / 100;
 	html += "<td width=200>" +
 	    "<button class=knapp title='Push to hide/show other links' style=width:100%" + " id=legend" + i + " bgcolor="
-	    + colors[i] + ">" + _v + "</button></td>";
+	    + colors[i] + ">" + escapeHtml(_v) + "</button></td>";
     }
     if (! jQuery.isEmptyObject(conffile[parms.net].dashboardURL)) {
-	html += '<td><button class=knapp title="Database dashboard" onclick=\'window.open("' + conffile[parms.net].dashboardURL + '", "_blank");\'>Dashboard</button>';
+	html += '<td><button class=knapp id="dashboard" title="Database dashboard">Dashboard</button>';
     }
     html +=  "</tr></table>";
     $("#legend").html(html);
+
+    // (Bound here and not written into the markup as an onclick: the content
+    // security policy of the map allows no script written into a page.)
+    $("#dashboard").click(  function () {
+	window.open(conffile[parms.net].dashboardURL, "_blank");
+    });
 
     $("#farge0").click(  function () {
 	only_links_by_color(empty_color);
@@ -1568,6 +1576,12 @@ function _draw_sparkline_empty(canvas, msg) {
     ctx.fillText(msg || 'No data for this period', w / 2, h / 2);
 }
 
+// A curve-chart.html URL. Every value is encoded: host names come from the
+// archive, and one holding "&" or "#" must not add or change a parameter.
+function curve_chart_url(p) {
+    return 'curve-chart.html?' + Object.keys(p).map(function (k) { return k + '=' + encodeURIComponent(p[k]); }).join('&');
+}
+
 function link_popup(link){
     var dato = $("#datepicker").val();
     var html = make_tooltip_v2(link.from, link.to, link);
@@ -1604,7 +1618,6 @@ function link_popup(link){
 	    var routesOpts = {
 		net: parms.net,
 		mahost: 'https://localhost:9200/',
-		verify_SSL: 0,
 		api: 'opensearch',
 		// Follow the selected network's IP version, so Net-6 shows v6
 		// traceroutes instead of always falling back to v4 (issue #127).
@@ -1729,7 +1742,7 @@ function link_popup(link){
 	    var bustedUrl = url + sep + '_t=' + Date.now();
 	    var iframe_html =
 		'<div class="curve-iframe-wrap">' +
-		    '<iframe class="curve-iframe" src="' + bustedUrl + '" frameborder="0" sandbox="allow-scripts allow-same-origin"></iframe>' +
+		    '<iframe class="curve-iframe" src="' + escapeHtml(bustedUrl) + '" frameborder="0" sandbox="allow-scripts allow-same-origin"></iframe>' +
 		'</div>';
 	    add_tab('div', title, num_tabs, iframe_html);
 	    var divid = 'tab' + num_tabs;
@@ -1747,7 +1760,7 @@ function link_popup(link){
 
 	// --- Queues (jitter / h_ddelay) ---
 	var queuesIndex = (event_index && event_index['jitter']) ? event_index['jitter'] : 'index-not-configured';
-	var queuesUrl = 'curve-chart.html?net=' + parms.net + '&index=' + queuesIndex + '&from=' + link.from + '&to=' + link.to + '&event=jitter&property=h_ddelay&start=' + start + '&end=' + end + "&title=From " + link.from + " to " + link.to;
+	var queuesUrl = curve_chart_url({ net: parms.net, index: queuesIndex, from: link.from, to: link.to, event: 'jitter', property: 'h_ddelay', start: start, end: end, title: 'From ' + link.from + ' to ' + link.to });
 	var queuesBtn = document.createElement("button");
 	queuesBtn.className = "knapp";
 	queuesBtn.title = "Curve over queues in this period";
@@ -1757,7 +1770,7 @@ function link_popup(link){
 
 	// --- Unavailability (gap / down_ppm) ---
 	var unavailIndex = (event_index && event_index['gap']) ? event_index['gap'] : (parms.net + '_gap');
-	var unavailUrl = 'curve-chart.html?net=' + parms.net + '&index=' + unavailIndex + '&from=' + link.from + '&to=' + link.to + '&event=gap&property=down_ppm&start=' + start + '&end=' + end + '&title=Unavailability ' + link.from + ' to ' + link.to;
+	var unavailUrl = curve_chart_url({ net: parms.net, index: unavailIndex, from: link.from, to: link.to, event: 'gap', property: 'down_ppm', start: start, end: end, title: 'Unavailability ' + link.from + ' to ' + link.to });
 	var unavailBtn = document.createElement("button");
 	unavailBtn.className = "knapp";
 	unavailBtn.title = "Unavailability over this period";
@@ -1771,7 +1784,7 @@ function link_popup(link){
 	var isQueuesDup     = (parms.event === 'jitter' && parms.property === 'h_ddelay');
 	var isUnavailDup    = (parms.event === 'gap'    && parms.property === 'down_ppm');
 	if (!isQueuesDup && !isUnavailDup) {
-	    var propUrl = 'curve-chart.html?net=' + parms.net + '&index=' + event_index[parms.event] + '&from=' + link.from + '&to=' + link.to + '&event=' + parms.event + '&property=' + parms.property + '&start=' + start + '&end=' + end + '&title="From ' + link.from + ' to ' + link.to + ' for ' + parms.property + '"';
+	    var propUrl = curve_chart_url({ net: parms.net, index: event_index[parms.event], from: link.from, to: link.to, event: parms.event, property: parms.property, start: start, end: end, title: '"From ' + link.from + ' to ' + link.to + ' for ' + parms.property + '"' });
 	    var propBtn = document.createElement("button");
 	    propBtn.className = "knapp";
 	    propBtn.title = "Detailed report for the currently selected metric";
@@ -1880,8 +1893,8 @@ function make_tooltip_v2(fromHost, toHost, link){
 	var nrows=0;
 	var tip='<div class="link-panel-endpoints">';
 	tip += '<div class="link-endpoint-list">';
-	tip += '<div class="link-endpoint"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg> <span class="link-host" data-copy-value="' + escapeHtml(fromHost) + '" title="Double-click to copy">' + fromHost + '</span></div>';
-	tip += '<div class="link-endpoint"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg> <span class="link-host" data-copy-value="' + escapeHtml(toHost) + '" title="Double-click to copy">' + toHost + '</span></div>';
+	tip += '<div class="link-endpoint"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg> <span class="link-host" data-copy-value="' + escapeHtml(fromHost) + '" title="Double-click to copy">' + escapeHtml(fromHost) + '</span></div>';
+	tip += '<div class="link-endpoint"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg> <span class="link-host" data-copy-value="' + escapeHtml(toHost) + '" title="Double-click to copy">' + escapeHtml(toHost) + '</span></div>';
 	tip += '</div>';
 	// Swap-direction button — only when the archive actually has the reverse
 	// pair to show (otherwise the swap would just relabel the same numbers).
@@ -1907,7 +1920,7 @@ function make_tooltip_v2(fromHost, toHost, link){
 		    // Config `descr` as a mouse-over help text on the row (issue #108).
 		    var help1 = (prop_long_desc[parms.event] && prop_long_desc[parms.event][sum_var])
 			? ' title="' + escapeHtml(prop_long_desc[parms.event][sum_var]) + '"' : '';
-		    tip+= '<tr' + help1 + '><td>' + prop_desc[parms.event][sum_var] + '<td align=right>' + prop_value;
+		    tip+= '<tr' + help1 + '><td>' + escapeHtml(prop_desc[parms.event][sum_var]) + '<td align=right>' + prop_value;
 		    nrows++;
 		}
 	    }
@@ -1919,7 +1932,7 @@ function make_tooltip_v2(fromHost, toHost, link){
 		    var sum_key = conffile[parms.net].event_type[parms.event].summary_event_type;
 		    var help2 = (prop_long_desc[sum_key] && prop_long_desc[sum_key][sum_var])
 			? ' title="' + escapeHtml(prop_long_desc[sum_key][sum_var]) + '"' : '';
-		    tip+= '<tr' + help2 + '><td>' + prop_desc[sum_key][sum_var] + '<td align=right>' + prop_value;
+		    tip+= '<tr' + help2 + '><td>' + escapeHtml(prop_desc[sum_key][sum_var]) + '<td align=right>' + prop_value;
 		    nrows++;
 		}
 	    }
@@ -1944,7 +1957,7 @@ function link_tooltip( title, link, prop){
 	if ( selected_date_is_today_or_future() ) {
 	    event = parms.event
 	}
-	var tip='<b>' + title + '</b>' + "<p>" + prop_desc[event][prop] + ": " ;
+	var tip='<b>' + escapeHtml(title) + '</b>' + "<p>" + escapeHtml(prop_desc[event][prop]) + ": " ;
 	if ( typeof(val) !== "string" ){
 	    tip += val.toFixed(1);
 	    if ( prop === "down_ppm" && typeof link[prop] == 'number' ){
@@ -1982,7 +1995,7 @@ function gap_list( from, to, hits, lines, sort_type){
 		    if (typeof prop_long_desc[etype][conffile[parms.net].event_type[etype].popup.table[col]] != "undefined") {
 			title_text = prop_long_desc[etype][conffile[parms.net].event_type[etype].popup.table[col]];
 		    }
-		    html += "<th  title='" + title_text + "'>" + prop_desc[etype][conffile[parms.net].event_type[etype].popup.table[col]];
+		    html += "<th  title='" + escapeHtml(title_text) + "'>" + escapeHtml(prop_desc[etype][conffile[parms.net].event_type[etype].popup.table[col]]);
 		}
 		html += "</thead>";
 	    }
@@ -1991,9 +2004,9 @@ function gap_list( from, to, hits, lines, sort_type){
 	    var d = new Date( Number(gap.timestamp * 1000) );
 	    var tid = zero_fill( d.getDate() ) + " " + zero_fill( d.getHours() ) + ":" + zero_fill( d.getMinutes() );
 	    var syslog_url = 'https://iou2.uninett.no/es-syslog-lookup/es-syslog-lookup.cgi?syslogwindow=3600&epoch=1&redirect=1'
-		+ '&timestamp=' + gap.timestamp + '&from=' + gap.from_adr + '&to=' + gap.to_adr + '&ip=1';
+		+ '&timestamp=' + encodeURIComponent(gap.timestamp) + '&from=' + encodeURIComponent(gap.from_adr) + '&to=' + encodeURIComponent(gap.to_adr) + '&ip=1';
 	    var telemetry_url = 'https://telemetri.uninett.no/telemetri-lookup/telemetri-lookup.cgi?telemetrywindow=60'
-                  + '&redirect=1&timestamp=' + gap.timestamp + '&from=' + gap.from_adr + '&to=' + gap.to_adr + '&ip=1';
+                  + '&redirect=1&timestamp=' + encodeURIComponent(gap.timestamp) + '&from=' + encodeURIComponent(gap.from_adr) + '&to=' + encodeURIComponent(gap.to_adr) + '&ip=1';
 	    var telemetry_href = tid;
 	    var sec;
 	    if ( etype === "gap"){ sec = ( gap.tloss / 1000 ).toFixed(1); }
@@ -2001,8 +2014,8 @@ function gap_list( from, to, hits, lines, sort_type){
 	    var syslog_href= sec;
 	    var tail="";
 	    if ( $("#network").val() === "uninett" ){
-	        syslog_href = '<a title="See router logs" href="' + syslog_url + '" target=_blank>' + "Log" + '</a>';
-	        telemetry_href = '<a title="See telemetry data" href="' + telemetry_url + '" target=_blank>' + "Mon" + '</a>';
+	        syslog_href = '<a title="See router logs" href="' + escapeHtml(syslog_url) + '" target=_blank>' + "Log" + '</a>';
+	        telemetry_href = '<a title="See telemetry data" href="' + escapeHtml(telemetry_url) + '" target=_blank>' + "Mon" + '</a>';
 		tail =  "<td><button class=knapp>" + syslog_href + "</button>" + "<td><button class=knapp>" + telemetry_href + "</button>";
 	    }
 	    var amount;
@@ -2019,12 +2032,12 @@ function gap_list( from, to, hits, lines, sort_type){
 			var value_tooltip_field = conffile[parms.net].event_type[etype].field[ conffile[parms.net].event_type[etype].popup.table[col] ].mouseover;
 			var value_tooltip = "";
 			if (typeof value_tooltip_field != "undefined" ) { value_tooltip = gap[ value_tooltip_field ]; }
-			html += "<td align=right title='" + value_tooltip + "' >" + gap[conffile[parms.net].event_type[etype].popup.table[col]];
+			html += "<td align=right title='" + escapeHtml(value_tooltip) + "' >" + escapeHtml(gap[conffile[parms.net].event_type[etype].popup.table[col]]);
 		    } else { html += "<td align=right>-"; }
 		}
 		html += "<td>" + tail + "\n";
 	    } else {
-		html += "<tr><td>" + tid +  "<td align=right>" + sec + "<td align=right>" + amount + "<td>" + tail + "\n";
+		html += "<tr><td>" + tid +  "<td align=right>" + escapeHtml(sec) + "<td align=right>" + escapeHtml(amount) + "<td>" + tail + "\n";
 	    }
 	    if ( lines &&  n >= lines) break;
 	    n++;
@@ -2233,7 +2246,7 @@ function warn_if_property_absent(hits, prop) {
         var v = hits[h]._source ? hits[h]._source[prop] : undefined;
         if (typeof v === "number" && isFinite(v)) return;      // at least one value
     }
-    $("#error").html(hhmmss(new Date()) + " : none of the " + hits.length + " "
+    $("#error").text(hhmmss(new Date()) + " : none of the " + hits.length + " "
         + parms.event + " records for this period carry a '" + prop_title(prop)
         + "' value - try another property;;");
 }
@@ -2295,16 +2308,25 @@ function get_topology(source = "archive"){
 		if (!jQuery.isEmptyObject(result.error)) {
 		    console.log("        (\"" + result.error.msg  + "\")");
 		}
+		clear_map_data("Failed to fetch data from archive");
 		return;
 	    }
 	    var topology = [];
 	    if (! result.aggregations.peer.buckets.length) {
+		// A date with nothing measured used to be logged and nothing
+		// more, so the previous date's links, colours, legend and data
+		// stayed on screen as if they belonged to the date now selected
+		// (issue #183).
 		console.log("No topology data returned from archive.");
+		clear_map_data("No " + (event_desc[parms.event] || parms.event) + " data for " + $("#datepicker").val() + " " + $("#period_input").val());
 	    } else {
 		for (var p=0; p < result.aggregations.peer.buckets.length; p++) { topology.push(result.aggregations.peer.buckets[p].key.split("_")); }
 		draw_topology( topology ); get_connections();
 	    }
-	}).fail( function(e, textStatus, error ) { console.log("failed to get data from server :" + textStatus + ", " + error); });
+	}).fail( function(e, textStatus, error ) {
+	    console.log("failed to get data from server :" + textStatus + ", " + error);
+	    clear_map_data("Failed to reach the archive (" + textStatus + ")");
+	});
 	break;
     }
 }
@@ -2337,6 +2359,24 @@ function _hub_point() {
         if (points[i].id === hubId && points[i].lat != null) return points[i];
     }
     return null;
+}
+
+// Take the map back to "nothing to show". The lines, the data they were drawn
+// from, the legend and the details panel all describe the date that was
+// selected when they arrived, so none of them may outlive a move to a date
+// that has no measurements (issue #183).
+function clear_map_data(reason) {
+    remove_links(links);
+    summary = []; last_hits = []; aggregates = [];
+    var panel = document.getElementById('link-panel');
+    if (panel) panel.classList.add('hidden');
+    currentPanelLink = null;
+    highlightedLink = null;
+    $("#legend").html("");
+    _set_map_empty_state(true);
+    if (reason) $("#error").text(hhmmss(new Date()) + " : " + reason + ";;");
+    $("#status").html("");
+    if (typeof window._microdep_mark_refreshed === 'function') window._microdep_mark_refreshed();
 }
 
 function draw_topology(topo){
@@ -2730,7 +2770,7 @@ function taint_links( hits, prop){
 	    if ( linkByName[abs] ){
 		var ft = abs.split(",");
 		taint_link( linkByName[abs], empty_color );
-		annotate_link( abs, linkByName[abs], abs + ': no data', link_popup( {"from":ft[0], "to":ft[1]} ) );
+		annotate_link( abs, linkByName[abs], escapeHtml(abs) + ': no data', link_popup( {"from":ft[0], "to":ft[1]} ) );
 	    }
 	}
     }
@@ -3245,8 +3285,7 @@ function fetch_real_path(from, to, start_epoch, end_epoch) {
     var fromList = name_to_ip[from] ? (from + ',' + name_to_ip[from]) : from;
     var toList   = name_to_ip[to]   ? (to   + ',' + name_to_ip[to])   : to;
     var url = 'get-tracetests.pl' +
-              '?mahost=' + encodeURIComponent((conffile[parms.net] && conffile[parms.net].archive) || 'https://localhost/opensearch') +
-              '&verify_SSL=0' +
+              '?net='   + encodeURIComponent(parms.net) +
               '&from='  + encodeURIComponent(fromList) +
               '&to='    + encodeURIComponent(toList) +
               '&start=' + encodeURIComponent(start_iso) +
@@ -3689,9 +3728,9 @@ function open_curve_in_tab(title, label, url) {
         '<div class="curve-iframe-wrap">' +
             '<div class="curve-iframe-loader" id="' + loader_id + '">' +
               '<div class="spinner"></div>' +
-              '<p>Loading ' + label + '…</p>' +
+              '<p>Loading ' + escapeHtml(label) + '…</p>' +
             '</div>' +
-            '<iframe class="curve-iframe" src="' + bustedUrl + '" frameborder="0" sandbox="allow-scripts allow-same-origin"></iframe>' +
+            '<iframe class="curve-iframe" src="' + escapeHtml(bustedUrl) + '" frameborder="0" sandbox="allow-scripts allow-same-origin"></iframe>' +
         '</div>';
     add_tab('div', title, num_tabs, iframe_html);
     const divid = 'tab' + num_tabs;
@@ -4006,8 +4045,6 @@ function annotate_link(abs,link, tooltip, popup, linkSourceData){
 	    }
 	});
     }
-    $("#" + abs + '-from' ).on('click', "button.knapp" , function( e){ focus_links(e.id, 'flip'); });
-    $("#" + abs + '-to' ).on('click', "button.knapp" , function( e){ focus_links(e.id, 'flip'); });
 }
 
 function draw_link( ends, color, tooltip, popup){
@@ -4212,7 +4249,7 @@ function check_ends(){
     for (i=0;i<ends.length;i++){ a=ends[i][0] + ' ' + ends[i][1]; ab[a]=true; }
     for (i=0;i<ends.length;i++){ var b=ends[i][1] + ' ' + ends[i][0]; if (ab[b]){ nok++; } else { missing.push(b); nmiss++; } }
     missing.sort(sort_missing);
-    for (i=0; i< missing.length; i++){ var ft=missing[i].split(" "); html+='<tr><td>' +ft[0] + '<td>'+ ft[1]; }
+    for (i=0; i< missing.length; i++){ var ft=missing[i].split(" "); html+='<tr><td>' + escapeHtml(ft[0]) + '<td>'+ escapeHtml(ft[1]); }
     html+='</table>'; html+='<p>' + "Ok " + nok + " Missing " + nmiss;
     $("#missing").html(html); $("#missing").dialog("open");
 }
@@ -4352,7 +4389,7 @@ function check_asymmetry(report, div_id){
     let html='';
     if ( report === 'missing' ){
 	if (nmiss > 0) {
-	    html+= '<div class="tab-header-row"><h2>Missing opposite flows for ' + title_state() + '</h2>' + _csv_button_html(div_id + '_miss_table', 'missing') + '</div>';
+	    html+= '<div class="tab-header-row"><h2>Missing opposite flows for ' + escapeHtml(title_state()) + '</h2>' + _csv_button_html(div_id + '_miss_table', 'missing') + '</div>';
 	    html+='<p>The below ' + nmiss + ' (out of ' + summary.length + ") flows might be missing";
 	    html += '<table id=' + div_id + '_miss_table title="Missing opposite flows?" class=sortable>';
 	    html += '<thead><tr><th class="summary-link-header">' + fromIcon + 'From<br>' + toIcon + 'To</th></tr></thead>';
@@ -4360,16 +4397,16 @@ function check_asymmetry(report, div_id){
 	    for (i=0; i< missing.length; i++){
 		var ft=missing[i].split(" ");
 		html+='<tr><td class="summary-link-cell">';
-		html+='<div class="summary-from">' + fromIcon + '<span>' + ft[0] + '</span></div>';
-		html+='<div class="summary-to">' + toIcon + '<span>' + ft[1] + '</span></div>';
+		html+='<div class="summary-from">' + fromIcon + '<span>' + escapeHtml(ft[0]) + '</span></div>';
+		html+='<div class="summary-to">' + toIcon + '<span>' + escapeHtml(ft[1]) + '</span></div>';
 		html+='</td>';
 	    }
 	    html+='</table>';
-	    html += "<p>The above analysis is based on " + prop_desc[event_sum_type[parms.event]][ parms.property ] + " data sets.</p>";
-	} else { html+= '<h2>No missing flows for ' + title_state() + '</h2>'; }
+	    html += "<p>The above analysis is based on " + escapeHtml(prop_desc[event_sum_type[parms.event]][ parms.property ]) + " data sets.</p>";
+	} else { html+= '<h2>No missing flows for ' + escapeHtml(title_state()) + '</h2>'; }
     } else {
 	if (diff.length > 0) {
-	    html+='<div class="tab-header-row"><h2>Asymmetry in ' + prop_desc[event_sum_type[parms.event]][parms.property] + ' for ' + title_state() + '</h2>' + _csv_button_html(div_id + '_table', 'asymmetry') + '</div>';
+	    html+='<div class="tab-header-row"><h2>Asymmetry in ' + escapeHtml(prop_desc[event_sum_type[parms.event]][parms.property]) + ' for ' + escapeHtml(title_state()) + '</h2>' + _csv_button_html(div_id + '_table', 'asymmetry') + '</div>';
 	    html += '<table id=' + div_id + '_table border=1 class=sortable><thead title="Click to sort on column"><tr>';
 	    html += '<th class="summary-link-header">' + fromIcon + 'From<br>' + toIcon + 'To';
 	    html += '<th align=right>From→To<th align=right>To→From<th align=right>Diff</tr></thead>';
@@ -4379,13 +4416,13 @@ function check_asymmetry(report, div_id){
 		let aval= down[a] ? down[a].toFixed(1) : down[a]; let bval= down[pair[a]] ? down[pair[a]].toFixed(1) : down[pair[a]];
 		let diffval = diff[i].val ? diff[i].val.toFixed(1) : 0 ;
 		html+='<tr><td class="summary-link-cell">';
-		html+='<div class="summary-from">' + fromIcon + '<span>' + ft[0] + '</span></div>';
-		html+='<div class="summary-to">' + toIcon + '<span>' + ft[1] + '</span></div>';
+		html+='<div class="summary-from">' + fromIcon + '<span>' + escapeHtml(ft[0]) + '</span></div>';
+		html+='<div class="summary-to">' + toIcon + '<span>' + escapeHtml(ft[1]) + '</span></div>';
 		html+='</td>';
 		html+='<td align=right>' + aval + '<td align=right>' + bval + '<td align=right>' + diffval;
 	    }
 	    html+='</table>';
-	} else { html+= '<h2>No asymmetry found in ' + prop_desc[event_sum_type[parms.event]][parms.property] + ' for ' + title_state() + '</h2>'; }
+	} else { html+= '<h2>No asymmetry found in ' + escapeHtml(prop_desc[event_sum_type[parms.event]][parms.property]) + ' for ' + escapeHtml(title_state()) + '</h2>'; }
     }
     return(html);
 }
@@ -4395,7 +4432,7 @@ var toIcon = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke
 
 function report_summary(div_id){
     let html='';
-    html+='<div class="tab-header-row"><h2>Summary for ' + title_state() + '</h2>' + _csv_button_html(div_id + '_table', 'summary') + '</div>';
+    html+='<div class="tab-header-row"><h2>Summary for ' + escapeHtml(title_state()) + '</h2>' + _csv_button_html(div_id + '_table', 'summary') + '</div>';
     html+='<table border=1 id=' + div_id + '_table class=sortable>\n';
     var header_missing=true;
     for (let i=0;i< summary.length;i++){
@@ -4405,18 +4442,18 @@ function report_summary(div_id){
 	    for ( const prop of prop_names[event_sum_type[parms.event]]){
 		var desc = prop_desc[event_sum_type[parms.event]][prop] || prop;
 		var longDesc = prop_long_desc[event_sum_type[parms.event]][prop] || '';
-		html+='<th align=right title="' + longDesc + ' - Click to sort" class="summary-prop-header">' + desc;
+		html+='<th align=right title="' + escapeHtml(longDesc) + ' - Click to sort" class="summary-prop-header">' + escapeHtml(desc);
 	    }
 	    html+='</tr></thead><tbody>'; header_missing=false;
 	}
 	html+='<tr><td class="summary-link-cell">';
-	html+='<div class="summary-from">' + fromIcon + '<span>' + entry['from'] + '</span></div>';
-	html+='<div class="summary-to">' + toIcon + '<span>' + entry['to'] + '</span></div>';
+	html+='<div class="summary-from">' + fromIcon + '<span>' + escapeHtml(entry['from']) + '</span></div>';
+	html+='<div class="summary-to">' + toIcon + '<span>' + escapeHtml(entry['to']) + '</span></div>';
 	html+='</td>';
 	for ( const prop of prop_names[event_sum_type[parms.event]]){
 	    let val= entry[prop];
 	    if ( typeof val === 'number' && ! val.isInteger){ if ( val < 100 ) val = val.toFixed(1); else val = val.toFixed(0); }
-	    html+='<td align=right>' + val;
+	    html+='<td align=right>' + (typeof val === 'string' ? escapeHtml(val) : val);
 	}
     }
     html+='</tbody></table>';
@@ -4466,7 +4503,7 @@ function get_peer_data(from, to, div){
             div.innerHTML = html; div['hits'+parms.event] = resp.hits.hits;
             sorttable.makeSortable( div.getElementsByClassName('sortable')[0] );
             // panel auto-updates, no need for popup update
-        } else { $("#error").html(hhmmss(new Date()) + " : No " + parms.event + " data for " + $("#datepicker").val() + " " + $("#period_input").val() + ";;"); }
+        } else { $("#error").text(hhmmss(new Date()) + " : No " + parms.event + " data for " + $("#datepicker").val() + " " + $("#period_input").val() + ";;"); }
     }).fail( function(e, textStatus, error ) { console.log("failed to get data from server :" + textStatus + ", " + error); });
 }
 
@@ -4521,12 +4558,12 @@ function get_connections(){
 		else { if (! sum_etype || start.substr(0,10) === now.toISOString().substr(0,10)) { summary=digest_es_data(etype, resp.hits.hits); } last_hits=resp.hits.hits; }
 		harvest_ip_name(summary);
 		var msg = hhmmss(new Date()) + " Found " + nrecs + " " + etype + " records for " + $("#datepicker").val() + " " + $("#period_input").val() + " ;;";
-		$("#status").html( msg );
+		$("#status").text( msg );
 		if (! jQuery.isEmptyObject(conffile) && conffile[parms.net].event_type[parms.event].asn_source ) {
 		    for (const h in last_hits) { var ab = last_hits[h]._source.from + ',' + last_hits[h]._source.to; if (linkByName[ab] && last_hits[h]._source.routechange_asn ) { linkByName[ab].asn_search += last_hits[h]._source[conffile[parms.net].event_type[parms.event].asn_source] + " "; } }
 		}
 		_paint_with_compare(summary, etype, $("#prop_select").val(), start, end);
-	    } else { taint_links([], "empty"); $("#error").html(hhmmss(new Date()) + " : No " + $("#event_type").val() + " data for " + $("#datepicker").val() + " " + $("#period_input").val() + ";;"); }
+	    } else { taint_links([], "empty"); $("#error").text(hhmmss(new Date()) + " : No " + $("#event_type").val() + " data for " + $("#datepicker").val() + " " + $("#period_input").val() + ";;"); }
 	}).fail( function(e, textStatus, error ) { console.log("### Failed to get data from server :" + textStatus + ", " + error + " url: " + url); });
     } else if ( sum_etype) {
 
@@ -4539,9 +4576,9 @@ function get_connections(){
 	    if (resp.hits && resp.hits.total.value > 0){
 		var nrecs=resp.hits.total.value.toString(); summary=coalesce_pairs(resp.hits.hits, sum_etype); harvest_ip_name(summary);
 		var msg = hhmmss(new Date()) + " Got " + nrecs + " " + sum_etype + " records for " + $("#datepicker").val() + " " + $("#period_input").val() + " ;;";
-		$("#status").html( msg );
+		$("#status").text( msg );
 		_paint_with_compare(summary, etype, $("#prop_select").val(), start, end);
-	    } else { taint_links([], "empty"); $("#error").html(hhmmss(new Date()) + " : No " + sum_etype + " data for " + $("#datepicker").val() + " " + $("#period_input").val() + ";;"); }
+	    } else { taint_links([], "empty"); $("#error").text(hhmmss(new Date()) + " : No " + sum_etype + " data for " + $("#datepicker").val() + " " + $("#period_input").val() + ";;"); }
 	}).fail( function(e, textStatus, error ) { console.log("failed to get data from server :" + textStatus + ", " + error); });
     }
     if (parms.report) { $("#check").val(parms.report).trigger('change'); delete parms.report; }
@@ -4561,7 +4598,9 @@ function title_state(){
 }
 
 function init_map(){
-    if ( parms.net){ $("#network").val(parms.net); } else { parms.net = $("#network").val(); }
+    // A network the configuration does not have (an old bookmark, a mistyped
+    // address) counts as not given: the map opens on the default network.
+    if ( parms.net && net_names.indexOf(parms.net) > -1 ){ $("#network").val(parms.net); } else { parms.net = $("#network").val(); }
     update_props();
     // Colour-blind-safe palette (#5): persisted across sessions in localStorage.
     var _cbfOn = false;
@@ -4638,7 +4677,6 @@ function init_map(){
 	    var menuRoutesOpts = {
 		net: parms.net,
 		mahost: 'https://localhost:9200/',
-		verify_SSL: 0,
 		api: 'opensearch',
 		ip_version: net_ip_version[parms.net]
 	    };
@@ -4649,7 +4687,8 @@ function init_map(){
 	    break;
 	}
 	case 'heatmap':
-	    let template_url='curve-chart.html?net=' + parms.net + '&index=' + event_index[parms.event] + '&from={0}&to={1}&event=' + parms.event + '&property=h_ddelay&start=' + start + '&end=' + end + "&title=\"From {2} to {3}\"";
+	    // {0}..{3} are the cell's hosts; heatmap() encodes them as it fills them in
+	    let template_url='curve-chart.html?net=' + encodeURIComponent(parms.net) + '&index=' + encodeURIComponent(event_index[parms.event]) + '&from={0}&to={1}&event=' + encodeURIComponent(parms.event) + '&property=h_ddelay&start=' + encodeURIComponent(start) + '&end=' + encodeURIComponent(end) + '&title=%22From%20{2}%20to%20{3}%22';
 	    add_tab( 'div', title, num_tabs, 'This will be graph soon'); heatmap(tab_id, summary, $("#prop_select").val(), get_color, threshes, title_state(), template_url, open_heatmap_cell ); break;
 	case 'curve': {
 	    // Chart.js scatter of the current property across all measurements over

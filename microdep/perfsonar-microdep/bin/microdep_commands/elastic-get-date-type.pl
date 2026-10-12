@@ -19,8 +19,22 @@ my $q = CGI->new;
 
 # Fetch config data (and remove html header)
 $config = decode_json(`/usr/lib/perfsonar/bin/microdep_commands/get-mapconfig.cgi | tail -n +2`);
-    
-my $esurl=  $config->{'config'}->{parm('net')}->{'archive'} || 'http://localhost:9200';
+
+# The measurement network, as named in mapconfig.yml, decides which archive is asked
+# and which indices may be read there: the ones mapconfig.yml names for it. An index
+# taken as it comes with the request would let anyone read, through this script,
+# whatever the address of the archive gives access to.
+my $net_config = $config->{'config'}->{parm('net')};
+fail('400 Bad Request', 'Unknown measurement network') unless ( ref $net_config eq 'HASH' );
+my %net_index = ();
+foreach my $event ( values %{ $net_config->{'event_type'} || {} } ) {
+    next unless ( ref $event eq 'HASH' );
+    foreach my $i ( $event->{'index'}, $event->{'topology_index'} ) {
+	$net_index{$i} = 1 if ( defined $i && $i ne '' );
+    }
+}
+
+my $esurl=  $net_config->{'archive'} || 'http://localhost:9200';
     
 my $yesterday= `date --date yesterday "+%Y-%m-%d"`;
 chomp($yesterday);
@@ -59,11 +73,12 @@ if ( $q->param("debug")){
 }
 # my 
 my $index= parm('index') || $config->{'config'}->{parm('net')}->{'event_type'}->{parm('event_type')}->{'index'} || "missing-index";
-if ( $debug > 0 ){
-    print $q->header('text/html');
-} else {
-    print $q->header('application/json');
-}
+fail('400 Bad Request', 'Unknown index') unless ( $net_index{$index} );
+
+# Always json, also with debug on: the debug output goes to the error log of the
+# web server. (It used to be sent as a web page, with the address of the archive
+# as it stands in the config - user name and password included, if it has them.)
+print $q->header( -type => 'application/json', -x_content_type_options => 'nosniff' );
 
 
 # my $curl = WWW::Curl::Easy->new;
@@ -242,7 +257,7 @@ if ( $path_addr){
 ';
     my @ips = split( ",", $path_addr);
     my $match="";
-    printf "path_addr : $path_addr : %d\n", $#ips if $debug > 0;
+    printf STDERR "path_addr : $path_addr : %d\n", $#ips if $debug > 0;
 
     foreach $i ( 0 .. $#ips){
 	$match .= ', ' if $i > 0;
@@ -304,7 +319,7 @@ if ( $count ) {
     $search =  '{ "size":10000, ' . $query_head . $query_tail . '}';
 }
 
-print $search."\n" if $debug > 0;
+print STDERR $search."\n" if $debug > 0;
 
 #my $url='http://admin:no+nz+br@localhost:9200/' . $index . '/_search?';
 my $url=$esurl . '/' . $index . '/_search?';
@@ -331,16 +346,27 @@ if ($type eq "topology") {
 #my $cmd='curl -f -X POST --insecure -H "Content-Type: application/json" "' . $url . '"  -d \'' . $search . '\' 2>/dev/null';
 #print `$cmd`;
 my $cmd='curl -f -X POST --insecure --no-progress-meter -H "Content-Type: application/json" "' . $url . '"  -d \'' . $search . '\' 2>&1 ';
-print "<p>$cmd</p>\n" if $debug > 0;
+if ( $debug > 0 ) {
+    ( my $cmd_shown = $cmd ) =~ s{://[^/@\s"]*@}{://...@};   # (without the user name and password of an archive address)
+    print STDERR "$cmd_shown\n";
+}
 my $results = `$cmd`;
 my $curl_status = $? >> 8;
 if ( $curl_status > 0 ) {
     # Something went wrong running curl command. Output error in json structure
     chomp($results);
-    print "{ \"error\": { \"curl-code\" : $curl_status, \"msg\" : \"$results\" } }\n";
+    print encode_json({ 'error' => { 'curl-code' => $curl_status, 'msg' => $results } }), "\n";
 } else {
     # Return results
     print $results;
+}
+
+# Refuse the request with a json error
+sub fail {
+    my ($status, $msg) = @_;
+    print $q->header( -type => 'application/json', -status => $status, -x_content_type_options => 'nosniff' );
+    print encode_json({ 'error' => { 'msg' => $msg } }), "\n";
+    exit(0);
 }
 
 # weed out special shell chars

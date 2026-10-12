@@ -15,3 +15,32 @@ ExecStart=/usr/lib/perfsonar/bin/microdep_commands/microdep-hourly-aggregator.pl
 # --backfill=N on the cmdline to fill in N preceding windows in one pass.
 StandardOutput=journal
 StandardError=journal
+# The aggregator handles what it reads from the archive, so it gets no more of
+# the host than it needs: no way to gain privileges, a read-only file system,
+# no home directories, devices or kernel settings, and a /tmp of its own.
+# Output to files works in /var/lib/logstash/microdep. For another folder, add
+# it in a drop-in ("systemctl edit" on this unit):
+#   [Service]
+#   ReadWritePaths=/the/folder
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+ProtectSystem=strict
+# (/run stays writable under the three settings further down that set up /proc
+# and /sys for the unit, so it is named here)
+ReadOnlyPaths=/run
+ReadWritePaths=-/var/lib/logstash/microdep
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes

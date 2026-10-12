@@ -4,7 +4,8 @@
 #
 
 USERNAME="traceroute"
-PASSWD="NeeLeoth9e"
+PASSWD=""
+PASSWDFILE="/etc/perfsonar/microdep/dbpasswd"
 DBHOST="localhost"
 MSPORT=3306
 PGPORT=5432
@@ -19,11 +20,12 @@ usage () {
     echo "-h              Help message."
     echo "-t dbtype       Database type. Supported are 'mysql' and 'postgres'. Default '$DBTYPE'"
     echo "-u username     Username to add. Default '$USERNAME'"
-    echo "-p password     Password for user. Default '$PASSWD'"
+    echo "-p password     Password for user. Default is the one kept in the password file."
+    echo "-f file         File the password is kept in. It gets a random password if it is missing or empty. Default '$PASSWDFILE'"
     echo "-H DB-hostname  Hostname for DB server. Default '$DBHOST'"
     echo "-P DB-port      Hostname for DB server. Default $MSPORT for mysql and $PGPORT for postgres."
     echo "-l              List databases only."
-    echo "-d              Drop DB first (if it exists) before creating new."
+    echo "-d              Drop DB first (if it exists) before creating new. Without it a DB that exists is kept."
     echo "-D              Drop DB only (if it exists) and do not create new."
     echo "-s              Be silent"
 
@@ -38,7 +40,7 @@ msg () {
 }
 
 # Parse arguments
-while getopts ":hlsdDt:u:p:H:P:" opt; do
+while getopts ":hlsdDt:u:p:f:H:P:" opt; do
     case $opt in
 	t)
 	    DBTYPE=$OPTARG
@@ -48,6 +50,9 @@ while getopts ":hlsdDt:u:p:H:P:" opt; do
 	    ;;
 	p)
 	    PASSWD=$OPTARG
+	    ;;
+	f)
+	    PASSWDFILE=$OPTARG
 	    ;;
 	H)
 	    DBHOST=$OPTARG
@@ -143,46 +148,87 @@ if [ $DROPONLY ]; then
     exit 0
 fi
 
-# Create new db
-msg -n "Creating databasbase $DBNAME..."
-exit_code=0
+# Is the db there? It is when it was not to be dropped: on an upgrade, for one.
+EXISTS=""
 if [ $DBTYPE = "mysql" ]; then
-    sudo mysqladmin -h $DBHOST -P $MSPORT create $DBNAME
-    exit_code=$?;
+    sudo mysqlshow -h $DBHOST -P $MSPORT $DBNAME 2> /dev/null | grep -q "| Tables |" && EXISTS=y
 elif [ $DBTYPE = "postgres" ]; then
-    su postgres -c "createdb $DBHOST -p $PGPORT $DBNAME"
-    exit_code=$?;
+    su postgres -c "psql $DBHOST -p $PGPORT -w -c \"\\l $DBNAME\"" 2> /dev/null | grep -q "(1 row)" && EXISTS=y
 fi
-if [ $exit_code -gt 0 ]; then
-    msg "Error: Failed creating DB."
-    exit 1 
+
+if [ "$EXISTS" ]; then
+    # Keep it, with what the analysis has stored in it
+    msg "Database $DBNAME exists and is kept."
+else
+    # Create new db
+    msg -n "Creating databasbase $DBNAME..."
+    exit_code=0
+    if [ $DBTYPE = "mysql" ]; then
+	sudo mysqladmin -h $DBHOST -P $MSPORT create $DBNAME
+	exit_code=$?;
+    elif [ $DBTYPE = "postgres" ]; then
+	su postgres -c "createdb $DBHOST -p $PGPORT $DBNAME"
+	exit_code=$?;
+    fi
+    if [ $exit_code -gt 0 ]; then
+	msg "Error: Failed creating DB."
+	exit 1 
+    fi
+    msg "done."
 fi
-msg "done."
    
 
+# Password for the user: the one given with -p, or else the one kept in the
+# password file. The file gets a random password the first time, so every
+# installation has a password of its own.
+if [ -z "$PASSWD" ]; then
+    if [ ! -s "$PASSWDFILE" ]; then
+	( umask 077; head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n' > "$PASSWDFILE" )
+	if [ ! -s "$PASSWDFILE" ]; then
+	    msg "Error: Failed creating password file $PASSWDFILE."
+	    exit 1
+	fi
+    fi
+    # Readable by root and, through the group, by the analyser (it runs as perfsonar)
+    if getent group perfsonar > /dev/null; then
+	chown root:perfsonar "$PASSWDFILE"
+	chmod 0640 "$PASSWDFILE"
+    else
+	chmod 0600 "$PASSWDFILE"
+    fi
+    PASSWD=$(cat "$PASSWDFILE")
+fi
+
 # Add user
-msg -n "Adding user '$USERNAME' with password '$PASSWD'..."
+msg -n "Adding user '$USERNAME'..."
+# The SQL holds the password: the file stays readable by root only and is
+# handed to the database client on standard input.
 SQLCMD=`mktemp`
-touch $SQLCMD
-chmod o+r $SQLCMD
 if [ $DBTYPE = "mysql" ]; then
     echo "
 DROP USER '$USERNAME';
 FLUSH PRIVILEGES;
 CREATE USER '$USERNAME' IDENTIFIED BY '$PASSWD';
-GRANT ALL PRIVILEGES ON *.* TO '$USERNAME';
+GRANT ALL PRIVILEGES ON \`$DBNAME\`.* TO '$USERNAME';
 FLUSH PRIVILEGES;
 " > $SQLCMD
     sudo mysql -h $DBHOST -P $MSPORT $DBNAME < $SQLCMD
 elif [ $DBTYPE = "postgres" ]; then
+    # (A role that owns the tables of a kept db cannot be dropped and made anew:
+    # it gets the password set instead.)
     echo "
-    DROP ROLE IF EXISTS $USERNAME;
-    CREATE ROLE $USERNAME WITH PASSWORD '$PASSWD' LOGIN;
+    DO \$do\$ BEGIN
+        IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = lower('$USERNAME')) THEN
+            ALTER ROLE $USERNAME WITH PASSWORD '$PASSWD' LOGIN;
+        ELSE
+            CREATE ROLE $USERNAME WITH PASSWORD '$PASSWD' LOGIN;
+        END IF;
+    END \$do\$;
     GRANT ALL ON DATABASE $DBNAME TO $USERNAME;
     GRANT CREATE ON SCHEMA public TO $USERNAME;
     GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO $USERNAME;
 " > $SQLCMD
-    su postgres -c "psql $DBHOST -p $PGPORT -f $SQLCMD $DBNAME"  
+    su postgres -c "psql $DBHOST -p $PGPORT $DBNAME" < $SQLCMD
 fi    
 rm $SQLCMD
 msg "done."

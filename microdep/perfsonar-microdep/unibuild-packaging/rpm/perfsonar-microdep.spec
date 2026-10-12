@@ -181,8 +181,11 @@ A collection of handy utilities to apply when working with Microdep analytic dat
 # Stop services (ignore failures)
 systemctl stop perfsonar-microdep-gap-ana.service || true
 systemctl stop perfsonar-microdep-trace-ana.service || true
-systemctl stop perfsonar-microdep-restart.timer || true
 systemctl stop perfsonar-microdep-hourly-aggregator.timer || true
+# The nightly restart of the analysis is gone: summary records are now output at
+# intervals by the analysis itself. Clear away the timer of an earlier version.
+systemctl stop perfsonar-microdep-restart.timer 2> /dev/null || true
+systemctl disable perfsonar-microdep-restart.timer 2> /dev/null || true
 
 %pre enrichdbs
 /usr/sbin/groupadd -r perfsonar 2> /dev/null || :
@@ -319,8 +322,13 @@ rm -rf %{buildroot}
 ###   P o s t  i n s t a l l   a c t i o n s 
 
 %post ana
-# Create db
-%{command_base}/create_new_db.sh -s -t postgres -d routingmonitor
+# Create db. The db of an earlier version is kept, with what the analysis has
+# learned: only a first installation starts from an empty one.
+if [ "$1" -gt 1 ]; then
+    %{command_base}/create_new_db.sh -s -t postgres routingmonitor
+else
+    %{command_base}/create_new_db.sh -s -t postgres -d routingmonitor
+fi
 # Fix access to db
 if [ -f /var/lib/pgsql/data/pg_hba.conf ]; then
     %{command_base}/fix-pgsql-access.sh -i /var/lib/pgsql/data/pg_hba.conf
@@ -338,11 +346,9 @@ fi
 systemctl daemon-reload || true
 systemctl enable perfsonar-microdep-gap-ana.service || true
 systemctl enable perfsonar-microdep-trace-ana.service || true
-systemctl enable perfsonar-microdep-restart.timer || true
 systemctl enable perfsonar-microdep-hourly-aggregator.timer || true
 systemctl start perfsonar-microdep-gap-ana.service || true
 systemctl start perfsonar-microdep-trace-ana.service || true
-systemctl start perfsonar-microdep-restart.timer || true
 systemctl start perfsonar-microdep-hourly-aggregator.timer || true
 
 %post logstash
@@ -356,8 +362,16 @@ systemctl start perfsonar-microdep-hourly-aggregator.timer || true
 systemctl daemon-reload || true
 
 if [ ! -f /etc/perfsonar/microdep/microdep-ana-archive.json ]; then
-    # Prepare default logstash archive config for analytic results
-    /usr/lib/perfsonar/bin/microdep_commands/psconfig_archive_ana.sh > /etc/perfsonar/microdep/microdep-ana-archive.json || true
+    # Prepare default logstash archive config for analytic results.
+    # It holds the credentials for the archive, so it is never created
+    # readable by others.
+    ( umask 077; /usr/lib/perfsonar/bin/microdep_commands/psconfig_archive_ana.sh > /etc/perfsonar/microdep/microdep-ana-archive.json ) || true
+fi
+if [ -f /etc/perfsonar/microdep/microdep-ana-archive.json ]; then
+    # Readable by root and by the analysers (they run as perfsonar), and by
+    # nobody else. Also corrects a file left world-readable by an earlier version.
+    chown root:perfsonar /etc/perfsonar/microdep/microdep-ana-archive.json
+    chmod 0640 /etc/perfsonar/microdep/microdep-ana-archive.json
 fi
 
 # Reload web server config
@@ -394,7 +408,6 @@ fi
 # Stop services (ignore failures)
 systemctl stop perfsonar-microdep-gap-ana.service || true
 systemctl stop perfsonar-microdep-trace-ana.service || true
-systemctl stop perfsonar-microdep-restart.timer || true
 systemctl stop perfsonar-microdep-hourly-aggregator.timer || true
 
 %preun logstash
@@ -428,24 +441,26 @@ systemctl reload httpd.service || true
 
 ###  F i l e s
 
+# Everything the packages install belongs to root, as packaged files normally
+# do. The perfsonar user, which the analysers run as, owns only the folder they
+# write their output to (/var/lib/logstash/microdep).
+
 #%files 
-#%defattr(0644,perfsonar,perfsonar,0755)
+#%defattr(0644,root,root,0755)
 #%license %{doc_base}/LICENSE
 
 %files ana
-%defattr(0644,perfsonar,perfsonar,0755)
+%defattr(0644,root,root,0755)
 %license %{doc_base}/LICENSE-ana
 %{_unitdir}/perfsonar-microdep-gap-ana.service
 %{_unitdir}/perfsonar-microdep-trace-ana.service
-%{_unitdir}/perfsonar-microdep-restart.service
-%{_unitdir}/perfsonar-microdep-restart.timer
 %{_unitdir}/perfsonar-microdep-hourly-aggregator.service
 %{_unitdir}/perfsonar-microdep-hourly-aggregator.timer
-%attr(0755,perfsonar,perfsonar) %{command_base}/qstream-gap-ana
-%attr(0755,perfsonar,perfsonar) %{command_base}/trace_event_reader.py
-%attr(0755,perfsonar,perfsonar) %{command_base}/create_new_db.sh
-%attr(0755,perfsonar,perfsonar) %{command_base}/fix-pgsql-access.sh
-%attr(0755,perfsonar,perfsonar) %{command_base}/microdep-hourly-aggregator.pl
+%attr(0755,root,root) %{command_base}/qstream-gap-ana
+%attr(0755,root,root) %{command_base}/trace_event_reader.py
+%attr(0755,root,root) %{command_base}/create_new_db.sh
+%attr(0755,root,root) %{command_base}/fix-pgsql-access.sh
+%attr(0755,root,root) %{command_base}/microdep-hourly-aggregator.pl
 %{microdep_config_base}/microdep-tests.json.example
 %{microdep_config_base}/microdep-tests-packet-subcount.json.example
 %config %{microdep_config_base}/microdep-gap-ana.yml
@@ -455,25 +470,25 @@ systemctl reload httpd.service || true
 %license %{doc_base}/LICENSE-archive
 
 %files enrichdbs
-%defattr(0644,perfsonar,perfsonar,0755)
+%defattr(0644,root,root,0755)
 %license %{microdep_share_base}/GeoLite2/LICENSE.txt
 %{microdep_share_base}/GeoLite2/COPYRIGHT.txt
 %{microdep_share_base}/GeoLite2/*.mmdb
 
 %files logstash
-%defattr(0644,perfsonar,perfsonar,0755)
+%defattr(0644,root,root,0755)
 %license %{doc_base}/LICENSE-logstash
-%attr(0755,perfsonar,perfsonar) %{command_base}/opensearch_config_microdep.sh
-%attr(0755,perfsonar,perfsonar) %{command_base}/microdep-opensearch-guard.sh
+%attr(0755,root,root) %{command_base}/opensearch_config_microdep.sh
+%attr(0755,root,root) %{command_base}/microdep-opensearch-guard.sh
 %{_unitdir}/perfsonar-microdep-opensearch-guard.service
 %{_unitdir}/perfsonar-microdep-opensearch-guard.timer
-%attr(0755,perfsonar,perfsonar) %{command_base}/psconfig_archive_ana.sh
+%attr(0755,root,root) %{command_base}/psconfig_archive_ana.sh
 /usr/local/bin/psconfig_archive_ana.sh
 /usr/local/bin/opensearch_config_microdep.sh
 /etc/httpd/conf.d/apache-microdep-ana.conf
 %{install_base}/logstash/microdep_pipeline/*.conf
 %{microdep_config_base}/logstash/microdep-pipelines.yml
-%config /var/lib/logstash/microdep 
+%attr(0755,perfsonar,perfsonar) %dir /var/lib/logstash/microdep
 /usr/lib/perfsonar/archive/config/ilm/install/microdep_default_policy.json
 /usr/lib/perfsonar/archive/config/os-template-gap-ana.json
 /usr/lib/perfsonar/archive/config/os-template-trace-ana.json
@@ -481,7 +496,7 @@ systemctl reload httpd.service || true
 %config /etc/logrotate.d/microdep
 
 %files map
-%defattr(0644,perfsonar,perfsonar,0755)
+%defattr(0644,root,root,0755)
 %license %{doc_base}/LICENSE-map
 %{microdep_web_dir}/*.html
 %{microdep_web_dir}/img
@@ -489,11 +504,10 @@ systemctl reload httpd.service || true
 %{microdep_web_dir}/css
 %{microdep_web_dir}/fonts
 %{microdep_web_dir}/geo
-%attr(0755,perfsonar,perfsonar) %{command_base}/elastic-get-date-type.pl
-%attr(0755,perfsonar,perfsonar) %{command_base}/yaml-to-json.cgi
-%attr(0755,perfsonar,perfsonar) %{command_base}/get-mapconfig.cgi
-%attr(0755,perfsonar,perfsonar) %{command_base}/get-tracetests.pl
-%attr(0755,perfsonar,perfsonar) %{command_base}/hopgeo.pl
+%attr(0755,root,root) %{command_base}/elastic-get-date-type.pl
+%attr(0755,root,root) %{command_base}/get-mapconfig.cgi
+%attr(0755,root,root) %{command_base}/get-tracetests.pl
+%attr(0755,root,root) %{command_base}/hopgeo.pl
 %config %{microdep_config_base}/mapconfig.yml
 %config %{microdep_config_base}/mapconfig.d/
 %{microdep_config_base}/microdep_ipv4-base-geo.json.example
@@ -505,9 +519,9 @@ systemctl reload httpd.service || true
 
 %files utils
 %license %{doc_base}/LICENSE-utils
-%defattr(0644,perfsonar,perfsonar,0755)
-%attr(0755,perfsonar,perfsonar) %{command_base}/json2table.pl
-%attr(0755,perfsonar,perfsonar) %{command_base}/rabbitmq-consume.py
+%defattr(0644,root,root,0755)
+%attr(0755,root,root) %{command_base}/json2table.pl
+%attr(0755,root,root) %{command_base}/rabbitmq-consume.py
 /usr/local/bin/rabbitmq-consume.py
 /usr/local/bin/json2table.pl
 
