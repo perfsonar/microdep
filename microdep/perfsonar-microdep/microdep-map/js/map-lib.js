@@ -215,10 +215,16 @@ export function max( max, val){
 	return Math.max(max, val);
 }
 
-export function round_number(num){
-    var digits=Math.floor(Math.log10(num));
-    var round=Math.round( num / 10**digits) * 10**digits;
-    return round;
+// Round to a number of significant digits: one unless more are asked for (the
+// steps of a scale take one, a value that is shown takes two). Zero stays zero
+// and a negative number keeps its sign - both used to come out as NaN - and
+// what is not a number is handed back as it is.
+export function round_number(num, digits){
+    if ( typeof num !== 'number' && ( typeof num !== 'string' || num.trim() === '' ) ) return num;
+    var n = Number(num);
+    if ( ! isFinite(n) ) return num;
+    digits = Math.min(100, Math.max(1, Math.floor(digits) || 1));
+    return Number( n.toPrecision(digits) );
 }
 
 export function zero_fill(n){
