@@ -359,8 +359,11 @@ var color_on=[]; // bool by color focused
 var linkByName=[];
 var linkByNameDashed=[];
 var linkHidden=[]; // 
-var ip_to_name=[]; // 
-var name_to_ip=[]; //
+// Looked up by address and by host name. They are objects without inherited properties, so that
+// a host may be called "length" or "constructor": in an array or a plain object such a name
+// meets a property that is there already.
+var ip_to_name=Object.create(null); // 
+var name_to_ip=Object.create(null); //
 var name_loaded=[]; // by network
 var ends=[];
 var last_hits=[]; // last query detail data (gaps)
@@ -742,7 +745,7 @@ function open_tree_tab(host) {
 // host differently than the topology does.
 function leaf_status_fn(root) {
     const alias_set = function (name) {
-	const a = {};
+	const a = Object.create(null);   // (by host name: no inherited properties)
 	const add = function (x) { if (!x) return; const n = String(x).toLowerCase(); a[n] = true; a[n.split('.')[0]] = true; };
 	add(name); add(name_to_ip[name]);
 	return function (x) { if (!x) return false; const n = String(x).toLowerCase(); return !!(a[n] || a[n.split('.')[0]] || (name_to_ip[x] && a[String(name_to_ip[x]).toLowerCase()])); };
@@ -986,7 +989,6 @@ function only_links_by_color(color){
 	    }
 	}
 	links_on=false;
-	focus[node]=true;
 	focus_node=node;
 	update_url("node", node);
     }
@@ -2932,7 +2934,7 @@ function geo_cache_get(network, host_id, ip) {
     const netCache = host_geo_cache[network];
     if (!netCache || !host_id) return null;
     // 1) exact host_id match
-    if (netCache[host_id]) return netCache[host_id];
+    if (Object.prototype.hasOwnProperty.call(netCache, host_id) && netCache[host_id]) return netCache[host_id];
     // 2) IP cross-reference — same physical host can appear under entirely
     //    different FQDNs (legacy LS registration, old hostname template,
     //    DNS-search artifacts). If the caller knows the host's IP, find any
