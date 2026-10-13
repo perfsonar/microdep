@@ -158,8 +158,11 @@ if ( $opt_sumperiod !~ /^\d+$/ || $opt_sumperiod > 86400 ) {
 $opt_config_file ||= '';     # Filename of configfile
 
 # Misc global variables
+# A send time outside these two is not a time in seconds (e.g. one in milliseconds),
+# and the packet is left out. (The upper one used to be 2030-01-01: from that day
+# on every packet would have been left out.)
 my $min_tx=946681200;
-my $max_tx=1893452400; # 2030-01-01
+my $max_tx=4102444800; # 2100-01-01
 my $maxseqreorder=1000; # 
 my $max_small_gap=10; # the max size of a small graph
 my $max_small_graphs= $opt_max_small_graphs;
