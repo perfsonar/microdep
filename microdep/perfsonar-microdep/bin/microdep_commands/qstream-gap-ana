@@ -62,7 +62,7 @@ GetOptions( 'h' => \$opt_h, 'help' => \$opt_help, 'id=s' => \$opt_id, 'slep=s' =
 	    'max-small-graphs=s' => \$opt_max_small_graphs, 
 	    'head' => \$opt_head, 'rhead=s' => \$opt_rhead, 'graph=s' => \$opt_graph, 'outdir=s' => \$opt_outdir, 
 	    'title=s' => \$opt_title, 'addresses=s'=> \$opt_addresses, 'names=s' => \$opt_names, 'json=s' => \$opt_json,  
-	    'jitter=s' => \$opt_jitter, 'threshold' => \$opt_threshold, 'owamp=s' => \$opt_owamp,
+	    'jitter=s' => \$opt_jitter, 'threshold=s' => \$opt_threshold, 'owamp=s' => \$opt_owamp,
 	    'rtp=s' => \$opt_rtp, 'ddelay_low=s' => \$opt_ddelay_low, 'ddelay_high=s' => \$opt_ddelay_high,
 	    'debug=s' => \$opt_debug, 'batchsize=s' => \$opt_batchsize,
 	    'change_factor=s' => \$opt_change_factor, 'v' => \$opt_v, 'version' => \$opt_version,
@@ -82,9 +82,9 @@ if ( ! $opt_h && ! $opt_help && -e $opt_config_file ) {
 	'h' => \$opt_h, 'help' => \$opt_help, 'id=s' => \$opt_id, 'slep=s' => \$opt_slep, 
 	    'minloss=s' => \$opt_minloss, 'win=s' => \$opt_win, 'recover=s' => \$opt_recover,
 	    'max-small-graphs=s' => \$opt_max_small_graphs, 
-	    'head' => \$opt_head, 'rhead' => \$opt_rhead, 'graph=s' => \$opt_graph, 'outdir=s' => \$opt_outdir, 
+	    'head' => \$opt_head, 'rhead=s' => \$opt_rhead, 'graph=s' => \$opt_graph, 'outdir=s' => \$opt_outdir, 
 	    'title=s' => \$opt_title, 'addresses=s'=> \$opt_addresses, 'names=s' => \$opt_names, 'json=s' => \$opt_json,  
-	    'jitter=s' => \$opt_jitter, 'threshold' => \$opt_threshold, 'owamp=s' => \$opt_owamp,
+	    'jitter=s' => \$opt_jitter, 'threshold=s' => \$opt_threshold, 'owamp=s' => \$opt_owamp,
 	    'rtp=s' => \$opt_rtp, 'ddelay_low=s' => \$opt_ddelay_low, 'ddelay_high=s' => \$opt_ddelay_high,
 	    'debug=s' => \$opt_debug, 'batchsize=s' => \$opt_batchsize,
 	    'change_factor=s' => \$opt_change_factor, 'v' => \$opt_v, 'version' => \$opt_version,
@@ -130,7 +130,7 @@ $opt_addresses ||= ''; # Set source of ip-to-name mappings.
 $opt_names ||= '';     # Set source of ip-to-name mappings. 
 $opt_json ||= '';      # Enable events output in JSON format to given file ro to destination specified in file via perfsonar's JSON achive spec format. 
 $opt_jitter ||= 600;   # Emit jitter statistics at intervals.
-$opt_threshold |= '10,10,0.5';  # Threshold values for reporting, in form of a vector.
+$opt_threshold ||= '10,10,0.5';  # Threshold values for reporting, in form of a vector.
 $opt_owamp ||= '';     # Get json owamp data from url
 $opt_rtp ||= 5;        # Number of ddelays to average before test
 $opt_ddelay_low ||=  2;  # End of burst limit
@@ -231,7 +231,7 @@ Options
   -title string	       Set title for graphs. Default is '$opt_title'.
   -addresses file      Set source of ip-to-name mappings. Both '<hostname> <address>' format and perfsonar psConfig json is accepted.
   -names file	       Set source of ip-to-name mappings. '<name> <user> <dns> <ip>' format acccepted.
-  -threshold vector    Threshold values for reporting, in form of a vector '<min-jitter>,<min-ddelay>,<min-slope>'. Default is $min_jit,$min_ddelay,$min_slope .
+  -threshold vector    Threshold values for reporting, in form of a vector '<min-jitter>,<min-ddelay>,<min-slope>'. Default is $opt_threshold.
   -owamp url           Get json owamp data from pscheduler (http://) og from rabbit message queue (ampq://)
   -follow	       Reread input source at intervals and analyse newly arrived packets. Applys only for http* owamp url. (To follow files apply '| tail -f'.)   	       
   -followinterval n    Interval for rereading input source. Default is $opt_followinterval sec.       	       
@@ -287,7 +287,7 @@ if ($opt_owamp){
     $rmq_cv = AnyEvent->condvar;
 }
 
-my ( $min_jit, $min_dddelay, $min_slope) = split(',', $opt_threshold);
+my ( $min_jit, $min_ddelay, $min_slope) = split(',', $opt_threshold);
 my $jitter_delta={'jit'=> $min_jit/2, 'ddelay'=> $min_ddelay/2, 'slope'=>$min_slope/2};
 
 #my $change_factor= $opt_change_factor;
