@@ -53,8 +53,10 @@ opendir my $dir, $configdir or msg("Cannot open config directory: $!") and exit;
 my @files = readdir $dir;
 closedir $dir;
 foreach (@files) {
-    if (! /\S*\.yml/ ) {
-	# Skip none-yaml-files
+    if (! /^[^.].*\.yml\z/ ) {
+	# Skip none-yaml-files: the name has to end in .yml, and hidden files are left out.
+	# (A name that merely held ".yml" was taken as well, so what a package upgrade or an
+	# editor leaves behind was loaded too: net.yml.rpmsave, net.yml.dpkg-old, net.yml~, .net.yml.swp)
 	next;
     }
     my $net_yaml_hash = YAML::LoadFile($configdir . "/" . $_);
