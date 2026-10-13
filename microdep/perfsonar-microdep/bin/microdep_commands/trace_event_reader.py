@@ -50,6 +50,7 @@ from io import StringIO
 import hashlib
 from operator import itemgetter
 import re
+import secrets
 import yaml
 
 #Tweaks for comparing final status of traceroute
@@ -94,6 +95,7 @@ CE_DELTA_LIMIT = 3.0          # Level of change in ce-level for a hop to conside
 HOPDIST_INIT_WINDOW = 2500    # Min no of probes seen for a hop to consider its host distribution to be representativ
 
 HTTP_TIMEOUT = 60             # Max no of seconds to wait for an answer when reading from a data source or delivering an event record
+MAX_SECONDS_AHEAD = 300        # A traceroute run dated more than this ahead of the clock of this host is passed over
 
 # Set default paramenter values
 param = {
@@ -2427,11 +2429,6 @@ def analyze(traceroute, time, cursor):
     #Compose unique identifier of this route
     unique_pair = str(traceroute["src"]) + "/" + str(traceroute["dst"])
         
-    # Update summary stats
-    tracesummary.count('routes_analysed')              
-    tracesummary.count( traceroute['type'] + '_routes')
-    tracesummary.set_max('max_ttl', traceroute['maxhops'])
-
     if traceroute_analysis_state_current_unique_pair and traceroute_analysis_state_current_unique_pair != unique_pair:
         # Update state for previous end-state-analysis in DB
         if param['verbose'] > 3:
@@ -2459,11 +2456,6 @@ def analyze(traceroute, time, cursor):
                 "bookmark": time }
             traceroute_analysis_state_current_unique_pair_is_new = True
 
-        elif traceroute_analysis_state_routes["bookmark"] >= time and param['all'] == 0:
-            # We return empty if the last traceroute we analyzed is older than what we have bookmarked
-            cursor.execute(('COMMIT'));
-            return
-
         # Gets state for lastest per-hop-analysis (jumps)
         cursor.execute(("SELECT unique_pair, hop, destinations, frequencies, count, normal, memory, anomaly, trcrt, betweens, cross_entropy, timestamp FROM jumps WHERE unique_pair =%s ORDER BY hop"), (unique_pair,))
         traceroute_analysis_state_jumps = []
@@ -2472,6 +2464,18 @@ def analyze(traceroute, time, cursor):
             traceroute_analysis_state_jumps.append(stored_hop)
             stored_hop = fetch_one_dict(cursor)
         cursor.execute(('COMMIT'));
+
+    if ( not traceroute_analysis_state_current_unique_pair_is_new
+         and traceroute_analysis_state_routes["bookmark"] >= time and param['all'] == 0 ):
+        # The run is no newer than the last one of its pair that was analysed: it is
+        # not analysed again. (This was looked at only when the pair changed, and
+        # before the state of the hops of the pair had been read.)
+        return
+
+    # Update summary stats
+    tracesummary.count('routes_analysed')
+    tracesummary.count( traceroute['type'] + '_routes')
+    tracesummary.set_max('max_ttl', traceroute['maxhops'])
         
     
     # Add initial state values for new hops
@@ -2529,6 +2533,11 @@ report_dir = {}  # Folders for outputfiles, indexed by thread
 pssrc_r, pssrc_w = os.pipe()                # Pipe from Rabbitmq reader to analysis process
 pssrc_pipe_input = os.fdopen(pssrc_w, "w")  # File descriptor for writing data to analysis process 
 pssrc_pipe_output = os.fdopen(pssrc_r)      # File descriptor for reading data inside analysis process  
+# What the reading process itself says to the analysis process (a record begins, a
+# summary period has ended) goes through the same pipe as the text of the records.
+# Such a line begins with this word. It is made up anew at every start of the
+# script, so no line in the text of a record can be taken for one.
+pssrc_message_mark = secrets.token_hex(16)
 
 def pscheduler_trace_command(word):
     """ The command line of a traceroute run by pscheduler, read by its options.
@@ -2679,6 +2688,7 @@ def read(path, srchost, srcdate, mode="batch", thread=0, starttime=0):
 
     try:
         parser_state = PS_INIT
+        record_begins = False
         while parser_state != PS_ENDED:
 
             # Get new line from log
@@ -2703,26 +2713,36 @@ def read(path, srchost, srcdate, mode="batch", thread=0, starttime=0):
                 # Empty or corrupt line (or no line at all). Skip
                 continue
 
-            if mode == "pssrc" and word[0] == "sumperiod" and len(word) > 1 and word[1].isdigit():
-                # The reading process tells that a summary period has ended (see sumperiod_tick())
-                if parser_state in [PS_STARTLINE, PS_LOGLINE]:
-                    # The traceroute run read last is complete, and belongs to the period that has ended
-                    analyze_parsed()
-                parser_state = PS_INIT
-                time = 0
-                # Output the summary records, and start the summary of each pair anew
-                tracesummary.print_all_pairs(thread, int(word[1]))
+            if mode == "pssrc" and word[0] == pssrc_message_mark:
+                # A message of the reading process
+                if len(word) > 2 and word[1] == "sumperiod" and word[2].isdigit():
+                    # A summary period has ended (see sumperiod_tick())
+                    if parser_state in [PS_STARTLINE, PS_LOGLINE]:
+                        # The traceroute run read last is complete, and belongs to the period that has ended
+                        analyze_parsed()
+                    parser_state = PS_INIT
+                    time = 0
+                    # Output the summary records, and start the summary of each pair anew
+                    tracesummary.print_all_pairs(thread, int(word[2]))
+                elif len(word) > 1 and word[1] == "record":
+                    # The next line is the first one of a record
+                    record_begins = True
                 continue
 
-            if word[0] == "ps_testid" and len(word) > 2:
+            # Only the first line of a record can begin a run or carry the test id:
+            # the lines after it are the output of the tool, whatever they look like.
+            first_line = record_begins or mode != "pssrc"
+            record_begins = False
+
+            if first_line and word[0] == "ps_testid" and len(word) > 2:
                 # Strip off perfsonar test id
                 ps_testid = word[1]
                 word.pop(1)
                 word.pop(0)
                 
-            MICRODEPLOG = ( len(word) > 1 and word[1] == "starttime" and word[0].isdigit() )   # E.g. logline ala "1617573742 starttime 00:02:22" found
+            MICRODEPLOG = ( mode != "pssrc" and len(word) > 1 and word[1] == "starttime" and word[0].isdigit() )   # E.g. logline ala "1617573742 starttime 00:02:22" found
             ps_command = pscheduler_trace_command(word)                                        # E.g. log line ala "1617573742 traceroute -q 1 -4 -s 172.150.1.2 -N 30 -n 172.150.2.2" found
-            PERFSONARLOG = ps_command is not None
+            PERFSONARLOG = ps_command is not None and first_line
 
             if MICRODEPLOG or PERFSONARLOG:
                 # Start line found
@@ -2739,6 +2759,15 @@ def read(path, srchost, srcdate, mode="batch", thread=0, starttime=0):
                 run_type = traceroute_type    # (udp, or what the name of the input file says)
                 traceroutes.clear()    # (Only the run being read is kept: the earlier ones have been analysed)
                 traceroutes[time] = {}
+                if time > datetime.now().timestamp() + MAX_SECONDS_AHEAD:
+                    # The run is dated ahead of the clock of this host (the clock of the
+                    # measuring host is wrong, for one). Its time would become the mark
+                    # of its pair, and the runs after it would count as older than that.
+                    if param["verbose"] > 2:
+                        print("Warning: Traceroute run dated ahead of the clock, skipping it: '" + line.strip() + "'")
+                    tracesummary.parse_error()
+                    parser_state = PS_INIT
+                    continue
                 if MICRODEPLOG:
                     traceroutes[time]["src"] = resolver.get_ip(srchost)
                     traceroutes[time]["dst"] = resolver.get_ip(dsthost)
@@ -2966,7 +2995,7 @@ def sumperiod_tick():
     now = time.time()
     if sumperiod_end and now >= sumperiod_end:
         # (On a line of its own, whatever the record forwarded last ended with)
-        pssrc_pipe_input.write("\nsumperiod " + str(int(sumperiod_end)) + "\n")
+        pssrc_pipe_input.write("\n" + pssrc_message_mark + " sumperiod " + str(int(sumperiod_end)) + "\n")
         try:
             pssrc_pipe_input.flush()
         except:
@@ -3072,7 +3101,7 @@ def opensearch_read(opensearch_api, mode, thread):
                         continue
                     # Forward to analysis process
                     sumperiod_tick()
-                    pssrc_pipe_input.write(data)
+                    pssrc_pipe_input.write(pssrc_message_mark + " record\n" + data)
                     if param["verbose"] > 3:
                         print("Wrote to pipe: '" + data + "'")
                     try:
@@ -3266,7 +3295,7 @@ def amqp_read_message(body):
         data += "\n"
     #data = starttime + " " + element["run"]["result-full"][0]["diags"]
     sumperiod_tick()
-    pssrc_pipe_input.write(data)
+    pssrc_pipe_input.write(pssrc_message_mark + " record\n" + data)
     if param["verbose"] > 3:
         print("Wrote to pipe: '" + data + "'")
     try:
