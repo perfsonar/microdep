@@ -4655,6 +4655,8 @@ function init_map(){
         make_palette(on ? 'cbf' : (parms.palette || ''));
         _paint_with_compare(summary, parms.event, $("#prop_select").val(), start, end);
         update_url();
+        // The traceroute views that are open draw with the same palette
+        document.dispatchEvent(new CustomEvent('microdep-palette-changed'));
     });
     fill_select( "stats_type", stats_types );
     $("#stats_type").change( function(){ endInitialising(); summary=digest_aggregates(aggregates, $("#stats_type").val()); _paint_with_compare(summary, parms.event, $("#prop_select").val(), start, end); update_url(); if (!initialising) $("#tabs").tabs("option", "active", 0); });
