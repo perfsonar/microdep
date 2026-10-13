@@ -191,6 +191,10 @@ def sigterm_handler(_signo, _stack_frame):
 signal.signal(signal.SIGTERM, sigterm_handler)
 signal.signal(signal.SIGHUP, sigterm_handler)
 
+# The signals that stop the script. They are held back while the state of the
+# analysis is written (see flush_analysis_state()).
+STOP_SIGNALS = (signal.SIGTERM, signal.SIGHUP, signal.SIGINT)
+
 
 class Tracesummary:
     """ Manage summary structure
@@ -603,7 +607,7 @@ def prepare_db(cursor, param):
                 cursor.execute("DROP TABLE jumps")
                 cursor.execute("DROP TABLE length")
                 cursor.execute("DROP TABLE rtt")
-        except:
+        except Exception:
             pass
 
     try:
@@ -705,7 +709,7 @@ class Resolver:
                                 # Assuming IPv4
                                 self.ip['4'][name] = ip
                             self.name[ip] = name
-                except:
+                except Exception:
                     pass
 
                 if not 'addresses' in psconfig_data:
@@ -727,7 +731,7 @@ class Resolver:
                         if param["verbose"] > 1:
                             if len(ip) == 0 or len(name) == 0:
                                 print("Warning: No entries found in resolution file " + mapfile)
-            except:
+            except Exception:
                 print("Warning: Could not open resolution file " + mapfile)
                             
         if param["verbose"] > 3:
@@ -883,7 +887,7 @@ class Resolver:
                 # Add mapping
                 self.name[ip] = name
                 return name
-            except:
+            except Exception:
                 if param["verbose"] > 2:
                     print("Warning: Cannot resolve ip " + ip + ". Returning " + ip + " as name.")
                 # Add "emergency" mapping
@@ -915,7 +919,7 @@ class Resolver:
                 self.name[ip] = name
                 self.refresh_geopos(ip)
                 return ip
-            except:
+            except Exception:
                 if param["verbose"] > 2:
                     print("Warning: Cannot resolve name " + name + ". Returning " + name + " as ip.")
                 # Add "emergency" mapping
@@ -939,7 +943,7 @@ class Resolver:
                         ip = socket.getaddrinfo(name, None, socket.AF_INET6)[0][4][0]
                     else:
                         ip = socket.gethostbyname(name)
-                except:
+                except Exception:
                     # Maybe name is really an ip...
                     if not name in self.name.keys():
                         try:
@@ -947,7 +951,7 @@ class Resolver:
                             maybe_ip = name
                             name, alias, addresslist = socket.gethostbyaddr(maybe_ip)
                             ip = maybe_ip
-                        except:
+                        except Exception:
                             pass
         if ip:
             # Add mapping
@@ -1254,7 +1258,7 @@ def printRouteAlert(threadid, tr_type, unique_pair, normalRoute, n, abnormalrout
                             lookup_res = asn_lookup.asn(ip)
                             asn_of_hops_before_over_ce_limit.add(str(lookup_res.autonomous_system_number))
                             as_of_hops_before_over_ce_limit.add(lookup_res.autonomous_system_organization)
-                        except:
+                        except Exception:
                             # No AS info found
                             asn_of_hops_before_over_ce_limit.add('0')
                             as_of_hops_before_over_ce_limit.add('unknown')
@@ -1271,7 +1275,7 @@ def printRouteAlert(threadid, tr_type, unique_pair, normalRoute, n, abnormalrout
                         lookup_res = asn_lookup.asn(normalRoute_obj[hop_no-1])
                         asn_of_hops_before_over_ce_limit.add(str(lookup_res.autonomous_system_number))
                         as_of_hops_before_over_ce_limit.add(lookup_res.autonomous_system_organization)
-                    except:
+                    except Exception:
                         asn_of_hops_before_over_ce_limit.add('0')
                         as_of_hops_before_over_ce_limit.add('Unknown')
         hop_no += 1
@@ -1461,7 +1465,7 @@ def printAlert(threadid, tr_type, n, time, mode, normal=None, new=None):
         lookup_res = asn_lookup.asn(data["lastip"])
         alert["last_reply_asn"] = lookup_res.autonomous_system_number
         alert["last_reply_as"] = lookup_res.autonomous_system_organization
-    except:
+    except Exception:
         # Lookup failed.
         alert["last_reply_asn"] = 0
         alert["last_reply_as"] = "unknown"
@@ -2371,6 +2375,11 @@ def flush_analysis_state(cursor):
     """ Flush state currently in memory to DB
     """
 
+    # The state is written as a whole: a signal to stop that arrives meanwhile is
+    # held back until it is stored, and takes effect then. (It used to be ignored
+    # here, so the script went on analysing while its unit was being stopped, and
+    # no longer heard the signals that followed.)
+    held_back = signal.pthread_sigmask(signal.SIG_BLOCK, STOP_SIGNALS)
     try:
         global traceroute_analysis_state_routes
         global traceroute_analysis_state_jumps
@@ -2405,9 +2414,8 @@ def flush_analysis_state(cursor):
             
         cursor.execute(('COMMIT'));
 
-    except (KeyboardInterrupt, SystemExit) as e :
-        # Ignore and quit
-        pass 
+    finally:
+        signal.pthread_sigmask(signal.SIG_SETMASK, held_back)
 
     return
 
@@ -2900,7 +2908,11 @@ def read(path, srchost, srcdate, mode="batch", thread=0, starttime=0):
             
     except (KeyboardInterrupt, SystemExit) as e :
         # Flush all state variables to DB
-        flush_analysis_state(cursor)  
+        try:
+            flush_analysis_state(cursor)
+        except (KeyboardInterrupt, SystemExit):
+            # Interrupted once more (the state is stored by then): quit
+            pass
 
     finally:
 
@@ -2998,7 +3010,7 @@ def sumperiod_tick():
         pssrc_pipe_input.write("\n" + pssrc_message_mark + " sumperiod " + str(int(sumperiod_end)) + "\n")
         try:
             pssrc_pipe_input.flush()
-        except:
+        except Exception:
             # Ignore flush errors
             pass
     if not sumperiod_end or now >= sumperiod_end:
@@ -3106,7 +3118,7 @@ def opensearch_read(opensearch_api, mode, thread):
                         print("Wrote to pipe: '" + data + "'")
                     try:
                         pssrc_pipe_input.flush()
-                    except:
+                    except Exception:
                         # Ignore flush errors
                         pass
 
@@ -3117,6 +3129,13 @@ def opensearch_read(opensearch_api, mode, thread):
             time.sleep(float(param["followinterval"]))   # (a value given on the command line arrives as text)
 
     except (KeyboardInterrupt, SystemExit) as e :
+        # Nothing more is forwarded. With the pipe closed the analysis process
+        # finds the end of its input and finishes, also when it has not taken
+        # the way out itself.
+        try:
+            pssrc_pipe_input.close()
+        except OSError:
+            pass
         # Wait for analysis child process to exit
         os.wait()
         return
@@ -3228,6 +3247,13 @@ def amqp_read(url, mode, thread):
         channel.start_consuming()
 
     except (KeyboardInterrupt, SystemExit) as e :
+        # Nothing more is forwarded. With the pipe closed the analysis process
+        # finds the end of its input and finishes, also when it has not taken
+        # the way out itself.
+        try:
+            pssrc_pipe_input.close()
+        except OSError:
+            pass
         # Wait for analysis child process to exit
         os.wait()
         return
@@ -3300,7 +3326,7 @@ def amqp_read_message(body):
         print("Wrote to pipe: '" + data + "'")
     try:
         pssrc_pipe_input.flush()
-    except:
+    except Exception:
         # Ignore flush errors
         pass
 
