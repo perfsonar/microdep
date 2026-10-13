@@ -422,6 +422,9 @@ asn_lookup = None              # For mapping IPs to ASNs
 def parse_cmd(param):
     """ Parse commandline argumets
     """
+    # The tuning values that a config file may set. (Without this line the values assigned
+    # further down stayed inside this function, and the analysis went on with the defaults.)
+    global f_reduction, f_majority, f_max_state_counter, f_csensitivity, CE_DELTA_LIMIT, HOPDIST_INIT_WINDOW
 
     # Parse arguments from commandline
     cmdparser = argparse.ArgumentParser(description="Analyses traceroute output and reports detected anomalities.")
@@ -477,6 +480,10 @@ def parse_cmd(param):
                 # Update (default) parameter
                 param[p] = config[p]
             # Handle additional parameters
+            elif ( p in ("f_reduction", "f_majority", "f_max_state_counter", "f_csensitivity", "ce_delta_limit", "hopdist_init_window")
+                   and ( isinstance(config[p], bool) or not isinstance(config[p], (int, float)) ) ):
+                # (The analysis compares these with numbers: any other value would stop it at every traceroute run)
+                print("Warning: The value of '" + p + "' in " + args.config + " is not a number. Keeping the default.")
             elif p == "f_reduction":
                 f_reduction = config[p]
             elif p == "f_majority":
