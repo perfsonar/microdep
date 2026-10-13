@@ -4555,7 +4555,9 @@ function get_connections(){
 		var nrecs=resp.hits.total.value.toString();
 		if ( etype === "gapsum" || etype === "routesum" ){ summary=coalesce_pairs(resp.hits.hits, etype); }
 		else if ( resp.aggregations){ aggregates=resp.aggregations; summary=digest_aggregates(aggregates, $("#stats_type").val()); nrecs = count_aggregates( aggregates ); }
-		else { if (! sum_etype || start.substr(0,10) === now.toISOString().substr(0,10)) { summary=digest_es_data(etype, resp.hits.hits); } last_hits=resp.hits.hits; }
+		// (An hour is summed from its events on any day: there is no summary
+		// record for an hour, and an hour of an earlier day used to be drawn empty.)
+		else { if (! sum_etype || start.substr(0,10) === now.toISOString().substr(0,10) || period < 24) { summary=digest_es_data(etype, resp.hits.hits); } last_hits=resp.hits.hits; }
 		harvest_ip_name(summary);
 		var msg = hhmmss(new Date()) + " Found " + nrecs + " " + etype + " records for " + $("#datepicker").val() + " " + $("#period_input").val() + " ;;";
 		$("#status").text( msg );
