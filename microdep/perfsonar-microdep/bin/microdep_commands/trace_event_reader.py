@@ -282,6 +282,10 @@ class Tracesummary:
         # Make sure src-dst pair exists in summary table
         if not src_dst in self.summary.keys():
             self.summary[src_dst] = self.summary_template.copy()
+            # The list of hosts per hop is the pair's own. (The copy above is a
+            # plain one: it handed every pair the one list of the template, so all
+            # pairs counted their hosts into it, summary period after summary period.)
+            self.summary[src_dst]['unique_hosts_list'] = []
         
     def count(self, counter):
         if not self.current_pair:
