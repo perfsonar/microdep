@@ -17,8 +17,11 @@ use JSON;
 # Prepare CGI agent
 my $q = CGI->new;
 
-# Fetch config data (and remove html header)
+# Fetch config data (and remove html header). It is asked for as a whole: the
+# address of the archive is left out of what a browser gets.
+$ENV{'MICRODEP_MAPCONFIG'} = 'full';
 $config = decode_json(`/usr/lib/perfsonar/bin/microdep_commands/get-mapconfig.cgi | tail -n +2`);
+delete $ENV{'MICRODEP_MAPCONFIG'};
 
 # The measurement network, as named in mapconfig.yml, decides which archive is asked
 # and which indices may be read there: the ones mapconfig.yml names for it. An index

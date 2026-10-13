@@ -48,8 +48,11 @@ if (param( "help" )) {
     exit(0);
 }    
 
-# Fetch config data (and remove html header)
+# Fetch config data (and remove html header). It is asked for as a whole: the
+# address of the archive is left out of what a browser gets.
+$ENV{'MICRODEP_MAPCONFIG'} = 'full';
 my $config = decode_json(`/usr/lib/perfsonar/bin/microdep_commands/get-mapconfig.cgi | tail -n +2`);
+delete $ENV{'MICRODEP_MAPCONFIG'};
 
 # Prepare parameters for search query
 # The archive is the one mapconfig.yml gives the measurement network. An address

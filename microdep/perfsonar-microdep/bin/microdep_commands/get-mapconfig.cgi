@@ -69,6 +69,13 @@ foreach (@files) {
 	$output{"config"}{$net} = $merged;
     }
 }
+# The address of the archive is for the scripts of this host that fetch the data:
+# they ask with MICRODEP_MAPCONFIG=full in their environment (which a request
+# cannot set). A browser has no use for it, and it may hold a user name and a
+# password, so it is left out of every other answer.
+if ( ( $ENV{'MICRODEP_MAPCONFIG'} // '' ) ne 'full' ) {
+    delete $output{'config'}{$_}{'archive'} foreach keys %{ $output{'config'} };
+}
 # Output all message and config as json structure
 msg_output();
 
