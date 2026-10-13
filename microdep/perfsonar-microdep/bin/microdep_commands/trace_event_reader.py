@@ -2530,6 +2530,49 @@ pssrc_r, pssrc_w = os.pipe()                # Pipe from Rabbitmq reader to analy
 pssrc_pipe_input = os.fdopen(pssrc_w, "w")  # File descriptor for writing data to analysis process 
 pssrc_pipe_output = os.fdopen(pssrc_r)      # File descriptor for reading data inside analysis process  
 
+def pscheduler_trace_command(word):
+    """ The command line of a traceroute run by pscheduler, read by its options.
+        Which options are there depends on the test spec; they come in the order
+        pscheduler-tool-traceroute puts them. word[0] is the start time of the run. E.g.
+          1617573742 traceroute -q 1 -4 -s 172.150.1.2 -N 30 -n 172.150.2.2
+          1617573742 sudo /usr/libexec/.../traceroute-safe traceroute -q 1 -4 -T -s 172.150.1.2 -m 20 -N 20 -n 172.150.2.2
+        Returns None if the words are no such line. Else the ip version, the source
+        and the destination (None where the line does not give it), whether tcp
+        probes were sent, and whether an option was met that is not known here.
+    """
+    if not word[0].isdigit():
+        return None
+    args = word[1:]
+    if args and args[0] == "sudo":
+        args = args[1:]
+    if args and args[0].split('/')[-1] == "traceroute-safe":
+        # (the wrapper pscheduler runs traceroute through when it needs root)
+        args = args[1:]
+    if len(args) < 2 or args[0] != "traceroute" or args[1] != "-q":
+        return None
+    command = { "ipversion": None, "src": None, "dst": None, "tcp": False, "unknown": False }
+    i = 1
+    while i < len(args):
+        if args[i] in ("-4", "-6"):
+            command["ipversion"] = int(args[i][1])
+        elif args[i] == "-T":
+            command["tcp"] = True
+        elif args[i] in ("-I", "-F", "-n", "-A"):
+            pass
+        elif args[i] in ("-q", "-l", "-f", "-s", "-m", "-N", "-p", "-t", "-w", "-z"):
+            # An option with a value
+            if args[i] == "-s" and i + 1 < len(args):
+                command["src"] = args[i+1]
+            i += 1
+        elif args[i].startswith("-"):
+            command["unknown"] = True
+        elif command["dst"] is None:
+            # The first word that is no option is the destination (the packet length may follow)
+            command["dst"] = args[i]
+        i += 1
+    return command
+
+
 def read(path, srchost, srcdate, mode="batch", thread=0, starttime=0):
     """ Parse raw log file and run analysis on each found traceroute run
         2022-01-20: Renovated to properly parse both traceroute and tcptraceroute logs
@@ -2589,16 +2632,46 @@ def read(path, srchost, srcdate, mode="batch", thread=0, starttime=0):
     PS_LOGLINE = 3
     PS_ENDED = 4
     
+    def analysis_failed(e):
+        # A run that cannot be analysed must not end the analysis of the runs that
+        # follow: it is reported and passed over. The state of its pair is taken
+        # from the database anew when the pair comes next, as after a restart.
+        global traceroute_analysis_state_current_unique_pair
+        global traceroute_analysis_state_current_unique_pair_is_new
+        global traceroute_analysis_state_jumps
+        global traceroute_analysis_state_routes
+        print("Warning: Skipping a traceroute run that could not be analysed (" + type(e).__name__ + ": " + str(e) + ").")
+        tracesummary.parse_error()
+        traceroute_analysis_state_current_unique_pair = ""
+        traceroute_analysis_state_current_unique_pair_is_new = False
+        traceroute_analysis_state_jumps = []
+        traceroute_analysis_state_routes = {}
+        try:
+            cursor.execute('ROLLBACK')
+        except Exception:
+            pass
+
     def analyze_parsed():
         # The lines of a traceroute run have all been read: analyse it
         if "src" in traceroutes[time] and "dst" in traceroutes[time]:
+            if sorted(traceroutes[time]["result"]) != list(range(len(traceroutes[time]["result"]))):
+                # The hop lines do not run from hop 1 on without a hole (a test that
+                # starts at a later hop, for one). The analysis cannot take such a run.
+                if param['verbose'] > 2:
+                    print ("Warning: Traceroute run at time ", time, " does not hold every hop from the first one on, skipping it.")
+                tracesummary.parse_error()
+                return
+
             if len(traceroutes[time]["result"]) > traceroutes[time]["maxhops"]:
                 # Update maxhops
                 traceroutes[time]["maxhops"] = len(traceroutes[time]["result"])
 
             if param['verbose'] > 2:
                 print ("New traceroute run found at time ", time ,", analysing...")
-            analyze(traceroutes[time], time, cursor)
+            try:
+                analyze(traceroutes[time], time, cursor)
+            except Exception as e:
+                analysis_failed(e)
 
         else:
             # Source or destination info missing. Traceroute is incomplete. Skip.
@@ -2641,25 +2714,15 @@ def read(path, srchost, srcdate, mode="batch", thread=0, starttime=0):
                 tracesummary.print_all_pairs(thread, int(word[1]))
                 continue
 
-            if word[0] == "ps_testid":
+            if word[0] == "ps_testid" and len(word) > 2:
                 # Strip off perfsonar test id
                 ps_testid = word[1]
                 word.pop(1)
                 word.pop(0)
                 
-            if len(word) >= 3 and word[2].split('/')[-1] == "traceroute-safe":
-                # Traceroute wrapper applied for rpm-linux detected. Clean away for line
-                word.pop(2)
-                
-            if len(word) >= 6 and word[1] == "sudo" and word[2] == "traceroute" and word[6] =="-T":
-                # TCP traceroute from perfsonar found. 
-                traceroute_type = "tcp"
-                # Clean away tcp-specific header stuff
-                word.pop(6)
-                word.pop(1)
-                
-            MICRODEPLOG = ( len(word) > 1 and word[1] == "starttime" )                        # E.g. logline ala "1617573742 starttime 00:02:22" found
-            PERFSONARLOG = ( len(word) > 2 and word[1] == "traceroute" and word[2] == "-q" )  # E.g. log line ala "1617573742 traceroute -q 1 -4 -s 172.150.1.2 -N 30 -n 172.150.2.8" found
+            MICRODEPLOG = ( len(word) > 1 and word[1] == "starttime" and word[0].isdigit() )   # E.g. logline ala "1617573742 starttime 00:02:22" found
+            ps_command = pscheduler_trace_command(word)                                        # E.g. log line ala "1617573742 traceroute -q 1 -4 -s 172.150.1.2 -N 30 -n 172.150.2.2" found
+            PERFSONARLOG = ps_command is not None
 
             if MICRODEPLOG or PERFSONARLOG:
                 # Start line found
@@ -2673,6 +2736,7 @@ def read(path, srchost, srcdate, mode="batch", thread=0, starttime=0):
                 parser_state = PS_STARTLINE
                 # Initializes for new traceroute
                 time = int(word[0])  
+                run_type = traceroute_type    # (udp, or what the name of the input file says)
                 traceroutes.clear()    # (Only the run being read is kept: the earlier ones have been analysed)
                 traceroutes[time] = {}
                 if MICRODEPLOG:
@@ -2680,15 +2744,31 @@ def read(path, srchost, srcdate, mode="batch", thread=0, starttime=0):
                     traceroutes[time]["dst"] = resolver.get_ip(dsthost)
                     tracesummary.set_current_pair(traceroutes[time]["src"] + "/" + traceroutes[time]["dst"], time, thread)
                 elif PERFSONARLOG:
-                    traceroutes[time]["ipversion"] = int(word[4][-1])
+                    if ps_command["ipversion"] is None:
+                        if param["verbose"] > 2:
+                            print("Warning: Traceroute command line without ip version, skipping the run: '" + line.strip() + "'")
+                        tracesummary.parse_error()
+                        parser_state = PS_INIT
+                        continue
+                    traceroutes[time]["ipversion"] = ps_command["ipversion"]
                     if traceroutes[time]["ipversion"] == 6 and not param["ipv6"] or traceroutes[time]["ipversion"] == 4 and param["ipv6"]:
                         # Do not parse traceroutes with wrong ip version
                         if param["verbose"] > 2:
                             print("Unsupported ip-version in traceroute. Skipping.")
                         parser_state = PS_INIT
                         continue
-                    traceroutes[time]["src"] = resolver.get_ip(word[6])
-                    traceroutes[time]["dst"] = resolver.get_ip(word[10])
+                    if ps_command["src"] is None or ps_command["dst"] is None or ps_command["unknown"]:
+                        # The command line does not say what is needed here (a test without
+                        # a source, an option that is not known). The run is passed over.
+                        if param["verbose"] > 2:
+                            print("Warning: Traceroute command line not understood, skipping the run: '" + line.strip() + "'")
+                        tracesummary.parse_error()
+                        parser_state = PS_INIT
+                        continue
+                    if ps_command["tcp"]:
+                        run_type = "tcp"
+                    traceroutes[time]["src"] = resolver.get_ip(ps_command["src"])
+                    traceroutes[time]["dst"] = resolver.get_ip(ps_command["dst"])
                     tracesummary.set_current_pair(traceroutes[time]["src"] + "/" + traceroutes[time]["dst"], time, thread)
                     tracesummary.set_pstestid(ps_testid)
                 else:
@@ -2696,20 +2776,20 @@ def read(path, srchost, srcdate, mode="batch", thread=0, starttime=0):
                         print ("Warning: Unrecognized start line format, skipping input.")
                     continue
 
-                tracesummary.set_routetype(traceroute_type)
+                tracesummary.set_routetype(run_type)
                 traceroutes[time]["maxhops"] = 0
-                traceroutes[time]["type"] = traceroute_type
+                traceroutes[time]["type"] = run_type
                 traceroutes[time]["result"] = {}
                 traceroutes[time]["rtt"] = {}
                 traceroutes[time]["thread"] = thread   # (for postfixing in output-filename)
 
-            elif parser_state == PS_STARTLINE and word[0] == "traceroute":
+            elif parser_state == PS_STARTLINE and word[0] == "traceroute" and len(word) > 4 and word[4].isdigit():
                 # Header line found, e.g. "traceroute to 109.105.116.52 (109.105.116.52), 30 hops max, 60 byte packets"
                 traceroutes[time]["dst"] = resolver.get_ip(word[2])   # Update dsthost found in filename or start line
                 traceroutes[time]["maxhops"] = int(word[4])
                 parser_state = PS_HEADERLINE
                 
-            elif ( parser_state in [PS_STARTLINE, PS_HEADERLINE, PS_LOGLINE]) and word[0].isdigit() and int(word[0]) > 0:
+            elif ( parser_state in [PS_STARTLINE, PS_HEADERLINE, PS_LOGLINE]) and word[0].isdigit() and 0 < int(word[0]) <= 255:
                 # Logline found, e.g. "7  109.105.99.180  16.149 ms  16.133 ms  16.871 ms  16.850 ms  16.200 ms  16.173 ms"
 
                 # Parse line
@@ -2766,6 +2846,18 @@ def read(path, srchost, srcdate, mode="batch", thread=0, starttime=0):
                 traceroutes[time]["rtt"][hop-1] = rtt
                 parser_state = PS_LOGLINE
 
+            elif mode == "pssrc" and word[0].isdigit() and int(word[0]) > 255:
+                # A record that does not begin as a traceroute run by pscheduler does
+                # (the output of another tool, for one). The run read last is complete,
+                # and the lines of this record are passed over.
+                if parser_state in [PS_STARTLINE, PS_LOGLINE]:
+                    analyze_parsed()
+                parser_state = PS_INIT
+                time = 0
+                if param["verbose"] > 2:
+                    print("Warning: Record of a kind that is not understood, skipping it: '" + line.strip() + "'")
+                tracesummary.parse_error()
+
             else:
                 # Unrecognized line in traceroute
                 if param["verbose"] > 2:
@@ -2774,12 +2866,7 @@ def read(path, srchost, srcdate, mode="batch", thread=0, starttime=0):
 
         if time > 0 and "src" in traceroutes[time] and "dst" in traceroutes[time]:
             # Analyse also last traceroute in file
-            if param['verbose'] > 2:
-                print ("New traceroute run found at time ", time ,", analysing...")
-            if len(traceroutes[time]["result"]) > traceroutes[time]["maxhops"]:
-                # Update maxhops
-                traceroutes[time]["maxhops"] = len(traceroutes[time]["result"]) 
-            analyze(traceroutes[time], time, cursor)
+            analyze_parsed()
             flush_analysis_state(cursor)      # Flush all state variables to DB
             
     except (KeyboardInterrupt, SystemExit) as e :
@@ -2977,6 +3064,9 @@ def opensearch_read(opensearch_api, mode, thread):
                         starttime  = str(int(isodate.parse_datetime(element["pscheduler"]["start_time"]).timestamp()))
                         # Add some header data
                         data = starttime + " " + element["result-full"][0]["diags"]
+                        if not data.endswith("\n"):
+                            # (or the first line of the next run would run on from the last line of this one)
+                            data += "\n"
                     except (ValueError, KeyError, IndexError, TypeError, AttributeError) as e:
                         print("Warning: Skipping a record from " + opensearch_api + " that could not be read (" + type(e).__name__ + ": " + str(e) + ").")
                         continue
@@ -3171,6 +3261,9 @@ def amqp_read_message(body):
     testid = hashlib.sha256(cleaned_testid_obj).hexdigest()
     # Forward to queue
     data = "ps_testid " + testid + " " + starttime + " " + element["run"]["result-full"][0]["diags"]
+    if not data.endswith("\n"):
+        # (or the first line of the next run would run on from the last line of this one)
+        data += "\n"
     #data = starttime + " " + element["run"]["result-full"][0]["diags"]
     sumperiod_tick()
     pssrc_pipe_input.write(data)
