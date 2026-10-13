@@ -2078,7 +2078,7 @@ function gap_list( from, to, hits, lines, sort_type){
 		if ( prop in prop_aggr[etype] ) {
 		    switch (prop_aggr[etype][prop]) {
 		    case "sum": rec[prop]=stat[ab][prop].sum; break;
-		    case "avg": rec[prop]=stat[ab][prop].average()
+		    case "avg": rec[prop]=stat[ab][prop].average(); break;
 		    case "max": rec[prop]=stat[ab][prop].max(); break;
 		    case "min": rec[prop]=stat[ab][prop].min(); break;
 		    default: rec[prop]=stat[ab][prop].average()
