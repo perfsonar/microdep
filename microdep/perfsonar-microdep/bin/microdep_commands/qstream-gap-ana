@@ -109,7 +109,7 @@ if ( ! $opt_h && ! $opt_help && -e $opt_config_file ) {
 	    }
 	} else {
 	    # Unsupported config option
-	    warn "Unsupported option '$opt' in config file '$configfile'. Ignoring."
+	    warn "Unsupported option '$opt' in config file '$opt_config_file'. Ignoring.\n"
 	}
     }
 }
