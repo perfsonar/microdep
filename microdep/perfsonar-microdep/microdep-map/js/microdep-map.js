@@ -1181,7 +1181,7 @@ function _render_link_sparkline_inner(canvas, link, etype, prop, dato, period, f
     // include ip_version when the network requires it.
     // net= is REQUIRED: elastic-get-date-type.pl resolves the archive URL from
     // config[net].archive — without it the CGI falls back to http://localhost:9200
-    // and the query dies with curl-code 52 (empty reply). (index= sets the OS
+    // and the query fails (empty reply). (index= sets the OS
     // index path; net= picks the archive.)
     var url = 'elastic-get-date-type.pl?net=' + parms.net +
               '&index=' + event_index[etype] +
