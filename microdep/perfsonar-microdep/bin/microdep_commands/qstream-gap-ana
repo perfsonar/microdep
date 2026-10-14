@@ -54,7 +54,7 @@ my ($opt_h, $opt_help, $opt_id, $opt_slep,
     $opt_topoevents, $opt_topointerval,
     $opt_pslookup, $opt_pslookup_wait, $opt_ipv6,
     $opt_follow, $opt_followinterval, $opt_config_file,
-    $opt_sumperiod );
+    $opt_sumperiod, $opt_memorymax );
 
 # Fetch options (if any) from commandline
 GetOptions( 'h' => \$opt_h, 'help' => \$opt_help, 'id=s' => \$opt_id, 'slep=s' => \$opt_slep, 
@@ -62,14 +62,14 @@ GetOptions( 'h' => \$opt_h, 'help' => \$opt_help, 'id=s' => \$opt_id, 'slep=s' =
 	    'max-small-graphs=s' => \$opt_max_small_graphs, 
 	    'head' => \$opt_head, 'rhead=s' => \$opt_rhead, 'graph=s' => \$opt_graph, 'outdir=s' => \$opt_outdir, 
 	    'title=s' => \$opt_title, 'addresses=s'=> \$opt_addresses, 'names=s' => \$opt_names, 'json=s' => \$opt_json,  
-	    'jitter=s' => \$opt_jitter, 'threshold=s' => \$opt_threshold, 'owamp=s' => \$opt_owamp,
+	    'jitter=s' => \$opt_jitter, 'threshold' => \$opt_threshold, 'owamp=s' => \$opt_owamp,
 	    'rtp=s' => \$opt_rtp, 'ddelay_low=s' => \$opt_ddelay_low, 'ddelay_high=s' => \$opt_ddelay_high,
 	    'debug=s' => \$opt_debug, 'batchsize=s' => \$opt_batchsize,
 	    'change_factor=s' => \$opt_change_factor, 'v' => \$opt_v, 'version' => \$opt_version,
 	    'topoevents' => \$opt_topoevents, 'topointerval=s' => \$opt_topointerval,
 	    'pslookup=s' => \$opt_pslookup, 'wait=s' => \$opt_pslookup_wait, 'ipv6' =>\$opt_ipv6,
 	    'follow' => \$opt_follow, 'followinterval=s' => \$opt_followinterval, 'conf=s' =>\$opt_config_file,
-	    'sumperiod=s' => \$opt_sumperiod
+	    'sumperiod=s' => \$opt_sumperiod, 'memorymax=s' => \$opt_memorymax
     ) or $opt_h = 1;   # (Output help text on failure)
 
 if ( ! $opt_h && ! $opt_help && -e $opt_config_file ) {
@@ -82,16 +82,16 @@ if ( ! $opt_h && ! $opt_help && -e $opt_config_file ) {
 	'h' => \$opt_h, 'help' => \$opt_help, 'id=s' => \$opt_id, 'slep=s' => \$opt_slep, 
 	    'minloss=s' => \$opt_minloss, 'win=s' => \$opt_win, 'recover=s' => \$opt_recover,
 	    'max-small-graphs=s' => \$opt_max_small_graphs, 
-	    'head' => \$opt_head, 'rhead=s' => \$opt_rhead, 'graph=s' => \$opt_graph, 'outdir=s' => \$opt_outdir, 
+	    'head' => \$opt_head, 'rhead' => \$opt_rhead, 'graph=s' => \$opt_graph, 'outdir=s' => \$opt_outdir, 
 	    'title=s' => \$opt_title, 'addresses=s'=> \$opt_addresses, 'names=s' => \$opt_names, 'json=s' => \$opt_json,  
-	    'jitter=s' => \$opt_jitter, 'threshold=s' => \$opt_threshold, 'owamp=s' => \$opt_owamp,
+	    'jitter=s' => \$opt_jitter, 'threshold' => \$opt_threshold, 'owamp=s' => \$opt_owamp,
 	    'rtp=s' => \$opt_rtp, 'ddelay_low=s' => \$opt_ddelay_low, 'ddelay_high=s' => \$opt_ddelay_high,
 	    'debug=s' => \$opt_debug, 'batchsize=s' => \$opt_batchsize,
 	    'change_factor=s' => \$opt_change_factor, 'v' => \$opt_v, 'version' => \$opt_version,
 	    'topoevents' => \$opt_topoevents, 'topointerval=s' => \$opt_topointerval,
 	    'pslookup=s' => \$opt_pslookup, 'wait=s' => \$opt_pslookup_wait, 'ipv6' =>\$opt_ipv6,
 	    'follow' => \$opt_follow, 'followinterval=s' => \$opt_followinterval, 'conf=s' =>\$opt_config_file,
-	    'sumperiod=s' => \$opt_sumperiod
+	    'sumperiod=s' => \$opt_sumperiod, 'memorymax=s' => \$opt_memorymax
 	); 
     foreach my $opt (keys %{$config}) {
 	# Set option based on value from config file
@@ -130,7 +130,7 @@ $opt_addresses ||= ''; # Set source of ip-to-name mappings.
 $opt_names ||= '';     # Set source of ip-to-name mappings. 
 $opt_json ||= '';      # Enable events output in JSON format to given file ro to destination specified in file via perfsonar's JSON achive spec format. 
 $opt_jitter ||= 600;   # Emit jitter statistics at intervals.
-$opt_threshold ||= '10,10,0.5';  # Threshold values for reporting, in form of a vector.
+$opt_threshold |= '10,10,0.5';  # Threshold values for reporting, in form of a vector.
 $opt_owamp ||= '';     # Get json owamp data from url
 $opt_rtp ||= 5;        # Number of ddelays to average before test
 $opt_ddelay_low ||=  2;  # End of burst limit
@@ -154,6 +154,13 @@ $opt_sumperiod = 0 if ( lc($opt_sumperiod) eq "off" );  # 0 or "off": summary re
 if ( $opt_sumperiod !~ /^\d+$/ || $opt_sumperiod > 86400 ) {
     warn "Summary period '$opt_sumperiod' is not a number of seconds up to 86400. Applying 86400.\n";
     $opt_sumperiod = 86400;
+}
+$opt_memorymax = '1G' if ( ! defined $opt_memorymax || $opt_memorymax eq '' );  # Most memory the analysis may hold while it reads owamp data
+my $memorymax = memory_size($opt_memorymax);   # The limit in bytes. 0: no limit
+if ( ! defined $memorymax ) {
+    warn "Memory limit '$opt_memorymax' is not a number of bytes, with K, M or G if wanted, or 'off'. Applying 1G.\n";
+    $opt_memorymax = '1G';
+    $memorymax = memory_size($opt_memorymax);
 }
 $opt_config_file ||= '';     # Filename of configfile
 
@@ -231,7 +238,7 @@ Options
   -title string	       Set title for graphs. Default is '$opt_title'.
   -addresses file      Set source of ip-to-name mappings. Both '<hostname> <address>' format and perfsonar psConfig json is accepted.
   -names file	       Set source of ip-to-name mappings. '<name> <user> <dns> <ip>' format acccepted.
-  -threshold vector    Threshold values for reporting, in form of a vector '<min-jitter>,<min-ddelay>,<min-slope>'. Default is $opt_threshold.
+  -threshold vector    Threshold values for reporting, in form of a vector '<min-jitter>,<min-ddelay>,<min-slope>'. Default is $min_jit,$min_ddelay,$min_slope .
   -owamp url           Get json owamp data from pscheduler (http://) og from rabbit message queue (ampq://)
   -follow	       Reread input source at intervals and analyse newly arrived packets. Applys only for http* owamp url. (To follow files apply '| tail -f'.)   	       
   -followinterval n    Interval for rereading input source. Default is $opt_followinterval sec.       	       
@@ -239,6 +246,9 @@ Options
                        Each summary covers its own interval, and the analysis carries on. The intervals follow the clock
                        in local time: with 3600 they end on the hour, with 86400 at midnight. 0 or 'off' gives summary
                        statistics at termination only. Default is $opt_sumperiod sec.
+  -memorymax size      Most memory the analysis may hold while it reads owamp data. Above it the analysis writes its
+                       summary statistics and ends (under systemd its unit then starts it again). A number of bytes,
+                       or with K, M or G. 0 or 'off' gives no limit. Default is $opt_memorymax.
   -json file           Enable events output in JSON format to given file or to destination specified in file via perfsonar's JSON achive spec format. 
   -jitter secs         Emit jitter statistics at intervals. Default is $opt_jitter sec.
   -v		       Be verbose.
@@ -252,7 +262,7 @@ Options
   -pslookup url        Source url for perfSONAR lookup service hosts, or 'off' for no lookup. Default is $opt_pslookup
   -wait seconds        Min no of seconds to wait between refreshing info fetched from pslookup-service. Default is $opt_pslookup_wait
   -ipv6                Analyse ipv6 packets (and ignore ipv4). Default is the opposite.
-  -conf filename       Filename to config file. Note that config file overrides CLI options.
+  -conf filename       Filename to config file. Note that CLI options override options from the config file.
     ";
 #  -change_factor f     Fraction change to cause threshold jitter report. Default is 0.3.
 
@@ -287,7 +297,7 @@ if ($opt_owamp){
     $rmq_cv = AnyEvent->condvar;
 }
 
-my ( $min_jit, $min_ddelay, $min_slope) = split(',', $opt_threshold);
+my ( $min_jit, $min_dddelay, $min_slope) = split(',', $opt_threshold);
 my $jitter_delta={'jit'=> $min_jit/2, 'ddelay'=> $min_ddelay/2, 'slope'=>$min_slope/2};
 
 #my $change_factor= $opt_change_factor;
@@ -517,6 +527,42 @@ sub check_sumperiod {
 	reset_summary($_) foreach ( keys %sum_flows );
     }
     $sum_next = next_sum_time(time(), $opt_sumperiod);
+}
+
+sub memory_size {
+    # A memory size as a number of bytes: a whole number, with K, M, G or T (steps of 1024) if wanted.
+    # 0, 'off' and 'infinity' stand for no limit and give 0. Anything else gives undef.
+    my $size = lc(shift);
+    return 0 if ( $size eq 'off' || $size eq 'infinity' );
+    return undef if ( $size !~ /^(\d+)([kmgt]?)$/ );
+    return $1 * 1024 ** { '' => 0, 'k' => 1, 'm' => 2, 'g' => 3, 't' => 4 }->{$2};
+}
+
+sub memory_in_use {
+    # The memory this process holds, in bytes: what is in RAM and what has been swapped out.
+    # Not known (undef) where /proc does not tell.
+    open(my $status, '<', '/proc/self/status') or return undef;
+    my ($bytes, $known);
+    while ( my $line = <$status> ) {
+	if ( $line =~ /^Vm(?:RSS|Swap):\s+(\d+)\s+kB/ ) {
+	    $bytes += $1 * 1024;
+	    $known = 1;
+	}
+    }
+    close $status;
+    return $known ? $bytes : undef;
+}
+
+sub check_memory {
+    # End the analysis when it holds more memory than it may (option memorymax). The summary is
+    # written first, as when the analysis is stopped. Under systemd the unit then starts it again.
+    # (Called before a batch of results is analysed.)
+    return if ! $memorymax;
+    my $in_use = memory_in_use();
+    return if ( ! defined $in_use || $in_use <= $memorymax );
+    warn sprintf("The analysis holds %d MB of memory, more than the %d MB it may (option memorymax). Writing the summary and ending.\n",
+		 POSIX::ceil($in_use / 2**20), $memorymax / 2**20);
+    handle_signals();
 }
 
 sub reset_summary {
@@ -1002,6 +1048,7 @@ sub owamp_ana($){
     # not have the expected shape, is reported and skipped: it must not stop
     # the analysis of the batches that follow.
     my $payload=shift;
+    check_memory();
     eval { owamp_ana_batch($payload); 1 }
 	or warn "Skipping a batch of results that could not be analysed: " . ( ( split /\n/, "$@" )[0] || "unknown error" ) . "\n";
 }
@@ -1083,14 +1130,16 @@ sub owamp_ana_batch {
 		my $seq=$probepacket->{'seq-num'};
 		my $uniq_seq;
 		# Adjust seq num attempting to make it unique across batches...
-		$owamp_batch{$opt_id} = { 'pre_tx' => 0, 'pre_seq' => 0, 'seq_base' => 0, 'pre_seq_base' => 0 } if ( ! exists($owamp_batch{$opt_id}) );
+		$owamp_batch{$opt_id} = { 'pre_tx' => 0, 'pre_seq' => 0, 'seq_base' => 0, 'pre_seq_base' => 0, 'size' => $batchsize } if ( ! exists($owamp_batch{$opt_id}) );
 		if ( $owamp_batch{$opt_id}->{'pre_tx'} > 0 && $tx < $owamp_batch{$opt_id}->{'pre_tx'} && $seq > $owamp_batch{$opt_id}->{'pre_seq'} ) {
 		    # Packet from previous batch
 		    $uniq_seq = $seq + $owamp_batch{$opt_id}->{'pre_seq_base'};
 		} elsif ($tx > $owamp_batch{$opt_id}->{'pre_tx'} && $seq < $owamp_batch{$opt_id}->{'pre_seq'} ) {
-		    # New batch / session. Increase base seq num to be added.
+		    # New batch / session. Increase base seq num by the size of the batch that
+		    # has ended: the batches of a flow are not always of the same size.
 		    $owamp_batch{$opt_id}->{'pre_seq_base'} = $owamp_batch{$opt_id}->{'seq_base'};
-		    $owamp_batch{$opt_id}->{'seq_base'} += $batchsize;
+		    $owamp_batch{$opt_id}->{'seq_base'} += $owamp_batch{$opt_id}->{'size'} || $batchsize;
+		    $owamp_batch{$opt_id}->{'size'} = $batchsize;
 		    $uniq_seq = $seq + $owamp_batch{$opt_id}->{'seq_base'};
 		} else {
 		    # Packet from current batch

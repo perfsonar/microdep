@@ -15,6 +15,12 @@ ROLES_YML=/usr/lib/perfsonar/archive/config/roles.yml
 ROLES_PATCH=/usr/lib/perfsonar/archive/config/microdep_roles_yml_patch
 PIPELINES_YML=/etc/logstash/pipelines.yml
 PIPELINES_PATCH=/etc/perfsonar/microdep/logstash/microdep-pipelines.yml
+# The index policy, where the packages install it. It is read from here both when
+# the policy is created and when it is updated. (The update used to read
+# /etc/perfsonar/microdep/microdep_default_policy.json, where no package puts it:
+# a change of the policy never arrived, and on a host that still had a file there
+# from an earlier version, that old policy was put back at every run.)
+POLICY_FILE=/usr/lib/perfsonar/archive/config/ilm/install/microdep_default_policy.json
 # The roles that get access to the Microdep indices: the one Logstash writes with,
 # and the one for reading (which is also the one of users that have not logged in)
 MICRODEP_ROLES="pscheduler_logstash pscheduler_reader"
@@ -290,7 +296,7 @@ os_curl -s -H 'Content-Type: application/json' -XPUT "$OPENSEARCH_URL/_index_tem
 if [ $(os_curl -s -o /dev/null -w "%{http_code}" "$OPENSEARCH_URL/_plugins/_ism/policies/microdep_default_policy") -ne 200 ]; then
     # No policy found.  Create new.
     msg "Creating default Microdep index policy..."
-    os_curl -H 'Content-Type: application/json' -X PUT "$OPENSEARCH_URL/_plugins/_ism/policies/microdep_default_policy" -d "@/usr/lib/perfsonar/archive/config/ilm/install/microdep_default_policy.json" 2>/dev/null ; echo
+    os_curl -H 'Content-Type: application/json' -X PUT "$OPENSEARCH_URL/_plugins/_ism/policies/microdep_default_policy" -d "@$POLICY_FILE" 2>/dev/null ; echo
     # Apply policy to index
     msg "Applying Microdep index policy to indices..."
     os_curl -H 'Content-Type: application/json' -X POST "$OPENSEARCH_URL/_plugins/_ism/add/microdep*" -d '{ "policy_id": "microdep_default_policy" }' 2>/dev/null ; echo
@@ -300,7 +306,7 @@ else
     P_PRIM_TERM=$(os_curl -s $OPENSEARCH_URL/_plugins/_ism/policies/microdep_default_policy | jq ._primary_term)
     # Update policy
     msg "Updating default Microdep index policy..."
-    os_curl -H 'Content-Type: application/json' -X PUT "$OPENSEARCH_URL/_plugins/_ism/policies/microdep_default_policy?if_seq_no=$P_SEQ_NO&if_primary_term=$P_PRIM_TERM" -d "@/etc/perfsonar/microdep/microdep_default_policy.json" 2>/dev/null ; echo
+    os_curl -H 'Content-Type: application/json' -X PUT "$OPENSEARCH_URL/_plugins/_ism/policies/microdep_default_policy?if_seq_no=$P_SEQ_NO&if_primary_term=$P_PRIM_TERM" -d "@$POLICY_FILE" 2>/dev/null ; echo
     # Roll over indices to activate new policy version
     msg "Rolling over indices to ensure new policy is applied..."
     for i in $MICRODEP_INDICES; do
