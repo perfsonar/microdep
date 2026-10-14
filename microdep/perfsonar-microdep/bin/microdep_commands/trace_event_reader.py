@@ -93,8 +93,7 @@ f_csensitivity = 1 #Amount of traceroutes in an anomalous report before printing
 # Cross Entropy parameters
 CE_DELTA_LIMIT = 3.0          # Level of change in ce-level for a hop to consider a route change to have happened.
 HOPDIST_INIT_WINDOW = 20      # Min no of probes seen for a hop to consider its host distribution to be representativ
-HOPDIST_INIT_MODE = 'hop'     # Which hops must have passed the window: 'hop' (each hop on its own), 'route' (every hop of the
-                              # traceroute at hand) or 'all' (every hop kept for the pair, the most cautious)
+HOPDIST_INIT_MODE = 'hop'     # Hops that must have passed the window: 'hop' (each on its own), 'route' (those of the run) or 'all'
 
 HTTP_TIMEOUT = 60             # Max no of seconds to wait for an answer when reading from a data source or delivering an event record
 MAX_SECONDS_AHEAD = 300        # A traceroute run dated more than this ahead of the clock of this host is passed over
@@ -1683,15 +1682,10 @@ def RouteCompare(traceroute, unique_pair, time, analysis_state_jumps, analysis_s
             # Total no of probes has reached "window" limit for this hop
             
             if HOPDIST_INIT_MODE == 'hop':
-                # Each hop on its own: its distribution is used once it has more probes than the window
                 ready = total > HOPDIST_INIT_WINDOW
             elif HOPDIST_INIT_MODE == 'all':
-                # Every hop kept for the pair has more probes than the window
                 ready = all_dest_dists_initialized or min([int(x['frequencies']) for x in analysis_state_jumps]) > HOPDIST_INIT_WINDOW
             else:
-                # Every hop of this traceroute has more probes than the window. (Hops kept for the pair that this
-                # traceroute does not have are left out: a hop that only a few longer runs reach would otherwise
-                # hold the calculations back for every run of the pair.)
                 ready = all_dest_dists_initialized or min([int(analysis_state_jumps[h]['frequencies']) for h in traceroute["result"]]) > HOPDIST_INIT_WINDOW
             if ready:
                 all_dest_dists_initialized = True
@@ -1752,8 +1746,7 @@ def RouteCompare(traceroute, unique_pair, time, analysis_state_jumps, analysis_s
 
 
         if len(ce_delta) == n_ce:
-            # No value for this hop (not enough probes yet): a 0 keeps the values in step with the hops,
-            # which is how printRouteAlert() reads them
+            # keep ce_delta in step with the hops: printRouteAlert() reads it by position
             ce_delta.append(0.0)
 
     total_ce_delta = prev_total_ce - total_ce
