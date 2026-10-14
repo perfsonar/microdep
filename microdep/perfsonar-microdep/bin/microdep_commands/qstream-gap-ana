@@ -54,7 +54,7 @@ my ($opt_h, $opt_help, $opt_id, $opt_slep,
     $opt_topoevents, $opt_topointerval,
     $opt_pslookup, $opt_pslookup_wait, $opt_ipv6,
     $opt_follow, $opt_followinterval, $opt_config_file,
-    $opt_sumperiod );
+    $opt_sumperiod, $opt_memorymax );
 
 # Fetch options (if any) from commandline
 GetOptions( 'h' => \$opt_h, 'help' => \$opt_help, 'id=s' => \$opt_id, 'slep=s' => \$opt_slep, 
@@ -69,7 +69,7 @@ GetOptions( 'h' => \$opt_h, 'help' => \$opt_help, 'id=s' => \$opt_id, 'slep=s' =
 	    'topoevents' => \$opt_topoevents, 'topointerval=s' => \$opt_topointerval,
 	    'pslookup=s' => \$opt_pslookup, 'wait=s' => \$opt_pslookup_wait, 'ipv6' =>\$opt_ipv6,
 	    'follow' => \$opt_follow, 'followinterval=s' => \$opt_followinterval, 'conf=s' =>\$opt_config_file,
-	    'sumperiod=s' => \$opt_sumperiod
+	    'sumperiod=s' => \$opt_sumperiod, 'memorymax=s' => \$opt_memorymax
     ) or $opt_h = 1;   # (Output help text on failure)
 
 if ( ! $opt_h && ! $opt_help && -e $opt_config_file ) {
@@ -91,7 +91,7 @@ if ( ! $opt_h && ! $opt_help && -e $opt_config_file ) {
 	    'topoevents' => \$opt_topoevents, 'topointerval=s' => \$opt_topointerval,
 	    'pslookup=s' => \$opt_pslookup, 'wait=s' => \$opt_pslookup_wait, 'ipv6' =>\$opt_ipv6,
 	    'follow' => \$opt_follow, 'followinterval=s' => \$opt_followinterval, 'conf=s' =>\$opt_config_file,
-	    'sumperiod=s' => \$opt_sumperiod
+	    'sumperiod=s' => \$opt_sumperiod, 'memorymax=s' => \$opt_memorymax
 	); 
     foreach my $opt (keys %{$config}) {
 	# Set option based on value from config file
@@ -154,6 +154,13 @@ $opt_sumperiod = 0 if ( lc($opt_sumperiod) eq "off" );  # 0 or "off": summary re
 if ( $opt_sumperiod !~ /^\d+$/ || $opt_sumperiod > 86400 ) {
     warn "Summary period '$opt_sumperiod' is not a number of seconds up to 86400. Applying 86400.\n";
     $opt_sumperiod = 86400;
+}
+$opt_memorymax = '1G' if ( ! defined $opt_memorymax || $opt_memorymax eq '' );  # Most memory the analysis may hold while it reads owamp data
+my $memorymax = memory_size($opt_memorymax);   # The limit in bytes. 0: no limit
+if ( ! defined $memorymax ) {
+    warn "Memory limit '$opt_memorymax' is not a number of bytes, with K, M or G if wanted, or 'off'. Applying 1G.\n";
+    $opt_memorymax = '1G';
+    $memorymax = memory_size($opt_memorymax);
 }
 $opt_config_file ||= '';     # Filename of configfile
 
@@ -239,6 +246,9 @@ Options
                        Each summary covers its own interval, and the analysis carries on. The intervals follow the clock
                        in local time: with 3600 they end on the hour, with 86400 at midnight. 0 or 'off' gives summary
                        statistics at termination only. Default is $opt_sumperiod sec.
+  -memorymax size      Most memory the analysis may hold while it reads owamp data. Above it the analysis writes its
+                       summary statistics and ends (under systemd its unit then starts it again). A number of bytes,
+                       or with K, M or G. 0 or 'off' gives no limit. Default is $opt_memorymax.
   -json file           Enable events output in JSON format to given file or to destination specified in file via perfsonar's JSON achive spec format. 
   -jitter secs         Emit jitter statistics at intervals. Default is $opt_jitter sec.
   -v		       Be verbose.
@@ -517,6 +527,42 @@ sub check_sumperiod {
 	reset_summary($_) foreach ( keys %sum_flows );
     }
     $sum_next = next_sum_time(time(), $opt_sumperiod);
+}
+
+sub memory_size {
+    # A memory size as a number of bytes: a whole number, with K, M, G or T (steps of 1024) if wanted.
+    # 0, 'off' and 'infinity' stand for no limit and give 0. Anything else gives undef.
+    my $size = lc(shift);
+    return 0 if ( $size eq 'off' || $size eq 'infinity' );
+    return undef if ( $size !~ /^(\d+)([kmgt]?)$/ );
+    return $1 * 1024 ** { '' => 0, 'k' => 1, 'm' => 2, 'g' => 3, 't' => 4 }->{$2};
+}
+
+sub memory_in_use {
+    # The memory this process holds, in bytes: what is in RAM and what has been swapped out.
+    # Not known (undef) where /proc does not tell.
+    open(my $status, '<', '/proc/self/status') or return undef;
+    my ($bytes, $known);
+    while ( my $line = <$status> ) {
+	if ( $line =~ /^Vm(?:RSS|Swap):\s+(\d+)\s+kB/ ) {
+	    $bytes += $1 * 1024;
+	    $known = 1;
+	}
+    }
+    close $status;
+    return $known ? $bytes : undef;
+}
+
+sub check_memory {
+    # End the analysis when it holds more memory than it may (option memorymax). The summary is
+    # written first, as when the analysis is stopped. Under systemd the unit then starts it again.
+    # (Called before a batch of results is analysed.)
+    return if ! $memorymax;
+    my $in_use = memory_in_use();
+    return if ( ! defined $in_use || $in_use <= $memorymax );
+    warn sprintf("The analysis holds %d MB of memory, more than the %d MB it may (option memorymax). Writing the summary and ending.\n",
+		 POSIX::ceil($in_use / 2**20), $memorymax / 2**20);
+    handle_signals();
 }
 
 sub reset_summary {
@@ -1002,6 +1048,7 @@ sub owamp_ana($){
     # not have the expected shape, is reported and skipped: it must not stop
     # the analysis of the batches that follow.
     my $payload=shift;
+    check_memory();
     eval { owamp_ana_batch($payload); 1 }
 	or warn "Skipping a batch of results that could not be analysed: " . ( ( split /\n/, "$@" )[0] || "unknown error" ) . "\n";
 }
