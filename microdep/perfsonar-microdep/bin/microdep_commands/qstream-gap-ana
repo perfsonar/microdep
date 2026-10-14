@@ -1083,14 +1083,16 @@ sub owamp_ana_batch {
 		my $seq=$probepacket->{'seq-num'};
 		my $uniq_seq;
 		# Adjust seq num attempting to make it unique across batches...
-		$owamp_batch{$opt_id} = { 'pre_tx' => 0, 'pre_seq' => 0, 'seq_base' => 0, 'pre_seq_base' => 0 } if ( ! exists($owamp_batch{$opt_id}) );
+		$owamp_batch{$opt_id} = { 'pre_tx' => 0, 'pre_seq' => 0, 'seq_base' => 0, 'pre_seq_base' => 0, 'size' => $batchsize } if ( ! exists($owamp_batch{$opt_id}) );
 		if ( $owamp_batch{$opt_id}->{'pre_tx'} > 0 && $tx < $owamp_batch{$opt_id}->{'pre_tx'} && $seq > $owamp_batch{$opt_id}->{'pre_seq'} ) {
 		    # Packet from previous batch
 		    $uniq_seq = $seq + $owamp_batch{$opt_id}->{'pre_seq_base'};
 		} elsif ($tx > $owamp_batch{$opt_id}->{'pre_tx'} && $seq < $owamp_batch{$opt_id}->{'pre_seq'} ) {
-		    # New batch / session. Increase base seq num to be added.
+		    # New batch / session. Increase base seq num by the size of the batch that
+		    # has ended: the batches of a flow are not always of the same size.
 		    $owamp_batch{$opt_id}->{'pre_seq_base'} = $owamp_batch{$opt_id}->{'seq_base'};
-		    $owamp_batch{$opt_id}->{'seq_base'} += $batchsize;
+		    $owamp_batch{$opt_id}->{'seq_base'} += $owamp_batch{$opt_id}->{'size'} || $batchsize;
+		    $owamp_batch{$opt_id}->{'size'} = $batchsize;
 		    $uniq_seq = $seq + $owamp_batch{$opt_id}->{'seq_base'};
 		} else {
 		    # Packet from current batch
