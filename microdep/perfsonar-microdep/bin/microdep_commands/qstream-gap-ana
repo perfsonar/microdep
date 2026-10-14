@@ -262,7 +262,7 @@ Options
   -pslookup url        Source url for perfSONAR lookup service hosts, or 'off' for no lookup. Default is $opt_pslookup
   -wait seconds        Min no of seconds to wait between refreshing info fetched from pslookup-service. Default is $opt_pslookup_wait
   -ipv6                Analyse ipv6 packets (and ignore ipv4). Default is the opposite.
-  -conf filename       Filename to config file. Note that config file overrides CLI options.
+  -conf filename       Filename to config file. Note that CLI options override options from the config file.
     ";
 #  -change_factor f     Fraction change to cause threshold jitter report. Default is 0.3.
 
