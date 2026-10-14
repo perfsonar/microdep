@@ -38,7 +38,9 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
     const to_list = (Array.isArray(to) ? to : String(to || '').split(','))
         .map(function (h) { return String(h).trim(); }).filter(Boolean);
     const multi = to_list.length > 1;
-    const is_dest = {};
+    // (Looked up by host name, like the other objects made with Object.create(null) in this file:
+    // without inherited properties a host may be called "length" or "constructor".)
+    const is_dest = Object.create(null);
     to_list.forEach(function (h) { is_dest[h] = true; });
     to = multi ? to_list.join(',') : (to_list[0] || to);
     // Map-supplied status of a leaf (peer): fn(host) -> { color, lines[] } or null
@@ -736,7 +738,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
     // tr_data + the Paths model -> samples in time order, with the route index
     // of each and the per-(hop, host) minimum RTT of the period.
     function build_tline_model(tr_data, M, simple) {
-        const routeIdx = {};
+        const routeIdx = Object.create(null);
         M.routes.forEach(function (r) { routeIdx[r.hosts.join(' ')] = r.idx; });
         const samples = tr_data.map(function (tr) {
             const hops = [], seen = {};
@@ -767,7 +769,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         for (let t = 1; t <= M.maxttl; t++) {
             const dom = M.routes[0] && M.routes[0].hosts[t - 1];
             if (dom) { ref.push(dom); continue; }
-            const cnt = {}; let best = null;
+            const cnt = Object.create(null); let best = null;
             samples.forEach(function (s) { const h = s.at[t]; if (!h) return; cnt[h.host] = (cnt[h.host] || 0) + 1; if (best === null || cnt[h.host] > cnt[best]) best = h.host; });
             ref.push(best);
         }
@@ -895,7 +897,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         const routeMode = tline_state.colour === 'adds';
 
         // ---- per peer: its traces, its routes ranked by share, its best RTT ----
-        const byPeer = {};
+        const byPeer = Object.create(null);
         T.samples.forEach(function (s) { if (!s.dest) return; (byPeer[s.dest] = byPeer[s.dest] || { samples: [], routes: {}, endMin: null }).samples.push(s); });
         const peers = to_list.filter(function (p) { return byPeer[p]; });
         Object.keys(byPeer).forEach(function (p) { if (peers.indexOf(p) < 0) peers.push(p); });
@@ -941,7 +943,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         const H = yAxis + 30;
         const X = tline_x(cols, x0, cw, plotW), xAt = X.xAt;
         const cwDraw = cw >= 6 ? cw - 1 : cw;
-        const colPeer = cols.map(function (c) { const m = {}; c.samples.forEach(function (s) { if (s.dest) (m[s.dest] = m[s.dest] || []).push(s); }); return m; });
+        const colPeer = cols.map(function (c) { const m = Object.create(null); c.samples.forEach(function (s) { if (s.dest) (m[s.dest] = m[s.dest] || []).push(s); }); return m; });
         const hatch = function (x, y, w, h) { return '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" fill="url(#' + id + '-tl-hatch)"></rect>'; };
 
         let out = '<defs><pattern id="' + id + '-tl-hatch" width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="4" class="tl-hatch"></line></pattern></defs>';
@@ -1091,7 +1093,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         // earlier one appears - gets ONE row, labelled with its hop range. A hop
         // of any trace goes to the row of its host when that host has one, else
         // to the row of the reference host at the same hop, hatched as "other".
-        const allRows = [], rowByHost = {}, rowOfTtl = [];
+        const allRows = [], rowByHost = Object.create(null), rowOfTtl = [];
         for (let t = 1; t <= T.maxttl; t++) {
             if (paths_state.simple && !T.ref[t]) continue;      // nobody answered there
             const h = T.ref[t] || (t + '?');
@@ -1174,7 +1176,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         cols.forEach(function (c, k) {
             cell.push([]);
             rows.forEach(function (ridx, ri) {
-                let worst = null, worstRtt = null, worstTtl = null, n = 0, alt = 0, hostCnt = {}, host = null, star = 0;
+                let worst = null, worstRtt = null, worstTtl = null, n = 0, alt = 0, hostCnt = Object.create(null), host = null, star = 0;
                 c.samples.forEach(function (s) {
                     const pl = s.place[ridx]; if (!pl) return;
                     const h = pl.h;
@@ -1502,7 +1504,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
     function mark_path_ends(tree) {
         if (!tree || !tree.nodes) return;
         const ends = end_colors();
-        const dests = {};
+        const dests = Object.create(null);
 
         // The destinations are whatever the view was opened for (one, or every
         // peer of a host); fall back to the furthest hop when none of the names
@@ -1539,7 +1541,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         const palette = link_palette();
         if (!tree || !tree.edges || !tree.stats) return null;
 
-        const min_rtt = { start: 0 };          // the sender is the zero point
+        const min_rtt = Object.assign(Object.create(null), { start: 0 });          // the sender is the zero point
         for (const st of tree.stats) {
             if (st && typeof st.min === 'number' && isFinite(st.min)) min_rtt[st.address] = st.min;
         }
@@ -2383,7 +2385,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         // Which node does each id end up as? Same label - same node. A hop that
         // never answered keeps an id of its own: it is dropped from the drawing,
         // but the walk below still has to pass through it.
-        const by_label = {}, merge = {};
+        const by_label = Object.create(null), merge = Object.create(null);
         for (const node of data.nodes) {
             if (node.id === START || is_unanswered(node.id)) continue;
             const label = node.label || node.id;
@@ -2397,7 +2399,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         };
 
         // Build the surviving nodes, folding the merged ones together.
-        const kept = {};
+        const kept = Object.create(null);
         for (const node of data.nodes) {
             if (is_unanswered(node.id)) continue;
             if (node.id === START) { kept[START] = Object.assign({}, node); continue; }
@@ -2416,7 +2418,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
             const hop = kept[id].hop;
             (per_hop[hop] = per_hop[hop] || []).push(kept[id]);
         }
-        const admitted = {};
+        const admitted = Object.create(null);
         if (kept[START]) admitted[START] = kept[START];
         for (const hop in per_hop) {
             per_hop[hop]
@@ -2426,7 +2428,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
 
         // Adjacency over the merged ids, dropped nodes included: the walk needs
         // them to find what lies on the far side.
-        const out = {};
+        const out = Object.create(null);
         for (const edge of data.edges) {
             const f = merged(edge.from), t = merged(edge.to);
             if (!f || !t || f === t) continue;
@@ -2457,7 +2459,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
             }
         };
         for (const from in admitted) {
-            const seen = {};
+            const seen = Object.create(null);
             const walk = function (at, depth, first_edge, value) {
                 if (depth > MAX_SKIP) return;
                 const links = out[at] || [];
@@ -2488,8 +2490,8 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         let nodes = [];
         let kanter = [];
         let hop = [];
-        let collapse = [];
-        let collapsed = [];
+        let collapse = Object.create(null);
+        let collapsed = Object.create(null);
 
         for (let s1 of data.stats) {
             hop[s1.address] = s1.hop;
