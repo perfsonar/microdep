@@ -192,7 +192,7 @@ else
     os_curl -H 'Content-Type: application/json' -X PUT "$OPENSEARCH_URL/_plugins/_ism/policies/pscheduler_raw_data_policy?if_seq_no=$P_SEQ_NO&if_primary_term=$P_PRIM_TERM" -d "@/usr/lib/perfsonar/archive/config/ilm/install/pscheduler_raw_data_policy.json" 2>/dev/null ; echo
     # Roll over indices to activate new policy version
     msg "Rolling over raw data indices to ensure new policy is applied..."
-    for i in INDICES; do
+    for i in $INDICES; do
 	os_curl -X POST "$OPENSEARCH_URL/$i/_rollover"  2>/dev/null ; echo
     done
 fi
