@@ -1667,8 +1667,10 @@ def RouteCompare(traceroute, unique_pair, time, analysis_state_jumps, analysis_s
             #if total > 2500:
             # Total no of probes has reached "window" limit for this hop
             
-            if all_dest_dists_initialized or min([int(x['frequencies']) for x in analysis_state_jumps]) > HOPDIST_INIT_WINDOW:
-                # Total no of probes has reached "window" limit for all hops
+            if all_dest_dists_initialized or min([int(analysis_state_jumps[h]['frequencies']) for h in traceroute["result"]]) > HOPDIST_INIT_WINDOW:
+                # Total no of probes has reached "window" limit for all hops of this traceroute.
+                # (Hops kept for the pair that this traceroute does not have are left out: a hop that only
+                # a few longer runs reach would otherwise hold the calculations back for every run of the pair.)
                 all_dest_dists_initialized = True
                 
                 ###  Cross entropy based anomality detection ### 
