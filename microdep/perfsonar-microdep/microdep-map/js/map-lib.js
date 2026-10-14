@@ -245,6 +245,16 @@ export function sort_diff(a , b){
 
 
 
+// The number for a new tab: the count of the items in the tab bar, as it always
+// was, unless a tab with that number is open - then the next number that is free.
+// (After an earlier tab is closed the count points at a number still in use: the
+// new tab then got the id of an open one, and its content went into that one.)
+export function new_tab_number(){
+    let n = $("main#tabs > ul > li").length;
+    while ( document.getElementById('tab' + n) ) n++;
+    return n;
+}
+
 export function add_tab(type, title, num_tabs, html){
 
     let divid='tab' + num_tabs;

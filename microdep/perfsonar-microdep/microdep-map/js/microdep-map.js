@@ -6,7 +6,7 @@ import {parms, conffile, prop_sum, update_url, stats_on, net_names, net_desc, ne
 	prop_names, prop_desc, prop_long_desc, prop_aggr,
 	colors, get_color, make_palette, threshes, get_thresholds, escapeHtml,
 	get_parms,removeParam, parse_hhmm, hhmm , adjust_to_timezone,
-	get_config, update_props, make_prop_select, add_tab,
+	get_config, update_props, make_prop_select, add_tab, new_tab_number,
 	round_number, zero_fill, selected_date_is_today_or_future, selected_hour_is_future }
 from "./map-lib.js" ;
 import { heatmap, chart_curve } from "./graph.js";
@@ -310,7 +310,7 @@ function restoreSavedTabs() {
 }
 
 function restoreOneTab(spec) {
-    const before = $("main#tabs > ul > li").length;
+    const before = new_tab_number();
     if (spec.kind === 'routes') {
         add_tab('div', spec.title, before,
             '<div class="center-text" style="padding:40px">' +
@@ -335,9 +335,9 @@ function restoreOneTab(spec) {
         // Simulate user picking the option from the #check dropdown — the
         // existing change-handler does all the work; we just need to
         // remember the divid afterwards.
+        const count = $("main#tabs > ul > li").length;
         $('#check').val(spec.report_type).trigger('change');
-        const after = $("main#tabs > ul > li").length;
-        if (after > before) tabSpecs.set('tab' + before, spec);
+        if ($("main#tabs > ul > li").length > count) tabSpecs.set('tab' + before, spec);
     }
 }
 
@@ -713,7 +713,7 @@ function spread_points(points){
 // The tree view: every traceroute from `host` in one picture, as a Routes tab
 // opened for "all peers" ('*'); ls_tab resolves the peers from the archive.
 function open_tree_tab(host) {
-    let num_tabs = $("main#tabs > ul > li").length;
+    let num_tabs = new_tab_number();
     let title = 'Tree: ' + host.split('.').slice(0, 2).join('.');
     add_tab('div', title, num_tabs, '<div class="center-text" style="padding:40px"><div class="spinner"></div><p>Loading traceroute data\u2026</p></div>');
     let tab_id = 'tab' + num_tabs;
@@ -1607,7 +1607,7 @@ function link_popup(link){
 	routesBtn.title = "See the routes graph and stats in this period";
 	routesBtn.innerHTML = 'Routes';
 	routesBtn.onclick = function(){
-	    let num_tabs = $("main#tabs > ul > li").length;
+	    let num_tabs = new_tab_number();
 	    let fromShort = link.from.split('.').slice(0,2).join('.');
 	    let toShort = link.to.split('.').slice(0,2).join('.');
 	    let title = 'Routes: ' + fromShort + ' \u2192 ' + toShort;
@@ -1733,7 +1733,7 @@ function link_popup(link){
 	var fromShortPlot = link.from.split('.').slice(0, 2).join('.');
 	var toShortPlot   = link.to.split('.').slice(0, 2).join('.');
 	function open_curve_tab(label, url) {
-	    var num_tabs = $("main#tabs > ul > li").length;
+	    var num_tabs = new_tab_number();
 	    var title = label + ': ' + fromShortPlot + ' → ' + toShortPlot;
 	    // Cache-buster — iframes get cached aggressively and the Queues view
 	    // is small/static, so fresh load each click is cheap and avoids
@@ -3720,7 +3720,7 @@ function _toggle_real_hop_labels(activeLine) {
 // persisted across reloads (kind 'curve' → restoreOneTab). Ported from
 // work-snapshot; used by the HTML heatmap's clickable cells (open_heatmap_cell).
 function open_curve_in_tab(title, label, url) {
-    const num_tabs = $("main#tabs > ul > li").length;
+    const num_tabs = new_tab_number();
     const sep = url.indexOf('?') >= 0 ? '&' : '?';
     const bustedUrl = url + sep + '_t=' + Date.now();
     const loader_id = 'curve-loader-' + num_tabs;
@@ -4665,7 +4665,7 @@ function init_map(){
     if ( parms.node){ focus_node=parms.node; get_topology(); links_on=true; }
     $("#check").change( function(){
 	var report_type = $("#check").val(); var title = $("#check").find(":selected").text();
-	let num_tabs = $("main#tabs > ul > li").length ; let tab_id = 'tab' + num_tabs;
+	let num_tabs = new_tab_number(); let tab_id = 'tab' + num_tabs;
 	switch(report_type ){
 	case 'missing': add_tab( 'div', title, num_tabs, check_asymmetry(report_type, tab_id) ); break;
 	case 'asymmetry': add_tab( 'div', title, num_tabs, check_asymmetry(report_type, tab_id) ); break;
