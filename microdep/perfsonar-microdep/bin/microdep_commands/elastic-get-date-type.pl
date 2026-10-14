@@ -324,7 +324,6 @@ if ( $count ) {
 
 print STDERR $search."\n" if $debug > 0;
 
-#my $url='http://admin:no+nz+br@localhost:9200/' . $index . '/_search?';
 my $url=$esurl . '/' . $index . '/_search?';
 if ($type eq "topology") {
     # Requires multi-search
