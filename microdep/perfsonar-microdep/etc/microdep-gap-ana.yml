@@ -21,7 +21,6 @@
 #outdir: "."	       # Set output directory. Defaut is current directory.
 #addresses: ""          # Filename to source of ip-to-name mappings. Both '<hostname> <address>' format and perfsonar psConfig json is accepted.
 #names: ""	       # Filename to source of ip-to-name mappings. '<name> <user> <dns> <ip>' format acccepted.
-#threshold: "10,10,0.5"  # Threshold values for reporting, in form of a vector-string '<min-jitter>,<min-ddelay>,<min-slope>'.
 #owamp: ""             # Url to source of json owamp data. Protocols supported: http, https, ampq, ampqs.
 #follow: false	       # Reread input source at intervals and analyse newly arrived packets. Applys only for owamp http* urls.
 #followinterval: 10     # Interval in seconds for rereading input source.
