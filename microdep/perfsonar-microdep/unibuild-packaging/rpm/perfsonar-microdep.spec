@@ -146,6 +146,7 @@ Requires:               select2js = 4.0.13
 Requires:               sorttablejs = 2.0
 Requires:               visjs
 Requires:               perfsonar-microdep-enrichdbs
+Obsoletes:              perfsonar-tracetree
 BuildRequires:          systemd
 BuildRequires:          systemd-rpm-macros
 # ... but macros are not yet utilized below
