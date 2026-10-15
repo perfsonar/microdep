@@ -38,7 +38,9 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
     const to_list = (Array.isArray(to) ? to : String(to || '').split(','))
         .map(function (h) { return String(h).trim(); }).filter(Boolean);
     const multi = to_list.length > 1;
-    const is_dest = {};
+    // (Looked up by host name, like the other objects made with Object.create(null) in this file:
+    // without inherited properties a host may be called "length" or "constructor".)
+    const is_dest = Object.create(null);
     to_list.forEach(function (h) { is_dest[h] = true; });
     to = multi ? to_list.join(',') : (to_list[0] || to);
     // Map-supplied status of a leaf (peer): fn(host) -> { color, lines[] } or null
@@ -736,7 +738,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
     // tr_data + the Paths model -> samples in time order, with the route index
     // of each and the per-(hop, host) minimum RTT of the period.
     function build_tline_model(tr_data, M, simple) {
-        const routeIdx = {};
+        const routeIdx = Object.create(null);
         M.routes.forEach(function (r) { routeIdx[r.hosts.join(' ')] = r.idx; });
         const samples = tr_data.map(function (tr) {
             const hops = [], seen = {};
@@ -767,7 +769,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         for (let t = 1; t <= M.maxttl; t++) {
             const dom = M.routes[0] && M.routes[0].hosts[t - 1];
             if (dom) { ref.push(dom); continue; }
-            const cnt = {}; let best = null;
+            const cnt = Object.create(null); let best = null;
             samples.forEach(function (s) { const h = s.at[t]; if (!h) return; cnt[h.host] = (cnt[h.host] || 0) + 1; if (best === null || cnt[h.host] > cnt[best]) best = h.host; });
             ref.push(best);
         }
@@ -895,7 +897,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         const routeMode = tline_state.colour === 'adds';
 
         // ---- per peer: its traces, its routes ranked by share, its best RTT ----
-        const byPeer = {};
+        const byPeer = Object.create(null);
         T.samples.forEach(function (s) { if (!s.dest) return; (byPeer[s.dest] = byPeer[s.dest] || { samples: [], routes: {}, endMin: null }).samples.push(s); });
         const peers = to_list.filter(function (p) { return byPeer[p]; });
         Object.keys(byPeer).forEach(function (p) { if (peers.indexOf(p) < 0) peers.push(p); });
@@ -941,7 +943,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         const H = yAxis + 30;
         const X = tline_x(cols, x0, cw, plotW), xAt = X.xAt;
         const cwDraw = cw >= 6 ? cw - 1 : cw;
-        const colPeer = cols.map(function (c) { const m = {}; c.samples.forEach(function (s) { if (s.dest) (m[s.dest] = m[s.dest] || []).push(s); }); return m; });
+        const colPeer = cols.map(function (c) { const m = Object.create(null); c.samples.forEach(function (s) { if (s.dest) (m[s.dest] = m[s.dest] || []).push(s); }); return m; });
         const hatch = function (x, y, w, h) { return '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" fill="url(#' + id + '-tl-hatch)"></rect>'; };
 
         let out = '<defs><pattern id="' + id + '-tl-hatch" width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="4" class="tl-hatch"></line></pattern></defs>';
@@ -1091,7 +1093,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         // earlier one appears - gets ONE row, labelled with its hop range. A hop
         // of any trace goes to the row of its host when that host has one, else
         // to the row of the reference host at the same hop, hatched as "other".
-        const allRows = [], rowByHost = {}, rowOfTtl = [];
+        const allRows = [], rowByHost = Object.create(null), rowOfTtl = [];
         for (let t = 1; t <= T.maxttl; t++) {
             if (paths_state.simple && !T.ref[t]) continue;      // nobody answered there
             const h = T.ref[t] || (t + '?');
@@ -1174,7 +1176,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         cols.forEach(function (c, k) {
             cell.push([]);
             rows.forEach(function (ridx, ri) {
-                let worst = null, worstRtt = null, worstTtl = null, n = 0, alt = 0, hostCnt = {}, host = null, star = 0;
+                let worst = null, worstRtt = null, worstTtl = null, n = 0, alt = 0, hostCnt = Object.create(null), host = null, star = 0;
                 c.samples.forEach(function (s) {
                     const pl = s.place[ridx]; if (!pl) return;
                     const h = pl.h;
@@ -1321,6 +1323,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
     let topo_layout = 'layered';
     try { topo_layout = localStorage.getItem('microdep-tracetree-topo') === 'free' ? 'free' : 'layered'; } catch (_) { /* private mode */ }
     let last_plot = null;                  // what the topology shows, for a re-plot on a layout switch
+    let topo_simple = false;               // true while it shows the simple view
 
     // ── Node shading: how often a node was seen ───────────────────────
     // Deliberately neutral. Colour now carries meaning on the LINKS (minimum
@@ -1501,7 +1504,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
     function mark_path_ends(tree) {
         if (!tree || !tree.nodes) return;
         const ends = end_colors();
-        const dests = {};
+        const dests = Object.create(null);
 
         // The destinations are whatever the view was opened for (one, or every
         // peer of a host); fall back to the furthest hop when none of the names
@@ -1525,7 +1528,10 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
             } else if (dests[n.id]) {
                 n.color = Object.assign({}, n.color, { background: ends.destination, border: ends.destination });
                 label_ink(n, ends.destination);
-            } else if (n.color && n.color.border === 'AA1111') {
+            } else if (n.color && (n.color.border === 'AA1111' || n.ended_short)) {
+                // (remembered: the marker is replaced by a colour here, and that
+                // colour changes with the palette)
+                n.ended_short = true;
                 n.color = Object.assign({}, n.color, { border: ends.error });
             }
         }
@@ -1535,7 +1541,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         const palette = link_palette();
         if (!tree || !tree.edges || !tree.stats) return null;
 
-        const min_rtt = { start: 0 };          // the sender is the zero point
+        const min_rtt = Object.assign(Object.create(null), { start: 0 });          // the sender is the zero point
         for (const st of tree.stats) {
             if (st && typeof st.min === 'number' && isFinite(st.min)) min_rtt[st.address] = st.min;
         }
@@ -1639,8 +1645,8 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
             if (nodes[nix].n !== undefined) {
                 for (let lim = limits.length - 1; lim >= 0; lim--) {
                     if (nodes[nix].n >= limits[lim]) {
-                        if (!nodes[nix].color) nodes[nix].color = {};
-                        nodes[nix].color.background = colors[lim];
+                        // (a new object: the drawing may still hold the one from before)
+                        nodes[nix].color = Object.assign({}, nodes[nix].color, { background: colors[lim] });
                         label_ink(nodes[nix], colors[lim]);
                         break;
                     }
@@ -1772,6 +1778,42 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         slices.push(n_slice);
     }
 
+    // Shade the nodes, mark the two ends, colour the links and draw the scale,
+    // all from the palette in use.
+    function colour_tree(tree) {
+        let limits = create_limits(tree.nodes, node_colors);
+        taint_nodes(tree.nodes, node_colors, limits);
+        mark_path_ends(tree);
+
+        // The scale beside the graph describes the LINK colours now: node
+        // shading only says how often a node was seen, which needs no key.
+        const link_scale = taint_edges_by_rtt(tree);
+        if (link_scale) {
+            create_legend('legend', link_scale.palette, link_scale.limits, 'min RTT ms');
+        } else {
+            create_legend('legend', node_colors, limits, 'traces');
+        }
+    }
+
+    // The palette switch of the map holds here as well (#148): what is on
+    // screen is coloured anew. The graph keeps its nodes, their places and the
+    // view it is in - only the colours change.
+    function repaint_palette() {
+        if (!in_slice || !in_slice.tree) return;
+        colour_tree(in_slice.tree);
+        if (tree) {
+            const shown = topo_simple ? reduce_graph(in_slice.tree) : in_slice.tree;
+            last_plot = { data: shown, divid: id + '-treetainer' };
+            topology = { nodes: new vis.DataSet(shown.nodes), edges: new vis.DataSet(shown.edges) };
+            update_tree_json(tree, topology);
+            setTimeout(attach_float_legend, 0);
+        }
+        paths_dirty = true;
+        if (paths_tab_active()) render_paths();
+        tline_dirty = true;
+        if (tline_tab_active()) render_tline();
+    }
+
     async function tr_slice_show(slice) {
         if (slice.tr_data) {
             if (!slice.tree) {
@@ -1781,19 +1823,9 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
             set_progress(90, 'Drawing');
             await _yield();
 
-            let limits = create_limits(slice.tree.nodes, node_colors);
-            taint_nodes(slice.tree.nodes, node_colors, limits);
-            mark_path_ends(slice.tree);
+            colour_tree(slice.tree);
 
-            // The scale beside the graph describes the LINK colours now: node
-            // shading only says how often a node was seen, which needs no key.
-            const link_scale = taint_edges_by_rtt(slice.tree);
-            if (link_scale) {
-                create_legend('legend', link_scale.palette, link_scale.limits, 'min RTT ms');
-            } else {
-                create_legend('legend', node_colors, limits, 'traces');
-            }
-
+            topo_simple = false;
             plot_tree_json(slice.tree, id + '-treetainer', false);
             paths_dirty = true;
             if (paths_tab_active()) render_paths();
@@ -2275,11 +2307,27 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
             g_ids = Object.keys(g_nodes),
             n_ids = Object.keys(data.nodes._data);
 
+        // A node or a link that stays is brought up to date as well: its colours
+        // follow the palette and the view (#148). Only the colours - its place
+        // is its own.
+        const drawn = function (item, keys) {
+            const d = { id: item.id };
+            keys.forEach(function (k) { if (item[k] !== undefined) d[k] = item[k]; });
+            return d;
+        };
+        const stay_nodes = [], stay_edges = [];
+
         for (let n_id of n_ids) {
             if (!g_ids.includes(n_id)) {
                 try { network.body.data.nodes.update(data.nodes._data[n_id]); }
                 catch (err) { console.error('Error adding node in update_tree: ' + err); }
+            } else {
+                stay_nodes.push(drawn(data.nodes._data[n_id], ['color', 'font']));
             }
+        }
+        if (stay_nodes.length) {
+            try { network.body.data.nodes.update(stay_nodes); }
+            catch (err) { console.error('Error updating nodes in update_tree: ' + err); }
         }
         for (let g_id of g_ids) {
             if (!n_ids.includes(g_id)) {
@@ -2295,7 +2343,13 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
             if (!eg_ids.includes(en_id)) {
                 try { network.body.data.edges.update(data.edges._data[en_id]); }
                 catch (err) { console.error('Error adding edge in update_tree: ' + err); }
+            } else {
+                stay_edges.push(drawn(data.edges._data[en_id], ['color']));
             }
+        }
+        if (stay_edges.length) {
+            try { network.body.data.edges.update(stay_edges); }
+            catch (err) { console.error('Error updating edges in update_tree: ' + err); }
         }
         for (let eg_id of eg_ids) {
             if (!en_ids.includes(eg_id)) {
@@ -2321,7 +2375,9 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
     //     old filter only admitted nodes that had a statistics record and the
     //     hop-zero node has none;
     //   - what is left is still capped per hop, now keeping the nodes most
-    //     traces actually went through rather than whichever came first.
+    //     traces actually went through rather than whichever came first;
+    //   - the destinations are kept as well. One that fell past the cap of
+    //     its hop used to vanish from the view.
     function reduce_graph(data) {
         const START = 'start';
         const is_unanswered = function (id) { return /\*$/.test(String(id)); };
@@ -2329,7 +2385,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         // Which node does each id end up as? Same label - same node. A hop that
         // never answered keeps an id of its own: it is dropped from the drawing,
         // but the walk below still has to pass through it.
-        const by_label = {}, merge = {};
+        const by_label = Object.create(null), merge = Object.create(null);
         for (const node of data.nodes) {
             if (node.id === START || is_unanswered(node.id)) continue;
             const label = node.label || node.id;
@@ -2343,7 +2399,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         };
 
         // Build the surviving nodes, folding the merged ones together.
-        const kept = {};
+        const kept = Object.create(null);
         for (const node of data.nodes) {
             if (is_unanswered(node.id)) continue;
             if (node.id === START) { kept[START] = Object.assign({}, node); continue; }
@@ -2355,25 +2411,24 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
             }
         }
 
-        // Cap the width of each hop, busiest first, sender exempt.
+        // Cap the width of each hop, busiest first, sender and destinations exempt.
         const per_hop = {};
         for (const id in kept) {
             if (id === START) continue;
             const hop = kept[id].hop;
             (per_hop[hop] = per_hop[hop] || []).push(kept[id]);
         }
-        const admitted = {};
+        const admitted = Object.create(null);
         if (kept[START]) admitted[START] = kept[START];
         for (const hop in per_hop) {
             per_hop[hop]
                 .sort(function (a, b) { return (b.n || 0) - (a.n || 0); })
-                .slice(0, max_parallel)
-                .forEach(function (n) { admitted[n.id] = n; });
+                .forEach(function (n, i) { if (i < max_parallel || is_dest[n.id] || is_dest[n.label]) admitted[n.id] = n; });
         }
 
         // Adjacency over the merged ids, dropped nodes included: the walk needs
         // them to find what lies on the far side.
-        const out = {};
+        const out = Object.create(null);
         for (const edge of data.edges) {
             const f = merged(edge.from), t = merged(edge.to);
             if (!f || !t || f === t) continue;
@@ -2404,7 +2459,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
             }
         };
         for (const from in admitted) {
-            const seen = {};
+            const seen = Object.create(null);
             const walk = function (at, depth, first_edge, value) {
                 if (depth > MAX_SKIP) return;
                 const links = out[at] || [];
@@ -2435,8 +2490,8 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         let nodes = [];
         let kanter = [];
         let hop = [];
-        let collapse = [];
-        let collapsed = [];
+        let collapse = Object.create(null);
+        let collapsed = Object.create(null);
 
         for (let s1 of data.stats) {
             hop[s1.address] = s1.hop;
@@ -3707,10 +3762,19 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
             simple_btn.addEventListener('click', function () {
                 if (in_slice && in_slice.tree) {
                     let reduced = reduce_graph(in_slice.tree);
+                    topo_simple = true;
                     plot_tree_json(reduced, id + '-treetainer', false);
                 }
             });
         }
+
+        // The map tells when its palette switch is used. (When this view is
+        // gone, so is its graph container: stop listening then.)
+        const on_palette = function () {
+            if (!el('treetainer')) { document.removeEventListener('microdep-palette-changed', on_palette); return; }
+            repaint_palette();
+        };
+        document.addEventListener('microdep-palette-changed', on_palette);
 
         // Full view — re-show current slice
         let full_btn = el('full');

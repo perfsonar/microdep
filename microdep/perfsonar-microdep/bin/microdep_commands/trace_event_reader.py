@@ -50,6 +50,7 @@ from io import StringIO
 import hashlib
 from operator import itemgetter
 import re
+import secrets
 import yaml
 
 #Tweaks for comparing final status of traceroute
@@ -91,9 +92,11 @@ f_csensitivity = 1 #Amount of traceroutes in an anomalous report before printing
 
 # Cross Entropy parameters
 CE_DELTA_LIMIT = 3.0          # Level of change in ce-level for a hop to consider a route change to have happened.
-HOPDIST_INIT_WINDOW = 2500    # Min no of probes seen for a hop to consider its host distribution to be representativ
+HOPDIST_INIT_WINDOW = 20      # Min no of probes seen for a hop to consider its host distribution to be representativ
+HOPDIST_INIT_MODE = 'hop'     # Hops that must have passed the window: 'hop' (each on its own), 'route' (those of the run) or 'all'
 
 HTTP_TIMEOUT = 60             # Max no of seconds to wait for an answer when reading from a data source or delivering an event record
+MAX_SECONDS_AHEAD = 300        # A traceroute run dated more than this ahead of the clock of this host is passed over
 
 # Set default paramenter values
 param = {
@@ -146,11 +149,11 @@ state_str = [ "dummy","success", "failed", "partialfail" ]
 
 
 # From https://www.geeksforgeeks.org/python/python-program-to-find-the-type-of-ip-address-using-regex/
-IP4_RE = '''^(25[0-5]|2[0-4][0-9]|[0-1]?[0-9][0-9]?)\.( 
+IP4_RE = r'''^(25[0-5]|2[0-4][0-9]|[0-1]?[0-9][0-9]?)\.( 
             25[0-5]|2[0-4][0-9]|[0-1]?[0-9][0-9]?)\.( 
             25[0-5]|2[0-4][0-9]|[0-1]?[0-9][0-9]?)\.( 
             25[0-5]|2[0-4][0-9]|[0-1]?[0-9][0-9]?)$'''
-IP6_RE = '''(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|
+IP6_RE = r'''(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|
         ([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:)
         {1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1
         ,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}
@@ -166,6 +169,12 @@ IP6_RE = '''(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|
         |1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]
         |1{0,1}[0-9]){0,1}[0-9]))'''
 
+IP4_PATTERN = re.compile(IP4_RE, re.VERBOSE)   # (the pattern is written over several lines)
+
+def is_ipv4(text):
+    """ True if text is an IPv4 address
+    """
+    return IP4_PATTERN.match(str(text)) is not None
 
 
 # Make sure SIGTERM also triggers exception handeling
@@ -182,6 +191,10 @@ def sigterm_handler(_signo, _stack_frame):
 
 signal.signal(signal.SIGTERM, sigterm_handler)
 signal.signal(signal.SIGHUP, sigterm_handler)
+
+# The signals that stop the script. They are held back while the state of the
+# analysis is written (see flush_analysis_state()).
+STOP_SIGNALS = (signal.SIGTERM, signal.SIGHUP, signal.SIGINT)
 
 
 class Tracesummary:
@@ -270,6 +283,10 @@ class Tracesummary:
         # Make sure src-dst pair exists in summary table
         if not src_dst in self.summary.keys():
             self.summary[src_dst] = self.summary_template.copy()
+            # The list of hosts per hop is the pair's own. (The copy above is a
+            # plain one: it handed every pair the one list of the template, so all
+            # pairs counted their hosts into it, summary period after summary period.)
+            self.summary[src_dst]['unique_hosts_list'] = []
         
     def count(self, counter):
         if not self.current_pair:
@@ -406,6 +423,9 @@ asn_lookup = None              # For mapping IPs to ASNs
 def parse_cmd(param):
     """ Parse commandline argumets
     """
+    # The tuning values that a config file may set. (Without this line the values assigned
+    # further down stayed inside this function, and the analysis went on with the defaults.)
+    global f_reduction, f_majority, f_max_state_counter, f_csensitivity, CE_DELTA_LIMIT, HOPDIST_INIT_WINDOW, HOPDIST_INIT_MODE
 
     # Parse arguments from commandline
     cmdparser = argparse.ArgumentParser(description="Analyses traceroute output and reports detected anomalities.")
@@ -461,6 +481,10 @@ def parse_cmd(param):
                 # Update (default) parameter
                 param[p] = config[p]
             # Handle additional parameters
+            elif ( p in ("f_reduction", "f_majority", "f_max_state_counter", "f_csensitivity", "ce_delta_limit", "hopdist_init_window")
+                   and ( isinstance(config[p], bool) or not isinstance(config[p], (int, float)) ) ):
+                # (The analysis compares these with numbers: any other value would stop it at every traceroute run)
+                print("Warning: The value of '" + p + "' in " + args.config + " is not a number. Keeping the default.")
             elif p == "f_reduction":
                 f_reduction = config[p]
             elif p == "f_majority":
@@ -473,6 +497,11 @@ def parse_cmd(param):
                 CE_DELTA_LIMIT = config[p]
             elif p == "hopdist_init_window":
                 HOPDIST_INIT_WINDOW = config[p]
+            elif p == "hopdist_init_mode":
+                if config[p] in ("hop", "route", "all"):
+                    HOPDIST_INIT_MODE = config[p]
+                else:
+                    print("Warning: The value of 'hopdist_init_mode' in " + args.config + " is not hop, route or all. Keeping the default.")
 
     # Extract all commandline parameters 
     for p in args.__dict__:
@@ -595,7 +624,7 @@ def prepare_db(cursor, param):
                 cursor.execute("DROP TABLE jumps")
                 cursor.execute("DROP TABLE length")
                 cursor.execute("DROP TABLE rtt")
-        except:
+        except Exception:
             pass
 
     try:
@@ -697,7 +726,7 @@ class Resolver:
                                 # Assuming IPv4
                                 self.ip['4'][name] = ip
                             self.name[ip] = name
-                except:
+                except Exception:
                     pass
 
                 if not 'addresses' in psconfig_data:
@@ -719,7 +748,7 @@ class Resolver:
                         if param["verbose"] > 1:
                             if len(ip) == 0 or len(name) == 0:
                                 print("Warning: No entries found in resolution file " + mapfile)
-            except:
+            except Exception:
                 print("Warning: Could not open resolution file " + mapfile)
                             
         if param["verbose"] > 3:
@@ -875,7 +904,7 @@ class Resolver:
                 # Add mapping
                 self.name[ip] = name
                 return name
-            except:
+            except Exception:
                 if param["verbose"] > 2:
                     print("Warning: Cannot resolve ip " + ip + ". Returning " + ip + " as name.")
                 # Add "emergency" mapping
@@ -907,7 +936,7 @@ class Resolver:
                 self.name[ip] = name
                 self.refresh_geopos(ip)
                 return ip
-            except:
+            except Exception:
                 if param["verbose"] > 2:
                     print("Warning: Cannot resolve name " + name + ". Returning " + name + " as ip.")
                 # Add "emergency" mapping
@@ -931,7 +960,7 @@ class Resolver:
                         ip = socket.getaddrinfo(name, None, socket.AF_INET6)[0][4][0]
                     else:
                         ip = socket.gethostbyname(name)
-                except:
+                except Exception:
                     # Maybe name is really an ip...
                     if not name in self.name.keys():
                         try:
@@ -939,7 +968,7 @@ class Resolver:
                             maybe_ip = name
                             name, alias, addresslist = socket.gethostbyaddr(maybe_ip)
                             ip = maybe_ip
-                        except:
+                        except Exception:
                             pass
         if ip:
             # Add mapping
@@ -1048,13 +1077,16 @@ def createJSON(alert):
         except ValueError:
             # No valid json (or spec) found.
             archive_spec = None
-        if archive_spec and archive_spec['archiver']:
+        if not isinstance(archive_spec, dict) or not archive_spec.get('archiver'):
+            # Json, but no spec (an output file that holds a single record, for one).
+            archive_spec = None
+        else:
             if archive_spec['archiver'] != "http":
                 if param["verbose"] > 2:
                     print ("No HTTP archiver specified in JSON object: " + json.dumps(archive_spec))
                 # No valid spec found.
                 archive_spec = None
-            elif not ( archive_spec['data'] and archive_spec['data']['_url'] and re.match(".*/logstash-ana", archive_spec['data']['_url']) ):
+            elif not ( isinstance(archive_spec.get('data'), dict) and isinstance(archive_spec['data'].get('_url'), str) and re.match(".*/logstash-ana", archive_spec['data']['_url']) ):
                 if param["verbose"] > 2:
                     print ("No valid archiver url found in JSON object: " + json.dumps(archive_spec))
                 # No valid spec found.
@@ -1243,7 +1275,7 @@ def printRouteAlert(threadid, tr_type, unique_pair, normalRoute, n, abnormalrout
                             lookup_res = asn_lookup.asn(ip)
                             asn_of_hops_before_over_ce_limit.add(str(lookup_res.autonomous_system_number))
                             as_of_hops_before_over_ce_limit.add(lookup_res.autonomous_system_organization)
-                        except:
+                        except Exception:
                             # No AS info found
                             asn_of_hops_before_over_ce_limit.add('0')
                             as_of_hops_before_over_ce_limit.add('unknown')
@@ -1260,7 +1292,7 @@ def printRouteAlert(threadid, tr_type, unique_pair, normalRoute, n, abnormalrout
                         lookup_res = asn_lookup.asn(normalRoute_obj[hop_no-1])
                         asn_of_hops_before_over_ce_limit.add(str(lookup_res.autonomous_system_number))
                         as_of_hops_before_over_ce_limit.add(lookup_res.autonomous_system_organization)
-                    except:
+                    except Exception:
                         asn_of_hops_before_over_ce_limit.add('0')
                         as_of_hops_before_over_ce_limit.add('Unknown')
         hop_no += 1
@@ -1450,7 +1482,7 @@ def printAlert(threadid, tr_type, n, time, mode, normal=None, new=None):
         lookup_res = asn_lookup.asn(data["lastip"])
         alert["last_reply_asn"] = lookup_res.autonomous_system_number
         alert["last_reply_as"] = lookup_res.autonomous_system_organization
-    except:
+    except Exception:
         # Lookup failed.
         alert["last_reply_asn"] = 0
         alert["last_reply_as"] = "unknown"
@@ -1514,13 +1546,13 @@ def compare(current, normal):
             for x in diff:
                 if x == "*":
                     points += 0.2
-                elif len(x.split(".")) == 4:
+                elif is_ipv4(x):
 
                     #Checks if address is in the same network
                     #Following https://link.springer.com/chapter/10.1007/978-3-319-04918-2_7
                     for y in normal:
                         same = False
-                        if len(y.split(".")) == 4:
+                        if is_ipv4(y):
                             if x.split(".")[-2] == y.split(".")[-2]:
                                 same = True
 
@@ -1544,13 +1576,13 @@ def compare(current, normal):
             for x in diff:
                 if x == "*":
                     points += 0.1
-                elif len(x.split(".")) == 4:
+                elif is_ipv4(x):
 
                     #Checks if address is in the same network
                     #Following https://link.springer.com/chapter/10.1007/978-3-319-04918-2_7
                     for y in current:
                         same = False
-                        if len(y.split(".")) == 4:
+                        if is_ipv4(y):
                             if x.split(".")[-2] == y.split(".")[-2]:
                                 same = True
 
@@ -1595,6 +1627,7 @@ def RouteCompare(traceroute, unique_pair, time, analysis_state_jumps, analysis_s
     
     #Goes through each hop in the current traceroute we're looking at
     for hop in traceroute["result"]:
+        n_ce = len(ce_delta)
 
         # Debug
         #print(" Hop", hop)
@@ -1648,8 +1681,13 @@ def RouteCompare(traceroute, unique_pair, time, analysis_state_jumps, analysis_s
             #if total > 2500:
             # Total no of probes has reached "window" limit for this hop
             
-            if all_dest_dists_initialized or min([int(x['frequencies']) for x in analysis_state_jumps]) > HOPDIST_INIT_WINDOW:
-                # Total no of probes has reached "window" limit for all hops
+            if HOPDIST_INIT_MODE == 'hop':
+                ready = total > HOPDIST_INIT_WINDOW
+            elif HOPDIST_INIT_MODE == 'all':
+                ready = all_dest_dists_initialized or min([int(x['frequencies']) for x in analysis_state_jumps]) > HOPDIST_INIT_WINDOW
+            else:
+                ready = all_dest_dists_initialized or min([int(analysis_state_jumps[h]['frequencies']) for h in traceroute["result"]]) > HOPDIST_INIT_WINDOW
+            if ready:
                 all_dest_dists_initialized = True
                 
                 ###  Cross entropy based anomality detection ### 
@@ -1707,6 +1745,10 @@ def RouteCompare(traceroute, unique_pair, time, analysis_state_jumps, analysis_s
                 # END OF UPDATING NORMALITY
 
 
+        if len(ce_delta) == n_ce:
+            # keep ce_delta in step with the hops: printRouteAlert() reads it by position
+            ce_delta.append(0.0)
+
     total_ce_delta = prev_total_ce - total_ce
     tracesummary.set_max('max_route_ce_delta', total_ce_delta)
     # Dump CE stuff
@@ -1756,7 +1798,7 @@ def findLastIp(traceroute, dest):
     for i in range(len(traceroute)-1, -1, -1):
         # Scan from last probe and backwards
         for j in range(len(traceroute[i])-1,-1,-1):
-            if len(traceroute[i][j].split(".")) == 4 or re.search(IP6_RE, traceroute[i][j]) and param["ipv6"]:
+            if is_ipv4(traceroute[i][j]) or re.search(IP6_RE, traceroute[i][j]) and param["ipv6"]:
                 return traceroute[i][j], i+1
                 
     # No ips found (all "*" or errormsgs)
@@ -1834,7 +1876,7 @@ def errorCheck(traceroute, unique_pair, time, analysis_state):
             ipseen = str(probe).strip()
             lastip = destination                     # Set dst-ip as last-ip since this is the one making traceroute terminate  
             tracesummary.count('probes_to_dst')
-        elif len(str(probe).strip().split(".")) == 4 or re.search(IP6_RE, str(probe).strip()) and param["ipv6"]:
+        elif is_ipv4(str(probe).strip()) or re.search(IP6_RE, str(probe).strip()) and param["ipv6"]:
             # Count stopped routes at none-desitantion addresses (ipv4 or ipv6)
             other += 1
             ipseen = str(probe).strip()
@@ -2360,6 +2402,11 @@ def flush_analysis_state(cursor):
     """ Flush state currently in memory to DB
     """
 
+    # The state is written as a whole: a signal to stop that arrives meanwhile is
+    # held back until it is stored, and takes effect then. (It used to be ignored
+    # here, so the script went on analysing while its unit was being stopped, and
+    # no longer heard the signals that followed.)
+    held_back = signal.pthread_sigmask(signal.SIG_BLOCK, STOP_SIGNALS)
     try:
         global traceroute_analysis_state_routes
         global traceroute_analysis_state_jumps
@@ -2394,9 +2441,8 @@ def flush_analysis_state(cursor):
             
         cursor.execute(('COMMIT'));
 
-    except (KeyboardInterrupt, SystemExit) as e :
-        # Ignore and quit
-        pass 
+    finally:
+        signal.pthread_sigmask(signal.SIG_SETMASK, held_back)
 
     return
 
@@ -2418,11 +2464,6 @@ def analyze(traceroute, time, cursor):
     #Compose unique identifier of this route
     unique_pair = str(traceroute["src"]) + "/" + str(traceroute["dst"])
         
-    # Update summary stats
-    tracesummary.count('routes_analysed')              
-    tracesummary.count( traceroute['type'] + '_routes')
-    tracesummary.set_max('max_ttl', traceroute['maxhops'])
-
     if traceroute_analysis_state_current_unique_pair and traceroute_analysis_state_current_unique_pair != unique_pair:
         # Update state for previous end-state-analysis in DB
         if param['verbose'] > 3:
@@ -2450,11 +2491,6 @@ def analyze(traceroute, time, cursor):
                 "bookmark": time }
             traceroute_analysis_state_current_unique_pair_is_new = True
 
-        elif traceroute_analysis_state_routes["bookmark"] >= time and param['all'] == 0:
-            # We return empty if the last traceroute we analyzed is older than what we have bookmarked
-            cursor.execute(('COMMIT'));
-            return
-
         # Gets state for lastest per-hop-analysis (jumps)
         cursor.execute(("SELECT unique_pair, hop, destinations, frequencies, count, normal, memory, anomaly, trcrt, betweens, cross_entropy, timestamp FROM jumps WHERE unique_pair =%s ORDER BY hop"), (unique_pair,))
         traceroute_analysis_state_jumps = []
@@ -2463,6 +2499,18 @@ def analyze(traceroute, time, cursor):
             traceroute_analysis_state_jumps.append(stored_hop)
             stored_hop = fetch_one_dict(cursor)
         cursor.execute(('COMMIT'));
+
+    if ( not traceroute_analysis_state_current_unique_pair_is_new
+         and traceroute_analysis_state_routes["bookmark"] >= time and param['all'] == 0 ):
+        # The run is no newer than the last one of its pair that was analysed: it is
+        # not analysed again. (This was looked at only when the pair changed, and
+        # before the state of the hops of the pair had been read.)
+        return
+
+    # Update summary stats
+    tracesummary.count('routes_analysed')
+    tracesummary.count( traceroute['type'] + '_routes')
+    tracesummary.set_max('max_ttl', traceroute['maxhops'])
         
     
     # Add initial state values for new hops
@@ -2520,6 +2568,54 @@ report_dir = {}  # Folders for outputfiles, indexed by thread
 pssrc_r, pssrc_w = os.pipe()                # Pipe from Rabbitmq reader to analysis process
 pssrc_pipe_input = os.fdopen(pssrc_w, "w")  # File descriptor for writing data to analysis process 
 pssrc_pipe_output = os.fdopen(pssrc_r)      # File descriptor for reading data inside analysis process  
+# What the reading process itself says to the analysis process (a record begins, a
+# summary period has ended) goes through the same pipe as the text of the records.
+# Such a line begins with this word. It is made up anew at every start of the
+# script, so no line in the text of a record can be taken for one.
+pssrc_message_mark = secrets.token_hex(16)
+
+def pscheduler_trace_command(word):
+    """ The command line of a traceroute run by pscheduler, read by its options.
+        Which options are there depends on the test spec; they come in the order
+        pscheduler-tool-traceroute puts them. word[0] is the start time of the run. E.g.
+          1617573742 traceroute -q 1 -4 -s 172.150.1.2 -N 30 -n 172.150.2.2
+          1617573742 sudo /usr/libexec/.../traceroute-safe traceroute -q 1 -4 -T -s 172.150.1.2 -m 20 -N 20 -n 172.150.2.2
+        Returns None if the words are no such line. Else the ip version, the source
+        and the destination (None where the line does not give it), whether tcp
+        probes were sent, and whether an option was met that is not known here.
+    """
+    if not word[0].isdigit():
+        return None
+    args = word[1:]
+    if args and args[0] == "sudo":
+        args = args[1:]
+    if args and args[0].split('/')[-1] == "traceroute-safe":
+        # (the wrapper pscheduler runs traceroute through when it needs root)
+        args = args[1:]
+    if len(args) < 2 or args[0] != "traceroute" or args[1] != "-q":
+        return None
+    command = { "ipversion": None, "src": None, "dst": None, "tcp": False, "unknown": False }
+    i = 1
+    while i < len(args):
+        if args[i] in ("-4", "-6"):
+            command["ipversion"] = int(args[i][1])
+        elif args[i] == "-T":
+            command["tcp"] = True
+        elif args[i] in ("-I", "-F", "-n", "-A"):
+            pass
+        elif args[i] in ("-q", "-l", "-f", "-s", "-m", "-N", "-p", "-t", "-w", "-z"):
+            # An option with a value
+            if args[i] == "-s" and i + 1 < len(args):
+                command["src"] = args[i+1]
+            i += 1
+        elif args[i].startswith("-"):
+            command["unknown"] = True
+        elif command["dst"] is None:
+            # The first word that is no option is the destination (the packet length may follow)
+            command["dst"] = args[i]
+        i += 1
+    return command
+
 
 def read(path, srchost, srcdate, mode="batch", thread=0, starttime=0):
     """ Parse raw log file and run analysis on each found traceroute run
@@ -2580,16 +2676,46 @@ def read(path, srchost, srcdate, mode="batch", thread=0, starttime=0):
     PS_LOGLINE = 3
     PS_ENDED = 4
     
+    def analysis_failed(e):
+        # A run that cannot be analysed must not end the analysis of the runs that
+        # follow: it is reported and passed over. The state of its pair is taken
+        # from the database anew when the pair comes next, as after a restart.
+        global traceroute_analysis_state_current_unique_pair
+        global traceroute_analysis_state_current_unique_pair_is_new
+        global traceroute_analysis_state_jumps
+        global traceroute_analysis_state_routes
+        print("Warning: Skipping a traceroute run that could not be analysed (" + type(e).__name__ + ": " + str(e) + ").")
+        tracesummary.parse_error()
+        traceroute_analysis_state_current_unique_pair = ""
+        traceroute_analysis_state_current_unique_pair_is_new = False
+        traceroute_analysis_state_jumps = []
+        traceroute_analysis_state_routes = {}
+        try:
+            cursor.execute('ROLLBACK')
+        except Exception:
+            pass
+
     def analyze_parsed():
         # The lines of a traceroute run have all been read: analyse it
         if "src" in traceroutes[time] and "dst" in traceroutes[time]:
+            if sorted(traceroutes[time]["result"]) != list(range(len(traceroutes[time]["result"]))):
+                # The hop lines do not run from hop 1 on without a hole (a test that
+                # starts at a later hop, for one). The analysis cannot take such a run.
+                if param['verbose'] > 2:
+                    print ("Warning: Traceroute run at time ", time, " does not hold every hop from the first one on, skipping it.")
+                tracesummary.parse_error()
+                return
+
             if len(traceroutes[time]["result"]) > traceroutes[time]["maxhops"]:
                 # Update maxhops
                 traceroutes[time]["maxhops"] = len(traceroutes[time]["result"])
 
             if param['verbose'] > 2:
                 print ("New traceroute run found at time ", time ,", analysing...")
-            analyze(traceroutes[time], time, cursor)
+            try:
+                analyze(traceroutes[time], time, cursor)
+            except Exception as e:
+                analysis_failed(e)
 
         else:
             # Source or destination info missing. Traceroute is incomplete. Skip.
@@ -2597,6 +2723,7 @@ def read(path, srchost, srcdate, mode="batch", thread=0, starttime=0):
 
     try:
         parser_state = PS_INIT
+        record_begins = False
         while parser_state != PS_ENDED:
 
             # Get new line from log
@@ -2621,36 +2748,36 @@ def read(path, srchost, srcdate, mode="batch", thread=0, starttime=0):
                 # Empty or corrupt line (or no line at all). Skip
                 continue
 
-            if mode == "pssrc" and word[0] == "sumperiod" and len(word) > 1 and word[1].isdigit():
-                # The reading process tells that a summary period has ended (see sumperiod_tick())
-                if parser_state in [PS_STARTLINE, PS_LOGLINE]:
-                    # The traceroute run read last is complete, and belongs to the period that has ended
-                    analyze_parsed()
-                parser_state = PS_INIT
-                time = 0
-                # Output the summary records, and start the summary of each pair anew
-                tracesummary.print_all_pairs(thread, int(word[1]))
+            if mode == "pssrc" and word[0] == pssrc_message_mark:
+                # A message of the reading process
+                if len(word) > 2 and word[1] == "sumperiod" and word[2].isdigit():
+                    # A summary period has ended (see sumperiod_tick())
+                    if parser_state in [PS_STARTLINE, PS_LOGLINE]:
+                        # The traceroute run read last is complete, and belongs to the period that has ended
+                        analyze_parsed()
+                    parser_state = PS_INIT
+                    time = 0
+                    # Output the summary records, and start the summary of each pair anew
+                    tracesummary.print_all_pairs(thread, int(word[2]))
+                elif len(word) > 1 and word[1] == "record":
+                    # The next line is the first one of a record
+                    record_begins = True
                 continue
 
-            if word[0] == "ps_testid":
+            # Only the first line of a record can begin a run or carry the test id:
+            # the lines after it are the output of the tool, whatever they look like.
+            first_line = record_begins or mode != "pssrc"
+            record_begins = False
+
+            if first_line and word[0] == "ps_testid" and len(word) > 2:
                 # Strip off perfsonar test id
                 ps_testid = word[1]
                 word.pop(1)
                 word.pop(0)
                 
-            if len(word) >= 3 and word[2].split('/')[-1] == "traceroute-safe":
-                # Traceroute wrapper applied for rpm-linux detected. Clean away for line
-                word.pop(2)
-                
-            if len(word) >= 6 and word[1] == "sudo" and word[2] == "traceroute" and word[6] =="-T":
-                # TCP traceroute from perfsonar found. 
-                traceroute_type = "tcp"
-                # Clean away tcp-specific header stuff
-                word.pop(6)
-                word.pop(1)
-                
-            MICRODEPLOG = ( len(word) > 1 and word[1] == "starttime" )                        # E.g. logline ala "1617573742 starttime 00:02:22" found
-            PERFSONARLOG = ( len(word) > 2 and word[1] == "traceroute" and word[2] == "-q" )  # E.g. log line ala "1617573742 traceroute -q 1 -4 -s 172.150.1.2 -N 30 -n 172.150.2.8" found
+            MICRODEPLOG = ( mode != "pssrc" and len(word) > 1 and word[1] == "starttime" and word[0].isdigit() )   # E.g. logline ala "1617573742 starttime 00:02:22" found
+            ps_command = pscheduler_trace_command(word)                                        # E.g. log line ala "1617573742 traceroute -q 1 -4 -s 172.150.1.2 -N 30 -n 172.150.2.2" found
+            PERFSONARLOG = ps_command is not None and first_line
 
             if MICRODEPLOG or PERFSONARLOG:
                 # Start line found
@@ -2664,22 +2791,48 @@ def read(path, srchost, srcdate, mode="batch", thread=0, starttime=0):
                 parser_state = PS_STARTLINE
                 # Initializes for new traceroute
                 time = int(word[0])  
+                run_type = traceroute_type    # (udp, or what the name of the input file says)
                 traceroutes.clear()    # (Only the run being read is kept: the earlier ones have been analysed)
                 traceroutes[time] = {}
+                if time > datetime.now().timestamp() + MAX_SECONDS_AHEAD:
+                    # The run is dated ahead of the clock of this host (the clock of the
+                    # measuring host is wrong, for one). Its time would become the mark
+                    # of its pair, and the runs after it would count as older than that.
+                    if param["verbose"] > 2:
+                        print("Warning: Traceroute run dated ahead of the clock, skipping it: '" + line.strip() + "'")
+                    tracesummary.parse_error()
+                    parser_state = PS_INIT
+                    continue
                 if MICRODEPLOG:
                     traceroutes[time]["src"] = resolver.get_ip(srchost)
                     traceroutes[time]["dst"] = resolver.get_ip(dsthost)
                     tracesummary.set_current_pair(traceroutes[time]["src"] + "/" + traceroutes[time]["dst"], time, thread)
                 elif PERFSONARLOG:
-                    traceroutes[time]["ipversion"] = int(word[4][-1])
+                    if ps_command["ipversion"] is None:
+                        if param["verbose"] > 2:
+                            print("Warning: Traceroute command line without ip version, skipping the run: '" + line.strip() + "'")
+                        tracesummary.parse_error()
+                        parser_state = PS_INIT
+                        continue
+                    traceroutes[time]["ipversion"] = ps_command["ipversion"]
                     if traceroutes[time]["ipversion"] == 6 and not param["ipv6"] or traceroutes[time]["ipversion"] == 4 and param["ipv6"]:
                         # Do not parse traceroutes with wrong ip version
                         if param["verbose"] > 2:
                             print("Unsupported ip-version in traceroute. Skipping.")
                         parser_state = PS_INIT
                         continue
-                    traceroutes[time]["src"] = resolver.get_ip(word[6])
-                    traceroutes[time]["dst"] = resolver.get_ip(word[10])
+                    if ps_command["src"] is None or ps_command["dst"] is None or ps_command["unknown"]:
+                        # The command line does not say what is needed here (a test without
+                        # a source, an option that is not known). The run is passed over.
+                        if param["verbose"] > 2:
+                            print("Warning: Traceroute command line not understood, skipping the run: '" + line.strip() + "'")
+                        tracesummary.parse_error()
+                        parser_state = PS_INIT
+                        continue
+                    if ps_command["tcp"]:
+                        run_type = "tcp"
+                    traceroutes[time]["src"] = resolver.get_ip(ps_command["src"])
+                    traceroutes[time]["dst"] = resolver.get_ip(ps_command["dst"])
                     tracesummary.set_current_pair(traceroutes[time]["src"] + "/" + traceroutes[time]["dst"], time, thread)
                     tracesummary.set_pstestid(ps_testid)
                 else:
@@ -2687,20 +2840,20 @@ def read(path, srchost, srcdate, mode="batch", thread=0, starttime=0):
                         print ("Warning: Unrecognized start line format, skipping input.")
                     continue
 
-                tracesummary.set_routetype(traceroute_type)
+                tracesummary.set_routetype(run_type)
                 traceroutes[time]["maxhops"] = 0
-                traceroutes[time]["type"] = traceroute_type
+                traceroutes[time]["type"] = run_type
                 traceroutes[time]["result"] = {}
                 traceroutes[time]["rtt"] = {}
                 traceroutes[time]["thread"] = thread   # (for postfixing in output-filename)
 
-            elif parser_state == PS_STARTLINE and word[0] == "traceroute":
+            elif parser_state == PS_STARTLINE and word[0] == "traceroute" and len(word) > 4 and word[4].isdigit():
                 # Header line found, e.g. "traceroute to 109.105.116.52 (109.105.116.52), 30 hops max, 60 byte packets"
                 traceroutes[time]["dst"] = resolver.get_ip(word[2])   # Update dsthost found in filename or start line
                 traceroutes[time]["maxhops"] = int(word[4])
                 parser_state = PS_HEADERLINE
                 
-            elif ( parser_state in [PS_STARTLINE, PS_HEADERLINE, PS_LOGLINE]) and word[0].isdigit() and int(word[0]) > 0:
+            elif ( parser_state in [PS_STARTLINE, PS_HEADERLINE, PS_LOGLINE]) and word[0].isdigit() and 0 < int(word[0]) <= 255:
                 # Logline found, e.g. "7  109.105.99.180  16.149 ms  16.133 ms  16.871 ms  16.850 ms  16.200 ms  16.173 ms"
 
                 # Parse line
@@ -2711,7 +2864,6 @@ def read(path, srchost, srcdate, mode="batch", thread=0, starttime=0):
 
                 new_ip_found_and_added = False
                 for w in word[1:]:
-                    w_dotsplit = w.split(".")
                     if w == "ms":
                         # RTT unit found. Ignore
                         pass
@@ -2728,7 +2880,7 @@ def read(path, srchost, srcdate, mode="batch", thread=0, starttime=0):
                             else:
                                 tracesummary.parse_error()
                         new_ip_found_and_added = False
-                    elif len(w_dotsplit) == 4 and (d.isdigit() for d in w_dotsplit):
+                    elif is_ipv4(w):
                         # IPv4 address found
                         adresses.append(w)
                         new_ip_found_and_added = True
@@ -2758,6 +2910,18 @@ def read(path, srchost, srcdate, mode="batch", thread=0, starttime=0):
                 traceroutes[time]["rtt"][hop-1] = rtt
                 parser_state = PS_LOGLINE
 
+            elif mode == "pssrc" and word[0].isdigit() and int(word[0]) > 255:
+                # A record that does not begin as a traceroute run by pscheduler does
+                # (the output of another tool, for one). The run read last is complete,
+                # and the lines of this record are passed over.
+                if parser_state in [PS_STARTLINE, PS_LOGLINE]:
+                    analyze_parsed()
+                parser_state = PS_INIT
+                time = 0
+                if param["verbose"] > 2:
+                    print("Warning: Record of a kind that is not understood, skipping it: '" + line.strip() + "'")
+                tracesummary.parse_error()
+
             else:
                 # Unrecognized line in traceroute
                 if param["verbose"] > 2:
@@ -2766,17 +2930,16 @@ def read(path, srchost, srcdate, mode="batch", thread=0, starttime=0):
 
         if time > 0 and "src" in traceroutes[time] and "dst" in traceroutes[time]:
             # Analyse also last traceroute in file
-            if param['verbose'] > 2:
-                print ("New traceroute run found at time ", time ,", analysing...")
-            if len(traceroutes[time]["result"]) > traceroutes[time]["maxhops"]:
-                # Update maxhops
-                traceroutes[time]["maxhops"] = len(traceroutes[time]["result"]) 
-            analyze(traceroutes[time], time, cursor)
+            analyze_parsed()
             flush_analysis_state(cursor)      # Flush all state variables to DB
             
     except (KeyboardInterrupt, SystemExit) as e :
         # Flush all state variables to DB
-        flush_analysis_state(cursor)  
+        try:
+            flush_analysis_state(cursor)
+        except (KeyboardInterrupt, SystemExit):
+            # Interrupted once more (the state is stored by then): quit
+            pass
 
     finally:
 
@@ -2871,10 +3034,10 @@ def sumperiod_tick():
     now = time.time()
     if sumperiod_end and now >= sumperiod_end:
         # (On a line of its own, whatever the record forwarded last ended with)
-        pssrc_pipe_input.write("\nsumperiod " + str(int(sumperiod_end)) + "\n")
+        pssrc_pipe_input.write("\n" + pssrc_message_mark + " sumperiod " + str(int(sumperiod_end)) + "\n")
         try:
             pssrc_pipe_input.flush()
-        except:
+        except Exception:
             # Ignore flush errors
             pass
     if not sumperiod_end or now >= sumperiod_end:
@@ -2969,17 +3132,20 @@ def opensearch_read(opensearch_api, mode, thread):
                         starttime  = str(int(isodate.parse_datetime(element["pscheduler"]["start_time"]).timestamp()))
                         # Add some header data
                         data = starttime + " " + element["result-full"][0]["diags"]
+                        if not data.endswith("\n"):
+                            # (or the first line of the next run would run on from the last line of this one)
+                            data += "\n"
                     except (ValueError, KeyError, IndexError, TypeError, AttributeError) as e:
                         print("Warning: Skipping a record from " + opensearch_api + " that could not be read (" + type(e).__name__ + ": " + str(e) + ").")
                         continue
                     # Forward to analysis process
                     sumperiod_tick()
-                    pssrc_pipe_input.write(data)
+                    pssrc_pipe_input.write(pssrc_message_mark + " record\n" + data)
                     if param["verbose"] > 3:
                         print("Wrote to pipe: '" + data + "'")
                     try:
                         pssrc_pipe_input.flush()
-                    except:
+                    except Exception:
                         # Ignore flush errors
                         pass
 
@@ -2990,6 +3156,13 @@ def opensearch_read(opensearch_api, mode, thread):
             time.sleep(float(param["followinterval"]))   # (a value given on the command line arrives as text)
 
     except (KeyboardInterrupt, SystemExit) as e :
+        # Nothing more is forwarded. With the pipe closed the analysis process
+        # finds the end of its input and finishes, also when it has not taken
+        # the way out itself.
+        try:
+            pssrc_pipe_input.close()
+        except OSError:
+            pass
         # Wait for analysis child process to exit
         os.wait()
         return
@@ -3101,6 +3274,13 @@ def amqp_read(url, mode, thread):
         channel.start_consuming()
 
     except (KeyboardInterrupt, SystemExit) as e :
+        # Nothing more is forwarded. With the pipe closed the analysis process
+        # finds the end of its input and finishes, also when it has not taken
+        # the way out itself.
+        try:
+            pssrc_pipe_input.close()
+        except OSError:
+            pass
         # Wait for analysis child process to exit
         os.wait()
         return
@@ -3163,14 +3343,17 @@ def amqp_read_message(body):
     testid = hashlib.sha256(cleaned_testid_obj).hexdigest()
     # Forward to queue
     data = "ps_testid " + testid + " " + starttime + " " + element["run"]["result-full"][0]["diags"]
+    if not data.endswith("\n"):
+        # (or the first line of the next run would run on from the last line of this one)
+        data += "\n"
     #data = starttime + " " + element["run"]["result-full"][0]["diags"]
     sumperiod_tick()
-    pssrc_pipe_input.write(data)
+    pssrc_pipe_input.write(pssrc_message_mark + " record\n" + data)
     if param["verbose"] > 3:
         print("Wrote to pipe: '" + data + "'")
     try:
         pssrc_pipe_input.flush()
-    except:
+    except Exception:
         # Ignore flush errors
         pass
 

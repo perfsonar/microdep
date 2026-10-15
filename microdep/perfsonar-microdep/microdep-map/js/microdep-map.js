@@ -6,7 +6,7 @@ import {parms, conffile, prop_sum, update_url, stats_on, net_names, net_desc, ne
 	prop_names, prop_desc, prop_long_desc, prop_aggr,
 	colors, get_color, make_palette, threshes, get_thresholds, escapeHtml,
 	get_parms,removeParam, parse_hhmm, hhmm , adjust_to_timezone,
-	get_config, update_props, make_prop_select, add_tab,
+	get_config, update_props, make_prop_select, add_tab, new_tab_number,
 	round_number, zero_fill, selected_date_is_today_or_future, selected_hour_is_future }
 from "./map-lib.js" ;
 import { heatmap, chart_curve } from "./graph.js";
@@ -310,7 +310,7 @@ function restoreSavedTabs() {
 }
 
 function restoreOneTab(spec) {
-    const before = $("main#tabs > ul > li").length;
+    const before = new_tab_number();
     if (spec.kind === 'routes') {
         add_tab('div', spec.title, before,
             '<div class="center-text" style="padding:40px">' +
@@ -335,9 +335,9 @@ function restoreOneTab(spec) {
         // Simulate user picking the option from the #check dropdown — the
         // existing change-handler does all the work; we just need to
         // remember the divid afterwards.
+        const count = $("main#tabs > ul > li").length;
         $('#check').val(spec.report_type).trigger('change');
-        const after = $("main#tabs > ul > li").length;
-        if (after > before) tabSpecs.set('tab' + before, spec);
+        if ($("main#tabs > ul > li").length > count) tabSpecs.set('tab' + before, spec);
     }
 }
 
@@ -359,8 +359,11 @@ var color_on=[]; // bool by color focused
 var linkByName=[];
 var linkByNameDashed=[];
 var linkHidden=[]; // 
-var ip_to_name=[]; // 
-var name_to_ip=[]; //
+// Looked up by address and by host name. They are objects without inherited properties, so that
+// a host may be called "length" or "constructor": in an array or a plain object such a name
+// meets a property that is there already.
+var ip_to_name=Object.create(null); // 
+var name_to_ip=Object.create(null); //
 var name_loaded=[]; // by network
 var ends=[];
 var last_hits=[]; // last query detail data (gaps)
@@ -713,7 +716,7 @@ function spread_points(points){
 // The tree view: every traceroute from `host` in one picture, as a Routes tab
 // opened for "all peers" ('*'); ls_tab resolves the peers from the archive.
 function open_tree_tab(host) {
-    let num_tabs = $("main#tabs > ul > li").length;
+    let num_tabs = new_tab_number();
     let title = 'Tree: ' + host.split('.').slice(0, 2).join('.');
     add_tab('div', title, num_tabs, '<div class="center-text" style="padding:40px"><div class="spinner"></div><p>Loading traceroute data\u2026</p></div>');
     let tab_id = 'tab' + num_tabs;
@@ -742,7 +745,7 @@ function open_tree_tab(host) {
 // host differently than the topology does.
 function leaf_status_fn(root) {
     const alias_set = function (name) {
-	const a = {};
+	const a = Object.create(null);   // (by host name: no inherited properties)
 	const add = function (x) { if (!x) return; const n = String(x).toLowerCase(); a[n] = true; a[n.split('.')[0]] = true; };
 	add(name); add(name_to_ip[name]);
 	return function (x) { if (!x) return false; const n = String(x).toLowerCase(); return !!(a[n] || a[n.split('.')[0]] || (name_to_ip[x] && a[String(name_to_ip[x]).toLowerCase()])); };
@@ -986,7 +989,6 @@ function only_links_by_color(color){
 	    }
 	}
 	links_on=false;
-	focus[node]=true;
 	focus_node=node;
 	update_url("node", node);
     }
@@ -1181,7 +1183,7 @@ function _render_link_sparkline_inner(canvas, link, etype, prop, dato, period, f
     // include ip_version when the network requires it.
     // net= is REQUIRED: elastic-get-date-type.pl resolves the archive URL from
     // config[net].archive — without it the CGI falls back to http://localhost:9200
-    // and the query dies with curl-code 52 (empty reply). (index= sets the OS
+    // and the query fails (empty reply). (index= sets the OS
     // index path; net= picks the archive.)
     var url = 'elastic-get-date-type.pl?net=' + parms.net +
               '&index=' + event_index[etype] +
@@ -1607,7 +1609,7 @@ function link_popup(link){
 	routesBtn.title = "See the routes graph and stats in this period";
 	routesBtn.innerHTML = 'Routes';
 	routesBtn.onclick = function(){
-	    let num_tabs = $("main#tabs > ul > li").length;
+	    let num_tabs = new_tab_number();
 	    let fromShort = link.from.split('.').slice(0,2).join('.');
 	    let toShort = link.to.split('.').slice(0,2).join('.');
 	    let title = 'Routes: ' + fromShort + ' \u2192 ' + toShort;
@@ -1733,7 +1735,7 @@ function link_popup(link){
 	var fromShortPlot = link.from.split('.').slice(0, 2).join('.');
 	var toShortPlot   = link.to.split('.').slice(0, 2).join('.');
 	function open_curve_tab(label, url) {
-	    var num_tabs = $("main#tabs > ul > li").length;
+	    var num_tabs = new_tab_number();
 	    var title = label + ': ' + fromShortPlot + ' → ' + toShortPlot;
 	    // Cache-buster — iframes get cached aggressively and the Queues view
 	    // is small/static, so fresh load each click is cheap and avoids
@@ -2078,7 +2080,7 @@ function gap_list( from, to, hits, lines, sort_type){
 		if ( prop in prop_aggr[etype] ) {
 		    switch (prop_aggr[etype][prop]) {
 		    case "sum": rec[prop]=stat[ab][prop].sum; break;
-		    case "avg": rec[prop]=stat[ab][prop].average()
+		    case "avg": rec[prop]=stat[ab][prop].average(); break;
 		    case "max": rec[prop]=stat[ab][prop].max(); break;
 		    case "min": rec[prop]=stat[ab][prop].min(); break;
 		    default: rec[prop]=stat[ab][prop].average()
@@ -2932,7 +2934,7 @@ function geo_cache_get(network, host_id, ip) {
     const netCache = host_geo_cache[network];
     if (!netCache || !host_id) return null;
     // 1) exact host_id match
-    if (netCache[host_id]) return netCache[host_id];
+    if (Object.prototype.hasOwnProperty.call(netCache, host_id) && netCache[host_id]) return netCache[host_id];
     // 2) IP cross-reference — same physical host can appear under entirely
     //    different FQDNs (legacy LS registration, old hostname template,
     //    DNS-search artifacts). If the caller knows the host's IP, find any
@@ -3720,7 +3722,7 @@ function _toggle_real_hop_labels(activeLine) {
 // persisted across reloads (kind 'curve' → restoreOneTab). Ported from
 // work-snapshot; used by the HTML heatmap's clickable cells (open_heatmap_cell).
 function open_curve_in_tab(title, label, url) {
-    const num_tabs = $("main#tabs > ul > li").length;
+    const num_tabs = new_tab_number();
     const sep = url.indexOf('?') >= 0 ? '&' : '?';
     const bustedUrl = url + sep + '_t=' + Date.now();
     const loader_id = 'curve-loader-' + num_tabs;
@@ -4555,7 +4557,9 @@ function get_connections(){
 		var nrecs=resp.hits.total.value.toString();
 		if ( etype === "gapsum" || etype === "routesum" ){ summary=coalesce_pairs(resp.hits.hits, etype); }
 		else if ( resp.aggregations){ aggregates=resp.aggregations; summary=digest_aggregates(aggregates, $("#stats_type").val()); nrecs = count_aggregates( aggregates ); }
-		else { if (! sum_etype || start.substr(0,10) === now.toISOString().substr(0,10)) { summary=digest_es_data(etype, resp.hits.hits); } last_hits=resp.hits.hits; }
+		// (An hour is summed from its events on any day: there is no summary
+		// record for an hour, and an hour of an earlier day used to be drawn empty.)
+		else { if (! sum_etype || start.substr(0,10) === now.toISOString().substr(0,10) || period < 24) { summary=digest_es_data(etype, resp.hits.hits); } last_hits=resp.hits.hits; }
 		harvest_ip_name(summary);
 		var msg = hhmmss(new Date()) + " Found " + nrecs + " " + etype + " records for " + $("#datepicker").val() + " " + $("#period_input").val() + " ;;";
 		$("#status").text( msg );
@@ -4655,13 +4659,15 @@ function init_map(){
         make_palette(on ? 'cbf' : (parms.palette || ''));
         _paint_with_compare(summary, parms.event, $("#prop_select").val(), start, end);
         update_url();
+        // The traceroute views that are open draw with the same palette
+        document.dispatchEvent(new CustomEvent('microdep-palette-changed'));
     });
     fill_select( "stats_type", stats_types );
     $("#stats_type").change( function(){ endInitialising(); summary=digest_aggregates(aggregates, $("#stats_type").val()); _paint_with_compare(summary, parms.event, $("#prop_select").val(), start, end); update_url(); if (!initialising) $("#tabs").tabs("option", "active", 0); });
     if ( parms.node){ focus_node=parms.node; get_topology(); links_on=true; }
     $("#check").change( function(){
 	var report_type = $("#check").val(); var title = $("#check").find(":selected").text();
-	let num_tabs = $("main#tabs > ul > li").length ; let tab_id = 'tab' + num_tabs;
+	let num_tabs = new_tab_number(); let tab_id = 'tab' + num_tabs;
 	switch(report_type ){
 	case 'missing': add_tab( 'div', title, num_tabs, check_asymmetry(report_type, tab_id) ); break;
 	case 'asymmetry': add_tab( 'div', title, num_tabs, check_asymmetry(report_type, tab_id) ); break;

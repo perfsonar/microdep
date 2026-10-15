@@ -49,9 +49,6 @@ rm -f %{buildroot}/%{config_base}/pscheduler_raw_data_policy.json
 rm -rf %{buildroot}
 
 %post
-# Fix permissions 
-chown perfsonar:perfsonar %{install_base}/logstash/pipeline/*raw*.conf
-
 # Add raw data templates and policies to Opensearch setup
 %{command_base}/opensearch_config_raw_data.sh || true
 
@@ -59,19 +56,27 @@ chown perfsonar:perfsonar %{install_base}/logstash/pipeline/*raw*.conf
 systemctl restart logstash.service || true
 
 %preun
-# Remove raw data indices, templates and policies from Opensearch
-%{command_base}/opensearch_config_raw_data.sh -ry || true
+# Remove raw data indices, templates and policies from Opensearch. Only when
+# the package is removed: on an upgrade this section runs after the post-install
+# section of the new version, and would take away what that has just set up.
+if [ "$1" -eq 0 ]; then
+    %{command_base}/opensearch_config_raw_data.sh -ry || true
+fi
 
 %postun
 # Restart Logstash to enable pipeline update
 systemctl restart logstash.service || true
 
 %files 
-%defattr(0644,perfsonar,perfsonar,0755)
+# Everything the package installs belongs to root, as packaged files normally
+# do: root runs the script when the package is installed and removed, and
+# Logstash only reads the pipeline files. The files are listed one by one, so
+# that the package does not claim folders it shares with other packages.
+%defattr(0644,root,root,0755)
 %license %{install_base}/LICENSE
-%attr(0755,perfsonar,perfsonar) %{command_base}/opensearch_config_raw_data.sh
+%attr(0755,root,root) %{command_base}/opensearch_config_raw_data.sh
 %{install_base}/logstash/pipeline/*
-%{config_base}/*
+%{config_base}/index_template-pscheduler_raw.json
 %{config_base}/ilm/install/pscheduler_raw_data_policy.json
 
 %changelog

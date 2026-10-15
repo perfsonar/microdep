@@ -108,7 +108,10 @@
         var optionEl = document.createElement('div');
         optionEl.className = 'custom-select-option';
         optionEl.dataset.value = opt.value;
-        optionEl.innerHTML = checkIconSVG + '<span class="custom-select-option-text">' + opt.textContent + '</span>';
+        // The text of an option comes from the map configuration: it goes in as
+        // text, not as markup.
+        optionEl.innerHTML = checkIconSVG + '<span class="custom-select-option-text"></span>';
+        optionEl.lastChild.textContent = opt.textContent;
         // Carry the native option's help text (the config `descr`, set as the
         // option title by make_prop_select) onto the styled option, so hovering
         // a menu item shows its description (issue #108).
@@ -194,7 +197,8 @@
           var optionEl = document.createElement('div');
           optionEl.className = 'custom-select-option';
           optionEl.dataset.value = opt.value;
-          optionEl.innerHTML = checkIconSVG + '<span class="custom-select-option-text">' + opt.textContent + '</span>';
+          optionEl.innerHTML = checkIconSVG + '<span class="custom-select-option-text"></span>';
+          optionEl.lastChild.textContent = opt.textContent;
           if (opt.selected) { optionEl.classList.add('selected'); valueEl.textContent = opt.textContent; }
           optionEl.addEventListener('click', function(e) {
             e.stopPropagation();

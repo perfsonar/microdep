@@ -21,13 +21,17 @@
 #outdir: "."	       # Set output directory. Defaut is current directory.
 #addresses: ""          # Filename to source of ip-to-name mappings. Both '<hostname> <address>' format and perfsonar psConfig json is accepted.
 #names: ""	       # Filename to source of ip-to-name mappings. '<name> <user> <dns> <ip>' format acccepted.
-#threshold: "10,10,0.5"  # Threshold values for reporting, in form of a vector-string '<min-jitter>,<min-ddelay>,<min-slope>'.
 #owamp: ""             # Url to source of json owamp data. Protocols supported: http, https, ampq, ampqs.
 #follow: false	       # Reread input source at intervals and analyse newly arrived packets. Applys only for owamp http* urls.
 #followinterval: 10     # Interval in seconds for rereading input source.
 #sumperiod: 86400       # Interval in seconds for summary statistics while an input source is followed. Each summary covers its own
                         # interval, and the analysis carries on. The intervals follow the clock in local time: with 3600 they end
                         # on the hour, with 86400 at midnight. 0 gives summary statistics at termination only.
+#memorymax: "1G"        # Most memory the analysis may hold while it reads owamp data. Above it the analysis writes its summary
+                        # statistics and ends, and its unit starts it again. A number of bytes, or with K, M or G. 0 or "off"
+                        # gives no limit. The ipv4 and the ipv6 analysis each have this limit. As a guide, an analysis needs
+                        # about 45 MB, plus 6 MB for each flow (with slep at 10000), plus up to 340 MB while it reads a
+                        # backlog of results.
 #json: ""               # Output event data in JSON format to given file or to destination specified in file via perfsonar's JSON achive spec format.
 #jitter: 600            # Emit jitter statistics at given interval, in seconds, in addition to burst events.
 #v: false               # Be verbose.

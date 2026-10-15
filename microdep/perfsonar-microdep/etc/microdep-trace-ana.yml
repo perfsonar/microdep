@@ -11,7 +11,8 @@
 #f_max_state_counter: 1000 # Maximum value for state counters (i.e. a window size). Counters are all to be decreased if one reach this value.
 #f_csensitivity: 1         # No of traceroutes in an anomalous report before printing a summary.
 #ce_delta_limit: 3.0       # Level of change in cross-entropy for a hop to tigger a route change event.
-#hopdist_init_window: 2500 # Min no of probes seen for a hop to consider its host distribution to be representativ.
+#hopdist_init_window: 20   # Min no of probes seen for a hop to consider its host distribution to be representativ.
+#hopdist_init_mode: hop    # Hops that must pass hopdist_init_window: hop (each on its own), route (those of the run) or all.
 #file: ''       # Path to traceroutes source
 #date: ''       # Date to consider when searching for files to analyse
 #live: false    # Flag to enable live (real-time) analysis

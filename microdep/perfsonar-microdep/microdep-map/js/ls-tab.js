@@ -200,9 +200,9 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
         let hits = list.filter(p => F.includes(norm(p.from)));
         if (!hits.length) hits = list.filter(p => F.some(f => !/^[0-9.:]+$/.test(f) && head(norm(p.from)) === head(f)));
         if (!hits.length) return null;
-        const cnt = {}; let src = null;
+        const cnt = Object.create(null); let src = null;   // (by host name: no inherited properties)
         hits.forEach(p => { cnt[p.from] = (cnt[p.from] || 0) + 1; if (src === null || cnt[p.from] > cnt[src]) src = p.from; });
-        const peers = []; const seen = {};
+        const peers = []; const seen = Object.create(null);
         hits.forEach(p => { if (p.from === src && !seen[p.to]) { seen[p.to] = true; peers.push(p.to); } });
         return { from: src, peers: peers.sort() };
     }
@@ -259,7 +259,7 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
 
             // One button per source with several peers: every route from that
             // host in one tree.
-            const by_src = {};
+            const by_src = Object.create(null);   // (by host name: no inherited properties)
             pair_list.forEach(function (p) { (by_src[p.from] = by_src[p.from] || []).push(p.to); });
             let trees = '';
             Object.keys(by_src).sort().forEach(function (src) {
@@ -458,7 +458,7 @@ export function ls_tab(div_id, from, to, time_start, time_end, options = {}) {
     function update_selected_button() {
         const btn = el('show-selected'); if (!btn) return;
         const picked = picked_pairs();
-        const sources = {}; picked.forEach(function (p) { sources[p.from] = true; });
+        const sources = Object.create(null); picked.forEach(function (p) { sources[p.from] = true; });
         const n_src = Object.keys(sources).length;
         btn.disabled = !picked.length || n_src > 1;
         btn.textContent = !picked.length ? 'Show selected'

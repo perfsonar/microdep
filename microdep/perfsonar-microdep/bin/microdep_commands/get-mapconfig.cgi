@@ -53,8 +53,10 @@ opendir my $dir, $configdir or msg("Cannot open config directory: $!") and exit;
 my @files = readdir $dir;
 closedir $dir;
 foreach (@files) {
-    if (! /\S*\.yml/ ) {
-	# Skip none-yaml-files
+    if (! /^[^.].*\.yml\z/ ) {
+	# Skip none-yaml-files: the name has to end in .yml, and hidden files are left out.
+	# (A name that merely held ".yml" was taken as well, so what a package upgrade or an
+	# editor leaves behind was loaded too: net.yml.rpmsave, net.yml.dpkg-old, net.yml~, .net.yml.swp)
 	next;
     }
     my $net_yaml_hash = YAML::LoadFile($configdir . "/" . $_);
@@ -68,6 +70,13 @@ foreach (@files) {
 	my $merged = merge $output{"config"}{$net}, $net_yaml_hash->{$net};
 	$output{"config"}{$net} = $merged;
     }
+}
+# The address of the archive is for the scripts of this host that fetch the data:
+# they ask with MICRODEP_MAPCONFIG=full in their environment (which a request
+# cannot set). A browser has no use for it, and it may hold a user name and a
+# password, so it is left out of every other answer.
+if ( ( $ENV{'MICRODEP_MAPCONFIG'} // '' ) ne 'full' ) {
+    delete $output{'config'}{$_}{'archive'} foreach keys %{ $output{'config'} };
 }
 # Output all message and config as json structure
 msg_output();

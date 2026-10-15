@@ -48,8 +48,11 @@ if (param( "help" )) {
     exit(0);
 }    
 
-# Fetch config data (and remove html header)
+# Fetch config data (and remove html header). It is asked for as a whole: the
+# address of the archive is left out of what a browser gets.
+$ENV{'MICRODEP_MAPCONFIG'} = 'full';
 my $config = decode_json(`/usr/lib/perfsonar/bin/microdep_commands/get-mapconfig.cgi | tail -n +2`);
+delete $ENV{'MICRODEP_MAPCONFIG'};
 
 # Prepare parameters for search query
 # The archive is the one mapconfig.yml gives the measurement network. An address
@@ -66,16 +69,20 @@ my $mahost = $networks->{$net}->{'archive'} || 'https://localhost/opensearch';
 
 # Start and end go into the query as they are, so only a well-formed ISO time
 # (or epoch seconds, converted here) is accepted.
+# An epoch time is that very second. (It used to be turned into midnight of its
+# day in the time zone of this host, start and end alike: a period shorter than
+# a day came out empty, and a day was the day of this host's time zone rather
+# than the one asked for.)
 my $iso_time = qr/\A\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:?\d{2})?)?\z/;
 my $iso_start = $cgi->param("start") || strftime("%Y-%m-%dT00:00:00%z", localtime);  # ISO formatted beginning of today in current timezone
 if ( $iso_start =~ /\A\d{1,11}\z/ ) {
     # Not ISO but likely epoch time. Convert.
-    $iso_start = strftime("%Y-%m-%dT00:00:00%z", localtime($iso_start));
+    $iso_start = strftime("%Y-%m-%dT%H:%M:%SZ", gmtime($iso_start));
 }
 my $iso_end = $cgi->param("end") || strftime("%Y-%m-%dT23:59:59%z", localtime);    # ISO formatted end of today in current timezone
 if ( $iso_end =~ /\A\d{1,11}\z/ ) {
     # Not ISO but likely epoch time. Convert.
-    $iso_end = strftime("%Y-%m-%dT00:00:00%z", localtime($iso_end));
+    $iso_end = strftime("%Y-%m-%dT%H:%M:%SZ", gmtime($iso_end));
 }
 fail('400 Bad Request', 'Invalid start or end time') unless ($iso_start =~ $iso_time && $iso_end =~ $iso_time);
 my $from = $cgi->param("from");

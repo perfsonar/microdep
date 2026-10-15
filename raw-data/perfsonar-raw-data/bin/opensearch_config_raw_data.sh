@@ -31,6 +31,16 @@ msg () {
     fi
 }
 
+os_curl () {
+    # Run curl against OpenSearch as admin (certificate not checked, as before).
+    # The credentials go to curl on standard input, as a config line, and not
+    # as arguments: the arguments of a running command can be read by every
+    # user on the host.
+    local pass=${ADMIN_PASS//\\/\\\\}
+    pass=${pass//\"/\\\"}
+    printf 'user = "admin:%s"\n' "$pass" | curl -K - -k "$@"
+}
+
 wait_opensearch () {
     # Wait for Opensearch to start
     msg "Waiting for opensearch to start..."
@@ -68,7 +78,7 @@ wait_opensearch () {
 wait_opensearch_api () {
     # Wait for Opensearch API to start
     msg "Waiting for opensearch API to start..."
-    api_status=$(curl -s -o /dev/null -w "%{http_code}" -u admin:${ADMIN_PASS} -k https://localhost:9200/_cluster/health)
+    api_status=$(os_curl -s -o /dev/null -w "%{http_code}" https://localhost:9200/_cluster/health)
     i=0
     while [[ $api_status -ne 200 ]]
     do
@@ -80,7 +90,7 @@ wait_opensearch_api () {
             return 2
 	    exit 2
 	fi
-	api_status=$(curl -s -o /dev/null -w "%{http_code}" -u admin:${ADMIN_PASS} -k https://localhost:9200/_cluster/health)
+	api_status=$(os_curl -s -o /dev/null -w "%{http_code}" https://localhost:9200/_cluster/health)
     done
     
     msg "API started!"
@@ -148,10 +158,10 @@ if [ "$REMOVE" ]; then
     # Remove all
     msg "Removing Opensearch datastreams/indices, policies and templates for raw data ..."
     for i in $INDICES; do
-	curl -k -u admin:${ADMIN_PASS} -s -XDELETE "$OPENSEARCH_URL/_data_stream/$i" 2>/dev/null ; echo
+	os_curl -s -XDELETE "$OPENSEARCH_URL/_data_stream/$i" 2>/dev/null ; echo
     done
-    curl -k -u admin:${ADMIN_PASS} -s -XDELETE "$OPENSEARCH_URL/_plugins/_ism/policies/pscheduler_raw_data_policy" 2>/dev/null ; echo
-    curl -k -u admin:${ADMIN_PASS} -s -XDELETE "$OPENSEARCH_URL/_index_template/pscheduler_raw_data_policy" 2>/dev/null ; echo
+    os_curl -s -XDELETE "$OPENSEARCH_URL/_plugins/_ism/policies/pscheduler_raw_data_policy" 2>/dev/null ; echo
+    os_curl -s -XDELETE "$OPENSEARCH_URL/_index_template/pscheduler_raw_data_policy" 2>/dev/null ; echo
 
     msg "Removal completed."
     exit 0
@@ -164,26 +174,26 @@ wait_opensearch_api
 
 # Add templates
 msg "Adding raw data index template..."
-curl -k -u admin:${ADMIN_PASS} -s -H 'Content-Type: application/json' -XPUT "$OPENSEARCH_URL/_index_template/pscheduler_raw_data_policy" -d @/usr/lib/perfsonar/archive/config/index_template-pscheduler_raw.json 2>/dev/null ; echo
+os_curl -s -H 'Content-Type: application/json' -XPUT "$OPENSEARCH_URL/_index_template/pscheduler_raw_data_policy" -d @/usr/lib/perfsonar/archive/config/index_template-pscheduler_raw.json 2>/dev/null ; echo
 
-if [ $(curl -s -o /dev/null -w "%{http_code}" -u admin:${ADMIN_PASS} -k "$OPENSEARCH_URL/_plugins/_ism/policies/pscheduler_raw_data_policy") -ne 200 ]; then
+if [ $(os_curl -s -o /dev/null -w "%{http_code}" "$OPENSEARCH_URL/_plugins/_ism/policies/pscheduler_raw_data_policy") -ne 200 ]; then
     # No policy found.  Create new.
     msg "Creating raw data index policy..."
-    curl -k -u admin:${ADMIN_PASS} -H 'Content-Type: application/json' -X PUT "$OPENSEARCH_URL/_plugins/_ism/policies/pscheduler_raw_data_policy" -d "@/usr/lib/perfsonar/archive/config/ilm/install/pscheduler_raw_data_policy.json" 2>/dev/null ; echo
+    os_curl -H 'Content-Type: application/json' -X PUT "$OPENSEARCH_URL/_plugins/_ism/policies/pscheduler_raw_data_policy" -d "@/usr/lib/perfsonar/archive/config/ilm/install/pscheduler_raw_data_policy.json" 2>/dev/null ; echo
     # Apply policy to index
     msg "Applying raw data index policy to indices..."
-    curl -k -u admin:${ADMIN_PASS} -H 'Content-Type: application/json' -X POST "$OPENSEARCH_URL/_plugins/_ism/add/pscheduler_raw*" -d '{ "policy_id": "pscheduler_raw_data_policy" }' 2>/dev/null ; echo
+    os_curl -H 'Content-Type: application/json' -X POST "$OPENSEARCH_URL/_plugins/_ism/add/pscheduler_raw*" -d '{ "policy_id": "pscheduler_raw_data_policy" }' 2>/dev/null ; echo
 else
     # Get policy identifiers
-    P_SEQ_NO=$(curl -s -u admin:${ADMIN_PASS} -k $OPENSEARCH_URL/_plugins/_ism/policies/pscheduler_raw_data_policy | jq ._seq_no)
-    P_PRIM_TERM=$(curl -s -u admin:${ADMIN_PASS} -k $OPENSEARCH_URL/_plugins/_ism/policies/pscheduler_raw_data_policy | jq ._primary_term)
+    P_SEQ_NO=$(os_curl -s $OPENSEARCH_URL/_plugins/_ism/policies/pscheduler_raw_data_policy | jq ._seq_no)
+    P_PRIM_TERM=$(os_curl -s $OPENSEARCH_URL/_plugins/_ism/policies/pscheduler_raw_data_policy | jq ._primary_term)
     # Update policy
     msg "Updating raw data index policy..."
-    curl -k -u admin:${ADMIN_PASS} -H 'Content-Type: application/json' -X PUT "$OPENSEARCH_URL/_plugins/_ism/policies/pscheduler_raw_data_policy?if_seq_no=$P_SEQ_NO&if_primary_term=$P_PRIM_TERM" -d "@/usr/lib/perfsonar/archive/config/ilm/install/pscheduler_raw_data_policy.json" 2>/dev/null ; echo
+    os_curl -H 'Content-Type: application/json' -X PUT "$OPENSEARCH_URL/_plugins/_ism/policies/pscheduler_raw_data_policy?if_seq_no=$P_SEQ_NO&if_primary_term=$P_PRIM_TERM" -d "@/usr/lib/perfsonar/archive/config/ilm/install/pscheduler_raw_data_policy.json" 2>/dev/null ; echo
     # Roll over indices to activate new policy version
     msg "Rolling over raw data indices to ensure new policy is applied..."
-    for i in INDICES; do
-	curl -k -u admin:${ADMIN_PASS} -X POST "$OPENSEARCH_URL/$i/_rollover"  2>/dev/null ; echo
+    for i in $INDICES; do
+	os_curl -X POST "$OPENSEARCH_URL/$i/_rollover"  2>/dev/null ; echo
     done
 fi
 msg "Configuration completed."
