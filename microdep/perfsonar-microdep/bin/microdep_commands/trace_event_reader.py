@@ -92,7 +92,8 @@ f_csensitivity = 1 #Amount of traceroutes in an anomalous report before printing
 
 # Cross Entropy parameters
 CE_DELTA_LIMIT = 3.0          # Level of change in ce-level for a hop to consider a route change to have happened.
-HOPDIST_INIT_WINDOW = 2500    # Min no of probes seen for a hop to consider its host distribution to be representativ
+HOPDIST_INIT_WINDOW = 20      # Min no of probes seen for a hop to consider its host distribution to be representativ
+HOPDIST_INIT_MODE = 'hop'     # Hops that must have passed the window: 'hop' (each on its own), 'route' (those of the run) or 'all'
 
 HTTP_TIMEOUT = 60             # Max no of seconds to wait for an answer when reading from a data source or delivering an event record
 MAX_SECONDS_AHEAD = 300        # A traceroute run dated more than this ahead of the clock of this host is passed over
@@ -424,7 +425,7 @@ def parse_cmd(param):
     """
     # The tuning values that a config file may set. (Without this line the values assigned
     # further down stayed inside this function, and the analysis went on with the defaults.)
-    global f_reduction, f_majority, f_max_state_counter, f_csensitivity, CE_DELTA_LIMIT, HOPDIST_INIT_WINDOW
+    global f_reduction, f_majority, f_max_state_counter, f_csensitivity, CE_DELTA_LIMIT, HOPDIST_INIT_WINDOW, HOPDIST_INIT_MODE
 
     # Parse arguments from commandline
     cmdparser = argparse.ArgumentParser(description="Analyses traceroute output and reports detected anomalities.")
@@ -496,6 +497,11 @@ def parse_cmd(param):
                 CE_DELTA_LIMIT = config[p]
             elif p == "hopdist_init_window":
                 HOPDIST_INIT_WINDOW = config[p]
+            elif p == "hopdist_init_mode":
+                if config[p] in ("hop", "route", "all"):
+                    HOPDIST_INIT_MODE = config[p]
+                else:
+                    print("Warning: The value of 'hopdist_init_mode' in " + args.config + " is not hop, route or all. Keeping the default.")
 
     # Extract all commandline parameters 
     for p in args.__dict__:
@@ -1621,6 +1627,7 @@ def RouteCompare(traceroute, unique_pair, time, analysis_state_jumps, analysis_s
     
     #Goes through each hop in the current traceroute we're looking at
     for hop in traceroute["result"]:
+        n_ce = len(ce_delta)
 
         # Debug
         #print(" Hop", hop)
@@ -1674,10 +1681,13 @@ def RouteCompare(traceroute, unique_pair, time, analysis_state_jumps, analysis_s
             #if total > 2500:
             # Total no of probes has reached "window" limit for this hop
             
-            if all_dest_dists_initialized or min([int(analysis_state_jumps[h]['frequencies']) for h in traceroute["result"]]) > HOPDIST_INIT_WINDOW:
-                # Total no of probes has reached "window" limit for all hops of this traceroute.
-                # (Hops kept for the pair that this traceroute does not have are left out: a hop that only
-                # a few longer runs reach would otherwise hold the calculations back for every run of the pair.)
+            if HOPDIST_INIT_MODE == 'hop':
+                ready = total > HOPDIST_INIT_WINDOW
+            elif HOPDIST_INIT_MODE == 'all':
+                ready = all_dest_dists_initialized or min([int(x['frequencies']) for x in analysis_state_jumps]) > HOPDIST_INIT_WINDOW
+            else:
+                ready = all_dest_dists_initialized or min([int(analysis_state_jumps[h]['frequencies']) for h in traceroute["result"]]) > HOPDIST_INIT_WINDOW
+            if ready:
                 all_dest_dists_initialized = True
                 
                 ###  Cross entropy based anomality detection ### 
@@ -1734,6 +1744,10 @@ def RouteCompare(traceroute, unique_pair, time, analysis_state_jumps, analysis_s
                 
                 # END OF UPDATING NORMALITY
 
+
+        if len(ce_delta) == n_ce:
+            # keep ce_delta in step with the hops: printRouteAlert() reads it by position
+            ce_delta.append(0.0)
 
     total_ce_delta = prev_total_ce - total_ce
     tracesummary.set_max('max_route_ce_delta', total_ce_delta)
