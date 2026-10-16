@@ -5,12 +5,13 @@
 (function(){
   // --- Theme switcher ---
   var root = document.documentElement;
-  var saved = localStorage.getItem('microdep-theme') || 'auto';
+  var saved = 'auto';
+  try { saved = localStorage.getItem('microdep-theme') || 'auto'; } catch (_) {}
   root.setAttribute('data-theme', saved);
 
   function applyTheme(mode) {
     root.setAttribute('data-theme', mode);
-    localStorage.setItem('microdep-theme', mode);
+    try { localStorage.setItem('microdep-theme', mode); } catch (_) {}
     document.querySelectorAll('.theme-btn').forEach(function(btn){
       btn.classList.toggle('active', btn.dataset.theme === mode);
     });
