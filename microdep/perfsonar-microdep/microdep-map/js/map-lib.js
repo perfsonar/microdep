@@ -437,19 +437,19 @@ export function update_url(parameter, value){
 
     var net = $("network").val() ? $("network").val() : parms.net;
     var etype= $("#event_type").val() ? $("#event_type").val() : parms.event;
-    pars=["net=" + net,
-	  "event=" + etype,
-	  "property=" + $("#prop_select").val(),
-	  "date=" + $("#datepicker").val(),
-	  "period=" + $("#period").val() ];
+    pars=["net=" + encodeURIComponent(net),
+	  "event=" + encodeURIComponent(etype),
+	  "property=" + encodeURIComponent($("#prop_select").val()),
+	  "date=" + encodeURIComponent($("#datepicker").val()),
+	  "period=" + encodeURIComponent($("#period").val()) ];
     if  ( etype === "jitter" && $("#stats_type").val() )
-	pars.push( "stats=" + $("#stats_type").val() );
-    if (parms.conffile) pars.push( "conffile=" + parms.conffile);   // Add configfile to url if relevant
-    if (parms.report) pars.push( "report=" + parms.report);         // Add report to url if relevant
+	pars.push( "stats=" + encodeURIComponent($("#stats_type").val()) );
+    if (parms.conffile) pars.push( "conffile=" + encodeURIComponent(parms.conffile));   // Add configfile to url if relevant
+    if (parms.report) pars.push( "report=" + encodeURIComponent(parms.report));         // Add report to url if relevant
     var cmpVal = ($("#compare_select").val && $("#compare_select").val()) || parms.compare;   // Snapshot compare mode
-    if (cmpVal && cmpVal !== 'off') pars.push( "compare=" + cmpVal );
+    if (cmpVal && cmpVal !== 'off') pars.push( "compare=" + encodeURIComponent(cmpVal) );
     if ( parameter )
-	pars.push( parameter + "=" + value );
+	pars.push( parameter + "=" + encodeURIComponent(value) );
     url = urlBase+'?'+pars.join('&');
     window.history.pushState('',document.title,url); // added this line to push the new url directly to url bar .
 
