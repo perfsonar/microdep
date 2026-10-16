@@ -1052,7 +1052,7 @@ function gap_popup( containerDiv, link){
     button.className = "knapp";
     let etype = parms.event;
     let etypeLabel = (event_desc[etype] || etype);
-    button.innerHTML = "Top " + etypeLabel;
+    button.textContent = "Top " + etypeLabel;
     button.onclick = function(event) {
 	let idiv;
 	let etag = 'event ' + parms.event + ' ' + parms.date + ' ' + parms.period;
@@ -4086,7 +4086,7 @@ function draw_link( ends, color, tooltip, popup){
 	    utslag= ( Math.random() - 0.5 )/ 10 ;
 	    if ( distance < 5000000 ){ cp1 = latlon1.destinationPoint((distance/2), bearing + bearing_offset); }
 	    else { cp1 =new LatLon( mp1.lat + (latlon2.lat - latlon1.lat) * utslag, mp1.lon + (latlon2.lon - latlon1.lon) * utslag ); }
-	    if (parms.debug){ var m=L.circle([cp1.lat,cp1.lon], {weight:6, radius:100, color:"blue"}).addTo(mymap).bindTooltip('cp1 '+line_name); }
+	    if (parms.debug){ var m=L.circle([cp1.lat,cp1.lon], {weight:6, radius:100, color:"blue"}).addTo(mymap).bindTooltip('cp1 '+escapeHtml(line_name)); }
 	}
 	middle_point[line_name]=cp1; line_utslag[line_name]=utslag;
 	var mid = cp1.midpointTo(latlon2); var dist2=(0+(cp1.distanceTo(latlon2)));
@@ -4097,8 +4097,8 @@ function draw_link( ends, color, tooltip, popup){
 	else { cp2 =new LatLon( mp1.lat + (latlon2.lat - mp1.lat) * utslag, mp1.lon + (latlon2.lon - mp1.lon) * utslag ); }
 	if (parms.debug){
 	    console.log(ends + [[cp2.lat, cp2.lon], [latlon2.lat, latlon2.lon]] + ' dist: ' + distance);
-	    var m=L.circle([cp2.lat,cp2.lon], {weight:6, radius:100, color:"red"}).addTo(mymap).bindTooltip('cp2 '+line_name);
-	    var m=L.circle([mp1.lat,mp1.lon], {weight:6, radius:100, color:"violet"}).addTo(mymap).bindTooltip('mp1 '+line_name);
+	    var m=L.circle([cp2.lat,cp2.lon], {weight:6, radius:100, color:"red"}).addTo(mymap).bindTooltip('cp2 '+escapeHtml(line_name));
+	    var m=L.circle([mp1.lat,mp1.lon], {weight:6, radius:100, color:"violet"}).addTo(mymap).bindTooltip('mp1 '+escapeHtml(line_name));
 	}
 	var line;
 	var bezierP0, bezierP1, bezierP2;
@@ -4455,7 +4455,7 @@ function report_summary(div_id){
 	for ( const prop of prop_names[event_sum_type[parms.event]]){
 	    let val= entry[prop];
 	    if ( typeof val === 'number' && ! val.isInteger){ if ( val < 100 ) val = val.toFixed(1); else val = val.toFixed(0); }
-	    html+='<td align=right>' + (typeof val === 'string' ? escapeHtml(val) : val);
+	    html+='<td align=right>' + escapeHtml(String(val));
 	}
     }
     html+='</tbody></table>';
