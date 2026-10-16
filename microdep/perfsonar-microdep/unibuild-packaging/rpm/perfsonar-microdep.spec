@@ -412,9 +412,11 @@ systemctl stop perfsonar-microdep-trace-ana.service || true
 systemctl stop perfsonar-microdep-hourly-aggregator.timer || true
 
 %preun logstash
-# Stop the OpenSearch read-grant self-heal timer
-systemctl stop perfsonar-microdep-opensearch-guard.timer || true
-systemctl disable perfsonar-microdep-opensearch-guard.timer || true
+# Stop the OpenSearch read-grant self-heal timer (on removal, not on upgrade)
+if [ $1 -eq 0 ]; then
+    systemctl stop perfsonar-microdep-opensearch-guard.timer || true
+    systemctl disable perfsonar-microdep-opensearch-guard.timer || true
+fi
 # Remove Microdep from Opensearch setup (including Logstash)
 /usr/lib/perfsonar/bin/microdep_commands/opensearch_config_microdep.sh -r config || true
 
