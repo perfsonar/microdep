@@ -1361,6 +1361,18 @@ def majority(states):
 
 #Counts the amounts of each state seen and returns a list with the sums
 
+def icmp_kind(annotation):
+    """ An ICMP annotation of traceroute as a field name of the index: !H, !N, !X ... as they are,
+    !F-<mtu> as !F, !<code> as !<n>, anything else as !other (so the set of fields stays small) """
+    a = str(annotation).strip()
+    if re.fullmatch(r"![A-Za-z]", a):
+        return a
+    if re.fullmatch(r"!F-?\d*", a):
+        return "!F"
+    if re.fullmatch(r"!<\d+>", a):
+        return "!<n>"
+    return "!other"
+
 def count(obs):
 
     tmp = obs[0]
@@ -1501,7 +1513,7 @@ def printAlert(threadid, tr_type, n, time, mode, normal=None, new=None):
     errs = data["errors"]
 
     if len(errs) > 0:
-        alert["icmp_errors"] = count(errs)
+        alert["icmp_errors"] = count([icmp_kind(e) for e in errs])
         alert["icmp_ips"] = data["errorsip"]
         #if "last_reply_from" in alert:
         #    del alert["last_reply_from"]
