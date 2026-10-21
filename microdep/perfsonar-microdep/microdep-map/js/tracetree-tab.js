@@ -1688,7 +1688,10 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         const dec = top >= 100 ? 0 : (top >= 10 ? 1 : 2);
         let ticks = '';
         for (let i = colors.length - 1; i >= 0; i--) {
-            ticks += '<span>' + Number(limits[i]).toFixed(dec) + '</span>';
+            const v = Number(limits[i]);
+            let t = v.toFixed(dec);
+            if (v > 0 && Number(t) === 0) t = v.toPrecision(1);   // a small step of a log scale would read as 0
+            ticks += '<span>' + t + '</span>';
         }
         // Values first, then the bar: the numbers read down the left edge and are
         // right-aligned against it, so the digits line up with their colours.
