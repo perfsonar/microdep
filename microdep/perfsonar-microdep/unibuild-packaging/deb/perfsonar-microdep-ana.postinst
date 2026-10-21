@@ -22,6 +22,10 @@ case "$1" in
 	# Ensure perfsonar user exists
 	groupadd -r perfsonar 2> /dev/null || true
 	useradd -g perfsonar -r -s /sbin/nologin -c "perfSONAR User" -d /tmp perfsonar 2> /dev/null || true
+	# Readable by root and the analysers (they run as perfsonar) only: a password may be put in them.
+	for CONF in /etc/perfsonar/microdep/microdep-gap-ana.yml /etc/perfsonar/microdep/microdep-trace-ana.yml; do
+	    if [ -f "$CONF" ]; then chown root:perfsonar "$CONF"; chmod 0640 "$CONF"; fi
+	done
 
 	# Prepare DB for trace analyser (ignore errors). The DB of an earlier version
 	# is kept, with what the analysis has learned: only a first installation
