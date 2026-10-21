@@ -4434,6 +4434,7 @@ var fromIcon = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stro
 var toIcon = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:4px;color:var(--c-accent)"><path d="M5 12h14M12 5l7 7-7 7"/></svg>';
 
 function report_summary(div_id){
+    if (summary.length === 0) return '<h2>No summary data for ' + escapeHtml(title_state()) + '</h2>';
     let html='';
     html+='<div class="tab-header-row"><h2>Summary for ' + escapeHtml(title_state()) + '</h2>' + _csv_button_html(div_id + '_table', 'summary') + '</div>';
     html+='<table border=1 id=' + div_id + '_table class=sortable>\n';
