@@ -4270,6 +4270,10 @@ function sort_diff(a , b){
 function _csv_escape(s) {
     if (s === null || s === undefined) return '';
     s = String(s);
+    // A spreadsheet reads a cell starting with = + - @ as a formula; keep such text as text.
+    if (/^[=+\-@\t\r]/.test(s) && !/^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(s)) {
+        s = "'" + s;
+    }
     if (/[",\r\n]/.test(s)) {
         s = '"' + s.replace(/"/g, '""') + '"';
     }
