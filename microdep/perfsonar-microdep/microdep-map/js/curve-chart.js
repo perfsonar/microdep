@@ -75,7 +75,7 @@ function make_curve(tab_id, property, start, end){
 
     var url="elastic-get-date-type.pl?net=" + parms.net + "&index=" + parms.index + "&event_type=" + parms.event
 	+ "&start=" + adjust_to_timezone(start) + "&end=" + adjust_to_timezone(end)
-	+ "&from=" + parms.from + "&to=" + parms.to;
+	+ "&from=" + encodeURIComponent(parms.from) + "&to=" + encodeURIComponent(parms.to);
 
     let title = parms.title ? parms.title : "From " + parms.from + " to " + parms.to;
     if (parms.debug) console.log(url);

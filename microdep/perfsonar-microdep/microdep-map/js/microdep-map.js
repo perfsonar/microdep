@@ -1177,10 +1177,7 @@ function _render_link_sparkline_inner(canvas, link, etype, prop, dato, period, f
     var sumEtype = (event_sum_type && event_sum_type[etype]) || '';
     var queryEtype = forceEtype || etype;
 
-    // Match the existing call pattern in get_peer_data / get_connections:
-    // raw concatenation (no encodeURIComponent — colons in ISO stamps
-    // and the IPv6-style addresses are passed through literally), and
-    // include ip_version when the network requires it.
+    // Include ip_version when the network requires it.
     // net= is REQUIRED: elastic-get-date-type.pl resolves the archive URL from
     // config[net].archive — without it the CGI falls back to http://localhost:9200
     // and the query fails (empty reply). (index= sets the OS
@@ -1190,8 +1187,8 @@ function _render_link_sparkline_inner(canvas, link, etype, prop, dato, period, f
               '&event_type=' + queryEtype +
               '&start=' + adjust_to_timezone(start_iso) +
               '&end='   + adjust_to_timezone(end_iso) +
-              '&from='  + link.from +
-              '&to='    + link.to;
+              '&from='  + encodeURIComponent(link.from) +
+              '&to='    + encodeURIComponent(link.to);
     if (net_ip_version && net_ip_version[parms.net]) {
         url += '&ip_version=' + net_ip_version[parms.net];
     }
@@ -4496,7 +4493,7 @@ function present_table( parameters, div, data){}
 function get_peer_data(from, to, div){
     var data=[];
     let tz_start = adjust_to_timezone(start); let tz_end = adjust_to_timezone(end);
-    var url="elastic-get-date-type.pl?net=" + parms.net + "&index=" + event_index[parms.event] + "&event_type=" + parms.event + "&start=" + tz_start + "&end=" + tz_end + "&from=" + from + "&to=" + to;
+    var url="elastic-get-date-type.pl?net=" + parms.net + "&index=" + event_index[parms.event] + "&event_type=" + parms.event + "&start=" + tz_start + "&end=" + tz_end + "&from=" + encodeURIComponent(from) + "&to=" + encodeURIComponent(to);
     if (net_ip_version[parms.net]) { url += "&ip_version=" + net_ip_version[parms.net]; }
     $.getJSON( url, function(resp){
 	if (jQuery.isEmptyObject(resp.hits)) {
