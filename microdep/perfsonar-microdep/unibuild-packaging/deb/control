@@ -105,6 +105,7 @@ Depends: ${misc:Depends}, ${perl:Depends},
  libjs-select2.js,
  libjs-sorttable,
  libjs-vis,
+ jq,
  perfsonar-microdep-enrichdbs
 Conflicts: perfsonar-tracetree
 Description: Microdep map web GUI presenting analytic results
