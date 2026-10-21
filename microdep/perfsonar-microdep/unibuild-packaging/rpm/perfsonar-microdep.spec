@@ -330,6 +330,10 @@ if [ "$1" -gt 1 ]; then
 else
     %{command_base}/create_new_db.sh -s -t postgres -d routingmonitor
 fi
+# Readable by root and the analysers (they run as perfsonar) only: a password may be put in them.
+for CONF in %{microdep_config_base}/microdep-gap-ana.yml %{microdep_config_base}/microdep-trace-ana.yml; do
+    if [ -f "$CONF" ]; then chown root:perfsonar "$CONF"; chmod 0640 "$CONF"; fi
+done
 # Fix access to db
 if [ -f /var/lib/pgsql/data/pg_hba.conf ]; then
     %{command_base}/fix-pgsql-access.sh -i /var/lib/pgsql/data/pg_hba.conf

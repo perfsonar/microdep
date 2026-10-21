@@ -749,7 +749,8 @@ sub emit_json{
 	    $archive_resp = $deliver_agent->post($archive_spec->{'data'}->{'_url'}, Content => $json_data );
 	}
 	if (defined $archive_resp) {
-	    print "Response when sending JSON: ", Dumper($archive_resp) if $opt_debug > 3;
+	    # Status and content only: the response object also holds the request, with its Authorization header.
+	    print "Response when sending JSON: ", $archive_resp->status_line, "\n", $archive_resp->decoded_content, "\n" if $opt_debug > 3;
 	    if ($archive_resp->{'_rc'} != 200) {
 		warn "Failed to send JSON document to ", $archive_spec->{'data'}->{'_url'},  " with return code ", $archive_resp->{'_rc'}; 
 	    } else {
@@ -1166,6 +1167,7 @@ sub read_owamp_follow{
     if ($url_str =~ /^http.*:\/\/\S*\/opensearch\/*$/ ){
 	# Url seems to be a ref to a perfsonar archive with opensearch.
 	$url_str .= "/pscheduler_raw_latencybg/_search";
+	( my $shown = $url_str ) =~ s{://[^/@\s]*@}{://...@};   # no credentials in the log
 	my $query_req = LWP::UserAgent->new;
 	$query_req->ssl_opts( verify_hostname => 0, SSL_verify_mode => IO::Socket::SSL::SSL_VERIFY_NONE);  # Accept any SSl cert
 	$sum_next = next_sum_time(time(), $opt_sumperiod) if $opt_sumperiod;
@@ -1175,7 +1177,7 @@ sub read_owamp_follow{
 	    my $search_query = owamp_search_query($date_last_read_rec); 
 	    my $owamp_resp = $query_req->post($url_str, 'Content-Type' => 'application/json', Content => $search_query );
 	    if (defined $owamp_resp) {
-		print "owamp data from ", $url_str, ":\n", Dumper($owamp_resp) if $opt_debug > 3;
+		print "owamp data from ", $shown, ":\n", $owamp_resp->status_line, "\n", $owamp_resp->decoded_content, "\n" if $opt_debug > 3;
 		if ($owamp_resp->{'_rc'} == 200) {
 		    # Successfull request. Decode response.
 		    # (An answer that is not json is taken as no records, and asked for again next round)
@@ -1191,10 +1193,10 @@ sub read_owamp_follow{
 			}
 		    }
 		} else {
-		    print "Warning: Failed to access ", $url_str, " (http-rc: ", $owamp_resp->{'_rc'}, ")\n" if $opt_debug > 3;
+		    print "Warning: Failed to access ", $shown, " (http-rc: ", $owamp_resp->{'_rc'}, ")\n" if $opt_debug > 3;
 		}
 	    } else {
-		warn "Missing response from $url_str." if ($opt_v || $opt_debug > 1);
+		warn "Missing response from $shown." if ($opt_v || $opt_debug > 1);
 	    }
 	    # Wait and try again
 	    sleep $followinterval;
