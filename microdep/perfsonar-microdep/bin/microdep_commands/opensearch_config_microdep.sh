@@ -193,6 +193,12 @@ if [ "$1" ]; then
     OPENSEARCH_URL="$1"
 fi
 
+# One run at a time: the guard timer and a package upgrade may start it together,
+# and both would edit roles.yml and pipelines.yml and run securityadmin.
+LOCKFILE=/run/lock/opensearch_config_microdep.lock
+exec 9> $LOCKFILE
+flock -w 600 9 || { echo "Error: another run of `basename $0` has not finished." >&2; exit 1; }
+
 ADMIN_PASS=$(grep -w "admin" $PASSWORD_FILE | head -n 1 | awk '{print $2}')
 if [ -z "$ADMIN_PASS" ]; then
     echo "Error: Opensearch admin password not available. Apply -p <password-file>. " >&2
