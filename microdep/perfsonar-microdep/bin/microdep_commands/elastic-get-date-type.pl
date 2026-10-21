@@ -48,7 +48,6 @@ my $type = parm('event_type');          # No event_type results in list of uniqu
 my $end = parm('end') || $start;
 my $from = parm('from');
 my $to = parm('to');
-my $min_delay = parm('min_delay');
 
 # Sparkline support — when `interval` and `prop` arrive alongside `from`,
 # the script returns per-bucket averages via a date_histogram aggregation
@@ -62,10 +61,7 @@ my $interval = parm('interval');
 my $prop_field = parm('prop');
 $interval = undef unless ( $interval && $interval =~ /^\d+[smhd]$/ );
 $prop_field = undef unless ( $prop_field && $prop_field =~ /^\w+$/ );
-my ($stats_type, $stats_field ) = split( ",", parm('stats') );
-my $path_addr=parm('path_addr'); # list of ips 
 my $date_field='@date';
-$date_field = '@timestamp' if $path_addr;
 my $load_coords = parm('load_coords');
 my $count = parm('count');      # Totals only - no hits, no aggregations
 
@@ -189,35 +185,6 @@ my $perc='
 ';
 
 
-my $min_aggr='
-  "aggs": {
-     "from": { "terms": {"field": "from.keyword", "size": 100 },
-        "aggs": {
-          "to": { "terms": {"field": "to.keyword", "size": 100 },
-            "aggs": {
-              "min_delay":  { "avg": { "field": "h_min_d" } }
-            }
-          }
-        }
-      }
-   }
-';
-
-
-my $stats_aggr='
-  "aggs": {
-     "from": { "terms": {"field": "from.keyword", "size": 100 },
-        "aggs": {
-          "to": { "terms": {"field": "to.keyword", "size": 100 },
-            "aggs": {
-              "stats":  { "' . $stats_type . '": { "field": "' . $stats_field . '" } }
-            }
-          }
-        }
-      }
-   }
-';
-
 my $flow_aggr = '"aggs": { "peer": { "terms": { "field": "from_to.keyword", "size" : 1000000  } } }';
 
 my $search;
@@ -244,34 +211,7 @@ if ( $from ) {
 
 $query_head .= '] ';
 
-if ( $min_delay ){
-    $query_head .= ', "must_not": { "range": { "h_min_d": { '
-						    . '"gte": ' . -10
-						    . ', "lte": ' . $min_delay 
-						    . ' } } }';
-    # $query_head .= ', { "range": { "h_min_d": { "lte": ' . -3 . ' } } }';
-    # $query_head .= ', { "range": { "h_min_d": { "gte": ' . $min_delay . ' } } }';
-}
-
 $sort_time = '"sort" : [ { "@date": { "order" : "asc" } } ]';
-
-if ( $path_addr){
-    $query_head .= ',    "filter": {
-        "bool": { "should": [
-';
-    my @ips = split( ",", $path_addr);
-    my $match="";
-    printf STDERR "path_addr : $path_addr : %d\n", $#ips if $debug > 0;
-
-    foreach $i ( 0 .. $#ips){
-	$match .= ', ' if $i > 0;
-	$match .= '{ "match": { "path_addr": "' . $ips[$i] . '" } }';
-    }
-
-    $query_head .= $match . ' ], "minimum_should_match": 1 }
-        }
-';
-}
 
 if ( $count ) {
     # Cheap probe: how many records match, nothing else. Used to find out
@@ -288,12 +228,6 @@ if ( $count ) {
     my $query_tonodes = '{ "size": 0, ' . $query_head . $query_tail . ', ' . aggr_node_query("to") .'}';
     $query_tonodes =~ s/\R//g ; # Clean away newlines
     $search = "{ \"index\": \"" . $index . "\" }\n" . $query_fromnodes . "\n{ \"index\": \"" . $index . "\" }\n" . $query_tonodes . "\n";
-} elsif ( $stats_type){
-    $search =  '{ "size":10000, ' . $query_head . $query_tail . ', ' . $stats_aggr . '}';    
-} elsif ( $min_delay ){
-    my $limit='{ "range": { "h_min_d": { "gte": ' . $min_delay . ' } } }';
-
-    $search =  '{ "size":0, ' . $query_head . $query_tail . ", " . $min_aggr . '}';
 } elsif ( $type eq "jitter" && ! $from ){ # no aggregation if pair
     # $search =  '{ "size":0, ' . $query_jit . ", " . $aggr . '}';
     $search =  '{ "size":0, ' . $query_head . $query_tail . ", " . $perc . '}';
