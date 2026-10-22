@@ -66,6 +66,7 @@ my $opt_follow;             # True if first input file is to be followed
 my $opt_roundrobin;         # True if cyclic read from sources is selected.
 my $opt_strict_eventorder;  # True if strict order of matching events is required.
 my $opt_sleepinterval;      # Timeperiod for re-reading file when followed.
+my $opt_ana_delay;          # Timeperiod to delay analysis (to wait for incoming events from batch-oriented owamp).
 my $opt_config_file;        # Path to config file
 my $opt_verbose;            # Verbose flag
 
@@ -177,7 +178,6 @@ sub init_corrsum_event {
 # Clean up before exit
 sub clean_up {
 
-    # Output summary events
     foreach my $key (keys %corrsum_event) {
 	# Prepare timestamp for specified date with local timesone
 #	my $iso_time = $date . "T23:59:59.999" . $tz_local;  # ISO date with local timezone
@@ -273,13 +273,12 @@ sub get_next_source_to_read{
 sub get_next_event{
     # Remove and replace oldest event in queue
 
-#    my $fill_q = shift;          # If true, do not remove head of queue, i.e. keep filling queue.
-
     my $old_event = $eventq[0];  # Store head of queue
     
     my $line="";
     my @at_eof;
     my $new_event;
+    my $new_event_docid;
  GET_NEXT_EVENT__INPUT_SRC_LOOP:   
     while (@at_eof < @inputfile) {
 	# Select file/source to read
@@ -294,6 +293,7 @@ sub get_next_event{
 	    } else {
 		# New doc ready
 		$new_event = $doc->{'_source'};
+		$new_event_docid = $doc->{'_id'};
 	    }
 	} else {
 	    if ( ! defined($line = <$fh>) ) {
@@ -306,6 +306,14 @@ sub get_next_event{
 	    }
 	}
 	if( $new_event ) {
+	    foreach my $in_q (@eventq) {
+		# Check if event is already in queue
+		if ( $in_q->{'me_docid'} eq $new_event_docid ) {
+		    # New event is already in queue. Skip.
+		    $new_event = undef; next GET_NEXT_EVENT__INPUT_SRC_LOOP;  # (Label required to jump to outer loop.)
+		}
+	    }
+		
 	    # Add a field common for all analysed records/docs   
 	    $new_event->{'me_matchall'} = 'match_all';      
 
@@ -326,16 +334,21 @@ sub get_next_event{
 		print STDERR "Warning: Missing timefield. Skipping input record/doc.\n" if ($opt_verbose);
 		$new_event = undef; next;
 	    }
+	    my $tf_epoch;
 	    if ( $tf_type eq "iso" ) {
-		if ( ! ( $new_event->{$tf_name} ge $start_iso && ( ! $end_iso || $new_event->{$tf_name} le $end_iso ) ) ) {
+		# Convert iso to epoch to handle timezones
+		$new_event->{$tf_name} =~ s/(.*T\d\d:\d\d:\d\d\.\d\d)\d+(\+\d\d)(\d\d)/$1$2:$3/;  # Keep only two decimals for seconds and add ":" in timezone (parse_datetime() is picky...)
+		$tf_epoch = DateTime::Format::ISO8601->parse_datetime($new_event->{$tf_name})->epoch();
+		if ( ! ( $tf_epoch >= $start_time && ( ! $end_time || $end_time && $tf_epoch <= $end_time ) ) ) {
 		    #  Incorrect iso time field. Skip.
-		    print STDERR "Warning: Iso timefield out of range. Skipping record/doc.\n" if ($opt_verbose);
+		    print STDERR "Warning: Iso timefield " . $new_event->{$tf_name} . " out of range. Skipping record/doc.\n" if ($opt_verbose);
 		    $new_event = undef; next;
 		}
 	    } elsif ( $tf_type eq "epoch" ) {
-		if ( ! ( $new_event->{$tf_name} >= $start_time && ( ! $end_time || $end_time && $new_event->{$tf_name} <= $end_time ) ) ) {
+		$tf_epoch = $new_event->{$tf_name};
+		if ( ! ( $tf_epoch >= $start_time && ( ! $end_time || $end_time && $tf_epoch <= $end_time ) ) ) {
 		    #  Incorrect epoch time field. Skip.
-		    print STDERR "Warning: Epoch timefield out of range. Skipping record/doc.\n" if ($opt_verbose);
+		    print STDERR "Warning: Epoch timefield " . $new_event->{$tf_name} . " out of range. Skipping record/doc.\n" if ($opt_verbose);
 		    $new_event = undef; next;
 		}
 	    } else {
@@ -345,7 +358,7 @@ sub get_next_event{
 
 	    # Enure epoch timestamp for event
 	    if ($tf_type eq "iso") {
-		$new_event->{'me_timestamp'} = DateTime::Format::ISO8601->parse_datetime()->epoch($new_event->{$tf_name});
+		$new_event->{'me_timestamp'} = DateTime::Format::ISO8601->parse_datetime($new_event->{$tf_name})->epoch();
 		if (!$new_event->{'me_timestamp'}) {
 		    # Timestamp conversion failed. Skip.
 		    print STDERR "Error: Unrecognized timestamp in document from source " . $ARGV[$next_file_to_read] . ". Skipping.\n" if ($opt_verbose);
@@ -360,6 +373,7 @@ sub get_next_event{
 	    # Add some more admin data to event
 	    $new_event->{'me_source'} = $ARGV[$next_file_to_read];
 	    $new_event->{'me_srcidx'} = $next_file_to_read;
+	    $new_event->{'me_docid'} = $new_event_docid;
 	    $inputfile_ts[$next_file_to_read] = $new_event->{'me_timestamp'};  # Latest read timestamp for source
 	    my $event_added_in_slot = -1;
 	    for my $e (0 .. $#eventq) {
@@ -376,12 +390,9 @@ sub get_next_event{
 	    }
 	    
 	    if (@eventq > $opt_inputbuffersize) {
-		if ($event_added_in_slot == 0) {
-		    # New events from input sources is older than oldest event in input queue. Longer queue probably required. 
-		    print STDERR "Warning: Unsorted input. New event is lost as it is older than oldest event in input buffer. Increase buffer size with -b.\n";
-		    print STDERR "Lost input event: src ". $new_event->{'me_source'} . " timestamp " . $new_event->{'timestamp'} . " peer ". $new_event->{'from'} . "," . $new_event->{'to'}  .  "\n" if ($opt_verbose);
-		}
-		
+		# Events are processed slower than they are arriving. Longer queue probably required. 
+		print STDERR "Warning: Input buffer is full. Oldest event is dropped. Try increasing buffer size with -b and/or reduce analysis delay with -a.\n";
+		print STDERR "Lost input event: src ". $eventq[0]{'me_source'} . " timestamp " . $eventq[0]{'timestamp'} . " peer ". $eventq[0]{'from'} . "," . $eventq[0]{'to'}  .  "\n" if ($opt_verbose);
 		# Event input queue to long. Remove head of queue (slot 0). 
 		shift @eventq;
 	    }
@@ -483,9 +494,9 @@ sub init_search {
     # Prepare time fields for search
     my ($tfield_name, $tfield_type) = split(":",$tfield);
     if ($tfield_type eq "iso") {
-	# Swap to iso time stamps with quotes
-	$search_start = '"' . $start_iso . '"'; 
-	$search_end = ( $end_iso ne "" ? '"' . $end_iso . '"' : '"now"');
+	# Swap to iso time stamps 
+	$search_start = $start_iso; 
+	$search_end = ( $end_iso ne "" ? $end_iso : "now");
     } elsif ($tfield_type ne "epoch") {
 	die "Error: Invalid time field type for '" . $tfield ."'.";
     }
@@ -525,10 +536,15 @@ sub fill_search_cache {
 	my $end_time = $search_cache->{$index}->{'end_time'};
 	if (!$end_time) {
 	    if( $search_cache->{$index}{'tfield_type'} eq 'iso' ) {
-		$end_time = '"now"';         # Apply 'now' when unspecifield iso end time
+		$end_time = 'now';         # Apply 'now' when unspecifield iso end time
 	    } else {
 		$end_time = time();   # Apply current epoch time when unspecifield epoch end time
 	    }
+	}
+	if( $search_cache->{$index}{'tfield_type'} eq 'iso' ) {
+	    # Date strings need quotes... 
+	    $start_time = '"' . $start_time . '"';
+	    $end_time = '"' . $end_time . '"';
 	}
 	# Prepare filter for search. Add range first.
 	my $filter_clause =  ' { "range": { "' . $search_cache->{$index}->{'tfield_name'} . '": { "' . $range_start. '": ' . $start_time . ', "lte": ' . $end_time . '}}}';
@@ -536,7 +552,7 @@ sub fill_search_cache {
 	# Add from-to peer matching (if any)
 	foreach my $peer (@opt_peermatch) {
 	    my ($from, $to) = split (',', $peer);
-	    $should_clause .= "," if ( $should_clause ne "");  # Add comman between peer match filters
+	    $should_clause .= "," if ( $should_clause ne "");  # Add comma between peer match filters
 	    $should_clause .=  '{ "bool": { "must": [ { "term": { "from": "' . $from . '" }}, { "term": { "to": "' . $to . '"}}]}}';
 	}
 	if ( $should_clause ne "") {
@@ -558,9 +574,17 @@ sub fill_search_cache {
 		    # Valid search. Add results to cache.
 		    push @{$search_cache->{$index}->{'hits'}}, @{$search_result->{'hits'}->{'hits'}};
 
-		    # Update start time for future cache fill requests
-		    $search_cache->{$index}->{'start_time'} = $search_cache->{$index}->{'hits'}[-1]->{'_source'}->{$search_cache->{$index}{'tfield_name'}};
-		    $search_cache->{$index}->{'range_start'} =  "gt" ;  # (... to avoid duplicates.)
+		    # Update start time for future cache fill requests. Fill cache with docs from time window $opt_ana_delay seconds past in time. 
+		    my $epoch_new_start_time = ( $search_cache->{$index}{'tfield_type'} eq 'iso' ? DateTime::Format::ISO8601->parse_datetime($search_cache->{$index}->{'start_time'})->epoch() : $search_cache->{$index}->{'start_time'} );
+		    $epoch_new_start_time = ( $epoch_new_start_time > time() - $opt_ana_delay ?  $epoch_new_start_time : time() - $opt_ana_delay );
+		    if( $search_cache->{$index}{'tfield_type'} eq 'iso' ) {
+			$search_cache->{$index}->{'start_time'} = localtime($epoch_new_start_time)->strftime("%Y-%m-%dT%H:%M:%S") . $tz_local ;
+		    } else {
+			$search_cache->{$index}->{'start_time'} = $epoch_new_start_time;
+		    }			
+		    
+		    #$search_cache->{$index}->{'start_time'} = $search_cache->{$index}->{'hits'}[-1]->{'_source'}->{$search_cache->{$index}{'tfield_name'}};
+		    #$search_cache->{$index}->{'range_start'} =  "gt" ;  # (... to avoid duplicates.)
 
 		    # Update query time
 		    $search_cache->{$index}->{'query_time'} =  time() ; 
@@ -615,7 +639,7 @@ sub report_correlation {
     my $t_local = localtime($corr_events_window{ $matchfieldvalues }[0]{'me_timestamp'});
 
     # Prepare basics event structure
-    my %corr_event = (
+    my %report_event = (
 	'event_type' => $opt_corr_event_name,
 	'timestamp' => $corr_events_window{ $matchfieldvalues }[0]{'me_timestamp'},
 	'duration' => $corr_events_window{ $matchfieldvalues }[-1]{'me_timestamp'} - $corr_events_window{ $matchfieldvalues }[0]{'me_timestamp'},
@@ -623,7 +647,8 @@ sub report_correlation {
 	'@date' => $t_local->strftime("%Y-%m-%dT%H:%M:%S%z"),  # ISO date with local timezone
 	'datetime' => $t_local->strftime("%Y-%m-%dT%H:%M:%S%z"),  # ISO date with local timezone
 	);
-		    
+    my %report_basic_keys = map { $_ => 1 } keys %report_event;   # Create hash with "only" basic keys.
+
     my $events_correlating = "";
     my @uniq_event_types = ();
     my @uniq_source_files = ();
@@ -634,12 +659,29 @@ sub report_correlation {
 	    my $event_type = $corr_events_window{ $matchfieldvalues }[$w]{'event_type'};
 	    $events_correlating .= $event_type . ", ";
 	    push @uniq_event_types, $event_type if (! is_element_of($event_type, @uniq_event_types));
+
 	    foreach my $key (keys %{$corr_events_window{ $matchfieldvalues }[$w]}) {
-		if (! exists $corr_event{$key} ) {
-		    # Copy event details (but don't overwriting anyting) THIS STRATEGY FOR AGGREGATION IS QUESTIONALBLE... DISCUSS WITH BRANKO.
-		    $corr_event{$key} = $corr_events_window{ $matchfieldvalues }[$w]{$key};
+		if ( exists $report_basic_keys{$key} ) {
+		    # A basic field / key. Skip.
+		    next;
+		} elsif ($w == 0) {
+		    # First event.  Prepare empty array.
+		    $report_event{$key} = [];
+		} elsif (! exists $report_event{$key} ) {
+		    # First event with this key.  Add padded array with empty entries for already added events without the key
+		    my @padding = map { undef } 1..$w;
+		    $report_event{$key} = \@padding;  
+		}
+		# Add event to report
+		push @{$report_event{$key}} , $corr_events_window{ $matchfieldvalues }[$w]{$key};
+	    }
+	    foreach my $key (keys %report_event) {
+		if (! exists $report_basic_keys{$key} && ! exists $corr_events_window{ $matchfieldvalues }[$w]{$key} ) {
+		    # Add padding for "missing" key (key existent in earlier added events only) for current event
+		    push @{$report_event{$key}} , undef;
 		}
 	    }
+		    
 	    # Register unique sourcefiles
 	    my $sourcefile = $corr_events_window{ $matchfieldvalues }[$w]{'me_source'};
 	    push @uniq_source_files, $sourcefile if (! is_element_of($sourcefile, @uniq_source_files));
@@ -652,25 +694,25 @@ sub report_correlation {
 	chop $events_correlating;
 	chop $events_correlating;
     }
-    $corr_event{'events_corr'} = $events_correlating;
-    $corr_event{'corr_count_uniq'} = @uniq_event_types;
-    $corr_event{'corr_count_src'} = @uniq_source_files;
+    $report_event{'events_corr'} = $events_correlating;
+    $report_event{'corr_count_uniq'} = @uniq_event_types;
+    $report_event{'corr_count_src'} = @uniq_source_files;
     # Clean up admin fields
-    delete $corr_event{'me_timestamp'};
-    delete $corr_event{'me_timestamp'};
-    delete $corr_event{'me_source'};
-    delete $corr_event{'me_srcidx'};
-    delete $corr_event{'me_matchall'};
+    delete $report_event{'me_timestamp'};
+    delete $report_event{'me_timestamp'};
+    delete $report_event{'me_source'};
+    delete $report_event{'me_srcidx'};
+    delete $report_event{'me_matchall'};
     
     # Output
     my $js = JSON->new();
     $js->canonical(1);  # Ensure sorted JSON structure
-    my $corr_event_json = $js->utf8->encode(\%corr_event);
-    my $md5_corr_report = md5($corr_event_json);   # Generate MD5 checksum for report
+    my $report_event_json = $js->utf8->encode(\%report_event);
+    my $md5_corr_report = md5($report_event_json);   # Generate MD5 checksum for report
     if ($md5_last_corr_report ne  $md5_corr_report) {
 	# New checksum => new report ready. Output.
 	$md5_last_corr_report = $md5_corr_report;
-	print $corr_event_json, "\n";
+	print $report_event_json, "\n";
     }
     
     # Update summary info
@@ -678,14 +720,17 @@ sub report_correlation {
     $corrsum_event{ $matchfieldvalues }{"timestamp_end"}=$corr_events_window{ $matchfieldvalues }[-1]{'me_timestamp'};
     #$corrsum_event{ $matchfieldvalues }{"timestamp"}=$corrsum_event{ $matchfieldvalues }{"timestamp_end"};
     $corrsum_event{ $matchfieldvalues }{"count"}++;
-    $corrsum_event{ $matchfieldvalues }{"corr_count"} += $corr_event{'corr_count'};
+    $corrsum_event{ $matchfieldvalues }{"corr_count"} += $report_event{'corr_count'};
     # Update collection of unique event types
     foreach (@uniq_event_types) {
 	push @{ $corrsum_event{ $matchfieldvalues }{"tot_uniq_events"} }, $_ if (! is_element_of($_, @{ $corrsum_event{ $matchfieldvalues }{"tot_uniq_events"} } ));
     }
-    $corrsum_event{ $matchfieldvalues }{'sum_duration'} += $corr_event{'duration'};
-    $corrsum_event{ $matchfieldvalues }{'sum_tloss'} += $corr_event{'tloss'} if ( exists $corr_event{'tloss'} );
-    $corrsum_event{ $matchfieldvalues }{'max_tloss'} = $corr_event{'tloss'} if ( exists $corr_event{'tloss'} && $corr_event{'tloss'} > $corrsum_event{ $matchfieldvalues }{'max_tloss'});
+    $corrsum_event{ $matchfieldvalues }{'sum_duration'} += $report_event{'duration'};
+    foreach (@{$report_event{'tloss'}}) {
+	$corrsum_event{ $matchfieldvalues }{'sum_tloss'} += $_;
+	$corrsum_event{ $matchfieldvalues }{'max_tloss'} = $_ if ( ! exists $corrsum_event{ $matchfieldvalues }{'max_tloss'} ||
+								   $_ > $corrsum_event{ $matchfieldvalues }{'max_tloss'});
+    }
     $corrsum_event{ $matchfieldvalues }{'avg_duration'} = $corrsum_event{ $matchfieldvalues }{'sum_duration'} / $corrsum_event{ $matchfieldvalues }{"corr_count"};
     $corrsum_event{ $matchfieldvalues }{'corr_count_src'} = @uniq_source_files if ( $corrsum_event{ $matchfieldvalues }{'corr_count_src'} < @uniq_source_files);
 }
@@ -706,6 +751,7 @@ GetOptions (
     "windowsize=i" => \$opt_window_size,    # Max acceptable time difference for event corrolation
     "buffersize=i" => \$opt_inputbuffersize,    # Max acceptable time difference for event corrolation
     "interval=i" => \$opt_sleepinterval,    # Sleep interval between polls for new content
+    "ana_delay=i" => \$opt_ana_delay,       # Timeperiod i seconds to postpone analysis (to wait for incoming events.)
     "pidfile=s"  => \$opt_pidfile,          # string for process id file
     "url=s"  => \$opt_url,                  # Url string to Elastic Search compatible source (including credentials)
     "cache=s"  => \$opt_cachesize,          # Max num of docs/records to keep in cache
@@ -739,7 +785,8 @@ if ( $opt_help || $#ARGV eq -1 ) {
    --cache integer Max num of docs/records to keep in cache.
    -d date-range   Filter on ISO date range (local time zone if none is given). A single date sets start date only.
                    Two dates separated by '/' sets a range. Default is <today>T00:00:00/<today>T23:59:59. 
-   -i integer      Sleep interval between polls for new content when -f is set. (Default 1 sec.)
+   -i seconds      Sleep interval between polls for new content when -f is set. (Default 1 sec.)
+   -a seconds      Timeperiod i seconds to postpone analysis (to wait for incoming events.)
    -p filename     Filename of process-id file.
    -v              Be verbose. Repeat to increase amount on info.
    \n";
@@ -754,8 +801,10 @@ if ($opt_config_file && -e $opt_config_file ) {
 # Set defaults for some options (if not already set).
 $opt_gunzip ||= 0;
 $opt_corr_event_name ||= 'correlation';                     # Default name for discovered correlation event
-@opt_matchfield = ("me_matchall") if (!@opt_matchfield);    # Name of field that needs to match for corrolation
-@opt_timefield = ("timestamp:epoch") if (!@opt_timefield);  # Name of field with time info to look for
+@opt_matchfield = ('me_matchall') if (!@opt_matchfield);    # Name of field that needs to match for corrolation
+#@opt_timefield = ('timestamp:epoch') if (!@opt_timefield);  # Name of field with time info to look for
+@opt_timefield = ('@date:iso') if (!@opt_timefield);  # Name of field with time info to look for
+#@opt_timefield = ('@timestamp:iso') if (!@opt_timefield);  # Name of field with time info to look for
 $opt_window_size ||= 60;       # Max time difference in seconds accepted for event corrolation
 $opt_inputbuffersize ||= 1;    # No of events to keep in sorted input buffer
 $opt_pidfile ||= '';           # Name of process id file
@@ -766,6 +815,8 @@ $opt_follow ||= 0;             # True if first input file is to be followed
 $opt_roundrobin ||= 0;         # True if cyclic read from sources is selected.
 $opt_strict_eventorder ||= 0;  # True if strict order of matching events is required.
 $opt_sleepinterval ||= 5;      # Timeperiod for re-reading file when followed.
+$opt_ana_delay ||= 60;         # Timeperiod to delay analysis (to wait for incoming events from batch-oriented owamp).
+$opt_verbose ||= 0;            # Verbosity level
 
 # Prepare iso date range
 if ($opt_daterange eq '') {
@@ -835,16 +886,12 @@ my $curpos;
 
 while ($tryagain) {   
 
-    # Fetch event (if any) from input source
-#    my $input_queue_size= get_next_event();  
-
     # Pull event from input queue, update correlation windows and check for correlations.
-#    while ($input_queue_size > 0) {
     my $prev_input_queue_size = 0;
     while (get_next_event()) {
 
 	while ($prev_input_queue_size < @eventq && @eventq < $opt_inputbuffersize ) {
-	    # Input queue is a bit short. Attempt to fill more events into it before starting analysis.
+	    # Input queue is filling up but is still a bit short. Attempt to fill more events into it before starting analysis.
 	    # (Filling the input queue helps with getting events sorted.)
 	    $prev_input_queue_size = @eventq;
 	    get_next_event();
@@ -854,42 +901,44 @@ while ($tryagain) {
 	if (! $matchfieldvalues ) {
 	    # No values for matchfields in head of event queue, i.e. nothing to do.
 	    print STDERR "Warning: No matchfields in record/doc. Skipping." if ($opt_verbose);
-#	    $input_queue_size = get_next_event();
 	    next;
 	}
-	if (! exists $corr_events_window{ $matchfieldvalues }) {
-	    # Add first element in window for matchfield value set
-	    $corr_events_window{ $matchfieldvalues } = ();
-	    push @{ $corr_events_window{ $matchfieldvalues } }, $eventq[0];
-	    shift @eventq;   # Remove processed event from input queue 
-	} else {
-	    #Check if last events in window are sorted in time. THIS IS HANDLED BY get_next_event().
-	    #die "Error: Usorted input buffer. Increase buffersize with -b." if (@eventq > 1 &&  $eventq[-1]{'me_timestamp'} < $eventq[-2]{'me_timestamp'});
-
-	    if ( ( $eventq[0]{'me_timestamp'} - $corr_events_window{ $matchfieldvalues }[0]{'me_timestamp'} ) > $opt_window_size) {
-		# Input event is outside correlation window.
-		if (@{ $corr_events_window{ $matchfieldvalues }} > 1 && all_expected_events_present($corr_events_window{ $matchfieldvalues }) ) {
-		    # More than one event correlate. Report.
-		    report_correlation( $matchfieldvalues );
-		}
-
-		# Clear out too old events from correlation window
-		my $newest_timestamp = $eventq[0]{'me_timestamp'};
-		my $oldest_timestamp = $corr_events_window{ $matchfieldvalues }[0]{'me_timestamp'};
-		while ( $oldest_timestamp < $newest_timestamp ) { 
-		    last if ($newest_timestamp - $oldest_timestamp < $opt_window_size);  # End loop
-		    shift @{ $corr_events_window{ $matchfieldvalues }}; # Remove from head of queue
-		    if ( @{ $corr_events_window{ $matchfieldvalues }} ) {  
-			$oldest_timestamp = $corr_events_window{ $matchfieldvalues }[0]{'me_timestamp'};
-		    } else {
-			# Window is empty
-			last;
+	if ($eventq[0]{'me_timestamp'} + $opt_ana_delay < time() ) {
+	    # Head of event queue is "mature" enough for analysis
+	    if (! exists $corr_events_window{ $matchfieldvalues }) {
+		# Add first element in window for matchfield value set
+		$corr_events_window{ $matchfieldvalues } = ();
+		push @{ $corr_events_window{ $matchfieldvalues } }, $eventq[0];
+		shift @eventq;   # Remove processed event from input queue  
+	    } else {
+		if ( ( $eventq[0]{'me_timestamp'} - $corr_events_window{ $matchfieldvalues }[0]{'me_timestamp'} ) > $opt_window_size) {
+		    # Input event is outside correlation window.
+		    if (@{ $corr_events_window{ $matchfieldvalues }} > 1 && all_expected_events_present($corr_events_window{ $matchfieldvalues }) ) {
+			# More than one event correlate. Report.
+			report_correlation( $matchfieldvalues );
+		    }
+		    
+		    # Clear out too old events from correlation window
+		    my $newest_timestamp = $eventq[0]{'me_timestamp'};
+		    my $oldest_timestamp = $corr_events_window{ $matchfieldvalues }[0]{'me_timestamp'};
+		    while ( $oldest_timestamp < $newest_timestamp ) { 
+			last if ($newest_timestamp - $oldest_timestamp < $opt_window_size);  # End loop
+			shift @{ $corr_events_window{ $matchfieldvalues }}; # Remove from head of queue
+			if ( @{ $corr_events_window{ $matchfieldvalues }} ) {  
+			    $oldest_timestamp = $corr_events_window{ $matchfieldvalues }[0]{'me_timestamp'};
+			} else {
+			    # Window is empty
+			    last;
+			}
 		    }
 		}
+		# Add new event 
+		push @{ $corr_events_window{ $matchfieldvalues }}, $eventq[0];
+		shift @eventq;   # Remove processed event from input queue 
 	    }
-	    # Add new event 
-	    push @{ $corr_events_window{ $matchfieldvalues }}, $eventq[0];
-	    shift @eventq;   # Remove processed event from input queue 
+	} else {
+	    # Sleep to let input queue "mature"
+	    sleep($opt_sleepinterval);
 	}
     }
     # Do a final check for correlating events (in case the very last collection of input events all correlate.)
