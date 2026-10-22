@@ -66,7 +66,7 @@ my $opt_follow;             # True if first input file is to be followed
 my $opt_roundrobin;         # True if cyclic read from sources is selected.
 my $opt_strict_eventorder;  # True if strict order of matching events is required.
 my $opt_sleepinterval;      # Timeperiod for re-reading file when followed.
-my $opt_ana_delay;          # Timeperiod to delay analysis (to wait for incoming events from batch-oriented owamp).
+my $opt_ana_delay;          # Timeperiod to delay analysis (e.g. to wait for incoming events from batch-oriented owamp).
 my $opt_config_file;        # Path to config file
 my $opt_verbose;            # Verbose flag
 
@@ -727,9 +727,11 @@ sub report_correlation {
     }
     $corrsum_event{ $matchfieldvalues }{'sum_duration'} += $report_event{'duration'};
     foreach (@{$report_event{'tloss'}}) {
-	$corrsum_event{ $matchfieldvalues }{'sum_tloss'} += $_;
-	$corrsum_event{ $matchfieldvalues }{'max_tloss'} = $_ if ( ! exists $corrsum_event{ $matchfieldvalues }{'max_tloss'} ||
-								   $_ > $corrsum_event{ $matchfieldvalues }{'max_tloss'});
+	if ($_) {
+	    $corrsum_event{ $matchfieldvalues }{'sum_tloss'} += $_; 
+	    $corrsum_event{ $matchfieldvalues }{'max_tloss'} = $_ if ( ! exists $corrsum_event{ $matchfieldvalues }{'max_tloss'} ||
+								       $_ > $corrsum_event{ $matchfieldvalues }{'max_tloss'});
+	}
     }
     $corrsum_event{ $matchfieldvalues }{'avg_duration'} = $corrsum_event{ $matchfieldvalues }{'sum_duration'} / $corrsum_event{ $matchfieldvalues }{"corr_count"};
     $corrsum_event{ $matchfieldvalues }{'corr_count_src'} = @uniq_source_files if ( $corrsum_event{ $matchfieldvalues }{'corr_count_src'} < @uniq_source_files);
@@ -815,7 +817,7 @@ $opt_follow ||= 0;             # True if first input file is to be followed
 $opt_roundrobin ||= 0;         # True if cyclic read from sources is selected.
 $opt_strict_eventorder ||= 0;  # True if strict order of matching events is required.
 $opt_sleepinterval ||= 5;      # Timeperiod for re-reading file when followed.
-$opt_ana_delay ||= 60;         # Timeperiod to delay analysis (to wait for incoming events from batch-oriented owamp).
+$opt_ana_delay ||= 0;          # Timeperiod to delay analysis (e.g. to wait for incoming events from batch-oriented owamp).
 $opt_verbose ||= 0;            # Verbosity level
 
 # Prepare iso date range
@@ -901,40 +903,42 @@ while ($tryagain) {
 	if (! $matchfieldvalues ) {
 	    # No values for matchfields in head of event queue, i.e. nothing to do.
 	    print STDERR "Warning: No matchfields in record/doc. Skipping." if ($opt_verbose);
+	    shift @eventq;
 	    next;
+	}
+	if (! exists $corr_events_window{ $matchfieldvalues }) {
+	    # Prepare analysis window/queue for matchfield value set
+	    $corr_events_window{ $matchfieldvalues } = ();
 	}
 	if ($eventq[0]{'me_timestamp'} + $opt_ana_delay < time() ) {
 	    # Head of event queue is "mature" enough for analysis
-	    if (! exists $corr_events_window{ $matchfieldvalues }) {
-		# Add first element in window for matchfield value set
-		$corr_events_window{ $matchfieldvalues } = ();
-		push @{ $corr_events_window{ $matchfieldvalues } }, $eventq[0];
-		shift @eventq;   # Remove processed event from input queue  
-	    } else {
-		if ( ( $eventq[0]{'me_timestamp'} - $corr_events_window{ $matchfieldvalues }[0]{'me_timestamp'} ) > $opt_window_size) {
-		    # Input event is outside correlation window.
-		    if (@{ $corr_events_window{ $matchfieldvalues }} > 1 && all_expected_events_present($corr_events_window{ $matchfieldvalues }) ) {
-			# More than one event correlate. Report.
-			report_correlation( $matchfieldvalues );
-		    }
-		    
-		    # Clear out too old events from correlation window
-		    my $newest_timestamp = $eventq[0]{'me_timestamp'};
-		    my $oldest_timestamp = $corr_events_window{ $matchfieldvalues }[0]{'me_timestamp'};
-		    while ( $oldest_timestamp < $newest_timestamp ) { 
-			last if ($newest_timestamp - $oldest_timestamp < $opt_window_size);  # End loop
-			shift @{ $corr_events_window{ $matchfieldvalues }}; # Remove from head of queue
-			if ( @{ $corr_events_window{ $matchfieldvalues }} ) {  
-			    $oldest_timestamp = $corr_events_window{ $matchfieldvalues }[0]{'me_timestamp'};
-			} else {
-			    # Window is empty
-			    last;
-			}
-		    }
+	    # Move head of input queue to tail of analysis window/queue
+	    push @{ $corr_events_window{ $matchfieldvalues } }, $eventq[0];
+	    shift @eventq;
+	    
+	    # Clear out too old events from correlation window/queue
+	    while ( @{ $corr_events_window{ $matchfieldvalues }} ) {
+		if ($corr_events_window{ $matchfieldvalues }[-1]{'me_timestamp'} - $corr_events_window{ $matchfieldvalues }[0]{'me_timestamp'} > $opt_window_size) {
+		    # To long (time wise) window/queue. Remove head.
+		    shift @{ $corr_events_window{ $matchfieldvalues }} 
+		} else {
+		    # Head in window/queu is still relevant (as well as rest of window)
+		    last;
 		}
-		# Add new event 
-		push @{ $corr_events_window{ $matchfieldvalues }}, $eventq[0];
-		shift @eventq;   # Remove processed event from input queue 
+	    }
+
+	    # Check if even more input events are relevant for correlation
+	    while (@eventq && $eventq[0]{'me_timestamp'} - $corr_events_window{ $matchfieldvalues }[0]{'me_timestamp'}  <= $opt_window_size ) { 
+		# (New) head of input event queue fits into correcation window.
+		# Move head of input queue to tail of analysis window/queue
+		push @{ $corr_events_window{ $matchfieldvalues } }, $eventq[0];
+		shift @eventq;
+	    }
+	    
+	    # Check status of correlation window
+	    if (@{ $corr_events_window{ $matchfieldvalues }} > 1 && all_expected_events_present($corr_events_window{ $matchfieldvalues }) ) {
+		# More than one event correlate in time. Report.
+		report_correlation( $matchfieldvalues );
 	    }
 	} else {
 	    # Sleep to let input queue "mature"
