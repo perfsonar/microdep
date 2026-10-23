@@ -41,8 +41,8 @@ Depends: ${misc:Depends}, ${perl:Depends},
 # pytz
  python3-tz,
  python3-tzlocal,
-## corr-ana
- libsearch-elasticsearch-perl
+## corr-ana match_event
+ libdatetime-format-iso8601-perl
 # 
  perfsonar-microdep-enrichdbs,
  perfsonar-microdep-utils

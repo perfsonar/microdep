@@ -101,7 +101,7 @@ sub load_config {
 	"follow" => \$opt_follow,               # follow source 
 	"roundrobin" => \$opt_roundrobin,       # Apply round robin read of input sources.
 	"gunzip"  => \$opt_gunzip,              # flag enabling gunzip of input.
-	"name"  => \$opt_corr_event_name,       # Event type name for output correlation events. 
+	"name=s"  => \$opt_corr_event_name,       # Event type name for output correlation events. 
 	"matchfield=s" => \@opt_matchfield,     # Name of field that needs to match for events to be corrolated. Option may be repeated.
 	"eventmatch=s" => \@opt_eventmatch,     # Name of event required in correlation. Option may be repeated.
 	"peer=s" => \@opt_peermatch,            # "<from>,<to>" peer relevant for corrocation. Option may be repeated. Default is all peers.
@@ -184,7 +184,10 @@ sub clean_up {
 #	$corrsum_event{$key}{"timestamp"} = DateTime::Format::ISO8601->parse_datetime($iso_time)->epoch(); 
 	#	$corrsum_event{$key}{"datetime"} = $iso_time;
 	
-	my $end_ts = ($end_time >= 0 ? $end_time : time());  # Apply current time as end time if none is given.
+	my $end_ts = time();  # Apply current time as end time if none is given.
+	my @s_inputfile_ts = sort(@inputfile_ts);
+	$end_ts = (@s_inputfile_ts > 0 ? $s_inputfile_ts[-1] : $end_ts); # Update to oldest timestamp seen in input sources
+	$end_ts = ($end_time > 0 ? $end_time : $end_ts);                # Update to user specified end time
 	$corrsum_event{$key}{"timestamp"} = $end_ts;
 	$corrsum_event{$key}{"datetime"} = localtime($end_ts)->strftime("%Y-%m-%dT%H:%M:%S") . $tz_local;
 	$corrsum_event{$key}{'@date'} = $corrsum_event{$key}{"datetime"};
@@ -192,7 +195,6 @@ sub clean_up {
 	$corrsum_event{$key}{'uniq_events'} = join(",", @{ $corrsum_event{$key}{"tot_uniq_events"} });
 	delete($corrsum_event{$key}{'tot_uniq_events'});  # Not required for output
 	# Output record
-#	print STDERR Dumper($corrsum_event{$key});
 	print encode_json($corrsum_event{$key}), "\n";
     }
     undef %corrsum_event;
@@ -214,7 +216,7 @@ $SIG{HUP} = \&sighup_handler;
 $SIG{INT} = \&sigint_handler;
 sub sighup_handler{
     if ($opt_follow) {
-	# Stop follow-file behavior and trigger restart of parsing file
+	# Stop follow-file behavior and close trigger restart of parsing file
 	$tryagain = 0;
 	if (!$opt_url) {
 	    foreach (@inputfile) {
@@ -303,6 +305,7 @@ sub get_next_event{
 	    } else {
 		# Line read from file. Parse.
 		$new_event = decode_json $line;
+		$new_event_docid = md5($line);  # Create a uniq document id
 	    }
 	}
 	if( $new_event ) {
@@ -313,7 +316,7 @@ sub get_next_event{
 		    $new_event = undef; next GET_NEXT_EVENT__INPUT_SRC_LOOP;  # (Label required to jump to outer loop.)
 		}
 	    }
-		
+
 	    # Add a field common for all analysed records/docs   
 	    $new_event->{'me_matchall'} = 'match_all';      
 
@@ -339,14 +342,14 @@ sub get_next_event{
 		# Convert iso to epoch to handle timezones
 		$new_event->{$tf_name} =~ s/(.*T\d\d:\d\d:\d\d\.\d\d)\d+(\+\d\d)(\d\d)/$1$2:$3/;  # Keep only two decimals for seconds and add ":" in timezone (parse_datetime() is picky...)
 		$tf_epoch = DateTime::Format::ISO8601->parse_datetime($new_event->{$tf_name})->epoch();
-		if ( ! ( $tf_epoch >= $start_time && ( ! $end_time || $end_time && $tf_epoch <= $end_time ) ) ) {
+		if ( ! ( $tf_epoch >= $start_time && ( ! $end_time || $tf_epoch <= $end_time ) ) ) {
 		    #  Incorrect iso time field. Skip.
 		    print STDERR "Warning: Iso timefield " . $new_event->{$tf_name} . " out of range. Skipping record/doc.\n" if ($opt_verbose);
 		    $new_event = undef; next;
 		}
 	    } elsif ( $tf_type eq "epoch" ) {
 		$tf_epoch = $new_event->{$tf_name};
-		if ( ! ( $tf_epoch >= $start_time && ( ! $end_time || $end_time && $tf_epoch <= $end_time ) ) ) {
+		if ( ! ( $tf_epoch >= $start_time && ( ! $end_time || $tf_epoch <= $end_time ) ) ) {
 		    #  Incorrect epoch time field. Skip.
 		    print STDERR "Warning: Epoch timefield " . $new_event->{$tf_name} . " out of range. Skipping record/doc.\n" if ($opt_verbose);
 		    $new_event = undef; next;
@@ -716,9 +719,14 @@ sub report_correlation {
     }
     
     # Update summary info
-    $corrsum_event{ $matchfieldvalues }{"timestamp_start"}=$corr_events_window{ $matchfieldvalues }[0]{'me_timestamp'};
-    $corrsum_event{ $matchfieldvalues }{"timestamp_end"}=$corr_events_window{ $matchfieldvalues }[-1]{'me_timestamp'};
-    #$corrsum_event{ $matchfieldvalues }{"timestamp"}=$corrsum_event{ $matchfieldvalues }{"timestamp_end"};
+    if (! $corrsum_event{ $matchfieldvalues }{"timestamp_start"} ||
+	$corrsum_event{ $matchfieldvalues }{"timestamp_start"} > $corr_events_window{ $matchfieldvalues }[0]{'me_timestamp'} ) {
+	$corrsum_event{ $matchfieldvalues }{"timestamp_start"} = $corr_events_window{ $matchfieldvalues }[0]{'me_timestamp'};
+    }
+    if (! $corrsum_event{ $matchfieldvalues }{"timestamp_end"} ||
+	$corrsum_event{ $matchfieldvalues }{"timestamp_end"} < $corr_events_window{ $matchfieldvalues }[-1]{'me_timestamp'} ) {
+	$corrsum_event{ $matchfieldvalues }{"timestamp_end"} = $corr_events_window{ $matchfieldvalues }[-1]{'me_timestamp'};
+    }
     $corrsum_event{ $matchfieldvalues }{"count"}++;
     $corrsum_event{ $matchfieldvalues }{"corr_count"} += $report_event{'corr_count'};
     # Update collection of unique event types
@@ -745,7 +753,7 @@ GetOptions (
     "follow" => \$opt_follow,               # follow source 
     "roundrobin" => \$opt_roundrobin,       # Apply round robin read of input sources.
     "gunzip"  => \$opt_gunzip,              # flag enabling gunzip of input 
-    "name"  => \$opt_corr_event_name,       # Event type name for output correlation events. 
+    "name=s"  => \$opt_corr_event_name,     # Event type name for output correlation events. 
     "matchfield=s" => \@opt_matchfield,     # Name of field that needs to match for events to be corrolated. Option may be repeated.
     "eventmatch=s" => \@opt_eventmatch,     # Name of event required in correlation. Option may be repeated.
     "peer=s" => \@opt_peermatch,            # "<from>,<to>" peer relevant for corrocation. Option may be repeated. Default is all peers.
@@ -822,8 +830,13 @@ $opt_verbose ||= 0;            # Verbosity level
 
 # Prepare iso date range
 if ($opt_daterange eq '') {
-    # Set range with current time as start date and no end date
-    $opt_daterange = localtime()->strftime("%Y-%m-%dT%H:%M:%S") . $tz_local ;
+    if ($opt_follow) {
+	# Sources are followed. Set range with current time as start date and no end date
+	$opt_daterange = localtime()->strftime("%Y-%m-%dT%H:%M:%S") . $tz_local ;
+    } else {
+	# Accept all datetime values
+	$opt_daterange = localtime(0)->strftime("%Y-%m-%dT%H:%M:%S") . $tz_local ;
+    }
 }
 ( $start_iso, $end_iso) = split("/", $opt_daterange);
 
