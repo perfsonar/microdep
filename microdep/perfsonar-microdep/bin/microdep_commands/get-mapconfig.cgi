@@ -18,14 +18,16 @@ use URI;
 use JSON;
 use YAML;
 use Storable qw(dclone);
-use Hash::Merge::Simple qw/ merge /;
+
+# Keep the keys in the order of the files: the map lists networks, events and properties in that order.
+$YAML::Preserve = 1;
     
 # #   M A I N   T H R E A D   # # 
 
 my $configfile="/etc/perfsonar/microdep/mapconfig.yml";
 my $configdir="/etc/perfsonar/microdep/mapconfig.d";
 
-my %output = ( msg => "", config => {});  # Output hash.
+my %output = ( msg => "", config => YAML::Node->new({}));  # Output hash.
 
 my $restq = CGI->new;        # Rest/CGI query object.
 
@@ -34,6 +36,18 @@ sub msg {
 
     # Add message to output console-string
     $output{'msg'} .= $msg . "\n";
+}
+
+# Like Hash::Merge::Simple::merge (right wins, hashes in both are merged), but keeping the key order.
+sub merge {
+    my ($left, $right) = @_;
+    my $merged = YAML::Node->new({});
+    $merged->{$_} = $left->{$_} foreach keys %$left;
+    foreach my $key (keys %$right) {
+        $merged->{$key} = ( ref $left->{$key} eq 'HASH' && ref $right->{$key} eq 'HASH' )
+            ? merge($left->{$key}, $right->{$key}) : $right->{$key};
+    }
+    return $merged;
 }
 
 sub msg_output {
@@ -52,7 +66,7 @@ msg ("Default YAML config successfully loaded" );
 opendir my $dir, $configdir or msg("Cannot open config directory: $!") and exit;
 my @files = readdir $dir;
 closedir $dir;
-foreach (@files) {
+foreach (sort @files) {
     if (! /^[^.].*\.yml\z/ ) {
 	# Skip none-yaml-files: the name has to end in .yml, and hidden files are left out.
 	# (A name that merely held ".yml" was taken as well, so what a package upgrade or an
@@ -67,7 +81,7 @@ foreach (@files) {
 #	print Dumper($net_yaml_hash->{$net});
 	$output{"config"}{$net} = dclone($default_yaml_hash);
 	# Add/overwrite specific conf data
-	my $merged = merge $output{"config"}{$net}, $net_yaml_hash->{$net};
+	my $merged = merge($output{"config"}{$net}, $net_yaml_hash->{$net});
 	$output{"config"}{$net} = $merged;
     }
 }
