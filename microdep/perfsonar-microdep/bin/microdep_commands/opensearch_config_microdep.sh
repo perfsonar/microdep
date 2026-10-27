@@ -135,7 +135,7 @@ pipelines_without_microdep () {
 wait_opensearch_api () {
     # Wait for Opensearch API to start
     msg "Waiting for opensearch API to start..."
-    api_status=$(os_curl -s -o /dev/null -w "%{http_code}" https://localhost:9200/_cluster/health)
+    api_status=$(os_curl -s -o /dev/null -w "%{http_code}" $OPENSEARCH_URL/_cluster/health)
     i=0
     while [[ $api_status -ne 200 ]]
     do
@@ -146,7 +146,7 @@ wait_opensearch_api () {
             msg "[Warning] API start timeout"
             exit 0
 	fi
-	api_status=$(os_curl -s -o /dev/null -w "%{http_code}" https://localhost:9200/_cluster/health)
+	api_status=$(os_curl -s -o /dev/null -w "%{http_code}" $OPENSEARCH_URL/_cluster/health)
     done
     
     msg "API started!"
@@ -192,6 +192,13 @@ shift $(($OPTIND - 1))  # (Shift away parsed arguments)
 if [ "$1" ]; then
     OPENSEARCH_URL="$1"
 fi
+OPENSEARCH_SECURITY_CONFIG=${OPENSEARCH_CONFIG_DIR}/opensearch-security   # (again: -c may have changed the config dir)
+
+# One run at a time: the guard timer and a package upgrade may start it together,
+# and both would edit roles.yml and pipelines.yml and run securityadmin.
+LOCKFILE=/run/lock/opensearch_config_microdep.lock
+exec 9> $LOCKFILE
+flock -w 600 9 || { echo "Error: another run of `basename $0` has not finished." >&2; exit 1; }
 
 ADMIN_PASS=$(grep -w "admin" $PASSWORD_FILE | head -n 1 | awk '{print $2}')
 if [ -z "$ADMIN_PASS" ]; then
