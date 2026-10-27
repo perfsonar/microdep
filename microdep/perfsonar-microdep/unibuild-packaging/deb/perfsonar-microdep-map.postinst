@@ -31,8 +31,9 @@ case "$1" in
 		jq --argjson nextid "$NEXTID" '.id = $nextid' /etc/perfsonar/microdep/grafana_dashboard_patch > $PATCHFILE
 		# Add new panel to main dashboard
 		DASHBOARDFILE=$(mktemp)
-		jq '.panels += [input]' /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json  $PATCHFILE > $DASHBOARDFILE
-		mv $DASHBOARDFILE /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json
+		# Only if jq worked, and into the same file, so that owner and mode stay
+		if jq '.panels += [input]' /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json  $PATCHFILE > $DASHBOARDFILE; then cat $DASHBOARDFILE > /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json; fi
+		rm -f $DASHBOARDFILE
 	    fi
 	fi
 

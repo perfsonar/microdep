@@ -145,6 +145,7 @@ Requires:               momentjs = 2.30.1
 Requires:               select2js = 4.0.13
 Requires:               sorttablejs = 2.0
 Requires:               visjs
+Requires:               jq
 Requires:               perfsonar-microdep-enrichdbs
 Obsoletes:              perfsonar-tracetree
 BuildRequires:          systemd
@@ -390,8 +391,9 @@ if [ -e /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json-tempor
 	jq --argjson nextid "$NEXTID" '.id = $nextid' %{microdep_config_base}/grafana_dashboard_patch > $PATCHFILE
 	# Add new panel to main dashboard
 	DASHBOARDFILE=$(mktemp)
-	jq '.panels += [input]' /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json  $PATCHFILE > $DASHBOARDFILE
-	mv $DASHBOARDFILE /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json
+	# Only if jq worked, and into the same file, so that owner and mode stay
+	if jq '.panels += [input]' /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json  $PATCHFILE > $DASHBOARDFILE; then cat $DASHBOARDFILE > /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json; fi
+	rm -f $DASHBOARDFILE
     fi
 fi
 
@@ -424,8 +426,9 @@ fi
 # Remove Microdep button from Grafana main dashboard (if present)
 if grep -q  "Microdep map" /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json; then
     DASHBOARDFILE=$(mktemp)
-    jq  'del( .panels[] | select(.options.content != null ) | select (.options.content | contains("Microdep map")))' /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json > $DASHBOARDFILE
-    mv $DASHBOARDFILE /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json
+    # Only if jq worked, and into the same file, so that owner and mode stay
+    if jq  'del( .panels[] | select(.options.content != null ) | select (.options.content | contains("Microdep map")))' /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json > $DASHBOARDFILE; then cat $DASHBOARDFILE > /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json; fi
+    rm -f $DASHBOARDFILE
 fi
 
 ###   P o s t   u n i n s t a l l   a c t i o n s 
