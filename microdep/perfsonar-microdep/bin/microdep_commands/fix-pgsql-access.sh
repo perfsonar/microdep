@@ -47,8 +47,21 @@ if [ $# -lt 1 ]; then
     exit 2
 fi
 
-# Always remove exiting entry (if any)
-sed $INFILE "/^#BEGIN-$TAG/,/^#END-$TAG/d" $1
+# Always remove exiting entry (if any). A block goes only up to its END line: one without
+# it (an edited file) is left as it is, instead of everything after it being removed.
+remove_block() {
+    awk -v b="#BEGIN-$TAG" -v e="#END-$TAG" '
+        index($0, b) == 1 { if (inb) printf "%s", buf; inb = 1; buf = $0 ORS; next }
+        inb { buf = buf $0 ORS; if (index($0, e) == 1) { inb = 0; buf = "" } next }
+        { print }
+        END { if (inb) { printf "%s", buf; print b " without " e ": left as it is" > "/dev/stderr" } }' "$1"
+}
+if [ "$INFILE" ]; then
+    TMP=$(mktemp) && remove_block "$1" > "$TMP" && cat "$TMP" > "$1"
+    rm -f "$TMP"
+else
+    remove_block "$1"
+fi
 
 if [ "$REMOVE"  ]; then
     # Only remove.
