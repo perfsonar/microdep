@@ -715,12 +715,19 @@ function spread_points(points){
 
 // The tree view: every traceroute from `host` in one picture, as a Routes tab
 // opened for "all peers" ('*'); ls_tab resolves the peers from the archive.
+// Start of the shown period in epoch seconds: for less than a day the selected hour, as in get_connections().
+function shown_start_epoch(dato) {
+    let s = new Date(dato).getTime() / 1000;
+    if (parms.period < 24) s += (parse_hhmm($("#period_input").val()) + new Date(dato).getTimezoneOffset() / 60) * 3600;
+    return s;
+}
+
 function open_tree_tab(host) {
     let num_tabs = new_tab_number();
     let title = 'Tree: ' + host.split('.').slice(0, 2).join('.');
     add_tab('div', title, num_tabs, '<div class="center-text" style="padding:40px"><div class="spinner"></div><p>Loading traceroute data\u2026</p></div>');
     let tab_id = 'tab' + num_tabs;
-    let start_epoch = new Date($("#datepicker").val()).getTime() / 1000;
+    let start_epoch = shown_start_epoch($("#datepicker").val());
     let end_epoch = start_epoch + parms.period * 3600;
     var opts = {
 	net: parms.net,
@@ -1612,7 +1619,7 @@ function link_popup(link){
 	    let title = 'Routes: ' + fromShort + ' \u2192 ' + toShort;
 	    add_tab('div', title, num_tabs, '<div class="center-text" style="padding:40px"><div class="spinner"></div><p>Loading traceroute data\u2026</p></div>');
 	    let tab_id = 'tab' + num_tabs;
-	    let start_epoch = new Date(dato).getTime() / 1000;
+	    let start_epoch = shown_start_epoch(dato);
 	    let end_epoch = start_epoch + parms.period * 3600;
 	    var routesOpts = {
 		net: parms.net,
@@ -4680,7 +4687,7 @@ function init_map(){
 	    // (issue #124). Same archive/options as the link popup's Routes button.
 	    add_tab( 'div', title, num_tabs,
 		     '<div class="center-text" style="padding:40px"><div class="spinner"></div><p>Loading traceroute peers\u2026</p></div>' );
-	    var routes_start = new Date($("#datepicker").val()).getTime() / 1000;
+	    var routes_start = shown_start_epoch($("#datepicker").val());
 	    var routes_end   = routes_start + parms.period * 3600;
 	    var menuRoutesOpts = {
 		net: parms.net,
