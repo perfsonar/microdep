@@ -2,20 +2,10 @@
 #
 #  Find time corrolated JSON events from multiple source streams
 #
-#  Parses JSON sources with Elastic search compatible entries and search for entries
+#  Parses JSON sources with Opensearch (Elastic search) compatible entries and search for entries
 #  with similar timestamp. Generate a JSON output with matched entries.
 #
-#  Input  JSON documents assumed to have at least
-#    { "@timestamp"  : "<UTC ISO timestamp>,
-#      "@date"       : "<UTC ISO timestamp>,
-#      "from"        : "<src hostname>",
-#      "to"          : "<dst hostname>",
-#      "from_addr"   : "<src ip address>",
-#      "to_addr"     : "<dst ip address>",
-#      ...
-#    }
-#
-#  Author: OttoJ Wittner
+#  Author: Otto J Wittner
 #  Email: otto.wittner@sikt.no
 #  Date: 2022-04-26
 #
@@ -25,7 +15,7 @@
 
 use strict;
 use warnings;
-use Getopt::Long;   # Commandline argument parser
+use Getopt::Long qw(:config no_ignore_case);   # Commandline argument parser, case sensitive
 use Time::Piece;    # Date and time string parsing
 use JSON;
 use Math::Complex;
@@ -54,6 +44,7 @@ my $opt_gunzip;
 my $opt_corr_event_name;     # Name for discovered correlation event
 my @opt_matchfield;         # Name of field that needs to match for corrolation
 my @opt_timefield;          # Name of field with time info to look for
+my @opt_eventfield;         # Name of field with event name to look for
 my @opt_eventmatch;         # List of events required to correlate for report to be output
 my @opt_peermatch;          # List of peers (from,to) relevant for corrolation window
 my $opt_window_size;        # Max time difference accepted for event corrolation
@@ -65,6 +56,7 @@ my $opt_daterange;          # ISO date range to filter on (local time zone if no
 my $opt_follow;             # True if first input file is to be followed
 my $opt_roundrobin;         # True if cyclic read from sources is selected.
 my $opt_strict_eventorder;  # True if strict order of matching events is required.
+my $opt_strict_eventset;    # True if strict set of matching events is required, i.e. only events in @opt_eventmatch.
 my $opt_sleepinterval;      # Timeperiod for re-reading file when followed.
 my $opt_ana_delay;          # Timeperiod to delay analysis (e.g. to wait for incoming events from batch-oriented owamp).
 my $opt_config_file;        # Path to config file
@@ -98,17 +90,20 @@ sub load_config {
     # Prepare list of supported options ( Copied from GetOptions!)
     my %supported_options = (
 	"timefield=s" => \@opt_timefield,       # Array of names of time-fields. One for each given JSON input file. 
+	"Eventfield=s" => \@opt_eventfield,     # Array of names of event-fields. One for each given JSON input file. 
 	"follow" => \$opt_follow,               # follow source 
 	"roundrobin" => \$opt_roundrobin,       # Apply round robin read of input sources.
-	"gunzip"  => \$opt_gunzip,              # flag enabling gunzip of input.
-	"name=s"  => \$opt_corr_event_name,       # Event type name for output correlation events. 
+	"gunzip"  => \$opt_gunzip,              # flag enabling gunzip of input 
+	"name=s"  => \$opt_corr_event_name,     # Event type name for output correlation events. 
 	"matchfield=s" => \@opt_matchfield,     # Name of field that needs to match for events to be corrolated. Option may be repeated.
 	"eventmatch=s" => \@opt_eventmatch,     # Name of event required in correlation. Option may be repeated.
 	"peer=s" => \@opt_peermatch,            # "<from>,<to>" peer relevant for corrocation. Option may be repeated. Default is all peers.
-	"strict"  => \$opt_strict_eventorder,   # flag enabling strict order of matching events
+	"strictorder"  => \$opt_strict_eventorder, # Flag enabling strict order of matching events
+	"Strictset"  => \$opt_strict_eventset,  # Flag enabling strict set of matching events, i.e. only events given by -e.
 	"windowsize=i" => \$opt_window_size,    # Max acceptable time difference for event corrolation
 	"buffersize=i" => \$opt_inputbuffersize,    # Max acceptable time difference for event corrolation
 	"interval=i" => \$opt_sleepinterval,    # Sleep interval between polls for new content
+	"ana_delay=i" => \$opt_ana_delay,       # Timeperiod i seconds to postpone analysis (to wait for incoming events.)
 	"pidfile=s"  => \$opt_pidfile,          # string for process id file
 	"url=s"  => \$opt_url,                  # Url string to Elastic Search compatible source (including credentials)
 	"cache=s"  => \$opt_cachesize,          # Max num of docs/records to keep in cache
@@ -178,12 +173,8 @@ sub init_corrsum_event {
 # Clean up before exit
 sub clean_up {
 
+    # Add some final data to summary events
     foreach my $key (keys %corrsum_event) {
-	# Prepare timestamp for specified date with local timesone
-#	my $iso_time = $date . "T23:59:59.999" . $tz_local;  # ISO date with local timezone
-#	$corrsum_event{$key}{"timestamp"} = DateTime::Format::ISO8601->parse_datetime($iso_time)->epoch(); 
-	#	$corrsum_event{$key}{"datetime"} = $iso_time;
-	
 	my $end_ts = time();  # Apply current time as end time if none is given.
 	my @s_inputfile_ts = sort(@inputfile_ts);
 	$end_ts = (@s_inputfile_ts > 0 ? $s_inputfile_ts[-1] : $end_ts); # Update to oldest timestamp seen in input sources
@@ -320,7 +311,7 @@ sub get_next_event{
 	    # Add a field common for all analysed records/docs   
 	    $new_event->{'me_matchall'} = 'match_all';      
 
-	    # Get timefile name and type
+	    # Get timefield name and type
 	    my $timefield = ( $#opt_timefield == $#inputfile ? $opt_timefield[$next_file_to_read] : $opt_timefield[0] );
 	    my ($tf_name, $tf_type) = split(":", $timefield);
 	    
@@ -359,42 +350,37 @@ sub get_next_event{
 		die "Error: Invalid timefield type '" . $tf_type. "'.\n";
 	    }
 
-	    # Enure epoch timestamp for event
-	    if ($tf_type eq "iso") {
-		$new_event->{'me_timestamp'} = DateTime::Format::ISO8601->parse_datetime($new_event->{$tf_name})->epoch();
-		if (!$new_event->{'me_timestamp'}) {
-		    # Timestamp conversion failed. Skip.
-		    print STDERR "Error: Unrecognized timestamp in document from source " . $ARGV[$next_file_to_read] . ". Skipping.\n" if ($opt_verbose);
-		    $new_event = undef; next;
-		}
-	    } elsif ($tf_type eq "epoch") {
-		$new_event->{'me_timestamp'} = $new_event->{$tf_name};
-	    } else {
-		print STDERR "Error: Unrecognized timestamp format '" . $tf_type . "'. Skipping doc/record.\n" if ($opt_verbose);
-		$new_event = undef; next;
-	    }
+	    # Store epoch timestamp for event
+	    $new_event->{'me_timestamp'} = $tf_epoch;
+	    
 	    # Add some more admin data to event
 	    $new_event->{'me_source'} = $ARGV[$next_file_to_read];
 	    $new_event->{'me_srcidx'} = $next_file_to_read;
 	    $new_event->{'me_docid'} = $new_event_docid;
+	    $new_event->{'me_eventfield'} = ( $#opt_eventfield == $#inputfile ? $opt_eventfield[$next_file_to_read] : $opt_eventfield[0] ); 
 	    $inputfile_ts[$next_file_to_read] = $new_event->{'me_timestamp'};  # Latest read timestamp for source
 	    my $event_added_in_slot = -1;
 	    for my $e (0 .. $#eventq) {
-		if ($new_event->{'me_timestamp'} < $eventq[$e]{'me_timestamp'}) {
+		my $e_rev = $#eventq - $e; 
+		if ($new_event->{'me_timestamp'} >= $eventq[$e_rev]{'me_timestamp'}) {
 		    # Insert new event into queue
-		    splice(@eventq, $e, 0, $new_event);
-		    $event_added_in_slot = $e;
+		    splice(@eventq, $e_rev, 0, $new_event);
+		    $event_added_in_slot = $e_rev;
 		    last;
 		}
 	    }
 	    if ($event_added_in_slot == -1) {
-		# Add new event at end of queue
-		push @eventq, $new_event;
+		# Add new event to head of queue
+		unshift @eventq, $new_event;
+		if ( @eventq > $opt_inputbuffersize * 0.9 ) {
+		    # Buffer is 90% full but new events are still added to head of queue
+		    print STDERR scalar @eventq, " Warning: Severly unordered input events. Try increasing input buffer size with -b.\n" if ($opt_verbose);
+		}
 	    }
 	    
 	    if (@eventq > $opt_inputbuffersize) {
 		# Events are processed slower than they are arriving. Longer queue probably required. 
-		print STDERR "Warning: Input buffer is full. Oldest event is dropped. Try increasing buffer size with -b and/or reduce analysis delay with -a.\n";
+		print STDERR "Warning: Input buffer is full. Event is dropped before analysis. Try increasing buffer size with -b and/or reduce analysis delay with -a.\n";
 		print STDERR "Lost input event: src ". $eventq[0]{'me_source'} . " timestamp " . $eventq[0]{'timestamp'} . " peer ". $eventq[0]{'from'} . "," . $eventq[0]{'to'}  .  "\n" if ($opt_verbose);
 		# Event input queue to long. Remove head of queue (slot 0). 
 		shift @eventq;
@@ -441,11 +427,18 @@ sub all_expected_events_present {
     # Test if all required events are present in given window
     my $window = shift;
     my @not_found_event = @opt_eventmatch;
+    my $found_count = 0;
     if (@opt_eventmatch > 0) {
+	# Iterate over match-events-window
 	foreach (@{ $window}) {
+	    # Count events in window which match events specified by user
+	    foreach my $e (@opt_eventmatch) {
+		$found_count++ if ($e eq $_->{$_->{'me_eventfield'}});
+	    }
 	    if (! $opt_strict_eventorder) {
+		# Check if specified events appear at least once in window
 		for my $i (0 .. $#not_found_event) {
-		    if ($_->{'event_type'} eq $not_found_event[$i]) {
+		    if ($_->{$_->{'me_eventfield'}} eq $not_found_event[$i]) {
 			# Event found. Remove.
 			splice @not_found_event, $i, 1;
 			last;
@@ -453,15 +446,20 @@ sub all_expected_events_present {
 		}
 	    } else {
 		# Look for events in given order
-		if ( @not_found_event > 0 && $_->{'event_type'} eq $not_found_event[0]) {
+		if ( @not_found_event > 0 && $_->{$_->{'me_eventfield'}} eq $not_found_event[0]) {
 		    # Event found. Remove.
 		    shift @not_found_event;
 		}
 	    }
 	}
     }
-    # Return true if all events where found in window
-    return (@not_found_event == 0);
+    if ($opt_strict_eventset) {
+	# Return true if all but only events specified (in @opt_eventmatch) where found in window
+	return (@not_found_event == 0 && $found_count == @{$window});
+    } else {
+	# Return true if all events where found in window
+	return (@not_found_event == 0);
+    }
 }
 
 sub relevant_peer {
@@ -657,9 +655,9 @@ sub report_correlation {
     my @uniq_source_files = ();
     # Browse through all events in window and copy data into new correlation event
     for my $w (0 .. $#{ $corr_events_window{ $matchfieldvalues } } ) {
-	if ( exists $corr_events_window{ $matchfieldvalues }[$w]{'event_type'} ) {
+	if ( exists $corr_events_window{ $matchfieldvalues }[$w]{$corr_events_window{ $matchfieldvalues }[$w]{'me_eventfield'}} ) {
 	    # Register event types
-	    my $event_type = $corr_events_window{ $matchfieldvalues }[$w]{'event_type'};
+	    my $event_type = $corr_events_window{ $matchfieldvalues }[$w]{$corr_events_window{ $matchfieldvalues }[$w]{'me_eventfield'}};
 	    $events_correlating .= $event_type . ", ";
 	    push @uniq_event_types, $event_type if (! is_element_of($event_type, @uniq_event_types));
 
@@ -750,6 +748,7 @@ sub report_correlation {
 
 GetOptions (
     "timefield=s" => \@opt_timefield,       # Array of names of time-fields. One for each given JSON input file. 
+    "Eventfield=s" => \@opt_eventfield,     # Array of names of event-fields. One for each given JSON input file. 
     "follow" => \$opt_follow,               # follow source 
     "roundrobin" => \$opt_roundrobin,       # Apply round robin read of input sources.
     "gunzip"  => \$opt_gunzip,              # flag enabling gunzip of input 
@@ -757,7 +756,8 @@ GetOptions (
     "matchfield=s" => \@opt_matchfield,     # Name of field that needs to match for events to be corrolated. Option may be repeated.
     "eventmatch=s" => \@opt_eventmatch,     # Name of event required in correlation. Option may be repeated.
     "peer=s" => \@opt_peermatch,            # "<from>,<to>" peer relevant for corrocation. Option may be repeated. Default is all peers.
-    "strict"  => \$opt_strict_eventorder,   # flag enabling strict order of matching events
+    "strictorder"  => \$opt_strict_eventorder, # Flag enabling strict order of matching events
+    "Strictset"  => \$opt_strict_eventset,  # Flag enabling strict set of matching events, i.e. only events given by -e.
     "windowsize=i" => \$opt_window_size,    # Max acceptable time difference for event corrolation
     "buffersize=i" => \$opt_inputbuffersize,    # Max acceptable time difference for event corrolation
     "interval=i" => \$opt_sleepinterval,    # Sleep interval between polls for new content
@@ -783,9 +783,11 @@ if ( $opt_help || $#ARGV eq -1 ) {
    -e eventname    Name of event required in correlation. Option may be repeated.
    --peer from,to  Peer of node names (comman separated) relevant for corrolation. Option may be repeated.
                    Default is all peers. 
-   -s              Strict order of events given by -e is required. 
+   -o              Strict order of events given by -e is required. 
+   -s              Only set of events given by -e is to be in correlation window. 
    -t fieldname[:iso|epoch]   Name of timefield and timefield type (colon separated). Type is either 'iso'
-                   or 'epoch'. Default is 'epoch'. Option may be repeated according to no of input files.
+                   or 'epoch'. Default is 'timestamp:epoch'. Option may be repeated according to no of input files.
+   -E fieldname    Name of event field to apply. Default is 'event_type'. Option may be repeated according to no of input files.
    -w seconds      Width of time window (in seconds) to be interpreted as corrolated events.
    -b integer      No of events to read and sort in input buffer. Default is no of files specified.
    -f              Follow input source. End date in -d option is ignored.
@@ -797,7 +799,7 @@ if ( $opt_help || $#ARGV eq -1 ) {
                    Two dates separated by '/' sets a range. Default is <today>T00:00:00/<today>T23:59:59. 
    -i seconds      Sleep interval between polls for new content when -f is set. (Default 1 sec.)
    -a seconds      Timeperiod i seconds to postpone analysis (to wait for incoming events.)
-   -p filename     Filename of process-id file.
+   --pid filename  Filename of process-id file.
    -v              Be verbose. Repeat to increase amount on info.
    \n";
 
@@ -812,8 +814,9 @@ if ($opt_config_file && -e $opt_config_file ) {
 $opt_gunzip ||= 0;
 $opt_corr_event_name ||= 'correlation';                     # Default name for discovered correlation event
 @opt_matchfield = ('me_matchall') if (!@opt_matchfield);    # Name of field that needs to match for corrolation
-#@opt_timefield = ('timestamp:epoch') if (!@opt_timefield);  # Name of field with time info to look for
-@opt_timefield = ('@date:iso') if (!@opt_timefield);  # Name of field with time info to look for
+@opt_eventfield = ('event_type') if (!@opt_eventfield);     # Name of event field to look for
+@opt_timefield = ('timestamp:epoch') if (!@opt_timefield);  # Name of field with time info to look for
+#@opt_timefield = ('@date:iso') if (!@opt_timefield);  # Name of field with time info to look for
 #@opt_timefield = ('@timestamp:iso') if (!@opt_timefield);  # Name of field with time info to look for
 $opt_window_size ||= 60;       # Max time difference in seconds accepted for event corrolation
 $opt_inputbuffersize ||= 1;    # No of events to keep in sorted input buffer
@@ -824,9 +827,13 @@ $opt_daterange ||= '';         # ISO date range to filter on (local time zone if
 $opt_follow ||= 0;             # True if first input file is to be followed
 $opt_roundrobin ||= 0;         # True if cyclic read from sources is selected.
 $opt_strict_eventorder ||= 0;  # True if strict order of matching events is required.
+$opt_strict_eventset ||= 0;    # True if strict set of matching events is required, i.e. only events in @opt_eventmatch.
 $opt_sleepinterval ||= 5;      # Timeperiod for re-reading file when followed.
 $opt_ana_delay ||= 0;          # Timeperiod to delay analysis (e.g. to wait for incoming events from batch-oriented owamp).
 $opt_verbose ||= 0;            # Verbosity level
+
+# Check for invalid option combinations
+$opt_strict_eventset && @opt_eventmatch < 2 && die "Error: Invalid option combination. Strict event set matching (-S) requires at least two event types (-e).";
 
 # Prepare iso date range
 if ($opt_daterange eq '') {
@@ -849,7 +856,7 @@ if (! ( $start_iso =~ /Z|[+\-]\d{2}:?\d{2}$/) ) {
     $start_iso .= $tz_local;
 }
 # Prepare epoch timestamps for range (and evaluate iso dates)
-$start_time = DateTime::Format::ISO8601->parse_datetime($start_iso)->epoch() || die "Error: Invalid start date in range.";
+$start_time = DateTime::Format::ISO8601->parse_datetime($start_iso)->epoch();  # (Parser dies on format error.)
 $end_iso = ($opt_follow ? '' : $end_iso);   # Clear end time to follow input source 
 if ($end_iso) {
     if ( $end_iso =~ /^\d{4}-[01]\d-[0-3]\d$/ ) {
@@ -860,14 +867,13 @@ if ($end_iso) {
 	# Timezone missing. Add same as for start iso.
 	$end_iso .= substr($start_iso, -6);
     }
-    $end_time = DateTime::Format::ISO8601->parse_datetime($end_iso)->epoch() || die "Error: Invalid end date in range.";
+    $end_time = DateTime::Format::ISO8601->parse_datetime($end_iso)->epoch();   # (Parser dies on format error.)
 } 
 if ( $opt_pidfile ne "" && open(my $pid_fh, ">", $opt_pidfile) ) {
     # Put current pid in file
     print $pid_fh "$$\n";
     close $pid_fh;
 }
-
 
 STARTPARSING:
 
@@ -930,7 +936,7 @@ while ($tryagain) {
 	    shift @eventq;
 	    
 	    # Clear out too old events from correlation window/queue
-	    while ( @{ $corr_events_window{ $matchfieldvalues }} ) {
+	    while ( @{ $corr_events_window{ $matchfieldvalues }} > 1 ) {
 		if ($corr_events_window{ $matchfieldvalues }[-1]{'me_timestamp'} - $corr_events_window{ $matchfieldvalues }[0]{'me_timestamp'} > $opt_window_size) {
 		    # To long (time wise) window/queue. Remove head.
 		    shift @{ $corr_events_window{ $matchfieldvalues }} 
@@ -946,6 +952,7 @@ while ($tryagain) {
 		# Move head of input queue to tail of analysis window/queue
 		push @{ $corr_events_window{ $matchfieldvalues } }, $eventq[0];
 		shift @eventq;
+		get_next_event();
 	    }
 	    
 	    # Check status of correlation window
