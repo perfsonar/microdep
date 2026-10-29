@@ -52,6 +52,20 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
     let timeline = null;        // vis.Timeline instance
     let topology = null;        // { nodes: DataSet, edges: DataSet }
 
+    // Listeners outside the view are dropped, and its graphs destroyed, once the view has left the page
+    let root = null;
+    const cleanups = [];
+    function on_outside(target, type, fn, opts) {
+        target.addEventListener(type, fn, opts);
+        cleanups.push(function () { target.removeEventListener(type, fn, opts); });
+    }
+    function gone() {
+        if (!root || root.isConnected) return false;
+        cleanups.splice(0).forEach(function (f) { f(); });
+        [tree, timeline].forEach(function (g) { if (g) try { g.destroy(); } catch (_) {} });
+        return true;
+    }
+
     let mother = { range: 86400 };
     let current_slice = mother;
     let in_slice = mother;
@@ -692,7 +706,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
             });
         }
         let rt = null;
-        window.addEventListener('resize', function () { clearTimeout(rt); rt = setTimeout(function () { if (paths_tab_active()) render_paths(); }, 150); });
+        on_outside(window, 'resize', function () { if (gone()) return; clearTimeout(rt); rt = setTimeout(function () { if (paths_tab_active()) render_paths(); }, 150); });
         watch_width(s1, function () { if (paths_tab_active()) render_paths(); });
     }
 
@@ -702,12 +716,14 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
     function watch_width(node, redraw) {
         if (!node || !window.ResizeObserver) return;
         let last = node.clientWidth, t = null;
-        new ResizeObserver(function (entries) {
+        const ro = new ResizeObserver(function (entries) {
             const w = entries[0].contentRect.width;
             if (Math.abs(w - last) < 24) return;
             last = w;
             clearTimeout(t); t = setTimeout(redraw, 120);
-        }).observe(node);
+        });
+        ro.observe(node);
+        cleanups.push(function () { ro.disconnect(); });
     }
 
     // ====================================================================
@@ -1305,7 +1321,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         }
         bind_simple_pair('tline', function () { if (tline_tab_active()) render_tline(); });
         let rt = null;
-        window.addEventListener('resize', function () { clearTimeout(rt); rt = setTimeout(function () { if (tline_tab_active()) render_tline(); }, 150); });
+        on_outside(window, 'resize', function () { if (gone()) return; clearTimeout(rt); rt = setTimeout(function () { if (tline_tab_active()) render_tline(); }, 150); });
         watch_width(el('tline-scroll'), function () { if (tline_tab_active()) render_tline(); });
     }
 
@@ -2255,13 +2271,16 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
             // A graph laid out while its tab was hidden has no usable size, so
             // it shows up zoomed in and the user has to press "fit content".
             // Re-measure and fit whenever this tab becomes visible instead.
-            $('main#tabs').on('tabsactivate', function () {
+            const on_tab = function () {
+                if (gone()) return;
                 const c = el('treetainer');
                 if (!c || c.offsetParent === null) return;   // still hidden
                 setTimeout(function () {
                     try { tree.redraw(); settle_layout(tree); } catch (_) {}
                 }, 60);
-            });
+            };
+            $('main#tabs').on('tabsactivate', on_tab);
+            cleanups.push(function () { $('main#tabs').off('tabsactivate', on_tab); });
 
             tree.on("hoverNode", function (ev) {
                 if (last_tr !== null)
@@ -3127,9 +3146,6 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         modal.addEventListener('click', function (e) {
             if (e.target === modal) modal.hidden = true;     // click outside closes
         });
-        document.addEventListener('keydown', function (e) {
-            if (e.key === 'Escape' && !modal.hidden) modal.hidden = true;
-        });
     }
 
     // Build the side-by-side comparison table for the selected variants.
@@ -3753,10 +3769,14 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         const unmax_btn = el('unmaximize');
         if (unmax_btn) unmax_btn.addEventListener('click', function () { set_maximized(false); });
 
-        document.addEventListener('keydown', function (ev) {
+        on_outside(document, 'keydown', function (ev) {
+            if (gone()) return;
             if (ev.key === 'Escape' && document.body.classList.contains('tracetree-maximized')) {
                 set_maximized(false);
             }
+            // the comparison modal is rebuilt with every slice shown: one listener here, not one per slice
+            const m = el('modal');
+            if (ev.key === 'Escape' && m && !m.hidden) m.hidden = true;
         });
 
         // Simple view — reduce graph
@@ -3771,13 +3791,8 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
             });
         }
 
-        // The map tells when its palette switch is used. (When this view is
-        // gone, so is its graph container: stop listening then.)
-        const on_palette = function () {
-            if (!el('treetainer')) { document.removeEventListener('microdep-palette-changed', on_palette); return; }
-            repaint_palette();
-        };
-        document.addEventListener('microdep-palette-changed', on_palette);
+        // The map tells when its palette switch is used.
+        on_outside(document, 'microdep-palette-changed', function () { if (!gone()) repaint_palette(); });
 
         // Full view — re-show current slice
         let full_btn = el('full');
@@ -3844,7 +3859,8 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
             const r = e.getBoundingClientRect();
             return (r.width > 0 && r.height > 0) ? e : null;
         };
-        document.addEventListener('keydown', function (ev) {
+        on_outside(document, 'keydown', function (ev) {
+            if (gone()) return;
             if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
             const step = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[ev.key];
             if (!step) return;
@@ -3903,6 +3919,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
     // ── Main initialisation ───────────────────────────────────────────
 
     if (!build_html()) return;
+    root = document.getElementById(id);
 
     // Init jQuery UI tabs. Paths opens first - it reads the routes better than
     // the force layout - unless the user last left the viewer on another
