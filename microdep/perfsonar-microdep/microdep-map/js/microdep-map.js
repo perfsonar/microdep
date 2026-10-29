@@ -7,7 +7,7 @@ import {parms, conffile, prop_sum, update_url, stats_on, net_names, net_desc, ne
 	colors, get_color, make_palette, threshes, get_thresholds, escapeHtml,
 	get_parms,removeParam, parse_hhmm, hhmm , adjust_to_timezone,
 	get_config, update_props, make_prop_select, add_tab, new_tab_number,
-	round_number, zero_fill, selected_date_is_today_or_future, selected_hour_is_future }
+	round_number, zero_fill, selected_date_is_today_or_future, selected_hour_is_future, sort_hits }
 from "./map-lib.js" ;
 import { heatmap, chart_curve } from "./graph.js";
 import { ls_tab } from "./ls-tab.js";
@@ -4633,7 +4633,7 @@ function init_map(){
 	// today and an earlier day leaves the previous day's properties on
 	// screen, offering fields the fetched records do not carry.
 	update_props();
-	$("#next").prop('dsabled', selected_hour_is_future() ); update_url(); show_network(parms.net);
+	$("#next").prop('disabled', selected_hour_is_future() ); update_url(); show_network(parms.net);
     });
     $("#period").change( function(){ parms.period = $("#period").val(); update_props(); update_url(); get_topology(); $("#period_input").val('00:00'); });
     $("#period_input").change( function(){ parms.period_input = $("#period").val(); $("#period").val(1); parms.period = $("#period").val(); update_url(); get_topology(); });
