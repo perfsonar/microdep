@@ -3192,7 +3192,7 @@ function enable_real_locations() {
     var network = parms.net;
     var dato = $("#datepicker").val();
     var period = parseFloat($("#period").val()) || 24;
-    var start_epoch = Math.floor(new Date(dato + 'T00:00:00').getTime() / 1000);
+    var start_epoch = shown_start_epoch(dato);   // the period on the map, as for Routes
     var end_epoch = start_epoch + period * 3600;
 
     // Detach beziers and their arrow markers from the map. Removing > opacity
