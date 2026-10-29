@@ -1980,12 +1980,15 @@ function gap_list( from, to, hits, lines, sort_type){
     var etype, html;
     var n=0;
     if ( sort_type){
-	let sort_col = conffile[parms.net].event_type[parms.event].default_field;
-	hits.sort( function(a,b){
+	// The map's field, or the first table column the events carry (gap events have no down_ppm)
+	let et = conffile[parms.net].event_type[parms.event];
+	let val = function(h, c){ let x = parseFloat(h._source[c]); return isNaN(x) ? -Infinity : x; };   // some values are stored as text
+	let sort_col = [et.default_field].concat(et.popup.table).find( function(c){ return hits.some( function(h){ return val(h, c) > -Infinity; }); });
+	if ( sort_col) hits.sort( function(a,b){
 	    if ( sort_type === 'num_desc')
-		return b._source[sort_col] - a._source[sort_col];
+		return val(b, sort_col) - val(a, sort_col) || 0;
 	    else
-		return a._source[sort_col] - a._source[sort_col];
+		return val(a, sort_col) - val(b, sort_col) || 0;
 	} );
     }
     for ( var hit of hits){
@@ -2045,8 +2048,8 @@ function gap_list( from, to, hits, lines, sort_type){
 	    } else {
 		html += "<tr><td>" + tid +  "<td align=right>" + escapeHtml(sec) + "<td align=right>" + escapeHtml(amount) + "<td>" + tail + "\n";
 	    }
-	    if ( lines &&  n >= lines) break;
 	    n++;
+	    if ( lines &&  n >= lines) break;
 	}
     }
     html += "</table>";
