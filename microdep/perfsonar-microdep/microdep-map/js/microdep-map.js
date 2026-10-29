@@ -4463,8 +4463,8 @@ function report_summary(div_id){
 	html+='</td>';
 	for ( const prop of prop_names[event_sum_type[parms.event]]){
 	    let val= entry[prop];
-	    if ( typeof val === 'number' && ! val.isInteger){ if ( val < 100 ) val = val.toFixed(1); else val = val.toFixed(0); }
-	    html+='<td align=right>' + escapeHtml(String(val));
+	    if ( typeof val === 'number' && ! Number.isInteger(val)){ if ( val < 100 ) val = val.toFixed(1); else val = val.toFixed(0); }
+	    html+='<td align=right>' + escapeHtml(val === undefined || val === null ? '-' : String(val));   // '-': the records carry no such value
 	}
     }
     html+='</tbody></table>';
