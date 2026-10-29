@@ -857,6 +857,7 @@ function remove_links(){
     linkByName=[];
     ends=[];
     extendedLinks=[];
+    _resync_real_path_colors();   // no real path may outlive its link
 }
 
 function remove_link(ab){
@@ -3077,6 +3078,9 @@ function hopgeo_lookup_batch(ips) {
 var realLocationsMode = false;
 var realPathLines = {};       // abs → { line: L.polyline, markers: [L.circleMarker, ...] }
 var realLocationsBusy = false;
+var realLocationsFor = '';    // the network, period and links the paths were drawn for
+var realLocationsGen = 0;     // bumped when a build in progress is no longer wanted
+function _real_locations_key() { return [parms.net, start, end, Object.keys(linkByName).sort().join(';')].join('|'); }
 // Layers that we removed from the map when entering real-locations mode —
 // kept so disable_real_locations can re-attach them. We can't just hide via
 // opacity because (a) L.curve / canvas paths can still intercept clicks
@@ -3149,6 +3153,7 @@ function disable_real_locations() {
     // layer, which then can't be properly un-highlighted on the next click.
     clearHighlightedLink();
     _set_real_loc_loading(false);
+    realLocationsGen++;
     for (var abs in realPathLines) {
         var entry = realPathLines[abs];
         if (!entry) continue;
@@ -3162,7 +3167,8 @@ function disable_real_locations() {
     // think — Leaflet figures out z-ordering by pane, not by attach order.
     for (var i = 0; i < _hiddenForRealMode.length; i++) {
         var layer = _hiddenForRealMode[i];
-        if (layer && mymap && !mymap.hasLayer(layer)) {
+        // only a link or arrow still on the map's list: one replaced or removed meanwhile stays off
+        if (layer && mymap && !mymap.hasLayer(layer) && _is_bezier_or_arrow(layer)) {
             try { layer.addTo(mymap); } catch (_) {}
         }
     }
@@ -3185,6 +3191,8 @@ function enable_real_locations() {
 
     realLocationsMode = true;
     realLocationsBusy = true;
+    var gen = ++realLocationsGen;
+    realLocationsFor = _real_locations_key();
     _set_real_loc_loading(true);
     _hiddenForRealMode = [];
     _ensure_layeradd_hook();
@@ -3233,6 +3241,7 @@ function enable_real_locations() {
     });
 
     Promise.all(traceFetches).then(function (results) {
+        if (gen !== realLocationsGen) return;   // a newer build or a switch-off took over
         if (!realLocationsMode) { realLocationsBusy = false; return; }
 
         // Phase 2 — collect every unique hop IP across all traces and batch
@@ -3245,6 +3254,7 @@ function enable_real_locations() {
         var ipList = Object.keys(allIps);
         return hopgeo_lookup_batch(ipList).then(function () { return results; });
     }).then(function (results) {
+        if (!results || gen !== realLocationsGen) return;
         if (!realLocationsMode) { realLocationsBusy = false; return; }
 
         // Phase 3 — every hop now has a (possibly null) cache entry; build
@@ -3271,6 +3281,7 @@ function enable_real_locations() {
         realLocationsBusy = false;
         _set_real_loc_loading(false);
     }).catch(function (err) {
+        if (gen !== realLocationsGen) return;
         console.log('real-loc: aborted: ' + err);
         realLocationsBusy = false;
         _set_real_loc_loading(false);
@@ -3682,6 +3693,8 @@ function draw_real_path(abs, entries) {
 // needs no re-fetch.
 function _resync_real_path_colors() {
     if (typeof realLocationsMode === 'undefined' || !realLocationsMode) return;
+    // Another network, period or set of links: draw the paths anew instead of keeping the old ones
+    if (_real_locations_key() !== realLocationsFor) { disable_real_locations(); enable_real_locations(); return; }
     for (var abs in realPathLines) {
         var rp = realPathLines[abs];
         if (rp && rp.entries) draw_real_path(abs, rp.entries);
