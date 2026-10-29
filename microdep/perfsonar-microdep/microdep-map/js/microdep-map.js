@@ -1192,8 +1192,8 @@ function _render_link_sparkline_inner(canvas, link, etype, prop, dato, period, f
     var url = 'elastic-get-date-type.pl?net=' + parms.net +
               '&index=' + event_index[etype] +
               '&event_type=' + queryEtype +
-              '&start=' + adjust_to_timezone(start_iso) +
-              '&end='   + adjust_to_timezone(end_iso) +
+              '&start=' + start_iso +
+              '&end='   + end_iso +
               '&from='  + encodeURIComponent(link.from) +
               '&to='    + encodeURIComponent(link.to);
     if (net_ip_version && net_ip_version[parms.net]) {
@@ -4500,7 +4500,7 @@ function present_table( parameters, div, data){}
 
 function get_peer_data(from, to, div){
     var data=[];
-    let tz_start = adjust_to_timezone(start); let tz_end = adjust_to_timezone(end);
+    let tz_start = start; let tz_end = end;   // the map's own window (no time zone shift)
     var url="elastic-get-date-type.pl?net=" + parms.net + "&index=" + event_index[parms.event] + "&event_type=" + parms.event + "&start=" + tz_start + "&end=" + tz_end + "&from=" + encodeURIComponent(from) + "&to=" + encodeURIComponent(to);
     if (net_ip_version[parms.net]) { url += "&ip_version=" + net_ip_version[parms.net]; }
     $.getJSON( url, function(resp){
