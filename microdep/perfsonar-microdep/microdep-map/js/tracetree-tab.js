@@ -2128,8 +2128,9 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         url = 'get-tracetests.pl?net=' + encodeURIComponent(params.net)
             + '&from=' + encodeURIComponent(params.from)
             + '&to=' + encodeURIComponent(params.to)
-            + '&start=' + encodeURIComponent(params.start)
-            + '&end=' + encodeURIComponent(params.end)
+            // the slice's own period (whole seconds, as the script takes them)
+            + '&start=' + encodeURIComponent(Math.floor(slice.start))
+            + '&end=' + encodeURIComponent(Math.ceil(slice.end))
             // only the fields the viewer reads, and the largest page OpenSearch
             // allows: one request may carry every peer of a host
             + '&slim=1&size=10000';
@@ -3953,12 +3954,14 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         mother.end = time_end * msts;
     }
 
+    const asked = mother.start && mother.end;   // a given period is kept as it is, so Prev/Next step by it
     if (!mother.start) {
         if (!mother.end)
             mother.end = Date.now() / 1000 * msts;
         mother.start = mother.end - mother.range;
     }
-    mother.start = Math.floor(mother.start / mother.range) * mother.range;
+    if (asked) mother.range = mother.end - mother.start;
+    else mother.start = Math.floor(mother.start / mother.range) * mother.range;
     if (!mother.end)
         mother.end = mother.start + mother.range;
     mother.slice_count = Math.floor(mother.range / compute_slice_size(mother.range));
