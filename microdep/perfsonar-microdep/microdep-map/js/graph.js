@@ -326,6 +326,9 @@ export function chart_curve( div, hits, property, title, unit ){
 	let rec= hit._source;
 	data.push( {"x": rec.timestamp * 1000, "y": rec[property] });
     }
+    // Summary-only fields have their texts under the summary type
+    const sum_type = event_sum_type[parms.event];
+    const text_of = function(d){ let t = d[parms.event] && d[parms.event][property]; if (t === undefined && d[sum_type]) t = d[sum_type][property]; return t === undefined ? property : t; };
 
     // Resolve theme tokens from :root (works for both light and dark themes
     // via curve-chart.html's localStorage-driven data-theme on <html>).
@@ -347,7 +350,7 @@ export function chart_curve( div, hits, property, title, unit ){
 
     const data_desc = {
         datasets: [{
-            label: prop_long_desc[parms.event][property],
+            label: text_of(prop_long_desc),
             data: data,
             backgroundColor: _alpha(accent, 0.55),
             borderColor: accent,
@@ -398,7 +401,7 @@ export function chart_curve( div, hits, property, title, unit ){
                     grid:   { color: _alpha(border, 0.5), drawTicks: true, tickColor: borderH, drawBorder: false },
                     border: { display: false },
                     ticks:  { color: text3, font: { size: 11 }, padding: 6 },
-                    title:  { display: true, text: prop_desc[parms.event][property], color: text3,
+                    title:  { display: true, text: text_of(prop_desc), color: text3,
                               font: { size: 11, weight: '600' } }
                 }
             },
