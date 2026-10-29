@@ -196,7 +196,10 @@ OPENSEARCH_SECURITY_CONFIG=${OPENSEARCH_CONFIG_DIR}/opensearch-security   # (aga
 
 # One run at a time: the guard timer and a package upgrade may start it together,
 # and both would edit roles.yml and pipelines.yml and run securityadmin.
-LOCKFILE=/run/lock/opensearch_config_microdep.lock
+# (In a directory of root's own: in /run/lock any user could hold the lock.)
+LOCKDIR=/run/perfsonar-microdep
+mkdir -p -m 0700 $LOCKDIR
+LOCKFILE=$LOCKDIR/opensearch_config_microdep.lock
 exec 9> $LOCKFILE
 flock -w 600 9 || { echo "Error: another run of `basename $0` has not finished." >&2; exit 1; }
 
