@@ -4538,7 +4538,10 @@ function get_connections(){
 	dstart= new Date( msstart + hour * 3600*1000 ); start = dstart.toISOString(); end = new Date(dstart.getTime() + 3600*1000).toISOString(); tloss=0;
     } else {
 	var msperiod=period * 3600*1000; var msend= msstart + msperiod;
-	if ( (msend - now) > (msperiod/2) ){ if ( period > 24 ){ dstart=new Date(msstart); var cd = dstart.getDate() - dstart.getDay(); var sow = new Date(dstart.setDate(cd + 1)); msstart=sow.getTime(); $("#datepicker").datepicker('setDate', new Date(msstart)); } }
+	if ( (msend - now) > (msperiod/2) ){ if ( period > 24 ){
+	    // Back to Monday of the date's week (the date is UTC midnight); the end moves with it
+	    msstart -= ((new Date(msstart).getUTCDay() + 6) % 7) * 24*3600*1000; msend = msstart + msperiod;
+	    $("#datepicker").datepicker('setDate', new Date(msstart).toISOString().substr(0,10)); } }
 	if ( etype === "gapsum" ) msend += 5 * 60 * 1000;
 	start= new Date(msstart).toISOString(); end= new Date(msend).toISOString();
 	if ( period < 2*24 ){ tloss=1000; } else if ( period <= 7*24 ){ tloss=5000; } else { tloss=60000; }
