@@ -1957,21 +1957,19 @@ function make_tooltip_v2(fromHost, toHost, link){
 }
 
 function link_tooltip( title, link, prop){
-    if ( prop in link ){
-	var val=link[prop];
-	var event = event_sum_type[parms.event]
-	if ( selected_date_is_today_or_future() ) {
-	    event = parms.event
-	}
-	var tip='<b>' + escapeHtml(title) + '</b>' + "<p>" + escapeHtml(prop_desc[event][prop]) + ": " ;
-	if ( typeof(val) !== "string" ){
-	    tip += val.toFixed(1);
-	    if ( prop === "down_ppm" && typeof link[prop] == 'number' ){
-		tip+= " ( " + ( val * 86400 / 10**6 ).toFixed(0) + " sec/day )";
-	    }
-	}
+    var event = event_sum_type[parms.event]
+    if ( selected_date_is_today_or_future() ) {
+	event = parms.event
+    }
+    var tip='<b>' + escapeHtml(title) + '</b>' + "<p>" + escapeHtml(prop_desc[event][prop]) + ": " ;
+    var val = parseFloat(link[prop]);   // missing, null or stored as text
+    if ( isNaN(val) ){
+	tip += "no value";
     } else {
-	tip += "undef";
+	tip += val.toFixed(1);
+	if ( prop === "down_ppm" ){
+	    tip+= " ( " + ( val * 86400 / 10**6 ).toFixed(0) + " sec/day )";
+	}
     }
     return tip;
 }
