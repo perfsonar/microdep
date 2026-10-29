@@ -620,8 +620,10 @@ window.clearHighlightedLink = clearHighlightedLink;
 
 function refreshLinkPanel() {
     if (currentPanelLink && !document.getElementById('link-panel').classList.contains('hidden')) {
-        var newContent = link_popup(currentPanelLink);
-        openLinkPanel(newContent);
+        // The pair's record in the data now on the map, not the one the panel was opened with
+        var from = currentPanelLink.from, to = currentPanelLink.to, fresh = {"from": from, "to": to};
+        for (var i = 0; i < (summary || []).length; i++) { var s = summary[i] && summary[i]._source; if (s && s.from === from && s.to === to) { fresh = s; break; } }
+        openLinkPanel(link_popup(fresh), fresh);
     }
 }
 
@@ -2775,8 +2777,9 @@ function taint_links( hits, prop){
 	if ( ! done[abs]){
 	    if ( linkByName[abs] ){
 		var ft = abs.split(",");
+		var nodata = {"from":ft[0], "to":ft[1]};   // also the panel's link, so a later refresh shows this pair
 		taint_link( linkByName[abs], empty_color );
-		annotate_link( abs, linkByName[abs], escapeHtml(abs) + ': no data', link_popup( {"from":ft[0], "to":ft[1]} ) );
+		annotate_link( abs, linkByName[abs], escapeHtml(abs) + ': no data', link_popup( nodata ), nodata );
 	    }
 	}
     }
