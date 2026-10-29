@@ -2508,29 +2508,36 @@ function _fetch_baseline_summary(currStart, currEnd, etype, prop, cb) {
     var bEnd     = new Date(bEndMs).toISOString();
 
     var index   = (event_index && event_index[etype]) || parms.net + '_' + etype;
-    var sumType = (event_sum_type && event_sum_type[etype]) || etype;
-    // Mirror get_connections's logic for past-period queries: prefer summary
-    // when one exists (we're always in past for compare mode). The baseline
-    // is by definition older than now.
-    var queryEtype = sumType || etype;
+    var sumType = event_sum_type && event_sum_type[etype];
+    // The same records, read the same way, as get_connections() uses for the current
+    // period: the events themselves for less than a day (or a day that is today),
+    // the summary records otherwise; the same window too (no time zone shift).
+    var per = parseInt($("#period").val(), 10) || 24;
+    var raw = !sumType || per < 24 || bStart.substr(0, 10) === new Date().toISOString().substr(0, 10);
+    var queryEtype = raw ? etype : sumType;
 
     // net= is REQUIRED so the CGI resolves the archive URL (config[net].archive);
     // without it it falls back to http://localhost:9200 → curl-52 empty reply.
     var url = 'elastic-get-date-type.pl?net=' + parms.net +
               '&index=' + index +
               '&event_type=' + queryEtype +
-              '&start=' + adjust_to_timezone(bStart) +
-              '&end='   + adjust_to_timezone(bEnd);
+              '&start=' + bStart +
+              '&end='   + bEnd;
     if (net_ip_version && net_ip_version[parms.net]) {
         url += '&ip_version=' + net_ip_version[parms.net];
     }
+    if (raw && etype === 'gap' && per >= 24) url += '&tloss=' + (per < 48 ? 1000 : (per <= 168 ? 5000 : 60000));
     if (parms.debug) console.log('compare: baseline url:', url);
 
     $.getJSON(url).done(function (resp) {
         var hits = (resp && resp.hits && resp.hits.hits) || [];
+        var rows;
+        if (!raw || queryEtype === 'gapsum' || queryEtype === 'routesum') rows = coalesce_pairs(hits, queryEtype);
+        else if (resp && resp.aggregations) rows = digest_aggregates(resp.aggregations, $("#stats_type").val());
+        else rows = digest_es_data(etype, hits);
         baselineSummary = {};
-        for (var i = 0; i < hits.length; i++) {
-            var s = hits[i] && hits[i]._source;
+        for (var i = 0; i < rows.length; i++) {
+            var s = rows[i] && rows[i]._source;
             if (!s || !s.from || !s.to) continue;
             var v = s[prop];
             if (typeof v !== 'number' || isNaN(v)) continue;
