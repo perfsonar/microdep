@@ -2501,6 +2501,8 @@ function _fetch_baseline_summary(currStart, currEnd, etype, prop, cb) {
         cb && cb(true);
         return;
     }
+    // No period loaded yet (Compare changed before the first data arrived): its arrival paints the map
+    if (isNaN(new Date(currStart).getTime()) || isNaN(new Date(currEnd).getTime())) { cb && cb(false); return; }
 
     var bStartMs = new Date(currStart).getTime() - offsetMs;
     var bEndMs   = new Date(currEnd).getTime()   - offsetMs;
