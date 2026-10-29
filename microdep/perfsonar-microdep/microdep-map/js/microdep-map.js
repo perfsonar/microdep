@@ -2289,11 +2289,15 @@ function draw_links(hits, prop){
     taint_links(hits, prop);
 }
 
+// Bumped by each map load: an answer of an older load is dropped, so it cannot paint another period
+var _topology_load = 0, _data_load = 0;
+
 function get_topology(source = "archive"){
     if (points.length == 0) {
 	load_coords_from_all_sources(network);
 	return;
     }
+    var load = ++_topology_load; _data_load++;   // this topology starts its own data load
     let start = new Date($("#datepicker").val() + " 00:00:00").getTime()/1000;
     let start_iso = new Date($("#datepicker").val() + " 00:00:00").toISOString();
     let end= new Date($("#datepicker").val() + " 23:59:59").getTime()/1000;
@@ -2308,6 +2312,7 @@ function get_topology(source = "archive"){
 	var url="elastic-get-date-type.pl?net=" + parms.net + "&index=" + query_index + "&start=" + start_iso + "&end=" + end_iso;
 	if (net_ip_version[parms.net]) { url += "&ip_version=" + net_ip_version[parms.net]; }
 	$.getJSON( url, function(result){
+	    if (load !== _topology_load) return;
 	    if (jQuery.isEmptyObject(result.aggregations)) {
 		// Something went wrong. Log failure.
 		console.log("Warning: Failed to fetch data from archive. Check archive url in mapconfig.yml.");
@@ -2330,6 +2335,7 @@ function get_topology(source = "archive"){
 		draw_topology( topology ); get_connections();
 	    }
 	}).fail( function(e, textStatus, error ) {
+	    if (load !== _topology_load) return;
 	    console.log("failed to get data from server :" + textStatus + ", " + error);
 	    clear_map_data("Failed to reach the archive (" + textStatus + ")");
 	});
@@ -2679,7 +2685,9 @@ function _compare_pct_for_link(from, to, currVal) {
 // the existing taint_links call sites inside get_connections so the
 // compare flow can wait for baseline data before painting.
 function _paint_with_compare(summary, etype, prop, start_iso, end_iso) {
+    var load = _data_load;
     var paint = function () {
+        if (load !== _data_load) return;   // a newer load started while the baseline was fetched
         if (!parms.connections) taint_links(summary, prop);
         else                    draw_links(summary, prop);
     };
@@ -4526,6 +4534,7 @@ const index_extension={};
 // ES module top-level declarations don't leak to the global object.
 window.get_connections = function () { return get_connections.apply(this, arguments); };
 function get_connections(){
+    var load = ++_data_load;
     var index=parms.net; var etype= parms.event; var sum_etype=""; var sum_index="";
     if ( ! jQuery.isEmptyObject(event_index)) { index = event_index[parms.event]; sum_etype = event_sum_type[parms.event]; }
     else { index = index + "_" + etype; console.log("Warning: No index specified. Missing config file? Applying '", + index + "'"); }
@@ -4558,6 +4567,7 @@ function get_connections(){
 	if ( tloss > 0 && etype === "gap" ) url += "&tloss=" + tloss;
 	if (parms.debug) console.log(url);
 	$.getJSON( url, function(resp){
+	    if (load !== _data_load) return;
 	    if (jQuery.isEmptyObject(resp.hits)) {
 		console.log("Warning: Failed to fetch data from archive. Check archive url in mapconfig.yml.");
 		if (!jQuery.isEmptyObject(resp.error)) { console.log("        (\"" + resp.error.msg  + "\")"); }
@@ -4586,6 +4596,7 @@ function get_connections(){
 	if (net_ip_version[parms.net]) { sum_url += "&ip_version=" + net_ip_version[parms.net]; }
 	if (parms.debug) console.log(sum_url);
 	$.getJSON( sum_url, function(resp){
+	    if (load !== _data_load) return;
 	    if (resp.hits && resp.hits.total.value > 0){
 		var nrecs=resp.hits.total.value.toString(); summary=coalesce_pairs(resp.hits.hits, sum_etype); harvest_ip_name(summary);
 		var msg = hhmmss(new Date()) + " Got " + nrecs + " " + sum_etype + " records for " + $("#datepicker").val() + " " + $("#period_input").val() + " ;;";
