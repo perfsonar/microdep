@@ -367,7 +367,7 @@ systemctl start perfsonar-microdep-hourly-aggregator.timer || true
 #   systemctl enable --now perfsonar-microdep-opensearch-guard.timer
 systemctl daemon-reload || true
 
-if [ ! -f /etc/perfsonar/microdep/microdep-ana-archive.json ]; then
+if [ ! -s /etc/perfsonar/microdep/microdep-ana-archive.json ]; then
     # Prepare default logstash archive config for analytic results.
     # It holds the credentials for the archive, so it is never created
     # readable by others.
