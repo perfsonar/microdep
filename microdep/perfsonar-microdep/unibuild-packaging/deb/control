@@ -30,6 +30,9 @@ Depends: ${misc:Depends}, ${perl:Depends},
  liburi-perl,
  libjson-perl,
  libchart-clicker-perl,
+## hourly aggregator
+ libyaml-perl,
+ libio-socket-ssl-perl,
 ## trace-ana 
  postgresql,
  python3-geoip2,
