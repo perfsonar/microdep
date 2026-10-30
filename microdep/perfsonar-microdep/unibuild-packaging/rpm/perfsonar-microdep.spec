@@ -93,7 +93,9 @@ container for any future enrichment data sources.
 %package logstash
 Summary:		Logstash pipeline for archiving Microdep analytic events
 Group:			Applications/Communications
+Requires:               httpd
 Requires:               curl,
+Requires:               jq
 Requires:               logrotate
 
 %description logstash

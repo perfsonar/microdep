@@ -65,7 +65,9 @@ Description: Enrichment databases for Microdep (geoip etc.)
 Package: perfsonar-microdep-logstash
 Architecture: all
 Depends: ${misc:Depends},
+ apache2,
  curl,
+ jq,
  logrotate
 #Recommends: perfsonar-archive
 Description: Logstash pipeline for archiving Microdep analytic events
