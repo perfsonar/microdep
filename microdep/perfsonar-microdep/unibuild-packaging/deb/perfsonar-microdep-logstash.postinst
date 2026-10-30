@@ -34,7 +34,7 @@ case "$1" in
 	# Add Microdep to Opensearch setup (including Logstash) 
 	/usr/lib/perfsonar/bin/microdep_commands/opensearch_config_microdep.sh || true
 
-	if [ ! -f /etc/perfsonar/microdep/microdep-ana-archive.json ]; then
+	if [ ! -s /etc/perfsonar/microdep/microdep-ana-archive.json ]; then
 	    # Prepare default logstash archive config for analytic results.
 	    # It holds the credentials for the archive, so it is never created
 	    # readable by others.
