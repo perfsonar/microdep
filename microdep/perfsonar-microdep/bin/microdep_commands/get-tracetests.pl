@@ -173,8 +173,12 @@ my $response = $http_session->request( 'POST', $mahost . '/pscheduler/_search', 
 # browser never treats the answer as a page. A failed request is a 502, so the
 # map reports it instead of drawing an empty result.
 my $content = $response->{content};
-# HTTP::Tiny describes a failure to reach the archive (connection, TLS) in plain text
-$content = encode_json({ error => { reason => $content } }) if ($response->{status} == 599);
+# HTTP::Tiny describes a failure to reach the archive (connection, TLS) in plain text, which
+# may quote the archive's address: that goes to the web server's error log, not to the browser
+if ($response->{status} == 599) {
+    print STDERR "get-tracetests.pl: $content\n";
+    $content = encode_json({ error => { reason => 'The archive could not be reached' } });
+}
 print $cgi->header( -type => 'application/json', -charset => 'utf-8',
                     -status => ($response->{success} ? '200 OK' : '502 Bad Gateway'),
                     -x_content_type_options => 'nosniff' );
