@@ -19,6 +19,8 @@ override_dh_auto_build:
 override_dh_installsystemd:
 	dh_installsystemd --name=perfsonar-microdep-gap-ana
 	dh_installsystemd --name=perfsonar-microdep-trace-ana
+# Only the timer is enabled and started: the service runs when it fires, not at every install.
+	dh_installsystemd -pperfsonar-microdep-ana --name=perfsonar-microdep-hourly-aggregator perfsonar-microdep-hourly-aggregator.timer
 # The OpenSearch read-grant guard is a stop-gap: install the units, but leave
 # them disabled so an admin opts in with
 #   systemctl enable --now perfsonar-microdep-opensearch-guard.timer
