@@ -302,7 +302,7 @@ if ( $response->{'status'} >= 400 ) {
     # (599: the archive was not reached, and the content says why)
     my $msg = $response->{'status'} == 599 ? $response->{'content'} : 'The archive answered ' . $response->{'status'} . ' ' . $response->{'reason'};
     $msg =~ s/\s+\z//;
-    $msg =~ s{://[^/@\s"']*@}{://...@}g;   # (no user name and password of an archive address in what the browser gets)
+    $msg =~ s{[^/\s"']*@}{...@}g;   # (no user name and password of an archive address in what the browser gets, with a scheme or without)
     print encode_json({ 'error' => { 'status' => $response->{'status'} + 0, 'msg' => $msg } }), "\n";
 } else {
     # Return results
