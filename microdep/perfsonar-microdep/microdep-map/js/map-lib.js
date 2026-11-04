@@ -201,7 +201,7 @@ export function  make_prop_select(id, names, desc, long_desc = {}){
 */
 
 export function sort_hits(a ,b){
-    if ( a._source.from === b._sorce.from){
+    if ( a._source.from === b._source.from){
 	return a._source.to.localeCompare( b._source.to );
     } else {
 	return a._source.from.localeCompare( b._source.from );
