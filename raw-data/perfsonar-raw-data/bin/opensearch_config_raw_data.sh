@@ -78,7 +78,7 @@ wait_opensearch () {
 wait_opensearch_api () {
     # Wait for Opensearch API to start
     msg "Waiting for opensearch API to start..."
-    api_status=$(os_curl -s -o /dev/null -w "%{http_code}" https://localhost:9200/_cluster/health)
+    api_status=$(os_curl -s -o /dev/null -w "%{http_code}" $OPENSEARCH_URL/_cluster/health)
     i=0
     while [[ $api_status -ne 200 ]]
     do
@@ -90,7 +90,7 @@ wait_opensearch_api () {
             return 2
 	    exit 2
 	fi
-	api_status=$(os_curl -s -o /dev/null -w "%{http_code}" https://localhost:9200/_cluster/health)
+	api_status=$(os_curl -s -o /dev/null -w "%{http_code}" $OPENSEARCH_URL/_cluster/health)
     done
     
     msg "API started!"
