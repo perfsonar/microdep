@@ -4,7 +4,7 @@ import { parms, conffile, net_names,
 	 colors, make_palette,
 	 prop_desc, prop_names, make_prop_select,
 	 periods, get_period, period_units, anhour, aday, aweek,
-	 selected_date_is_today_or_future, adjust_to_timezone }
+	 selected_date_is_today_or_future, adjust_to_timezone, event_sum_type }
 from "./map-lib.js" ;
 import {chart_curve, chart} from "./graph.js";
 
@@ -82,37 +82,16 @@ function make_curve(tab_id, property, start, end){
 
     $.getJSON( url,
 	       function(resp){
-
-		   var label = (prop_desc[parms.event] && prop_desc[parms.event][property]) || property;
-
-		   if (resp.hits && resp.hits.total.value > 0){
-		       var nrecs=resp.hits.total.value.toString();
-		       add_tab( "canvas", label, $("main#tabs ul li").length , '');
-		       chart_curve( tab_id, resp.hits.hits, property, title, xunit);
+		   var hits = (resp.hits && resp.hits.hits) || [];
+		   var sum_type = event_sum_type[parms.event];
+		   // Fields kept only in the summary records (down_ppm, big_gaps, ...): plot those records
+		   if ( ! carries(hits, property) && sum_type ) {
+		       $.getJSON( url.replace("&event_type=" + parms.event + "&", "&event_type=" + sum_type + "&"), function(sresp){
+			   show_curve( tab_id, property, (sresp.hits && sresp.hits.hits) || [], title, xunit);
+		       }).fail( function(e, textStatus, error ) { show_curve( tab_id, property, [], title, xunit); });
 		   } else {
-		       // Empty result — still open a placeholder tab so the user
-		       // sees the action took effect and gets a clear "no data"
-		       // explanation, instead of just a tiny error in the status bar.
-		       // The parameters come from the page's URL, so they are
-		       // escaped on their way into the HTML.
-		       const empty_html =
-			   '<div class="cc-empty-graph">' +
-			     '<h3>No ' + escapeHtml(parms.event) + ' data</h3>' +
-			     '<p>No measurements were found for this peer pair in the selected time range.</p>' +
-			     '<p class="cc-empty-period"><strong>From:</strong> ' + escapeHtml(parms.start) + '<br>' +
-			       '<strong>To:</strong> ' + escapeHtml(parms.end) + '</p>' +
-			   '</div>';
-		       add_tab('div', label, $("main#tabs ul li").length, empty_html);
-		       $("#error").text(hhmmss(new Date()) + " : No " + parms.event
-					+ " data for " + parms.start + " "
-					+ parms.end + ";;");
+		       show_curve( tab_id, property, hits, title, xunit);
 		   }
-
-		   // Activate the just-added tab in either branch (the modernized
-		   // curve-chart.html no longer has the placeholder #check li
-		   // inside main#tabs that the original add_tab indexing assumed).
-		   const _count = $("main#tabs > ul > li > a").length;
-		   if (_count > 0) $("#tabs").tabs("option", "active", _count - 1);
 	       })
 	.fail( function(e, textStatus, error ) {
 	    console.log("failed to get data from server :" + textStatus + ", " + error);
@@ -120,6 +99,45 @@ function make_curve(tab_id, property, start, end){
 	});
 
 };
+
+// Whether any record has a value for the property
+function carries(hits, property){
+    return hits.some( function(h){ return ! isNaN( parseFloat(h._source[property]) ); });
+}
+
+function show_curve(tab_id, property, hits, title, xunit){
+    var sum_type = event_sum_type[parms.event];
+    var label = (prop_desc[parms.event] && prop_desc[parms.event][property])
+	|| (prop_desc[sum_type] && prop_desc[sum_type][property]) || property;
+
+    if ( carries(hits, property) ){
+	add_tab( "canvas", label, $("main#tabs ul li").length , '');
+	chart_curve( tab_id, hits, property, title, xunit);
+    } else {
+	// Empty result — still open a placeholder tab so the user
+	// sees the action took effect and gets a clear "no data"
+	// explanation, instead of just a tiny error in the status bar.
+	// The parameters come from the page's URL, so they are
+	// escaped on their way into the HTML.
+	const empty_html =
+	    '<div class="cc-empty-graph">' +
+	      '<h3>No ' + escapeHtml(label) + ' data</h3>' +
+	      '<p>No measurements with this value were found for this peer pair in the selected time range.</p>' +
+	      '<p class="cc-empty-period"><strong>From:</strong> ' + escapeHtml(parms.start) + '<br>' +
+		'<strong>To:</strong> ' + escapeHtml(parms.end) + '</p>' +
+	    '</div>';
+	add_tab('div', label, $("main#tabs ul li").length, empty_html);
+	$("#error").text(hhmmss(new Date()) + " : No " + label
+			 + " data for " + parms.start + " "
+			 + parms.end + ";;");
+    }
+
+    // Activate the just-added tab in either branch (the modernized
+    // curve-chart.html no longer has the placeholder #check li
+    // inside main#tabs that the original add_tab indexing assumed).
+    const _count = $("main#tabs > ul > li > a").length;
+    if (_count > 0) $("#tabs").tabs("option", "active", _count - 1);
+}
 
 function pad(d){
     return ("0"+d).slice(-2) ;
