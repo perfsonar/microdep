@@ -23,10 +23,11 @@ dist: MANIFEST
 	tar czf $(PACKAGE)-$(VERSION).tar.gz -C /tmp $(PACKAGE)-$(VERSION)
 	rm -rf /tmp/$(PACKAGE)-$(VERSION)
 
+# DESTDIR is the staging root of a package build. Without it these targets act on the live system.
 install:
 #	Install all files according to MANIFEST
 	@echo Installing...
-	@awk -v rootp=$(ROOTPATH) -v confp=$(CONFIGPATH) -v sharep=$(SHAREPATH) '{ \
+	@awk -v rootp=$(DESTDIR)$(ROOTPATH) -v confp=$(DESTDIR)$(CONFIGPATH) -v sharep=$(DESTDIR)$(SHAREPATH) '{ \
 		if ( substr($$1,1,1) != "#" && NF >= 1) { \
 			cmd=""; \
 			if ( substr($$1,1,4) == "etc/" ) { \
@@ -44,7 +45,7 @@ install:
 uninstall:
 #	Remove all files according to MANIFEST
 	@echo Removing...
-	@awk -v rp=$(ROOTPATH) -v cp=$(CONFIGPATH) '{ \
+	@awk -v rp=$(DESTDIR)$(ROOTPATH) -v cp=$(DESTDIR)$(CONFIGPATH) '{ \
 		if ( substr($$1,1,1) != "#" ) { \
 			cmd=""; \
 			if ( substr($$2,1,4) == "etc/" ) { \
