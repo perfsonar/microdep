@@ -134,7 +134,7 @@
                "_url": "http://localhost/logstash",
                "op": "put",
                "_headers": {
-		   "content-type": "application/json", "Authorization":"Basic cGVyZnNvbmFyOjcyOUpmVGVYcG9lazFFaFdyVTNJ"
+		   "content-type": "application/json", "Authorization":"Basic BASE64_OF_USER_COLON_PASSWORD"
                }
 	   }
        },
