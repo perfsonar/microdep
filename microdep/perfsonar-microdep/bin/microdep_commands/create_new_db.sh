@@ -133,7 +133,7 @@ if [ "$DROP" -o "$DROPONLY" ]; then
 	fi
     elif [ $DBTYPE = "postgres" ]; then
 	# Check if db exits
-	su postgres -c "psql $DBHOST -p $PGPORT -w -c \"\\l $DBNAME\"" | grep -q "(1 row)" 2> /dev/null
+	su postgres -c "LC_ALL=C psql $DBHOST -p $PGPORT -w -c \"\\l $DBNAME\"" | grep -q "(1 row)" 2> /dev/null
 	if [ $? -eq 0 ]; then
 	    # Drop db first
 	    msg -n "Dropping database $DBNAME..."
@@ -153,7 +153,8 @@ EXISTS=""
 if [ $DBTYPE = "mysql" ]; then
     sudo mysqlshow -h $DBHOST -P $MSPORT $DBNAME 2> /dev/null | grep -q "| Tables |" && EXISTS=y
 elif [ $DBTYPE = "postgres" ]; then
-    su postgres -c "psql $DBHOST -p $PGPORT -w -c \"\\l $DBNAME\"" 2> /dev/null | grep -q "(1 row)" && EXISTS=y
+    # (LC_ALL=C: psql says "(1 row)" in the language of the locale)
+    su postgres -c "LC_ALL=C psql $DBHOST -p $PGPORT -w -c \"\\l $DBNAME\"" 2> /dev/null | grep -q "(1 row)" && EXISTS=y
 fi
 
 if [ "$EXISTS" ]; then
