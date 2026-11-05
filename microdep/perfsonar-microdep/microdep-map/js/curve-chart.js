@@ -70,7 +70,7 @@ function make_curve(property, start, end){
     var xunit= get_period(parms.start, parms.end);
     $("#period").val(xunit);
 
-    var url="elastic-get-date-type.pl?net=" + parms.net + "&index=" + parms.index + "&event_type=" + parms.event
+    var url="elastic-get-date-type.pl?net=" + encodeURIComponent(parms.net) + "&index=" + encodeURIComponent(parms.index) + "&event_type=" + encodeURIComponent(parms.event)
 	+ "&start=" + start + "&end=" + end   // the window the map gave (no time zone shift)
 	+ "&from=" + encodeURIComponent(parms.from) + "&to=" + encodeURIComponent(parms.to);
 
@@ -83,7 +83,7 @@ function make_curve(property, start, end){
 		   var sum_type = event_sum_type[parms.event];
 		   // Fields kept only in the summary records (down_ppm, big_gaps, ...): plot those records
 		   if ( ! carries(hits, property) && sum_type ) {
-		       $.getJSON( url.replace("&event_type=" + parms.event + "&", "&event_type=" + sum_type + "&"), function(sresp){
+		       $.getJSON( url.replace("&event_type=" + encodeURIComponent(parms.event) + "&", "&event_type=" + encodeURIComponent(sum_type) + "&"), function(sresp){
 			   show_curve( property, (sresp.hits && sresp.hits.hits) || [], title, xunit);
 		       }).fail( function(e, textStatus, error ) { show_curve( property, [], title, xunit); });
 		   } else {
