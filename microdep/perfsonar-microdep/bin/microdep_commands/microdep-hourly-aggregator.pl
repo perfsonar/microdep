@@ -104,7 +104,7 @@ sub process_bucket {
 
     my $start_iso = strftime("%Y-%m-%dT%H:%M:%S", gmtime($bucket_start)) . '.000Z';
     my $end_iso   = strftime("%Y-%m-%dT%H:%M:%S", gmtime($bucket_end))   . '.000Z';
-    my $date_str  = strftime("%Y-%m-%d",          gmtime($bucket_start));
+    my $date_str  = strftime("%Y-%m-%dT%H:%M:%S.000%z", localtime($bucket_start));   # as qstream-gap-ana writes @date
 
     print STDERR "microdep-hourly-aggregator: window $start_iso → $end_iso\n" if $opt_verbose;
 
