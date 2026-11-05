@@ -3350,16 +3350,18 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         });
 
         timeline.on('select', function (parms) {
+            // A point stands for the traceroutes of its bin: zoom to the time they span
+            const bins = parms.items.map(function (i) { return timeline_bins[i] || { start: i, end: i }; });
+            const start = Math.min.apply(null, bins.map(function (b) { return b.start; }));
+            const end = Math.max.apply(null, bins.map(function (b) { return b.end; }));
             if (parms.items.length > 1) {
-                let start = parms.items[0];
-                let range = parms.items[parms.items.length - 1] - start;
-                zoom_by_timeline_slice(start, range);
+                zoom_by_timeline_slice(start, end - start);
             } else if (parms.items.length === 1) {
                 if (last_select) {
                     clearInterval(last_select);
                 }
                 last_select = setTimeout(function () {
-                    zoom_by_timeline_slice(parms.items[0], 1);
+                    zoom_by_timeline_slice(start, Math.max(1, end - start));
                 }, update_interval);
             }
         });
@@ -3436,20 +3438,41 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         timeline.setItems(vis_items);
     }
 
+    // One point per time bin, at most TIMELINE_POINTS: a point per traceroute (8640 a day
+    // at a 10 s interval) took the timeline half a minute to draw (#315)
+    const TIMELINE_POINTS = 500;
+    let timeline_bins = Object.create(null);   // point id (first ts of the bin) -> { start, end, n }
+
     function update_timeline_items(n_slice) {
-        let ids = [], items = [];
+        let ids = Object.create(null), stamps = [], items = [];
         for (let slice of slices) {
             if (slice.tr_data) {
                 for (let tr of slice.tr_data) {
                     if (!ids[tr.ts]) {
-                        let t = new Date(tr.ts * 1000);
-                        items.push({ id: tr.ts, 'type': 'point', 'start': t });
+                        stamps.push(tr.ts);
                         ids[tr.ts] = true;
                     }
                 }
             }
         }
-        items.sort(function (a, b) { return a.id - b.id; });
+        stamps.sort(function (a, b) { return a - b; });
+        const width = stamps.length > TIMELINE_POINTS ? (stamps[stamps.length - 1] - stamps[0]) / TIMELINE_POINTS : 0;
+        timeline_bins = Object.create(null);
+        let bin = null;
+        for (const ts of stamps) {
+            if (!bin || ts - bin.start >= width) {
+                bin = { start: ts, end: ts, n: 0 };
+                timeline_bins[ts] = bin;
+            }
+            bin.end = ts;
+            bin.n++;
+        }
+        for (const id in timeline_bins) {
+            const b = timeline_bins[id];
+            const item = { id: b.start, 'type': 'point', 'start': new Date(b.start * 1000) };
+            if (b.n > 1) item.title = b.n + ' traceroutes, ' + new Date(b.start * 1000).toLocaleTimeString() + ' - ' + new Date(b.end * 1000).toLocaleTimeString();
+            items.push(item);
+        }
         let vis_items = new vis.DataSet(items);
         timeline.setItems(vis_items);
     }
