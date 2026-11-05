@@ -8,7 +8,6 @@ import { parms, conffile, net_names,
 from "./map-lib.js" ;
 import {chart_curve, chart} from "./graph.js";
 
-var current_tab_id;
 var current_title;
 
 // variables to be in configfile
@@ -58,14 +57,12 @@ export function scroll_change(type, delta){
 	    new_end = new_start + per;
 	}
     }
-    let num_tabs = $("main#tabs ul li").length ;
-    let tab_id = 'tab' + num_tabs;
     parms.start=new Date(new_start).toISOString();
     parms.end=new Date( new_end).toISOString();
-    make_curve( tab_id, current_title, parms.start, parms.end);
+    make_curve( current_title, parms.start, parms.end);
 }
 
-function make_curve(tab_id, property, start, end){
+function make_curve(property, start, end){
     // $("#range").html( start.substring(0,19) );
     // $("#range").html( parms.title );
     $("#datepicker").datepicker('setDate', parms.start.substring(0,10) );
@@ -87,10 +84,10 @@ function make_curve(tab_id, property, start, end){
 		   // Fields kept only in the summary records (down_ppm, big_gaps, ...): plot those records
 		   if ( ! carries(hits, property) && sum_type ) {
 		       $.getJSON( url.replace("&event_type=" + parms.event + "&", "&event_type=" + sum_type + "&"), function(sresp){
-			   show_curve( tab_id, property, (sresp.hits && sresp.hits.hits) || [], title, xunit);
-		       }).fail( function(e, textStatus, error ) { show_curve( tab_id, property, [], title, xunit); });
+			   show_curve( property, (sresp.hits && sresp.hits.hits) || [], title, xunit);
+		       }).fail( function(e, textStatus, error ) { show_curve( property, [], title, xunit); });
 		   } else {
-		       show_curve( tab_id, property, hits, title, xunit);
+		       show_curve( property, hits, title, xunit);
 		   }
 	       })
 	.fail( function(e, textStatus, error ) {
@@ -105,14 +102,16 @@ function carries(hits, property){
     return hits.some( function(h){ return ! isNaN( parseFloat(h._source[property]) ); });
 }
 
-function show_curve(tab_id, property, hits, title, xunit){
+function show_curve(property, hits, title, xunit){
     var sum_type = event_sum_type[parms.event];
     var label = (prop_desc[parms.event] && prop_desc[parms.event][property])
 	|| (prop_desc[sum_type] && prop_desc[sum_type][property]) || property;
 
     if ( carries(hits, property) ){
-	add_tab( "canvas", label, $("main#tabs ul li").length , '');
-	chart_curve( tab_id, hits, property, title, xunit);
+	// The tab is numbered when the answer is in, so a curve asked for before it cannot land in this tab
+	const num_tabs = $("main#tabs ul li").length;
+	add_tab( "canvas", label, num_tabs, '');
+	chart_curve( 'tab' + num_tabs, hits, property, title, xunit);
     } else {
 	// Empty result — still open a placeholder tab so the user
 	// sees the action took effect and gets a clear "no data"
@@ -234,9 +233,8 @@ function init_module(){
 	let prop=$("#check").val();
 	current_title = prop ? prop : parms.property;
 	let num_tabs = $("main#tabs ul li").length ;
-	current_tab_id = 'tab' + num_tabs;
 
-	make_curve( current_tab_id, current_title, parms.start, parms.end);
+	make_curve( current_title, parms.start, parms.end);
 
 	$("#check").val('choose');
 	$("#tabs").tabs("option", "active", num_tabs);
