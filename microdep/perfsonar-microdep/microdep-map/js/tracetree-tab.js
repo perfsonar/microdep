@@ -1481,8 +1481,13 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
     // frozen. The heavy loops below process CHUNK items, then yield to the
     // browser and report how far along they are (issue #130).
     const CHUNK = 250;
+    // A message rather than setTimeout: browsers slow timers down on a page that is not in front (#315)
     function _yield() {
-        return new Promise(function (resolve) { setTimeout(resolve, 0); });
+        return new Promise(function (resolve) {
+            const c = new MessageChannel();
+            c.port1.onmessage = function () { c.port1.close(); resolve(); };
+            c.port2.postMessage(null);
+        });
     }
     function show_awaiting(on) {
         const a = el('awaiting');
