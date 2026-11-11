@@ -172,19 +172,21 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         };
         const src = add_node(0, 'source');
         const routes = {};
-        let maxttl = 0;
+        let maxttl = 0, traces = 0;
         for (const tr of tr_data) {
-            src.n++;
+            const w = tr.w || 1;                       // the traces a grouped trace stands for (#315)
+            traces += w;
+            src.n += w;
             let prev = src, prev_rtt = 0;
             const key = [];
             for (const hop of trace_hops(tr, simple)) {
                 const host = hop.hostname || hop.ip || (hop.ttl + '*');
                 const node = add_node(hop.ttl, host);
-                node.n++;
+                node.n += w;
                 if (typeof hop.rtt === 'number' && isFinite(hop.rtt)) node.rtts.push(hop.rtt);
                 const lid = prev.id + '->' + node.id;
                 if (!links[lid]) { links[lid] = { id: lid, from: prev.id, to: node.id, n: 0, deltas: [] }; order_l.push(lid); }
-                links[lid].n++;
+                links[lid].n += w;
                 if (typeof hop.rtt === 'number' && isFinite(hop.rtt)) {
                     links[lid].deltas.push(Math.max(0, hop.rtt - prev_rtt));
                     prev_rtt = hop.rtt;
@@ -195,7 +197,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
             }
             const k = key.join(' ');
             if (!routes[k]) routes[k] = { hosts: key, n: 0, prof: {}, nhops: key.filter(Boolean).length };
-            routes[k].n++;
+            routes[k].n += w;
             for (const hop of tr.val) {
                 if (typeof hop.rtt === 'number' && isFinite(hop.rtt)) (routes[k].prof[hop.ttl] = routes[k].prof[hop.ttl] || []).push(hop.rtt);
             }
@@ -227,7 +229,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
             r.diverge = null;
             if (dom) { const m = Math.max(r.hosts.length, dom.hosts.length); for (let q = 0; q < m; q++) { if (r.hosts[q] !== dom.hosts[q]) { r.diverge = q + 1; break; } } }
         });
-        return { nodes: out_nodes, links: out_links, routes: out_routes, band: band, traces: tr_data.length, maxttl: maxttl };
+        return { nodes: out_nodes, links: out_links, routes: out_routes, band: band, traces: traces, maxttl: maxttl };
     }
 
     // Fold runs of hops that carry no branching into single segments. Returns a
@@ -770,7 +772,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
             for (let i = hops.length - 1; i >= 0; i--) if (hops[i].rtt !== null) { end = hops[i].rtt; break; }
             const last = hops.length ? hops[hops.length - 1].host : null;
             const key = hops.map(function (h) { return h.host; }).join(' ');
-            return { ts: tr.ts, hops: hops, at: at, route: routeIdx[key] !== undefined ? routeIdx[key] : 0, end: end, reached: !!(last && is_dest[last]),
+            return { ts: tr.ts, w: tr.w || 1, hops: hops, at: at, route: routeIdx[key] !== undefined ? routeIdx[key] : 0, end: end, reached: !!(last && is_dest[last]),
                      dest: tr.dest || ((last && is_dest[last]) ? last : null) };   // the peer, even when the trace fell short of it
         }).sort(function (a, b) { return a.ts - b.ts; });
         const floor = {};
@@ -822,6 +824,9 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         const hm = ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
         return withDate ? hm + P_DOT + d.getDate() + ' ' + ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getMonth()] : hm;
     };
+    const tline_count = function (ss) { let n = 0; for (const s of ss) n += s.w; return n; };
+    // a grouped answer has nothing finer than its bins to show
+    const tline_max_cols = function (cols, span) { return in_slice.grouped ? Math.max(1, Math.min(cols, Math.ceil(span / in_slice.grouped.bin))) : cols; };
     const tline_median = function (a) { const b = a.slice().sort(function (x, y) { return x - y; }); const m = b.length >> 1; return b.length ? (b.length % 2 ? b[m] : (b[m - 1] + b[m]) / 2) : null; };
 
     const tline_fmt_dur = function (sec) {
@@ -920,7 +925,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         peers.forEach(function (p) {
             const P = byPeer[p];
             P.samples.forEach(function (s) {
-                P.routes[s.route] = (P.routes[s.route] || 0) + 1;
+                P.routes[s.route] = (P.routes[s.route] || 0) + s.w;
                 if (s.reached && s.end !== null && (P.endMin === null || s.end < P.endMin)) P.endMin = s.end;
             });
             P.rank = {};
@@ -948,7 +953,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         gaps.sort(function (a, b) { return a - b; });
         const gapMed = gaps.length ? gaps[gaps.length >> 1] : 600;
         const span = T.samples.length ? Math.max(1, T.samples[T.samples.length - 1].ts - T.samples[0].ts) : 1;
-        const cols = tline_columns(T.samples, Math.max(1, Math.min(Math.floor(avail / 3), Math.ceil(span / gapMed))));
+        const cols = tline_columns(T.samples, tline_max_cols(Math.max(1, Math.min(Math.floor(avail / 3), Math.ceil(span / gapMed))), span));
         const cw = Math.max(3, Math.min(24, Math.floor(avail / Math.max(1, cols.length))));
         const x0 = L, plotW = cw * cols.length;
         const rowH = Math.max(12, Math.min(22, Math.floor(420 / Math.max(1, rows.length))));
@@ -979,13 +984,13 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
                 if (!ss.length) { cell[k].push(null); return; }
                 const P = byPeer[p], y = yHeat + ri * rowH;
                 const cnt = {}; let best = null;
-                ss.forEach(function (s) { cnt[s.route] = (cnt[s.route] || 0) + 1; if (best === null || cnt[s.route] > cnt[best]) best = s.route; });
+                ss.forEach(function (s) { cnt[s.route] = (cnt[s.route] || 0) + s.w; if (best === null || cnt[s.route] > cnt[best]) best = s.route; });
                 const mixed = Object.keys(cnt).length > 1;
                 let worst = null, worstEnd = null, reached = 0;
                 const ends = [];
                 ss.forEach(function (s) {
                     if (!s.reached || s.end === null) return;
-                    reached++; ends.push(s.end);
+                    reached += s.w; ends.push(s.end);
                     const ex = s.end - P.endMin;
                     if (worst === null || ex > worst) { worst = ex; worstEnd = s.end; }
                 });
@@ -994,9 +999,9 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
                     if (mixed) out += hatch(xAt(k), y, cwDraw, rowH);
                 } else {
                     out += '<rect class="tl-cell ' + (worst === null ? 'na' : paths_bin(worst)) + '" x="' + xAt(k) + '" y="' + y + '" width="' + cwDraw + '" height="' + rowH + '"></rect>';
-                    if (worst !== null && reached < ss.length) out += hatch(xAt(k), y, cwDraw, rowH);
+                    if (worst !== null && reached < tline_count(ss)) out += hatch(xAt(k), y, cwDraw, rowH);
                 }
-                cell[k].push({ n: ss.length, route: best, local: P.rank[best], mixed: mixed, worst: worst, end: worstEnd, reached: reached,
+                cell[k].push({ n: tline_count(ss), route: best, local: P.rank[best], mixed: mixed, worst: worst, end: worstEnd, reached: reached,
                                med: tline_median(ends), lo: ends.length ? Math.min.apply(null, ends) : null, hi: ends.length ? Math.max.apply(null, ends) : null });
             });
         });
@@ -1040,7 +1045,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         const selTxt = selCell
             ? P_DOT + 'route #' + (selCell.route + 1) + ' of ' + paths_short(rows[tline_state.selRow]) + ' isolated in Paths, click the cell again to clear'
             : P_DOT + 'click a cell to isolate that route in Paths';
-        note.textContent = T.samples.length + ' traceroutes' + P_DOT + peers.length + ' peers' + P_DOT +
+        note.textContent = tline_count(T.samples) + ' traceroutes' + P_DOT + peers.length + ' peers' + P_DOT +
             (cols.binned ? cols.length + ' bins of ' + tline_fmt_dur(cols.binDur) : 'one column each') +
             (rows.length < peers.length ? P_DOT + rows.length + ' of ' + peers.length + ' peers shown' : '') + selTxt;
 
@@ -1056,7 +1061,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         hit.addEventListener('mousemove', function (e) {
             const p = colAt(e), c = cols[p.k];
             xh.style.display = 'block'; xh.setAttribute('x1', xAt(p.k) + cw / 2); xh.setAttribute('x2', xAt(p.k) + cw / 2);
-            let html = '<div class="mono">' + (c.samples.length > 1 ? tline_fmt_time(c.t0, true) + P_DASH + tline_fmt_time(c.t1, false) + '<span class="k">' + P_DOT + c.samples.length + ' traceroutes</span>' : tline_fmt_time(c.t0, true)) + '</div>';
+            let html = '<div class="mono">' + (tline_count(c.samples) > 1 ? tline_fmt_time(c.t0, true) + P_DASH + tline_fmt_time(c.t1, false) + '<span class="k">' + P_DOT + tline_count(c.samples) + ' traceroutes</span>' : tline_fmt_time(c.t0, true)) + '</div>';
             if (p.ri !== null) {
                 const peer = rows[p.ri], ce = cell[p.k][p.ri];
                 html += '<div class="mono">' + paths_esc(peer) + '</div>';
@@ -1148,7 +1153,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         const numW = 48;                                       // hop number, or a range like 21–24
         const L = Math.min(310, numW + 8 + Math.min(labelChars, 36) * P_MONO_PX + 12), R = 18;
         const avail = W - L - R;
-        const cols = tline_columns(S, Math.floor(avail / 3));
+        const cols = tline_columns(S, tline_max_cols(Math.floor(avail / 3), S.length ? S[S.length - 1].ts - S[0].ts : 0));
         const cw = Math.max(3, Math.min(24, Math.floor(avail / Math.max(1, cols.length))));
         const x0 = L, plotW = cw * cols.length;
         const rowH = Math.max(9, Math.min(14, Math.floor(420 / Math.max(1, rows.length))));
@@ -1166,7 +1171,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         out += '<text class="tp-tick" x="' + (L - 10) + '" y="' + (yBar + barH / 2 + 3.5) + '" text-anchor="end">route</text>';
         const colRoute = cols.map(function (c) {
             const cnt = {}; let best = null;
-            c.samples.forEach(function (s) { cnt[s.route] = (cnt[s.route] || 0) + 1; if (best === null || cnt[s.route] > cnt[best]) best = s.route; });
+            c.samples.forEach(function (s) { cnt[s.route] = (cnt[s.route] || 0) + s.w; if (best === null || cnt[s.route] > cnt[best]) best = s.route; });
             return { r: best, mixed: Object.keys(cnt).length > 1 };
         });
         let i = 0;
@@ -1196,11 +1201,11 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
                 c.samples.forEach(function (s) {
                     const pl = s.place[ridx]; if (!pl) return;
                     const h = pl.h;
-                    n++;
-                    hostCnt[h.host] = (hostCnt[h.host] || 0) + 1; if (host === null || hostCnt[h.host] > hostCnt[host]) host = h.host;
-                    if (pl.alt) alt++;
+                    n += s.w;
+                    hostCnt[h.host] = (hostCnt[h.host] || 0) + s.w; if (host === null || hostCnt[h.host] > hostCnt[host]) host = h.host;
+                    if (pl.alt) alt += s.w;
                     const v = valOf(h);
-                    if (v === null) { star++; if (worstTtl === null) worstTtl = h.ttl; return; }
+                    if (v === null) { star += s.w; if (worstTtl === null) worstTtl = h.ttl; return; }
                     if (worst === null || v > worst) { worst = v; worstRtt = h.rtt; worstTtl = h.ttl; }
                 });
                 if (!n) { cell[k].push(null); return; }
@@ -1216,8 +1221,8 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         // ---- round-trip time to the end ----
         const colEnd = cols.map(function (c) {
             const v = c.samples.map(function (s) { return s.end; }).filter(function (x) { return x !== null; });
-            const reached = c.samples.filter(function (s) { return s.reached; }).length;
-            return v.length ? { med: tline_median(v), lo: Math.min.apply(null, v), hi: Math.max.apply(null, v), n: v.length, reached: reached, of: c.samples.length } : null;
+            const reached = tline_count(c.samples.filter(function (s) { return s.reached; }));
+            return v.length ? { med: tline_median(v), lo: Math.min.apply(null, v), hi: Math.max.apply(null, v), n: v.length, reached: reached, of: tline_count(c.samples) } : null;
         });
         const vals = []; colEnd.forEach(function (e) { if (e) vals.push(e.lo, e.hi); });
         out += '<text class="tp-tick" x="' + (L - 10) + '" y="' + (yRtt - 9) + '" text-anchor="end">RTT to end</text>';
@@ -1259,7 +1264,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         const selTxt = tline_state.sel !== null && tline_state.sel < cols.length
             ? P_DOT + 'route #' + (colRoute[tline_state.sel].r + 1) + ' isolated in Paths, click the column again to clear'
             : P_DOT + 'click a column to isolate its route in Paths';
-        note.textContent = S.length + ' traceroutes' + P_DOT + (cols.binned ? cols.length + ' bins of ' + tline_fmt_dur(cols.binDur) : 'one column each') +
+        note.textContent = tline_count(S) + ' traceroutes' + P_DOT + (cols.binned ? cols.length + ' bins of ' + tline_fmt_dur(cols.binDur) : 'one column each') +
             P_DOT + T.maxttl + ' hops on ' + allRows.length + ' hosts' + (rows.length < allRows.length ? P_DOT + rows.length + ' of ' + allRows.length + ' shown' : '') + selTxt;
 
         // ---- interaction ----
@@ -1274,7 +1279,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         hit.addEventListener('mousemove', function (e) {
             const p = colAt(e), c = cols[p.k], cr = colRoute[p.k], en = colEnd[p.k];
             xh.style.display = 'block'; xh.setAttribute('x1', xAt(p.k) + cw / 2); xh.setAttribute('x2', xAt(p.k) + cw / 2);
-            let html = '<div class="mono">' + (c.samples.length > 1 ? tline_fmt_time(c.t0, true) + P_DASH + tline_fmt_time(c.t1, false) + '<span class="k">' + P_DOT + c.samples.length + ' traceroutes</span>' : tline_fmt_time(c.t0, true)) + '</div>';
+            let html = '<div class="mono">' + (tline_count(c.samples) > 1 ? tline_fmt_time(c.t0, true) + P_DASH + tline_fmt_time(c.t1, false) + '<span class="k">' + P_DOT + tline_count(c.samples) + ' traceroutes</span>' : tline_fmt_time(c.t0, true)) + '</div>';
             html += '<div><span class="k">route</span> <span class="mono">#' + (cr.r + 1) + '</span>' + (cr.mixed ? '<span class="k">' + P_DOT + 'mixed in this bin</span>' : '') +
                     (en ? '<span class="k">' + P_DOT + 'RTT to end</span> <span class="mono">' + paths_fmt(en.med) + (en.n > 1 ? ' (' + paths_fmt(en.lo) + P_DASH + paths_fmt(en.hi) + ')' : '') + ' ms</span>' : '') +
                     (en && en.reached < en.of ? '<span class="k">' + P_DOT + (en.of - en.reached) + ' did not reach the destination</span>' : '') + '</div>';
@@ -1742,7 +1747,8 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         let endms = startms + range;
 
         for (let slice of slices) {
-            if (slice.tr_data && slice.start <= start
+            // a grouped slice holds one trace per route and bin: a part of it is fetched anew
+            if (slice.tr_data && !slice.grouped && slice.start <= start
                 && (slice.start + slice.range) >= endms) {
                 for (let tr of slice.tr_data) {
                     if (tr.ts >= startms && (tr.ts <= endms || extract.length <= 0)) {
@@ -1959,6 +1965,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
             routers = [];
             routers['start'] = 1;
 
+            const w = tr.w || 1;                       // the traces a grouped trace stands for (#315)
             let last_node = 0, all_hops = [];
             if (!start) start = tr.ts;
             range = tr.ts - start;
@@ -1990,7 +1997,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
                     prouters = routers;
                     routers = [];
                 }
-                tr_edges(prouters, hop_id, edges);
+                tr_edges(prouters, hop_id, edges, w);
 
                 if (!routers[hop_id]) { routers[hop_id] = 0; }
                 routers[hop_id]++;
@@ -2004,15 +2011,15 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
                     });
                     node_ix[hop_id] = nodes.length - 1;
                 }
-                nodes[node_ix[hop_id]].n++;
+                nodes[node_ix[hop_id]].n += w;
                 // Original had a bug referencing undefined `node` — use hop instead
                 if ('color' in hop) {
                     nodes[node_ix[hop_id]].color = hop.color;
                 }
                 if (hop.ip) {
-                    update_stats(hop_id, hop, tr.ts, stats, stats_ix);
+                    update_stats(hop_id, hop, tr.ts, stats, stats_ix, w);
                 } else {
-                    loss[hop.ttl] = ++loss[hop.ttl] || 1;
+                    loss[hop.ttl] = (loss[hop.ttl] || 0) + w;
                 }
                 pttl = hop.ttl;
             }
@@ -2034,7 +2041,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         return { "nodes": nodes, "edges": edgelist, "stats": stats, "start": start, "range": range, "loss": loss };
     }
 
-    function tr_edges(prouters, to, edges) {
+    function tr_edges(prouters, to, edges, w) {
         for (let from in prouters) {
             let edge = from + "-" + to;
             if (!(edge in edges)) {
@@ -2046,11 +2053,11 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
                     "color": "#000000"
                 };
             }
-            edges[edge].value++;
+            edges[edge].value += w;
         }
     }
 
-    function update_stats(hopid, hop, ts, stats, stats_ix) {
+    function update_stats(hopid, hop, ts, stats, stats_ix, w) {
         let ix;
         if (hopid in stats_ix) {
             ix = stats_ix[hopid];
@@ -2070,7 +2077,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
                 rtt: new Stats()
             };
         }
-        stats[ix].seen++;
+        stats[ix].seen += w;
         stats[ix].rtt.add(hop.rtt);
         if (hop.hostname) {
             stats[ix].router = hop.hostname;
@@ -2091,6 +2098,16 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
 
     async function os2esmond_traceroute(os_json) {
         let esmond_json = [];
+        // A grouped answer (#315): one trace per route and time bin, standing for doc_count traces
+        let weights = null;
+        if (os_json.aggregations && os_json.aggregations.bins) {
+            const hits = [];
+            weights = [];
+            for (const b of os_json.aggregations.bins.buckets) {
+                for (const p of b.paths.buckets) { hits.push(p.trace.hits.hits[0]); weights.push(p.doc_count); }
+            }
+            os_json = { hits: { hits: hits } };
+        }
         const total = os_json.hits.hits.length;
 
         for (let tr = 0; tr < total; tr++) {
@@ -2112,6 +2129,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
             // the test's own ends: the timeline for a whole host groups by them
             esmond_tr.src  = os_json.hits.hits[tr]._source.test.spec.source;
             esmond_tr.dest = os_json.hits.hits[tr]._source.test.spec.dest;
+            if (weights) esmond_tr.w = weights[tr];
             esmond_tr.val = [];
             for (let tr_query = 0; tr_query < os_json.hits.hits[tr]._source.result.json.length; tr_query++) {
                 for (let hn = 0; hn < os_json.hits.hits[tr]._source.result.json[tr_query].length; hn++) {
@@ -2144,6 +2162,8 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         in_slice = slice;
 
         let url;
+        // more traces than one answer holds come back grouped, about one per timeline point (#315)
+        const group = Math.max(1, Math.ceil((slice.end - slice.start) * Math.max(1, to_list.length) / TIMELINE_POINTS));
 
         // The archive is the one mapconfig.yml gives the network
         url = 'get-tracetests.pl?net=' + encodeURIComponent(params.net)
@@ -2154,7 +2174,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
             + '&end=' + encodeURIComponent(Math.ceil(slice.end))
             // only the fields the viewer reads, and the largest page OpenSearch
             // allows: one request may carry every peer of a host
-            + '&slim=1&size=10000';
+            + '&slim=1&size=10000&group=' + group;
 
         if (params['ip-version']) {
             url += '&ip_version=' + encodeURIComponent(params['ip-version']);
@@ -2166,6 +2186,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
             slice.tr_data = tr_json;
             if (params.api === 'opensearch') {
                 set_progress(0, 'Parsing traceroutes');
+                if (tr_json.aggregations) slice.grouped = { total: tr_json.hits.total.value, bin: group };
                 slice.tr_data = await os2esmond_traceroute(tr_json);
             }
             await tr_slice_show(slice);
@@ -2926,7 +2947,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
                       '<input type="checkbox" class="trace-variant-checkbox" data-variant="' + i + '"> ' +
                       '<span>compare</span>' +
                     '</label>';
-            html += render_variant_table(v.samples[0], v.last_ttl, i, v.samples.length);
+            html += render_variant_table(v.samples[0], v.last_ttl, i, v.samples.reduce(function (n, s) { return n + (s.w || 1); }, 0));
 
             const repeats = v.samples.slice(1);
             if (repeats.length > 0) {
@@ -2941,7 +2962,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
                 html += '<ul class="trace-repeats-list" id="' + list_id + '" hidden>';
                 for (const r of repeats) {
                     const d = new Date(r.ts * 1000);
-                    html += '<li>' + d.toLocaleDateString() + ' ' + d.toLocaleTimeString() + '</li>';
+                    html += '<li>' + d.toLocaleDateString() + ' ' + d.toLocaleTimeString() + (r.w > 1 ? ' (' + r.w + ' traceroutes)' : '') + '</li>';
                 }
                 html += '</ul>';
                 html += '</div>';
@@ -3318,6 +3339,7 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
         let t_range = readable_range(slice.range);
         let text = start_d.toLocaleDateString() + ' ' + start_d.toLocaleTimeString()
             + ' + ' + t_range;
+        if (slice.grouped) text += P_DOT + slice.grouped.total + ' traceroutes, one shown per route and ' + tline_fmt_dur(slice.grouped.bin);
 
         // Update the timeline container title area if it exists
         let nav = el('timeline-container');
@@ -3449,28 +3471,33 @@ export function tracetree_tab(div_id, from, to, time_start, time_end, options = 
     let timeline_bins = Object.create(null);   // point id (first ts of the bin) -> { start, end, n }
 
     function update_timeline_items(n_slice) {
+        // A grouped trace covers its whole bin (#315); where finer data is loaded, it counts instead
+        const loaded = slices.filter(function (s) { return s.tr_data; });
+        const bin_of = function (s) { return s.grouped ? s.grouped.bin : 0; };
         let ids = Object.create(null), stamps = [], items = [];
-        for (let slice of slices) {
-            if (slice.tr_data) {
-                for (let tr of slice.tr_data) {
-                    if (!ids[tr.ts]) {
-                        stamps.push(tr.ts);
-                        ids[tr.ts] = true;
-                    }
+        for (let slice of loaded) {
+            const b = bin_of(slice);
+            for (let tr of slice.tr_data) {
+                if (b && loaded.some(function (s) { return bin_of(s) < b && tr.ts >= s.start && tr.ts < s.end; })) continue;
+                const key = tr.ts + ' ' + tr.dest;             // two peers may be traced in the same second
+                if (!ids[key]) {
+                    const t = b ? Math.floor(tr.ts / b) * b : tr.ts;
+                    stamps.push({ ts: t, end: t + b, w: tr.w || 1 });
+                    ids[key] = true;
                 }
             }
         }
-        stamps.sort(function (a, b) { return a - b; });
-        const width = stamps.length > TIMELINE_POINTS ? (stamps[stamps.length - 1] - stamps[0]) / TIMELINE_POINTS : 0;
+        stamps.sort(function (a, b) { return a.ts - b.ts; });
+        const width = stamps.length > TIMELINE_POINTS ? (stamps[stamps.length - 1].ts - stamps[0].ts) / TIMELINE_POINTS : 0;
         timeline_bins = Object.create(null);
         let bin = null;
-        for (const ts of stamps) {
-            if (!bin || ts - bin.start >= width) {
-                bin = { start: ts, end: ts, n: 0 };
-                timeline_bins[ts] = bin;
+        for (const s of stamps) {
+            if (!bin || (s.ts !== bin.start && s.ts - bin.start >= width)) {
+                bin = { start: s.ts, end: s.end, n: 0 };
+                timeline_bins[s.ts] = bin;
             }
-            bin.end = ts;
-            bin.n++;
+            bin.end = Math.max(bin.end, s.end);
+            bin.n += s.w;
         }
         for (const id in timeline_bins) {
             const b = timeline_bins[id];
