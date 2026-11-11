@@ -518,6 +518,16 @@ export var prop_sum = ['tloss', 'anomaly_count'];              // OBSOLETE
 export var prop_aggr = {};         // Hash table (indexed by event_type and field) of aggregation methods to be applied for field values (in summary popups and tables).
 export var prop_reversed = {};     // Hash table (indexed by event_type and field) of flags indicating reversed ordering for a field values (to be applied in summary popups, tables and legends).
 export var prop_thresholds={};     // Hash table (indexed by event_type and field) of thresholds for field values (to be applied in legends and heatmaps).
+export var prop_derive = {};       // Hash table (indexed by event_type and field) of the derive_func of summary fields made from raw events
+
+// Summary values made from the raw events of a pair (mapconfig.yml `derive_func:`).
+// s: the pair's statistics from digest_es_data (s.events, s[field].sum, ...), secs: length of the period
+export const derive_funcs = {
+    'unavailability':  function (s, secs) { return s.tloss ? s.tloss.sum * 1000000 / 1000 / secs : undefined; },  // ms lost, in ppm of the period
+    'large-gaps':      function (s) { return s.events; },
+    'large-gaps-time': function (s) { return s.tloss ? s.tloss.sum / 1000 : undefined; },                     // ms to s
+    'routes-failed':   function (s) { return s.anomaly_count && s.anomaly_count.n ? s.anomaly_count.sum : undefined; }
+};
 
 
 // Which measurement network should the map open on?
@@ -624,6 +634,7 @@ export function update_props() {
 	// Config file data is available. Update lists.
 	prop_names ={}; 
 	prop_desc ={};           
+	prop_derive ={};
 	prop_long_desc ={};   
 	event_names = [];        
 	event_desc={};
@@ -662,6 +673,18 @@ export function update_props() {
 		    // Long description found too
 		    prop_long_desc[e][f] = conffile[parms.net].event_type[e].field[f].descr;
 		}
+	    }
+	    // Summary fields with a derive_func are made from the raw events as well
+	    prop_derive[e] = {};
+	    for (const f in conffile[parms.net].event_type[e].summary_field) {
+		const sf = conffile[parms.net].event_type[e].summary_field[f];
+		if (! sf.derive_func) continue;
+		if (! (sf.derive_func in derive_funcs)) { console.log('mapconfig.yml: unknown derive_func "' + sf.derive_func + '" for ' + e + '.' + f); continue; }
+		prop_derive[e][f] = sf.derive_func;
+		if (prop_names[e].indexOf(f) < 0) prop_names[e].push(f);
+		(prop_desc[e] = prop_desc[e] || [])[f] = sf.title + ( sf.unit ? " (" + sf.unit + ")" : "");
+		(prop_aggr[e] = prop_aggr[e] || [])[f] = sf.aggr;
+		(prop_long_desc[e] = prop_long_desc[e] || [])[f] = sf.descr || '';
 	    }
 	    // Store event type and properties for summary info
 	    event_sum_type[e] = conffile[parms.net].event_type[e].summary_event_type;
@@ -724,11 +747,14 @@ export function update_props() {
     // Init measurement variable select list
     if (selected_date_is_today_or_future() || parms.period < 24 ) {
 	// No summary event is available. Use "none-summary" properties.
-	for (var n = prop_names[parms.event].length-1; n >= 0; n--)
-	    if (typeof conffile[parms.net].event_type[parms.event].field[prop_names[parms.event][n]] == "undefined" ||
-		conffile[parms.net].event_type[parms.event].field[prop_names[parms.event][n]].type != "number" )
+	for (var n = prop_names[parms.event].length-1; n >= 0; n--) {
+	    const name = prop_names[parms.event][n];
+	    const def = conffile[parms.net].event_type[parms.event].field[name] ||
+		  (prop_derive[parms.event][name] && conffile[parms.net].event_type[parms.event].summary_field[name]);
+	    if (! def || def.type != "number" )
 		// Remove unsupported or none-numeric properties
 		prop_names[parms.event].splice(n,1);
+	}
 	make_prop_select("prop_select", prop_names[parms.event], prop_desc[parms.event], prop_long_desc[parms.event] );
 	// Select measurement variable
 	if (parms.property && (prop_names[parms.event].indexOf(parms.property) > -1) ) {
