@@ -105,9 +105,21 @@ my $size = 8640;
 if (defined $cgi->param('size') && $cgi->param('size') =~ /^(\d+)$/) {
     $size = $1 > 10000 ? 10000 : $1;
 }
+# Optional grouping (#315): with group=<seconds>, a period holding more traces than `size`
+# comes back as one trace per route and time bin of that length, with the number it stands for
+my $group = 0;
+if (defined $cgi->param('group') && $cgi->param('group') =~ /^(\d{1,9})$/) {
+    $group = $1;
+}
+
+# The archive's certificate is not checked, as elastic-get-date-type.pl does not
+# check it either: the usual archive is https://localhost/opensearch, and the
+# certificate there is issued for the host's name, not for localhost.
+my $http_session = HTTP::Tiny->new( 'verify_SSL' => 0 );
 
 # Prepare query
 my $query='';
+my $search = '/pscheduler/_search';
 if (! $from || ! $to ) {
     # Search for all peers with trace test results available
     $query = '{ "query": { "bool": { "filter": [ { "term": { "test.type.keyword": "trace" } }, 
@@ -133,22 +145,35 @@ if (! $from || ! $to ) {
     my @from_list = grep { /\A[0-9A-Za-z_.:-]+\z/ } map { my $x=$_; $x =~ s/^\s+|\s+$//g; $x } split(/,/, $from);
     my @to_list   = grep { /\A[0-9A-Za-z_.:-]+\z/ } map { my $x=$_; $x =~ s/^\s+|\s+$//g; $x } split(/,/, $to);
     fail('400 Bad Request', 'Invalid from or to host') unless (@from_list && @to_list);
+    my $filter;
     if (@from_list > 1 || @to_list > 1) {
         my $fl = join(',', map { '"' . $_ . '"' } @from_list);
         my $tl = join(',', map { '"' . $_ . '"' } @to_list);
-        $query = '{ "query": { "bool": { "filter": [ { "term": { "test.type.keyword": "trace" } },
+        $filter = '{ "bool": { "filter": [ { "term": { "test.type.keyword": "trace" } },
                        { "range": { "@timestamp": { "gte": "' . $iso_start . '", "lt": "' . $iso_end . '" } } }' . $ipv_filter . ',
                        { "bool": { "minimum_should_match": 1, "should": [
                            { "bool": { "must": [ { "terms": { "test.spec.source.keyword": [' . $fl . '] } }, { "terms": { "test.spec.dest.keyword": [' . $tl . '] } } ] } },
                            { "bool": { "must": [ { "terms": { "test.spec.source.keyword": [' . $tl . '] } }, { "terms": { "test.spec.dest.keyword": [' . $fl . '] } } ] } }
                          ] } }
-                     ] } }, ' . $source_filter . '"size": ' . $size . ' }';
+                     ] } }';
     } else {
-        $query = '{ "query": { "bool": { "filter": [ { "term": { "test.type.keyword": "trace" } },
+        $filter = '{ "bool": { "filter": [ { "term": { "test.type.keyword": "trace" } },
                                                      { "term": { "test.spec.source.keyword": "' . $from_list[0] . '" } },
                                                      { "term": { "test.spec.dest.keyword": "' . $to_list[0] . '" } },
                                                      { "range": { "@timestamp": { "gte": "' . $iso_start . '", "lt": "' . $iso_end . '" } } }' . $ipv_filter . '
-                                                   ] } }, ' . $source_filter . '"size": ' . $size . ' }';
+                                                   ] } }';
+    }
+    $query = '{ "query": ' . $filter . ', ' . $source_filter . '"size": ' . $size . ' }';
+    # result.hop.checksum is the archive's fingerprint of a trace's hop addresses
+    if ($group && count_of($filter) > $size) {
+        $query = '{ "query": ' . $filter . ', "size": 0, "track_total_hits": true,
+                    "aggs": { "bins": { "date_histogram": { "field": "@timestamp", "fixed_interval": "' . $group . 's", "min_doc_count": 1 },
+                      "aggs": { "paths": { "multi_terms": { "terms": [ { "field": "test.spec.source.keyword" }, { "field": "test.spec.dest.keyword" },
+                                                                       { "field": "result.hop.checksum.keyword" } ], "size": 1000 },
+                        "aggs": { "trace": { "top_hits": { "size": 1, "sort": [ { "@timestamp": "asc" } ],
+                                                           "_source": [ "@timestamp", "test.spec", "result.json", "result.succeeded" ] } } } } } } } }';
+        # only what the viewer reads (the bucket keys hold the whole checksum twice)
+        $search .= '?filter_path=hits.total,aggregations.bins.buckets.paths.buckets.doc_count,aggregations.bins.buckets.paths.buckets.trace.hits.hits._source';
     }
 }
 
@@ -156,14 +181,10 @@ if (! $from || ! $to ) {
 print STDERR $query,"\n" if ($cgi->param('debug'));
 
 # Run query
-# The archive's certificate is not checked, as elastic-get-date-type.pl does not
-# check it either: the usual archive is https://localhost/opensearch, and the
-# certificate there is issued for the host's name, not for localhost.
-my $http_session = HTTP::Tiny->new( 'verify_SSL' => 0 );
 #my $response = $http_session->post( $mahost . '/opensearch/pscheduler/_search', 'Content-Type' => 'application/json', Content => $query );
 my $request_options = { 'headers' => { 'Content-Type' => 'application/json' }, 'content' => $query };
 #my $response = $http_session->request( 'POST', $mahost . '/opensearch/pscheduler/_search', $request_options );
-my $response = $http_session->request( 'POST', $mahost . '/pscheduler/_search', $request_options );
+my $response = $http_session->request( 'POST', $mahost . $search, $request_options );
 # Return (output) respons
 # Always as JSON, whatever content type the archive answered with, so the
 # browser never treats the answer as a page. A failed request is a 502, so the
@@ -180,6 +201,15 @@ print $cgi->header( -type => 'application/json', -charset => 'utf-8',
                     -x_content_type_options => 'nosniff' );
 print $content;
 exit(0);
+
+# The number of traces the filter matches, 0 when the archive does not tell
+sub count_of {
+    my ($filter) = @_;
+    my $r = $http_session->request( 'POST', $mahost . '/pscheduler/_count',
+                                    { 'headers' => { 'Content-Type' => 'application/json' }, 'content' => '{ "query": ' . $filter . ' }' } );
+    my $count = $r->{success} ? eval { decode_json($r->{content})->{count} } : undef;
+    return $count || 0;
+}
 
 # Refuse the request with a JSON error, without echoing anything from it
 sub fail {
