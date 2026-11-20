@@ -12,15 +12,33 @@ use CGI;
 #use CGI qw/:standard -debug/;
 #use WWW::Curl::Easy
 use JSON;
+use HTTP::Tiny;
 #use YAML;
 
 # Prepare CGI agent
 my $q = CGI->new;
 
-# Fetch config data (and remove html header)
+# Fetch config data (and remove html header). It is asked for as a whole: the
+# address of the archive is left out of what a browser gets.
+$ENV{'MICRODEP_MAPCONFIG'} = 'full';
 $config = decode_json(`/usr/lib/perfsonar/bin/microdep_commands/get-mapconfig.cgi | tail -n +2`);
-    
-my $esurl=  $config->{'config'}->{parm('net')}->{'archive'} || 'http://localhost:9200';
+delete $ENV{'MICRODEP_MAPCONFIG'};
+
+# The measurement network, as named in mapconfig.yml, decides which archive is asked
+# and which indices may be read there: the ones mapconfig.yml names for it. An index
+# taken as it comes with the request would let anyone read, through this script,
+# whatever the address of the archive gives access to.
+my $net_config = $config->{'config'}->{parm('net')};
+fail('400 Bad Request', 'Unknown measurement network') unless ( ref $net_config eq 'HASH' );
+my %net_index = ();
+foreach my $event ( values %{ $net_config->{'event_type'} || {} } ) {
+    next unless ( ref $event eq 'HASH' );
+    foreach my $i ( $event->{'index'}, $event->{'topology_index'} ) {
+	$net_index{$i} = 1 if ( defined $i && $i ne '' );
+    }
+}
+
+my $esurl=  $net_config->{'archive'} || 'http://localhost:9200';
     
 my $yesterday= `date --date yesterday "+%Y-%m-%d"`;
 chomp($yesterday);
@@ -30,7 +48,6 @@ my $type = parm('event_type');          # No event_type results in list of uniqu
 my $end = parm('end') || $start;
 my $from = parm('from');
 my $to = parm('to');
-my $min_delay = parm('min_delay');
 
 # Sparkline support — when `interval` and `prop` arrive alongside `from`,
 # the script returns per-bucket averages via a date_histogram aggregation
@@ -44,10 +61,7 @@ my $interval = parm('interval');
 my $prop_field = parm('prop');
 $interval = undef unless ( $interval && $interval =~ /^\d+[smhd]$/ );
 $prop_field = undef unless ( $prop_field && $prop_field =~ /^\w+$/ );
-my ($stats_type, $stats_field ) = split( ",", parm('stats') );
-my $path_addr=parm('path_addr'); # list of ips 
 my $date_field='@date';
-$date_field = '@timestamp' if $path_addr;
 my $load_coords = parm('load_coords');
 my $count = parm('count');      # Totals only - no hits, no aggregations
 
@@ -59,11 +73,12 @@ if ( $q->param("debug")){
 }
 # my 
 my $index= parm('index') || $config->{'config'}->{parm('net')}->{'event_type'}->{parm('event_type')}->{'index'} || "missing-index";
-if ( $debug > 0 ){
-    print $q->header('text/html');
-} else {
-    print $q->header('application/json');
-}
+fail('400 Bad Request', 'Unknown index') unless ( $net_index{$index} );
+
+# Always json, also with debug on: the debug output goes to the error log of the
+# web server. (It used to be sent as a web page, with the address of the archive
+# as it stands in the config - user name and password included, if it has them.)
+print $q->header( -type => 'application/json', -x_content_type_options => 'nosniff' );
 
 
 # my $curl = WWW::Curl::Easy->new;
@@ -170,35 +185,6 @@ my $perc='
 ';
 
 
-my $min_aggr='
-  "aggs": {
-     "from": { "terms": {"field": "from.keyword", "size": 100 },
-        "aggs": {
-          "to": { "terms": {"field": "to.keyword", "size": 100 },
-            "aggs": {
-              "min_delay":  { "avg": { "field": "h_min_d" } }
-            }
-          }
-        }
-      }
-   }
-';
-
-
-my $stats_aggr='
-  "aggs": {
-     "from": { "terms": {"field": "from.keyword", "size": 100 },
-        "aggs": {
-          "to": { "terms": {"field": "to.keyword", "size": 100 },
-            "aggs": {
-              "stats":  { "' . $stats_type . '": { "field": "' . $stats_field . '" } }
-            }
-          }
-        }
-      }
-   }
-';
-
 my $flow_aggr = '"aggs": { "peer": { "terms": { "field": "from_to.keyword", "size" : 1000000  } } }';
 
 my $search;
@@ -225,34 +211,7 @@ if ( $from ) {
 
 $query_head .= '] ';
 
-if ( $min_delay ){
-    $query_head .= ', "must_not": { "range": { "h_min_d": { '
-						    . '"gte": ' . -10
-						    . ', "lte": ' . $min_delay 
-						    . ' } } }';
-    # $query_head .= ', { "range": { "h_min_d": { "lte": ' . -3 . ' } } }';
-    # $query_head .= ', { "range": { "h_min_d": { "gte": ' . $min_delay . ' } } }';
-}
-
 $sort_time = '"sort" : [ { "@date": { "order" : "asc" } } ]';
-
-if ( $path_addr){
-    $query_head .= ',    "filter": {
-        "bool": { "should": [
-';
-    my @ips = split( ",", $path_addr);
-    my $match="";
-    printf "path_addr : $path_addr : %d\n", $#ips if $debug > 0;
-
-    foreach $i ( 0 .. $#ips){
-	$match .= ', ' if $i > 0;
-	$match .= '{ "match": { "path_addr": "' . $ips[$i] . '" } }';
-    }
-
-    $query_head .= $match . ' ], "minimum_should_match": 1 }
-        }
-';
-}
 
 if ( $count ) {
     # Cheap probe: how many records match, nothing else. Used to find out
@@ -269,12 +228,6 @@ if ( $count ) {
     my $query_tonodes = '{ "size": 0, ' . $query_head . $query_tail . ', ' . aggr_node_query("to") .'}';
     $query_tonodes =~ s/\R//g ; # Clean away newlines
     $search = "{ \"index\": \"" . $index . "\" }\n" . $query_fromnodes . "\n{ \"index\": \"" . $index . "\" }\n" . $query_tonodes . "\n";
-} elsif ( $stats_type){
-    $search =  '{ "size":10000, ' . $query_head . $query_tail . ', ' . $stats_aggr . '}';    
-} elsif ( $min_delay ){
-    my $limit='{ "range": { "h_min_d": { "gte": ' . $min_delay . ' } } }';
-
-    $search =  '{ "size":0, ' . $query_head . $query_tail . ", " . $min_aggr . '}';
 } elsif ( $type eq "jitter" && ! $from ){ # no aggregation if pair
     # $search =  '{ "size":0, ' . $query_jit . ", " . $aggr . '}';
     $search =  '{ "size":0, ' . $query_head . $query_tail . ", " . $perc . '}';
@@ -304,9 +257,8 @@ if ( $count ) {
     $search =  '{ "size":10000, ' . $query_head . $query_tail . '}';
 }
 
-print $search."\n" if $debug > 0;
+print STDERR $search."\n" if $debug > 0;
 
-#my $url='http://admin:no+nz+br@localhost:9200/' . $index . '/_search?';
 my $url=$esurl . '/' . $index . '/_search?';
 if ($type eq "topology") {
     # Requires multi-search
@@ -328,19 +280,41 @@ if ($type eq "topology") {
 #    print("An error happened: $retcode ".$curl->strerror($retcode)." ".$curl->errbuf."\n");
 #}
 
-#my $cmd='curl -f -X POST --insecure -H "Content-Type: application/json" "' . $url . '"  -d \'' . $search . '\' 2>/dev/null';
-#print `$cmd`;
-my $cmd='curl -f -X POST --insecure --no-progress-meter -H "Content-Type: application/json" "' . $url . '"  -d \'' . $search . '\' 2>&1 ';
-print "<p>$cmd</p>\n" if $debug > 0;
-my $results = `$cmd`;
-my $curl_status = $? >> 8;
-if ( $curl_status > 0 ) {
-    # Something went wrong running curl command. Output error in json structure
-    chomp($results);
-    print "{ \"error\": { \"curl-code\" : $curl_status, \"msg\" : \"$results\" } }\n";
+# The request is sent to the archive by this script itself. (It used to be handed to curl
+# through a shell, with the address of the archive on the command line, user name and
+# password included if it has them.) As before, the certificate of the archive is not
+# checked, a redirect is not followed, and an answer of 400 or above counts as a failure.
+$url = 'http://' . $url unless ( $url =~ m{^[A-Za-z][A-Za-z0-9+.-]*://} );   # (curl took an address without a scheme as http)
+if ( $debug > 0 ) {
+    ( my $url_shown = $url ) =~ s{://[^/@\s"]*@}{://...@};   # (without the user name and password of an archive address)
+    print STDERR "POST $url_shown\n";
+}
+my $response;
+if ( $url =~ m{^[^:/]+://(?:[^/@\s]*@)?(?:/|\z)} ) {
+    # (Without this the request would go to this host itself, user name and password with it)
+    $response = { 'status' => 599, 'content' => 'The address of the archive names no host' };
+} else {
+    $response = HTTP::Tiny->new( 'verify_SSL' => 0, 'max_redirect' => 0, 'timeout' => 300 )->request(
+	'POST', $url, { 'headers' => { 'Content-Type' => 'application/json' }, 'content' => $search } );
+}
+if ( $response->{'status'} >= 400 ) {
+    # Something went wrong. Output error in json structure
+    # (599: the archive was not reached, and the content says why)
+    my $msg = $response->{'status'} == 599 ? $response->{'content'} : 'The archive answered ' . $response->{'status'} . ' ' . $response->{'reason'};
+    $msg =~ s/\s+\z//;
+    $msg =~ s{[^/\s"']*@}{...@}g;   # (no user name and password of an archive address in what the browser gets, with a scheme or without)
+    print encode_json({ 'error' => { 'status' => $response->{'status'} + 0, 'msg' => $msg } }), "\n";
 } else {
     # Return results
-    print $results;
+    print $response->{'content'};
+}
+
+# Refuse the request with a json error
+sub fail {
+    my ($status, $msg) = @_;
+    print $q->header( -type => 'application/json', -status => $status, -x_content_type_options => 'nosniff' );
+    print encode_json({ 'error' => { 'msg' => $msg } }), "\n";
+    exit(0);
 }
 
 # weed out special shell chars

@@ -6,8 +6,8 @@ import {parms, conffile, prop_sum, update_url, stats_on, net_names, net_desc, ne
 	prop_names, prop_desc, prop_long_desc, prop_aggr,
 	colors, get_color, make_palette, threshes, get_thresholds, escapeHtml,
 	get_parms,removeParam, parse_hhmm, hhmm , adjust_to_timezone,
-	get_config, update_props, make_prop_select, add_tab,
-	round_number, zero_fill, selected_date_is_today_or_future, selected_hour_is_future }
+	get_config, update_props, make_prop_select, add_tab, new_tab_number,
+	round_number, zero_fill, selected_date_is_today_or_future, selected_hour_is_future, sort_hits }
 from "./map-lib.js" ;
 import { heatmap, chart_curve } from "./graph.js";
 import { ls_tab } from "./ls-tab.js";
@@ -80,7 +80,7 @@ document.addEventListener('microdep-tracetree-pair', function (e) {
         startEpoch: d.startEpoch,
         endEpoch: d.endEpoch,
         options: prev.options || {
-            net: d.net, mahost: d.mahost, verify_SSL: 0,
+            net: d.net, mahost: d.mahost,
             api: d.api, ip_version: d.ip_version
         }
     });
@@ -310,21 +310,24 @@ function restoreSavedTabs() {
 }
 
 function restoreOneTab(spec) {
-    const before = $("main#tabs > ul > li").length;
+    const before = new_tab_number();
     if (spec.kind === 'routes') {
         add_tab('div', spec.title, before,
             '<div class="center-text" style="padding:40px">' +
               '<div class="spinner"></div><p>Restoring routes…</p>' +
             '</div>');
         const tab_id = 'tab' + before;
-        ls_tab(tab_id, spec.from, spec.to, spec.startEpoch, spec.endEpoch, spec.options || {});
+        // Functions do not survive localStorage; the tree's leaf colours come
+        // from the live map, so re-attach the callback on every restore.
+        const opts = Object.assign({}, spec.options || {}, { leaf_status: leaf_status_fn(spec.from) });
+        ls_tab(tab_id, spec.from, spec.to, spec.startEpoch, spec.endEpoch, opts);
         tabSpecs.set(tab_id, spec);
     } else if (spec.kind === 'curve') {
         const sep = spec.url.indexOf('?') >= 0 ? '&' : '?';
         const bustedUrl = spec.url + sep + '_t=' + Date.now();
         const iframe_html =
             '<div class="curve-iframe-wrap">' +
-                '<iframe class="curve-iframe" src="' + bustedUrl + '" frameborder="0" sandbox="allow-scripts allow-same-origin"></iframe>' +
+                '<iframe class="curve-iframe" src="' + escapeHtml(bustedUrl) + '" frameborder="0" sandbox="allow-scripts allow-same-origin"></iframe>' +
             '</div>';
         add_tab('div', spec.title, before, iframe_html);
         tabSpecs.set('tab' + before, spec);
@@ -332,9 +335,9 @@ function restoreOneTab(spec) {
         // Simulate user picking the option from the #check dropdown — the
         // existing change-handler does all the work; we just need to
         // remember the divid afterwards.
+        const count = $("main#tabs > ul > li").length;
         $('#check').val(spec.report_type).trigger('change');
-        const after = $("main#tabs > ul > li").length;
-        if (after > before) tabSpecs.set('tab' + before, spec);
+        if ($("main#tabs > ul > li").length > count) tabSpecs.set('tab' + before, spec);
     }
 }
 
@@ -356,8 +359,11 @@ var color_on=[]; // bool by color focused
 var linkByName=[];
 var linkByNameDashed=[];
 var linkHidden=[]; // 
-var ip_to_name=[]; // 
-var name_to_ip=[]; //
+// Looked up by address and by host name. They are objects without inherited properties, so that
+// a host may be called "length" or "constructor": in an array or a plain object such a name
+// meets a property that is there already.
+var ip_to_name=Object.create(null); // 
+var name_to_ip=Object.create(null); //
 var name_loaded=[]; // by network
 var ends=[];
 var last_hits=[]; // last query detail data (gaps)
@@ -614,8 +620,10 @@ window.clearHighlightedLink = clearHighlightedLink;
 
 function refreshLinkPanel() {
     if (currentPanelLink && !document.getElementById('link-panel').classList.contains('hidden')) {
-        var newContent = link_popup(currentPanelLink);
-        openLinkPanel(newContent);
+        // The pair's record in the data now on the map, not the one the panel was opened with
+        var from = currentPanelLink.from, to = currentPanelLink.to, fresh = {"from": from, "to": to};
+        for (var i = 0; i < (summary || []).length; i++) { var s = summary[i] && summary[i]._source; if (s && s.from === from && s.to === to) { fresh = s; break; } }
+        openLinkPanel(link_popup(fresh), fresh);
     }
 }
 
@@ -707,6 +715,75 @@ function spread_points(points){
     }
 }
 
+// The tree view: every traceroute from `host` in one picture, as a Routes tab
+// opened for "all peers" ('*'); ls_tab resolves the peers from the archive.
+// Start of the shown period in epoch seconds: for less than a day the selected hour, as in get_connections().
+function shown_start_epoch(dato) {
+    let s = new Date(dato).getTime() / 1000;
+    if (parms.period < 24) s += (parse_hhmm($("#period_input").val()) + new Date(dato).getTimezoneOffset() / 60) * 3600;
+    return s;
+}
+
+function open_tree_tab(host) {
+    let num_tabs = new_tab_number();
+    let title = 'Tree: ' + host.split('.').slice(0, 2).join('.');
+    add_tab('div', title, num_tabs, '<div class="center-text" style="padding:40px"><div class="spinner"></div><p>Loading traceroute data\u2026</p></div>');
+    let tab_id = 'tab' + num_tabs;
+    let start_epoch = shown_start_epoch($("#datepicker").val());
+    let end_epoch = start_epoch + parms.period * 3600;
+    var opts = {
+	net: parms.net,
+	mahost: 'https://localhost:9200/',
+	api: 'opensearch',
+	ip_version: net_ip_version[parms.net],
+	from_adr: name_to_ip[host] || '',
+	leaf_status: leaf_status_fn(host)
+    };
+    if (! jQuery.isEmptyObject(conffile[parms.net].archive)) opts.mahost = conffile[parms.net].archive;
+    ls_tab(tab_id, host, '*', start_epoch, end_epoch, opts);
+    persistTab(tab_id, { kind: 'routes', title: title, from: host, to: '*', startEpoch: start_epoch, endEpoch: end_epoch, options: opts });
+    const tab_count = $('main#tabs > ul > li > a').length;
+    if (tab_count > 0) $('main#tabs').tabs('option', 'active', tab_count - 1);
+}
+
+// What the map currently shows for the link between the tree's `root` and a
+// peer: the colour of the link out of the root and the property values both
+// ways. The traceroute viewer calls the returned function when it draws a
+// leaf, so the colours follow the map's selected property and date. Hosts
+// are matched by name, address or first label, since pscheduler may spell a
+// host differently than the topology does.
+function leaf_status_fn(root) {
+    const alias_set = function (name) {
+	const a = Object.create(null);   // (by host name: no inherited properties)
+	const add = function (x) { if (!x) return; const n = String(x).toLowerCase(); a[n] = true; a[n.split('.')[0]] = true; };
+	add(name); add(name_to_ip[name]);
+	return function (x) { if (!x) return false; const n = String(x).toLowerCase(); return !!(a[n] || a[n.split('.')[0]] || (name_to_ip[x] && a[String(name_to_ip[x]).toLowerCase()])); };
+    };
+    const is_root = alias_set(root);
+    return function (peer) {
+	const is_peer = alias_set(peer);
+	const etype = event_sum_type[parms.event] || parms.event;
+	const unit = (typeof _field_unit === 'function') ? (_field_unit(etype, parms.property) || '') : '';
+	const label = (prop_desc[etype] && prop_desc[etype][parms.property]) || parms.property;
+	const suffix = (unit && String(label).indexOf(unit) < 0) ? ' ' + unit : '';   // "Unavailability (ppm)" already says ppm
+	const fmt = function (v) { return (v === undefined || v === null || v === '') ? 'no data' : (round_number(v, 2) + suffix); };
+	let out = null, back = null;
+	for (const abs in linkByName) {
+	    const ends = abs.split(','); if (ends.length !== 2) continue;
+	    const layer = linkByName[abs]; if (!layer || !layer.options) continue;
+	    const src = layer._panelSource || {};
+	    const st = { color: layer._baseColor || layer.options.color || '', value: src[parms.property], from: ends[0], to: ends[1] };
+	    if (is_root(ends[0]) && is_peer(ends[1])) out = st;        // root -> peer
+	    else if (is_peer(ends[0]) && is_root(ends[1])) back = st;  // peer -> root
+	}
+	if (!out && !back) return null;
+	const lines = [];
+	if (out)  lines.push({ k: label + ' ' + out.from.split('.')[0] + ' \u2192 ' + out.to.split('.')[0], v: fmt(out.value) });
+	if (back) lines.push({ k: label + ' ' + back.from.split('.')[0] + ' \u2192 ' + back.to.split('.')[0], v: fmt(back.value) });
+	return { color: (out && out.color) || (back && back.color) || '', lines: lines };
+    };
+}
+
 function make_markers ( network, points, focus) {
     var i;
     var bounds = new L.LatLngBounds();
@@ -716,17 +793,25 @@ function make_markers ( network, points, focus) {
 	var id=points[i].id;
 	var marker = L.marker ([points[i].lat, points[i].lon]).addTo(clustergroup[network]);
 	bounds.extend(marker.getLatLng());
-	marker.bindTooltip( points[i].name, {permanent: false, className: "my-label", offset: [0, 0] });
-	var html = '<br><a href="#" class=trigger id="' + id + '">Focus on</a>';
+	// Names and ids come from the archive: Leaflet takes a string as HTML, so
+	// they are escaped on the way into the tooltip and the popup.
+	marker.bindTooltip( escapeHtml(points[i].name), {permanent: false, className: "my-label", offset: [0, 0] });
+	var html = '<br><a href="#" class=trigger id="' + escapeHtml(id) + '">Focus on</a>' +
+	           '<br><a href="#" class="tree-trigger" data-host="' + escapeHtml(id) + '" title="Every traceroute from this host in one tree">Routes to all peers</a>';
 	var url;
 	if (points[i].url){
 	    url = points[i].url;
 	} else {
 	    url = "http://" + id;
 	}
-	marker.bindPopup("<b><a href=\"" + url + "\">" + "Home for " + id + "</a></b>"+html);
-	$("#" + id ).on('click', "a.trigger", function(e){
-	    focus_links( e.id, 'flip' );
+	marker.bindPopup("<b><a href=\"" + escapeHtml(url) + "\">" + "Home for " + escapeHtml(id) + "</a></b>"+html);
+	// The "Focus on" click is handled by the delegated a.trigger handler on
+	// #mapid (init_map). A handler bound here through a selector made of the
+	// host name never matched anything, and a name that is not a valid
+	// selector made jQuery throw, which stopped the markers being drawn.
+	marker.on('popupopen', function (e) {
+	    var a = e.popup.getElement().querySelector('a.tree-trigger');
+	    if (a) a.addEventListener('click', function (ev) { ev.preventDefault(); open_tree_tab(a.dataset.host); e.target.closePopup(); });
 	});
     }
 
@@ -753,9 +838,18 @@ function make_markers ( network, points, focus) {
 }
 
 function remove_links(){
+    // Take every layer off the map, not only the ones in `links`: a one-way
+    // link is rebuilt by extend_unidirectional_links() as a full-length or half
+    // line that replaces the original in linkByName, while `links` keeps the
+    // original, which is already gone. Clearing `links` alone left the rebuilt
+    // lines behind on a network switch (issue #161), most visibly with event
+    // types whose links run one way, such as route errors.
     var i;
     for ( i=0; i<links.length; i++ ){
 	if ( links[i] ) links[i].remove();
+    }
+    for ( var ab in linkByName ){
+	if ( linkByName[ab] && typeof linkByName[ab].remove === 'function' ) linkByName[ab].remove();
     }
     for (var name in arrowMarkers) {
         removeArrowMarkers(name);
@@ -764,6 +858,8 @@ function remove_links(){
     links=[];
     linkByName=[];
     ends=[];
+    extendedLinks=[];
+    _resync_real_path_colors();   // no real path may outlive its link
 }
 
 function remove_link(ab){
@@ -771,7 +867,10 @@ function remove_link(ab){
 	linkByName[ab].remove();
 	removeArrowMarkers(ab);
 	delete linkByName[ab];
-	ends.splice( ends, ends.indexOf(ab), 1);
+	// splice() takes an index first; passing the array itself removed the
+	// wrong entries and inserted a stray 1, so `ends` drifted from linkByName.
+	var at = ends.indexOf(ab);
+	if ( at >= 0 ) ends.splice( at, 1 );
     }
 }
 
@@ -900,7 +999,6 @@ function only_links_by_color(color){
 	    }
 	}
 	links_on=false;
-	focus[node]=true;
 	focus_node=node;
 	update_url("node", node);
     }
@@ -921,7 +1019,7 @@ function prop_title(prop) {
 function update_legend(title, threshes){
     var html="<table border=1 align=center id=legend> ";
     html+="<tr align=center>";
-    html+='<th><button class=knapp id="farge0" title="Push to hide/show grey links">' + title + '</button>';
+    html+='<th><button class=knapp id="farge0" title="Push to hide/show grey links">' + escapeHtml(title) + '</button>';
     var i;
     var lower=threshes.slice();
     lower.unshift(0);
@@ -931,13 +1029,19 @@ function update_legend(title, threshes){
 	if (typeof _v === 'number' && !isNaN(_v)) _v = Math.round(_v * 100) / 100;
 	html += "<td width=200>" +
 	    "<button class=knapp title='Push to hide/show other links' style=width:100%" + " id=legend" + i + " bgcolor="
-	    + colors[i] + ">" + _v + "</button></td>";
+	    + colors[i] + ">" + escapeHtml(_v) + "</button></td>";
     }
     if (! jQuery.isEmptyObject(conffile[parms.net].dashboardURL)) {
-	html += '<td><button class=knapp title="Database dashboard" onclick=\'window.open("' + conffile[parms.net].dashboardURL + '", "_blank");\'>Dashboard</button>';
+	html += '<td><button class=knapp id="dashboard" title="Database dashboard">Dashboard</button>';
     }
     html +=  "</tr></table>";
     $("#legend").html(html);
+
+    // (Bound here and not written into the markup as an onclick: the content
+    // security policy of the map allows no script written into a page.)
+    $("#dashboard").click(  function () {
+	window.open(conffile[parms.net].dashboardURL, "_blank");
+    });
 
     $("#farge0").click(  function () {
 	only_links_by_color(empty_color);
@@ -958,7 +1062,7 @@ function gap_popup( containerDiv, link){
     button.className = "knapp";
     let etype = parms.event;
     let etypeLabel = (event_desc[etype] || etype);
-    button.innerHTML = "Top " + etypeLabel;
+    button.textContent = "Top " + etypeLabel;
     button.onclick = function(event) {
 	let idiv;
 	let etag = 'event ' + parms.event + ' ' + parms.date + ' ' + parms.period;
@@ -1083,21 +1187,18 @@ function _render_link_sparkline_inner(canvas, link, etype, prop, dato, period, f
     var sumEtype = (event_sum_type && event_sum_type[etype]) || '';
     var queryEtype = forceEtype || etype;
 
-    // Match the existing call pattern in get_peer_data / get_connections:
-    // raw concatenation (no encodeURIComponent — colons in ISO stamps
-    // and the IPv6-style addresses are passed through literally), and
-    // include ip_version when the network requires it.
+    // Include ip_version when the network requires it.
     // net= is REQUIRED: elastic-get-date-type.pl resolves the archive URL from
     // config[net].archive — without it the CGI falls back to http://localhost:9200
-    // and the query dies with curl-code 52 (empty reply). (index= sets the OS
+    // and the query fails (empty reply). (index= sets the OS
     // index path; net= picks the archive.)
     var url = 'elastic-get-date-type.pl?net=' + parms.net +
               '&index=' + event_index[etype] +
               '&event_type=' + queryEtype +
-              '&start=' + adjust_to_timezone(start_iso) +
-              '&end='   + adjust_to_timezone(end_iso) +
-              '&from='  + link.from +
-              '&to='    + link.to;
+              '&start=' + start_iso +
+              '&end='   + end_iso +
+              '&from='  + encodeURIComponent(link.from) +
+              '&to='    + encodeURIComponent(link.to);
     if (net_ip_version && net_ip_version[parms.net]) {
         url += '&ip_version=' + net_ip_version[parms.net];
     }
@@ -1484,6 +1585,12 @@ function _draw_sparkline_empty(canvas, msg) {
     ctx.fillText(msg || 'No data for this period', w / 2, h / 2);
 }
 
+// A curve-chart.html URL. Every value is encoded: host names come from the
+// archive, and one holding "&" or "#" must not add or change a parameter.
+function curve_chart_url(p) {
+    return 'curve-chart.html?' + Object.keys(p).map(function (k) { return k + '=' + encodeURIComponent(p[k]); }).join('&');
+}
+
 function link_popup(link){
     var dato = $("#datepicker").val();
     var html = make_tooltip_v2(link.from, link.to, link);
@@ -1509,22 +1616,26 @@ function link_popup(link){
 	routesBtn.title = "See the routes graph and stats in this period";
 	routesBtn.innerHTML = 'Routes';
 	routesBtn.onclick = function(){
-	    let num_tabs = $("main#tabs > ul > li").length;
+	    let num_tabs = new_tab_number();
 	    let fromShort = link.from.split('.').slice(0,2).join('.');
 	    let toShort = link.to.split('.').slice(0,2).join('.');
 	    let title = 'Routes: ' + fromShort + ' \u2192 ' + toShort;
 	    add_tab('div', title, num_tabs, '<div class="center-text" style="padding:40px"><div class="spinner"></div><p>Loading traceroute data\u2026</p></div>');
 	    let tab_id = 'tab' + num_tabs;
-	    let start_epoch = new Date(dato).getTime() / 1000;
+	    let start_epoch = shown_start_epoch(dato);
 	    let end_epoch = start_epoch + parms.period * 3600;
 	    var routesOpts = {
 		net: parms.net,
 		mahost: 'https://localhost:9200/',
-		verify_SSL: 0,
 		api: 'opensearch',
 		// Follow the selected network's IP version, so Net-6 shows v6
 		// traceroutes instead of always falling back to v4 (issue #127).
-		ip_version: net_ip_version[parms.net]
+		ip_version: net_ip_version[parms.net],
+		// The archive records the local end by IP (and usually only the
+		// direction it traces itself), so ls_tab gets the addresses too
+		// and can match the pair by either form or direction.
+		from_adr: link.from_adr || name_to_ip[link.from] || '',
+		to_adr:   link.to_adr   || name_to_ip[link.to]   || ''
 	    };
 	    if(! jQuery.isEmptyObject(conffile[parms.net].archive) ) {
 		routesOpts.mahost = conffile[parms.net].archive;
@@ -1631,7 +1742,7 @@ function link_popup(link){
 	var fromShortPlot = link.from.split('.').slice(0, 2).join('.');
 	var toShortPlot   = link.to.split('.').slice(0, 2).join('.');
 	function open_curve_tab(label, url) {
-	    var num_tabs = $("main#tabs > ul > li").length;
+	    var num_tabs = new_tab_number();
 	    var title = label + ': ' + fromShortPlot + ' → ' + toShortPlot;
 	    // Cache-buster — iframes get cached aggressively and the Queues view
 	    // is small/static, so fresh load each click is cheap and avoids
@@ -1640,7 +1751,7 @@ function link_popup(link){
 	    var bustedUrl = url + sep + '_t=' + Date.now();
 	    var iframe_html =
 		'<div class="curve-iframe-wrap">' +
-		    '<iframe class="curve-iframe" src="' + bustedUrl + '" frameborder="0" sandbox="allow-scripts allow-same-origin"></iframe>' +
+		    '<iframe class="curve-iframe" src="' + escapeHtml(bustedUrl) + '" frameborder="0" sandbox="allow-scripts allow-same-origin"></iframe>' +
 		'</div>';
 	    add_tab('div', title, num_tabs, iframe_html);
 	    var divid = 'tab' + num_tabs;
@@ -1658,7 +1769,7 @@ function link_popup(link){
 
 	// --- Queues (jitter / h_ddelay) ---
 	var queuesIndex = (event_index && event_index['jitter']) ? event_index['jitter'] : 'index-not-configured';
-	var queuesUrl = 'curve-chart.html?net=' + parms.net + '&index=' + queuesIndex + '&from=' + link.from + '&to=' + link.to + '&event=jitter&property=h_ddelay&start=' + start + '&end=' + end + "&title=From " + link.from + " to " + link.to;
+	var queuesUrl = curve_chart_url({ net: parms.net, index: queuesIndex, from: link.from, to: link.to, event: 'jitter', property: 'h_ddelay', start: start, end: end, title: 'From ' + link.from + ' to ' + link.to });
 	var queuesBtn = document.createElement("button");
 	queuesBtn.className = "knapp";
 	queuesBtn.title = "Curve over queues in this period";
@@ -1668,7 +1779,7 @@ function link_popup(link){
 
 	// --- Unavailability (gap / down_ppm) ---
 	var unavailIndex = (event_index && event_index['gap']) ? event_index['gap'] : (parms.net + '_gap');
-	var unavailUrl = 'curve-chart.html?net=' + parms.net + '&index=' + unavailIndex + '&from=' + link.from + '&to=' + link.to + '&event=gap&property=down_ppm&start=' + start + '&end=' + end + '&title=Unavailability ' + link.from + ' to ' + link.to;
+	var unavailUrl = curve_chart_url({ net: parms.net, index: unavailIndex, from: link.from, to: link.to, event: 'gap', property: 'down_ppm', start: start, end: end, title: 'Unavailability ' + link.from + ' to ' + link.to });
 	var unavailBtn = document.createElement("button");
 	unavailBtn.className = "knapp";
 	unavailBtn.title = "Unavailability over this period";
@@ -1682,7 +1793,7 @@ function link_popup(link){
 	var isQueuesDup     = (parms.event === 'jitter' && parms.property === 'h_ddelay');
 	var isUnavailDup    = (parms.event === 'gap'    && parms.property === 'down_ppm');
 	if (!isQueuesDup && !isUnavailDup) {
-	    var propUrl = 'curve-chart.html?net=' + parms.net + '&index=' + event_index[parms.event] + '&from=' + link.from + '&to=' + link.to + '&event=' + parms.event + '&property=' + parms.property + '&start=' + start + '&end=' + end + '&title="From ' + link.from + ' to ' + link.to + ' for ' + parms.property + '"';
+	    var propUrl = curve_chart_url({ net: parms.net, index: event_index[parms.event], from: link.from, to: link.to, event: parms.event, property: parms.property, start: start, end: end, title: '"From ' + link.from + ' to ' + link.to + ' for ' + parms.property + '"' });
 	    var propBtn = document.createElement("button");
 	    propBtn.className = "knapp";
 	    propBtn.title = "Detailed report for the currently selected metric";
@@ -1791,8 +1902,8 @@ function make_tooltip_v2(fromHost, toHost, link){
 	var nrows=0;
 	var tip='<div class="link-panel-endpoints">';
 	tip += '<div class="link-endpoint-list">';
-	tip += '<div class="link-endpoint"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg> <span class="link-host" data-copy-value="' + escapeHtml(fromHost) + '" title="Double-click to copy">' + fromHost + '</span></div>';
-	tip += '<div class="link-endpoint"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg> <span class="link-host" data-copy-value="' + escapeHtml(toHost) + '" title="Double-click to copy">' + toHost + '</span></div>';
+	tip += '<div class="link-endpoint"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg> <span class="link-host" data-copy-value="' + escapeHtml(fromHost) + '" title="Double-click to copy">' + escapeHtml(fromHost) + '</span></div>';
+	tip += '<div class="link-endpoint"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg> <span class="link-host" data-copy-value="' + escapeHtml(toHost) + '" title="Double-click to copy">' + escapeHtml(toHost) + '</span></div>';
 	tip += '</div>';
 	// Swap-direction button — only when the archive actually has the reverse
 	// pair to show (otherwise the swap would just relabel the same numbers).
@@ -1818,7 +1929,7 @@ function make_tooltip_v2(fromHost, toHost, link){
 		    // Config `descr` as a mouse-over help text on the row (issue #108).
 		    var help1 = (prop_long_desc[parms.event] && prop_long_desc[parms.event][sum_var])
 			? ' title="' + escapeHtml(prop_long_desc[parms.event][sum_var]) + '"' : '';
-		    tip+= '<tr' + help1 + '><td>' + prop_desc[parms.event][sum_var] + '<td align=right>' + prop_value;
+		    tip+= '<tr' + help1 + '><td>' + escapeHtml(prop_desc[parms.event][sum_var]) + '<td align=right>' + prop_value;
 		    nrows++;
 		}
 	    }
@@ -1830,7 +1941,7 @@ function make_tooltip_v2(fromHost, toHost, link){
 		    var sum_key = conffile[parms.net].event_type[parms.event].summary_event_type;
 		    var help2 = (prop_long_desc[sum_key] && prop_long_desc[sum_key][sum_var])
 			? ' title="' + escapeHtml(prop_long_desc[sum_key][sum_var]) + '"' : '';
-		    tip+= '<tr' + help2 + '><td>' + prop_desc[sum_key][sum_var] + '<td align=right>' + prop_value;
+		    tip+= '<tr' + help2 + '><td>' + escapeHtml(prop_desc[sum_key][sum_var]) + '<td align=right>' + prop_value;
 		    nrows++;
 		}
 	    }
@@ -1849,21 +1960,19 @@ function make_tooltip_v2(fromHost, toHost, link){
 }
 
 function link_tooltip( title, link, prop){
-    if ( prop in link ){
-	var val=link[prop];
-	var event = event_sum_type[parms.event]
-	if ( selected_date_is_today_or_future() ) {
-	    event = parms.event
-	}
-	var tip='<b>' + title + '</b>' + "<p>" + prop_desc[event][prop] + ": " ;
-	if ( typeof(val) !== "string" ){
-	    tip += val.toFixed(1);
-	    if ( prop === "down_ppm" && typeof link[prop] == 'number' ){
-		tip+= " ( " + ( val * 86400 / 10**6 ).toFixed(0) + " sec/day )";
-	    }
-	}
+    var event = event_sum_type[parms.event]
+    if ( selected_date_is_today_or_future() ) {
+	event = parms.event
+    }
+    var tip='<b>' + escapeHtml(title) + '</b>' + "<p>" + escapeHtml(prop_desc[event][prop]) + ": " ;
+    var val = parseFloat(link[prop]);   // missing, null or stored as text
+    if ( isNaN(val) ){
+	tip += "no value";
     } else {
-	tip += "undef";
+	tip += val.toFixed(1);
+	if ( prop === "down_ppm" ){
+	    tip+= " ( " + ( val * 86400 / 10**6 ).toFixed(0) + " sec/day )";
+	}
     }
     return tip;
 }
@@ -1893,7 +2002,7 @@ function gap_list( from, to, hits, lines, sort_type){
 		    if (typeof prop_long_desc[etype][conffile[parms.net].event_type[etype].popup.table[col]] != "undefined") {
 			title_text = prop_long_desc[etype][conffile[parms.net].event_type[etype].popup.table[col]];
 		    }
-		    html += "<th  title='" + title_text + "'>" + prop_desc[etype][conffile[parms.net].event_type[etype].popup.table[col]];
+		    html += "<th  title='" + escapeHtml(title_text) + "'>" + escapeHtml(prop_desc[etype][conffile[parms.net].event_type[etype].popup.table[col]]);
 		}
 		html += "</thead>";
 	    }
@@ -1902,9 +2011,9 @@ function gap_list( from, to, hits, lines, sort_type){
 	    var d = new Date( Number(gap.timestamp * 1000) );
 	    var tid = zero_fill( d.getDate() ) + " " + zero_fill( d.getHours() ) + ":" + zero_fill( d.getMinutes() );
 	    var syslog_url = 'https://iou2.uninett.no/es-syslog-lookup/es-syslog-lookup.cgi?syslogwindow=3600&epoch=1&redirect=1'
-		+ '&timestamp=' + gap.timestamp + '&from=' + gap.from_adr + '&to=' + gap.to_adr + '&ip=1';
+		+ '&timestamp=' + encodeURIComponent(gap.timestamp) + '&from=' + encodeURIComponent(gap.from_adr) + '&to=' + encodeURIComponent(gap.to_adr) + '&ip=1';
 	    var telemetry_url = 'https://telemetri.uninett.no/telemetri-lookup/telemetri-lookup.cgi?telemetrywindow=60'
-                  + '&redirect=1&timestamp=' + gap.timestamp + '&from=' + gap.from_adr + '&to=' + gap.to_adr + '&ip=1';
+                  + '&redirect=1&timestamp=' + encodeURIComponent(gap.timestamp) + '&from=' + encodeURIComponent(gap.from_adr) + '&to=' + encodeURIComponent(gap.to_adr) + '&ip=1';
 	    var telemetry_href = tid;
 	    var sec;
 	    if ( etype === "gap"){ sec = ( gap.tloss / 1000 ).toFixed(1); }
@@ -1912,8 +2021,8 @@ function gap_list( from, to, hits, lines, sort_type){
 	    var syslog_href= sec;
 	    var tail="";
 	    if ( $("#network").val() === "uninett" ){
-	        syslog_href = '<a title="See router logs" href="' + syslog_url + '" target=_blank>' + "Log" + '</a>';
-	        telemetry_href = '<a title="See telemetry data" href="' + telemetry_url + '" target=_blank>' + "Mon" + '</a>';
+	        syslog_href = '<a title="See router logs" href="' + escapeHtml(syslog_url) + '" target=_blank>' + "Log" + '</a>';
+	        telemetry_href = '<a title="See telemetry data" href="' + escapeHtml(telemetry_url) + '" target=_blank>' + "Mon" + '</a>';
 		tail =  "<td><button class=knapp>" + syslog_href + "</button>" + "<td><button class=knapp>" + telemetry_href + "</button>";
 	    }
 	    var amount;
@@ -1930,12 +2039,12 @@ function gap_list( from, to, hits, lines, sort_type){
 			var value_tooltip_field = conffile[parms.net].event_type[etype].field[ conffile[parms.net].event_type[etype].popup.table[col] ].mouseover;
 			var value_tooltip = "";
 			if (typeof value_tooltip_field != "undefined" ) { value_tooltip = gap[ value_tooltip_field ]; }
-			html += "<td align=right title='" + value_tooltip + "' >" + gap[conffile[parms.net].event_type[etype].popup.table[col]];
+			html += "<td align=right title='" + escapeHtml(value_tooltip) + "' >" + escapeHtml(gap[conffile[parms.net].event_type[etype].popup.table[col]]);
 		    } else { html += "<td align=right>-"; }
 		}
 		html += "<td>" + tail + "\n";
 	    } else {
-		html += "<tr><td>" + tid +  "<td align=right>" + sec + "<td align=right>" + amount + "<td>" + tail + "\n";
+		html += "<tr><td>" + tid +  "<td align=right>" + escapeHtml(sec) + "<td align=right>" + escapeHtml(amount) + "<td>" + tail + "\n";
 	    }
 	    if ( lines &&  n >= lines) break;
 	    n++;
@@ -1976,7 +2085,7 @@ function gap_list( from, to, hits, lines, sort_type){
 		if ( prop in prop_aggr[etype] ) {
 		    switch (prop_aggr[etype][prop]) {
 		    case "sum": rec[prop]=stat[ab][prop].sum; break;
-		    case "avg": rec[prop]=stat[ab][prop].average()
+		    case "avg": rec[prop]=stat[ab][prop].average(); break;
 		    case "max": rec[prop]=stat[ab][prop].max(); break;
 		    case "min": rec[prop]=stat[ab][prop].min(); break;
 		    default: rec[prop]=stat[ab][prop].average()
@@ -1991,6 +2100,24 @@ function gap_list( from, to, hits, lines, sort_type){
 	digest.push( {_source: rec} );
     }
     return digest;
+}
+
+// What unit is a field declared with? Needed to tell a rate (ppm) from a total
+// (ms, count) when merging records - the config is the authority on that.
+function _field_unit(etype, field) {
+    try {
+        var events = conffile[parms.net].event_type;
+        for (var e in events) {
+            if (events[e].summary_event_type === etype &&
+                events[e].summary_field && events[e].summary_field[field]) {
+                return events[e].summary_field[field].unit;
+            }
+            if (e === etype && events[e].field && events[e].field[field]) {
+                return events[e].field[field].unit;
+            }
+        }
+    } catch (_) { /* config not loaded yet */ }
+    return undefined;
 }
 
 // Restarting the analytic services flushes an extra summary event, so a link can
@@ -2030,6 +2157,27 @@ function coalesce_pairs(hits, etype) {
         });
         var out = Object.assign({}, recs[recs.length - 1]);
 
+        // Summary records say how long they cover, in lasted_sec. When every
+        // record in the group has it, rates and averages can be weighted by
+        // that span instead of being treated as if the records were equals -
+        // which matters because the duplicates a restart leaves behind cover
+        // very unequal slices of the day.
+        var spans = recs.map(function (r) {
+            return (typeof r.lasted_sec === "number" && isFinite(r.lasted_sec) && r.lasted_sec > 0)
+                ? r.lasted_sec : null;
+        });
+        var weighted = spans.every(function (sp) { return sp !== null; });
+        var total_span = weighted ? spans.reduce(function (a, b) { return a + b; }, 0) : 0;
+
+        function weighted_mean(field) {
+            var num = 0, den = 0;
+            for (var i = 0; i < recs.length; i++) {
+                var v = recs[i][field];
+                if (typeof v === "number" && isFinite(v)) { num += v * spans[i]; den += spans[i]; }
+            }
+            return den > 0 ? num / den : null;
+        }
+
         var fields = {};
         recs.forEach(function (r) { Object.keys(r).forEach(function (f) { fields[f] = 1; }); });
         Object.keys(fields).forEach(function (f) {
@@ -2038,11 +2186,26 @@ function coalesce_pairs(hits, etype) {
                 if (typeof r[f] === "number" && isFinite(r[f])) vals.push(r[f]);
             });
             if (vals.length < 2) return;
+            var sum = function () { return vals.reduce(function (a, b) { return a + b; }, 0); };
+
+            // How long the merged record covers is the sum of its parts.
+            if (f === "lasted_sec" || f === "late_sec") { out[f] = sum(); return; }
+
+            // A rate is not additive: two half-days at 900 and 100 ppm make a
+            // day at 500, not at 1000. Weight it by how long each part lasted.
+            if (weighted && total_span > 0 && String(_field_unit(etype, f) || "").toLowerCase() === "ppm") {
+                var w = weighted_mean(f);
+                if (w !== null) { out[f] = w; return; }
+            }
+
             switch (aggr[f]) {
-            case "sum": out[f] = vals.reduce(function (a, b) { return a + b; }, 0); break;
+            case "sum": out[f] = sum(); break;
             case "max": out[f] = Math.max.apply(null, vals); break;
             case "min": out[f] = Math.min.apply(null, vals); break;
-            default:    out[f] = vals.reduce(function (a, b) { return a + b; }, 0) / vals.length;
+            default:
+                // Averages are weighted too when the spans are known.
+                var wm = weighted && total_span > 0 ? weighted_mean(f) : null;
+                out[f] = (wm !== null) ? wm : sum() / vals.length;
             }
         });
         merged.push({ _source: out });
@@ -2090,7 +2253,7 @@ function warn_if_property_absent(hits, prop) {
         var v = hits[h]._source ? hits[h]._source[prop] : undefined;
         if (typeof v === "number" && isFinite(v)) return;      // at least one value
     }
-    $("#error").html(hhmmss(new Date()) + " : none of the " + hits.length + " "
+    $("#error").text(hhmmss(new Date()) + " : none of the " + hits.length + " "
         + parms.event + " records for this period carry a '" + prop_title(prop)
         + "' value - try another property;;");
 }
@@ -2127,11 +2290,15 @@ function draw_links(hits, prop){
     taint_links(hits, prop);
 }
 
+// Bumped by each map load: an answer of an older load is dropped, so it cannot paint another period
+var _topology_load = 0, _data_load = 0;
+
 function get_topology(source = "archive"){
     if (points.length == 0) {
 	load_coords_from_all_sources(network);
 	return;
     }
+    var load = ++_topology_load; _data_load++;   // this topology starts its own data load
     let start = new Date($("#datepicker").val() + " 00:00:00").getTime()/1000;
     let start_iso = new Date($("#datepicker").val() + " 00:00:00").toISOString();
     let end= new Date($("#datepicker").val() + " 23:59:59").getTime()/1000;
@@ -2139,20 +2306,6 @@ function get_topology(source = "archive"){
     var network=parms.net;
 
     switch (source) {
-    case "sqlite-db":
-	//var url="microdep-config.cgi?secret=\"" + conffile[parms.net].database_secret + "\"&variant=mp-" + network + "&start=" + start + "&end=" + end;
-	var url="microdep-config.cgi?net=" + network + "&start=" + start + "&end=" + end;
-	$.getJSON( url, function(topology){
-	    if (topology.length == 0) {
-		$("#error").html(hhmmss(new Date()) + " : No topology data found for " + parms.event + " events on " + $("#datepicker").val() + " " + $("#period_input").val() + ";;");
-		remove_links(links);
-		_set_map_empty_state(true);
-	    } else {
-		if (points.length == 0) { load_coords_from_all_sources(network); return; }
-		draw_topology( topology ); get_connections();
-	    }
-	}).fail( function( jqxhr, textStatus, error ) { console.log( "Request" + url + " Failed: " + textStatus + ", " + error ); });
-	break;
     case "archive":
 	var query_index = event_index[parms.event];
 	if ( conffile[parms.net].event_type.topology.index ) { query_index = conffile[parms.net].event_type.topology.index; }
@@ -2160,25 +2313,33 @@ function get_topology(source = "archive"){
 	var url="elastic-get-date-type.pl?net=" + parms.net + "&index=" + query_index + "&start=" + start_iso + "&end=" + end_iso;
 	if (net_ip_version[parms.net]) { url += "&ip_version=" + net_ip_version[parms.net]; }
 	$.getJSON( url, function(result){
+	    if (load !== _topology_load) return;
 	    if (jQuery.isEmptyObject(result.aggregations)) {
 		// Something went wrong. Log failure.
 		console.log("Warning: Failed to fetch data from archive. Check archive url in mapconfig.yml.");
 		if (!jQuery.isEmptyObject(result.error)) {
 		    console.log("        (\"" + result.error.msg  + "\")");
 		}
-		// No topology data returned. Try sqlite-db instead.
-		get_topology("sqlite-db");
+		clear_map_data("Failed to fetch data from archive");
 		return;
 	    }
 	    var topology = [];
 	    if (! result.aggregations.peer.buckets.length) {
-		console.log("No topology data returned from archive. Trying sqlite db ...");
-		get_topology("sqlite-db");
+		// A date with nothing measured used to be logged and nothing
+		// more, so the previous date's links, colours, legend and data
+		// stayed on screen as if they belonged to the date now selected
+		// (issue #183).
+		console.log("No topology data returned from archive.");
+		clear_map_data("No " + (event_desc[parms.event] || parms.event) + " data for " + $("#datepicker").val() + " " + $("#period_input").val());
 	    } else {
 		for (var p=0; p < result.aggregations.peer.buckets.length; p++) { topology.push(result.aggregations.peer.buckets[p].key.split("_")); }
 		draw_topology( topology ); get_connections();
 	    }
-	}).fail( function(e, textStatus, error ) { console.log("failed to get data from server :" + textStatus + ", " + error); });
+	}).fail( function(e, textStatus, error ) {
+	    if (load !== _topology_load) return;
+	    console.log("failed to get data from server :" + textStatus + ", " + error);
+	    clear_map_data("Failed to reach the archive (" + textStatus + ")");
+	});
 	break;
     }
 }
@@ -2211,6 +2372,24 @@ function _hub_point() {
         if (points[i].id === hubId && points[i].lat != null) return points[i];
     }
     return null;
+}
+
+// Take the map back to "nothing to show". The lines, the data they were drawn
+// from, the legend and the details panel all describe the date that was
+// selected when they arrived, so none of them may outlive a move to a date
+// that has no measurements (issue #183).
+function clear_map_data(reason) {
+    remove_links(links);
+    summary = []; last_hits = []; aggregates = [];
+    var panel = document.getElementById('link-panel');
+    if (panel) panel.classList.add('hidden');
+    currentPanelLink = null;
+    highlightedLink = null;
+    $("#legend").html("");
+    _set_map_empty_state(true);
+    if (reason) $("#error").text(hhmmss(new Date()) + " : " + reason + ";;");
+    $("#status").html("");
+    if (typeof window._microdep_mark_refreshed === 'function') window._microdep_mark_refreshed();
 }
 
 function draw_topology(topo){
@@ -2329,6 +2508,8 @@ function _fetch_baseline_summary(currStart, currEnd, etype, prop, cb) {
         cb && cb(true);
         return;
     }
+    // No period loaded yet (Compare changed before the first data arrived): its arrival paints the map
+    if (isNaN(new Date(currStart).getTime()) || isNaN(new Date(currEnd).getTime())) { cb && cb(false); return; }
 
     var bStartMs = new Date(currStart).getTime() - offsetMs;
     var bEndMs   = new Date(currEnd).getTime()   - offsetMs;
@@ -2336,29 +2517,36 @@ function _fetch_baseline_summary(currStart, currEnd, etype, prop, cb) {
     var bEnd     = new Date(bEndMs).toISOString();
 
     var index   = (event_index && event_index[etype]) || parms.net + '_' + etype;
-    var sumType = (event_sum_type && event_sum_type[etype]) || etype;
-    // Mirror get_connections's logic for past-period queries: prefer summary
-    // when one exists (we're always in past for compare mode). The baseline
-    // is by definition older than now.
-    var queryEtype = sumType || etype;
+    var sumType = event_sum_type && event_sum_type[etype];
+    // The same records, read the same way, as get_connections() uses for the current
+    // period: the events themselves for less than a day (or a day that is today),
+    // the summary records otherwise; the same window too (no time zone shift).
+    var per = parseInt($("#period").val(), 10) || 24;
+    var raw = !sumType || per < 24 || bStart.substr(0, 10) === new Date().toISOString().substr(0, 10);
+    var queryEtype = raw ? etype : sumType;
 
     // net= is REQUIRED so the CGI resolves the archive URL (config[net].archive);
     // without it it falls back to http://localhost:9200 → curl-52 empty reply.
     var url = 'elastic-get-date-type.pl?net=' + parms.net +
               '&index=' + index +
               '&event_type=' + queryEtype +
-              '&start=' + adjust_to_timezone(bStart) +
-              '&end='   + adjust_to_timezone(bEnd);
+              '&start=' + bStart +
+              '&end='   + bEnd;
     if (net_ip_version && net_ip_version[parms.net]) {
         url += '&ip_version=' + net_ip_version[parms.net];
     }
+    if (raw && etype === 'gap' && per >= 24) url += '&tloss=' + (per < 48 ? 1000 : (per <= 168 ? 5000 : 60000));
     if (parms.debug) console.log('compare: baseline url:', url);
 
     $.getJSON(url).done(function (resp) {
         var hits = (resp && resp.hits && resp.hits.hits) || [];
+        var rows;
+        if (!raw || queryEtype === 'gapsum' || queryEtype === 'routesum') rows = coalesce_pairs(hits, queryEtype);
+        else if (resp && resp.aggregations) rows = digest_aggregates(resp.aggregations, $("#stats_type").val());
+        else rows = digest_es_data(etype, hits);
         baselineSummary = {};
-        for (var i = 0; i < hits.length; i++) {
-            var s = hits[i] && hits[i]._source;
+        for (var i = 0; i < rows.length; i++) {
+            var s = rows[i] && rows[i]._source;
             if (!s || !s.from || !s.to) continue;
             var v = s[prop];
             if (typeof v !== 'number' || isNaN(v)) continue;
@@ -2507,7 +2695,9 @@ function _compare_pct_for_link(from, to, currVal) {
 // the existing taint_links call sites inside get_connections so the
 // compare flow can wait for baseline data before painting.
 function _paint_with_compare(summary, etype, prop, start_iso, end_iso) {
+    var load = _data_load;
     var paint = function () {
+        if (load !== _data_load) return;   // a newer load started while the baseline was fetched
         if (!parms.connections) taint_links(summary, prop);
         else                    draw_links(summary, prop);
     };
@@ -2603,8 +2793,9 @@ function taint_links( hits, prop){
 	if ( ! done[abs]){
 	    if ( linkByName[abs] ){
 		var ft = abs.split(",");
+		var nodata = {"from":ft[0], "to":ft[1]};   // also the panel's link, so a later refresh shows this pair
 		taint_link( linkByName[abs], empty_color );
-		annotate_link( abs, linkByName[abs], abs + ': no data', link_popup( {"from":ft[0], "to":ft[1]} ) );
+		annotate_link( abs, linkByName[abs], escapeHtml(abs) + ': no data', link_popup( nodata ), nodata );
 	    }
 	}
     }
@@ -2766,7 +2957,7 @@ function geo_cache_get(network, host_id, ip) {
     const netCache = host_geo_cache[network];
     if (!netCache || !host_id) return null;
     // 1) exact host_id match
-    if (netCache[host_id]) return netCache[host_id];
+    if (Object.prototype.hasOwnProperty.call(netCache, host_id) && netCache[host_id]) return netCache[host_id];
     // 2) IP cross-reference — same physical host can appear under entirely
     //    different FQDNs (legacy LS registration, old hostname template,
     //    DNS-search artifacts). If the caller knows the host's IP, find any
@@ -2905,6 +3096,9 @@ function hopgeo_lookup_batch(ips) {
 var realLocationsMode = false;
 var realPathLines = {};       // abs → { line: L.polyline, markers: [L.circleMarker, ...] }
 var realLocationsBusy = false;
+var realLocationsFor = '';    // the network, period and links the paths were drawn for
+var realLocationsGen = 0;     // bumped when a build in progress is no longer wanted
+function _real_locations_key() { return [parms.net, start, end, Object.keys(linkByName).sort().join(';')].join('|'); }
 // Layers that we removed from the map when entering real-locations mode —
 // kept so disable_real_locations can re-attach them. We can't just hide via
 // opacity because (a) L.curve / canvas paths can still intercept clicks
@@ -2977,6 +3171,7 @@ function disable_real_locations() {
     // layer, which then can't be properly un-highlighted on the next click.
     clearHighlightedLink();
     _set_real_loc_loading(false);
+    realLocationsGen++;
     for (var abs in realPathLines) {
         var entry = realPathLines[abs];
         if (!entry) continue;
@@ -2990,7 +3185,8 @@ function disable_real_locations() {
     // think — Leaflet figures out z-ordering by pane, not by attach order.
     for (var i = 0; i < _hiddenForRealMode.length; i++) {
         var layer = _hiddenForRealMode[i];
-        if (layer && mymap && !mymap.hasLayer(layer)) {
+        // only a link or arrow still on the map's list: one replaced or removed meanwhile stays off
+        if (layer && mymap && !mymap.hasLayer(layer) && _is_bezier_or_arrow(layer)) {
             try { layer.addTo(mymap); } catch (_) {}
         }
     }
@@ -3013,6 +3209,8 @@ function enable_real_locations() {
 
     realLocationsMode = true;
     realLocationsBusy = true;
+    var gen = ++realLocationsGen;
+    realLocationsFor = _real_locations_key();
     _set_real_loc_loading(true);
     _hiddenForRealMode = [];
     _ensure_layeradd_hook();
@@ -3020,7 +3218,7 @@ function enable_real_locations() {
     var network = parms.net;
     var dato = $("#datepicker").val();
     var period = parseFloat($("#period").val()) || 24;
-    var start_epoch = Math.floor(new Date(dato + 'T00:00:00').getTime() / 1000);
+    var start_epoch = shown_start_epoch(dato);   // the period on the map, as for Routes
     var end_epoch = start_epoch + period * 3600;
 
     // Detach beziers and their arrow markers from the map. Removing > opacity
@@ -3061,6 +3259,7 @@ function enable_real_locations() {
     });
 
     Promise.all(traceFetches).then(function (results) {
+        if (gen !== realLocationsGen) return;   // a newer build or a switch-off took over
         if (!realLocationsMode) { realLocationsBusy = false; return; }
 
         // Phase 2 — collect every unique hop IP across all traces and batch
@@ -3073,6 +3272,7 @@ function enable_real_locations() {
         var ipList = Object.keys(allIps);
         return hopgeo_lookup_batch(ipList).then(function () { return results; });
     }).then(function (results) {
+        if (!results || gen !== realLocationsGen) return;
         if (!realLocationsMode) { realLocationsBusy = false; return; }
 
         // Phase 3 — every hop now has a (possibly null) cache entry; build
@@ -3099,6 +3299,7 @@ function enable_real_locations() {
         realLocationsBusy = false;
         _set_real_loc_loading(false);
     }).catch(function (err) {
+        if (gen !== realLocationsGen) return;
         console.log('real-loc: aborted: ' + err);
         realLocationsBusy = false;
         _set_real_loc_loading(false);
@@ -3119,8 +3320,7 @@ function fetch_real_path(from, to, start_epoch, end_epoch) {
     var fromList = name_to_ip[from] ? (from + ',' + name_to_ip[from]) : from;
     var toList   = name_to_ip[to]   ? (to   + ',' + name_to_ip[to])   : to;
     var url = 'get-tracetests.pl' +
-              '?mahost=' + encodeURIComponent((conffile[parms.net] && conffile[parms.net].archive) || 'https://localhost/opensearch') +
-              '&verify_SSL=0' +
+              '?net='   + encodeURIComponent(parms.net) +
               '&from='  + encodeURIComponent(fromList) +
               '&to='    + encodeURIComponent(toList) +
               '&start=' + encodeURIComponent(start_iso) +
@@ -3511,6 +3711,8 @@ function draw_real_path(abs, entries) {
 // needs no re-fetch.
 function _resync_real_path_colors() {
     if (typeof realLocationsMode === 'undefined' || !realLocationsMode) return;
+    // Another network, period or set of links: draw the paths anew instead of keeping the old ones
+    if (_real_locations_key() !== realLocationsFor) { disable_real_locations(); enable_real_locations(); return; }
     for (var abs in realPathLines) {
         var rp = realPathLines[abs];
         if (rp && rp.entries) draw_real_path(abs, rp.entries);
@@ -3555,7 +3757,7 @@ function _toggle_real_hop_labels(activeLine) {
 // persisted across reloads (kind 'curve' → restoreOneTab). Ported from
 // work-snapshot; used by the HTML heatmap's clickable cells (open_heatmap_cell).
 function open_curve_in_tab(title, label, url) {
-    const num_tabs = $("main#tabs > ul > li").length;
+    const num_tabs = new_tab_number();
     const sep = url.indexOf('?') >= 0 ? '&' : '?';
     const bustedUrl = url + sep + '_t=' + Date.now();
     const loader_id = 'curve-loader-' + num_tabs;
@@ -3563,9 +3765,9 @@ function open_curve_in_tab(title, label, url) {
         '<div class="curve-iframe-wrap">' +
             '<div class="curve-iframe-loader" id="' + loader_id + '">' +
               '<div class="spinner"></div>' +
-              '<p>Loading ' + label + '…</p>' +
+              '<p>Loading ' + escapeHtml(label) + '…</p>' +
             '</div>' +
-            '<iframe class="curve-iframe" src="' + bustedUrl + '" frameborder="0" sandbox="allow-scripts allow-same-origin"></iframe>' +
+            '<iframe class="curve-iframe" src="' + escapeHtml(bustedUrl) + '" frameborder="0" sandbox="allow-scripts allow-same-origin"></iframe>' +
         '</div>';
     add_tab('div', title, num_tabs, iframe_html);
     const divid = 'tab' + num_tabs;
@@ -3597,8 +3799,9 @@ function open_heatmap_cell(url, from_host, to_host) {
 const _shortcuts = [
     { key: '?',   desc: 'Show this help' },
     { key: 'Esc', desc: 'Close any open modal or overlay' },
-    { key: '←',   desc: 'Previous period' },
-    { key: '→',   desc: 'Next period' },
+    { key: '←',   desc: 'Previous period (moves the traceroute views)' },
+    { key: '→',   desc: 'Next period (moves the traceroute views)' },
+    { key: '↑ ↓', desc: 'Move the traceroute views: pan the topology, scroll Paths and Timeline' },
     { key: 'T',   desc: 'Jump to today' },
     { key: 'R',   desc: 'Toggle auto-refresh' },
     { key: 'L',   desc: 'Toggle Real Locations' },
@@ -3606,6 +3809,18 @@ const _shortcuts = [
     { key: 'D',   desc: 'Cycle theme (light · dark · auto)' },
     { key: '/',   desc: 'Focus search' }
 ];
+// The traceroute views take the arrow keys while one of them is on screen,
+// where they pan the topology or scroll the Paths and Timeline charts.
+// Everywhere else they keep stepping the period. Measured from the box rather
+// than offsetParent, so it also holds in the maximized view.
+function _topology_takes_arrows() {
+    var panes = document.querySelectorAll('.tracetree-topo, .tracetree-paths');
+    for (var i = 0; i < panes.length; i++) {
+        var r = panes[i].getBoundingClientRect();
+        if (r.width > 0 && r.height > 0) return true;
+    }
+    return false;
+}
 function _is_typing_target(el) {
     if (!el) return false;
     var tag = (el.tagName || '').toUpperCase();
@@ -3642,8 +3857,8 @@ document.addEventListener('keydown', function (e) {
     if (e.ctrlKey || e.metaKey || e.altKey) return;   // don't fight Ctrl+R, Cmd+S, etc.
     switch (e.key) {
         case '?': _show_shortcuts_overlay(); e.preventDefault(); break;
-        case 'ArrowLeft': $('#prev').trigger('click'); e.preventDefault(); break;
-        case 'ArrowRight': if (!$('#next').prop('disabled')) $('#next').trigger('click'); e.preventDefault(); break;
+        case 'ArrowLeft': if (_topology_takes_arrows()) break; $('#prev').trigger('click'); e.preventDefault(); break;
+        case 'ArrowRight': if (_topology_takes_arrows()) break; if (!$('#next').prop('disabled')) $('#next').trigger('click'); e.preventDefault(); break;
         case 't': case 'T': $('#today').trigger('click'); break;
         case 'r': case 'R': $('#autorefresh_checkbox').trigger('click'); break;
         case 'l': case 'L': $('#reallocs_checkbox').trigger('click'); break;
@@ -3806,8 +4021,14 @@ function extend_unidirectional_links() {
                 var baseColor = link._baseColor;
                 extendedLinks[abs] = { bp0: link._bezierP0, bp1: link._bezierP1, bp2: link._bezierP2, fullStart: link._fullStart, fullEnd: link._fullEnd, fullControl: link._fullControl, tooltip: tooltipContent, popup: popupContent, source: sourceData, baseColor: baseColor };
                 link.remove();
-                var newBP0 = link._fullStart; var newBP2 = link._fullEnd;
-                var cubicC1 = link._fullControl; var cubicC2 = link._bezierP1 || link._fullControl;
+                // draw_link() reverses its `ends` before reading coordinates, so
+                // _fullStart is the link's DESTINATION and _fullEnd its SOURCE.
+                // Run the full-length curve from the source to the destination
+                // (a Bezier reversed is the same curve with its control points
+                // swapped), so the arrow heads, which follow the curve's
+                // direction of travel, point the way the traffic goes (#162).
+                var newBP0 = link._fullEnd; var newBP2 = link._fullStart;
+                var cubicC1 = link._bezierP1 || link._fullControl; var cubicC2 = link._fullControl;
                 var newLine = L.curve(['M', newBP0, 'C', cubicC1, cubicC2, newBP2], { color: color, fill: false, weight: 6 });
                 newLine._bezierP0 = link._bezierP0; newLine._bezierP1 = link._bezierP1; newLine._bezierP2 = link._bezierP2;
                 newLine._fullStart = link._fullStart; newLine._fullEnd = link._fullEnd; newLine._fullControl = link._fullControl;
@@ -3861,8 +4082,6 @@ function annotate_link(abs,link, tooltip, popup, linkSourceData){
 	    }
 	});
     }
-    $("#" + abs + '-from' ).on('click', "button.knapp" , function( e){ focus_links(e.id, 'flip'); });
-    $("#" + abs + '-to' ).on('click', "button.knapp" , function( e){ focus_links(e.id, 'flip'); });
 }
 
 function draw_link( ends, color, tooltip, popup){
@@ -3902,7 +4121,7 @@ function draw_link( ends, color, tooltip, popup){
 	    utslag= ( Math.random() - 0.5 )/ 10 ;
 	    if ( distance < 5000000 ){ cp1 = latlon1.destinationPoint((distance/2), bearing + bearing_offset); }
 	    else { cp1 =new LatLon( mp1.lat + (latlon2.lat - latlon1.lat) * utslag, mp1.lon + (latlon2.lon - latlon1.lon) * utslag ); }
-	    if (parms.debug){ var m=L.circle([cp1.lat,cp1.lon], {weight:6, radius:100, color:"blue"}).addTo(mymap).bindTooltip('cp1 '+line_name); }
+	    if (parms.debug){ var m=L.circle([cp1.lat,cp1.lon], {weight:6, radius:100, color:"blue"}).addTo(mymap).bindTooltip('cp1 '+escapeHtml(line_name)); }
 	}
 	middle_point[line_name]=cp1; line_utslag[line_name]=utslag;
 	var mid = cp1.midpointTo(latlon2); var dist2=(0+(cp1.distanceTo(latlon2)));
@@ -3913,8 +4132,8 @@ function draw_link( ends, color, tooltip, popup){
 	else { cp2 =new LatLon( mp1.lat + (latlon2.lat - mp1.lat) * utslag, mp1.lon + (latlon2.lon - mp1.lon) * utslag ); }
 	if (parms.debug){
 	    console.log(ends + [[cp2.lat, cp2.lon], [latlon2.lat, latlon2.lon]] + ' dist: ' + distance);
-	    var m=L.circle([cp2.lat,cp2.lon], {weight:6, radius:100, color:"red"}).addTo(mymap).bindTooltip('cp2 '+line_name);
-	    var m=L.circle([mp1.lat,mp1.lon], {weight:6, radius:100, color:"violet"}).addTo(mymap).bindTooltip('mp1 '+line_name);
+	    var m=L.circle([cp2.lat,cp2.lon], {weight:6, radius:100, color:"red"}).addTo(mymap).bindTooltip('cp2 '+escapeHtml(line_name));
+	    var m=L.circle([mp1.lat,mp1.lon], {weight:6, radius:100, color:"violet"}).addTo(mymap).bindTooltip('mp1 '+escapeHtml(line_name));
 	}
 	var line;
 	var bezierP0, bezierP1, bezierP2;
@@ -3925,6 +4144,9 @@ function draw_link( ends, color, tooltip, popup){
 	    line = L.curve(['M', bezierP0, 'Q', bezierP1, bezierP2 ], { color: color, fill: false, weight:6 });
 	}
 	line._bezierP0 = bezierP0; line._bezierP1 = bezierP1; line._bezierP2 = bezierP2;
+	// NB: `ends` was reversed above, so latlon1 is the destination and latlon2
+	// the source: the half-curve runs from the middle to the SOURCE node, and
+	// _fullStart/_fullEnd are named for that reversed order.
 	line._fullStart = [latlon1.lat, latlon1.lon]; line._fullEnd = [latlon2.lat, latlon2.lon]; line._fullControl = [cp1.lat, cp1.lon];
 	if (line) line.addTo(mymap);
 	else console.log('Line draw failed ' + line_name);
@@ -3993,22 +4215,8 @@ function load_coords(network, service, goal){
 	}).fail( function(e, textStatus, error ) { console.log( "Request" + url + " Failed: " + textStatus + ", " + error ); _coords_load_done(network, goal); });
 	return;
     }
-    if ( service === "db" ) {
-	start = new Date($("#datepicker").val() + " 00:00:00").getTime()/1000;
-	end= new Date($("#datepicker").val() + " 23:59:59").getTime()/1000;
-	var network=parms.net;
-	var url="microdep-config.cgi?mode=nodes&net=" + network + "&start=" + start + "&end=" + end;
-	$.getJSON( url, function(nodes){
-	    for ( var n=0; n < nodes.length; n++) {
-		var p={}; p.id = nodes[n][0]; p.name = nodes[n][1]; p.lat = nodes[n][2]; p.lon = nodes[n][3];
-		reg_ip_adr(p.name, nodes[n][4]);
-		let point_already_loaded = points.find(o => o.id === p.id);
-		if (! point_already_loaded) { points.push( p); } else { console.log( "Duplicate node info for node " + p.id ); }
-	    }
-	    _coords_load_done(network, goal);
-	}).fail( function( jqxhr, textStatus, error ) { console.log( "Request" + url + " Failed: " + textStatus + ", " + error ); _coords_load_done(network, goal); });
-	return;
-    }
+    
+    // Default "service": Attempt to load local json source for geo-pos data
     var url= "./" + network + "/" + network + "-" + service + "-geo.json";
     $.getJSON( url, function(tjenester){
 	if ( "_meta" in tjenester ){
@@ -4045,8 +4253,8 @@ function _coords_load_done(network, goal) {
 }
 
 function load_coords_from_all_sources(network){
-    load_coords(network, "topoevents", 2);
-    load_coords(network, "db", 2);
+    load_coords(network, "topoevents", 1);
+    // ( Only one source in perfSONAR version of Microdep)
 }
 
 function show_network(network){
@@ -4078,7 +4286,7 @@ function check_ends(){
     for (i=0;i<ends.length;i++){ a=ends[i][0] + ' ' + ends[i][1]; ab[a]=true; }
     for (i=0;i<ends.length;i++){ var b=ends[i][1] + ' ' + ends[i][0]; if (ab[b]){ nok++; } else { missing.push(b); nmiss++; } }
     missing.sort(sort_missing);
-    for (i=0; i< missing.length; i++){ var ft=missing[i].split(" "); html+='<tr><td>' +ft[0] + '<td>'+ ft[1]; }
+    for (i=0; i< missing.length; i++){ var ft=missing[i].split(" "); html+='<tr><td>' + escapeHtml(ft[0]) + '<td>'+ escapeHtml(ft[1]); }
     html+='</table>'; html+='<p>' + "Ok " + nok + " Missing " + nmiss;
     $("#missing").html(html); $("#missing").dialog("open");
 }
@@ -4097,6 +4305,10 @@ function sort_diff(a , b){
 function _csv_escape(s) {
     if (s === null || s === undefined) return '';
     s = String(s);
+    // A spreadsheet reads a cell starting with = + - @ as a formula; keep such text as text.
+    if (/^[=+\-@\t\r]/.test(s) && !/^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(s)) {
+        s = "'" + s;
+    }
     if (/[",\r\n]/.test(s)) {
         s = '"' + s.replace(/"/g, '""') + '"';
     }
@@ -4218,7 +4430,7 @@ function check_asymmetry(report, div_id){
     let html='';
     if ( report === 'missing' ){
 	if (nmiss > 0) {
-	    html+= '<div class="tab-header-row"><h2>Missing opposite flows for ' + title_state() + '</h2>' + _csv_button_html(div_id + '_miss_table', 'missing') + '</div>';
+	    html+= '<div class="tab-header-row"><h2>Missing opposite flows for ' + escapeHtml(title_state()) + '</h2>' + _csv_button_html(div_id + '_miss_table', 'missing') + '</div>';
 	    html+='<p>The below ' + nmiss + ' (out of ' + summary.length + ") flows might be missing";
 	    html += '<table id=' + div_id + '_miss_table title="Missing opposite flows?" class=sortable>';
 	    html += '<thead><tr><th class="summary-link-header">' + fromIcon + 'From<br>' + toIcon + 'To</th></tr></thead>';
@@ -4226,16 +4438,16 @@ function check_asymmetry(report, div_id){
 	    for (i=0; i< missing.length; i++){
 		var ft=missing[i].split(" ");
 		html+='<tr><td class="summary-link-cell">';
-		html+='<div class="summary-from">' + fromIcon + '<span>' + ft[0] + '</span></div>';
-		html+='<div class="summary-to">' + toIcon + '<span>' + ft[1] + '</span></div>';
+		html+='<div class="summary-from">' + fromIcon + '<span>' + escapeHtml(ft[0]) + '</span></div>';
+		html+='<div class="summary-to">' + toIcon + '<span>' + escapeHtml(ft[1]) + '</span></div>';
 		html+='</td>';
 	    }
 	    html+='</table>';
-	    html += "<p>The above analysis is based on " + prop_desc[event_sum_type[parms.event]][ parms.property ] + " data sets.</p>";
-	} else { html+= '<h2>No missing flows for ' + title_state() + '</h2>'; }
+	    html += "<p>The above analysis is based on " + escapeHtml(prop_desc[event_sum_type[parms.event]][ parms.property ]) + " data sets.</p>";
+	} else { html+= '<h2>No missing flows for ' + escapeHtml(title_state()) + '</h2>'; }
     } else {
 	if (diff.length > 0) {
-	    html+='<div class="tab-header-row"><h2>Asymmetry in ' + prop_desc[event_sum_type[parms.event]][parms.property] + ' for ' + title_state() + '</h2>' + _csv_button_html(div_id + '_table', 'asymmetry') + '</div>';
+	    html+='<div class="tab-header-row"><h2>Asymmetry in ' + escapeHtml(prop_desc[event_sum_type[parms.event]][parms.property]) + ' for ' + escapeHtml(title_state()) + '</h2>' + _csv_button_html(div_id + '_table', 'asymmetry') + '</div>';
 	    html += '<table id=' + div_id + '_table border=1 class=sortable><thead title="Click to sort on column"><tr>';
 	    html += '<th class="summary-link-header">' + fromIcon + 'From<br>' + toIcon + 'To';
 	    html += '<th align=right>From→To<th align=right>To→From<th align=right>Diff</tr></thead>';
@@ -4245,13 +4457,13 @@ function check_asymmetry(report, div_id){
 		let aval= down[a] ? down[a].toFixed(1) : down[a]; let bval= down[pair[a]] ? down[pair[a]].toFixed(1) : down[pair[a]];
 		let diffval = diff[i].val ? diff[i].val.toFixed(1) : 0 ;
 		html+='<tr><td class="summary-link-cell">';
-		html+='<div class="summary-from">' + fromIcon + '<span>' + ft[0] + '</span></div>';
-		html+='<div class="summary-to">' + toIcon + '<span>' + ft[1] + '</span></div>';
+		html+='<div class="summary-from">' + fromIcon + '<span>' + escapeHtml(ft[0]) + '</span></div>';
+		html+='<div class="summary-to">' + toIcon + '<span>' + escapeHtml(ft[1]) + '</span></div>';
 		html+='</td>';
 		html+='<td align=right>' + aval + '<td align=right>' + bval + '<td align=right>' + diffval;
 	    }
 	    html+='</table>';
-	} else { html+= '<h2>No asymmetry found in ' + prop_desc[event_sum_type[parms.event]][parms.property] + ' for ' + title_state() + '</h2>'; }
+	} else { html+= '<h2>No asymmetry found in ' + escapeHtml(prop_desc[event_sum_type[parms.event]][parms.property]) + ' for ' + escapeHtml(title_state()) + '</h2>'; }
     }
     return(html);
 }
@@ -4260,8 +4472,9 @@ var fromIcon = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stro
 var toIcon = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:4px;color:var(--c-accent)"><path d="M5 12h14M12 5l7 7-7 7"/></svg>';
 
 function report_summary(div_id){
+    if (summary.length === 0) return '<h2>No summary data for ' + escapeHtml(title_state()) + '</h2>';
     let html='';
-    html+='<div class="tab-header-row"><h2>Summary for ' + title_state() + '</h2>' + _csv_button_html(div_id + '_table', 'summary') + '</div>';
+    html+='<div class="tab-header-row"><h2>Summary for ' + escapeHtml(title_state()) + '</h2>' + _csv_button_html(div_id + '_table', 'summary') + '</div>';
     html+='<table border=1 id=' + div_id + '_table class=sortable>\n';
     var header_missing=true;
     for (let i=0;i< summary.length;i++){
@@ -4271,18 +4484,18 @@ function report_summary(div_id){
 	    for ( const prop of prop_names[event_sum_type[parms.event]]){
 		var desc = prop_desc[event_sum_type[parms.event]][prop] || prop;
 		var longDesc = prop_long_desc[event_sum_type[parms.event]][prop] || '';
-		html+='<th align=right title="' + longDesc + ' - Click to sort" class="summary-prop-header">' + desc;
+		html+='<th align=right title="' + escapeHtml(longDesc) + ' - Click to sort" class="summary-prop-header">' + escapeHtml(desc);
 	    }
 	    html+='</tr></thead><tbody>'; header_missing=false;
 	}
 	html+='<tr><td class="summary-link-cell">';
-	html+='<div class="summary-from">' + fromIcon + '<span>' + entry['from'] + '</span></div>';
-	html+='<div class="summary-to">' + toIcon + '<span>' + entry['to'] + '</span></div>';
+	html+='<div class="summary-from">' + fromIcon + '<span>' + escapeHtml(entry['from']) + '</span></div>';
+	html+='<div class="summary-to">' + toIcon + '<span>' + escapeHtml(entry['to']) + '</span></div>';
 	html+='</td>';
 	for ( const prop of prop_names[event_sum_type[parms.event]]){
 	    let val= entry[prop];
-	    if ( typeof val === 'number' && ! val.isInteger){ if ( val < 100 ) val = val.toFixed(1); else val = val.toFixed(0); }
-	    html+='<td align=right>' + val;
+	    if ( typeof val === 'number' && ! Number.isInteger(val)){ if ( val < 100 ) val = val.toFixed(1); else val = val.toFixed(0); }
+	    html+='<td align=right>' + escapeHtml(val === undefined || val === null ? '-' : String(val));   // '-': the records carry no such value
 	}
     }
     html+='</tbody></table>';
@@ -4318,15 +4531,13 @@ function present_table( parameters, div, data){}
 
 function get_peer_data(from, to, div){
     var data=[];
-    let tz_start = adjust_to_timezone(start); let tz_end = adjust_to_timezone(end);
-    var url="elastic-get-date-type.pl?net=" + parms.net + "&index=" + event_index[parms.event] + "&event_type=" + parms.event + "&start=" + tz_start + "&end=" + tz_end + "&from=" + from + "&to=" + to;
+    let tz_start = start; let tz_end = end;   // the map's own window (no time zone shift)
+    var url="elastic-get-date-type.pl?net=" + parms.net + "&index=" + event_index[parms.event] + "&event_type=" + parms.event + "&start=" + tz_start + "&end=" + tz_end + "&from=" + encodeURIComponent(from) + "&to=" + encodeURIComponent(to);
     if (net_ip_version[parms.net]) { url += "&ip_version=" + net_ip_version[parms.net]; }
     $.getJSON( url, function(resp){
 	if (jQuery.isEmptyObject(resp.hits)) {
 	    console.log("Warning: Failed to fetch data from archive. Check archive url inn mapconfig.yml.");
 	    if (!jQuery.isEmptyObject(resp.error)) { console.log("        (\"" + resp.error.msg  + "\")");}
-	    // No topology data returned. Try sqlite-db instead.
-	    get_topology("sqlite-db");
 	    return;
 	}
         if (resp.hits && resp.hits.total.value > 0){
@@ -4334,7 +4545,7 @@ function get_peer_data(from, to, div){
             div.innerHTML = html; div['hits'+parms.event] = resp.hits.hits;
             sorttable.makeSortable( div.getElementsByClassName('sortable')[0] );
             // panel auto-updates, no need for popup update
-        } else { $("#error").html(hhmmss(new Date()) + " : No " + parms.event + " data for " + $("#datepicker").val() + " " + $("#period_input").val() + ";;"); }
+        } else { $("#error").text(hhmmss(new Date()) + " : No " + parms.event + " data for " + $("#datepicker").val() + " " + $("#period_input").val() + ";;"); }
     }).fail( function(e, textStatus, error ) { console.log("failed to get data from server :" + textStatus + ", " + error); });
 }
 
@@ -4346,6 +4557,7 @@ const index_extension={};
 // ES module top-level declarations don't leak to the global object.
 window.get_connections = function () { return get_connections.apply(this, arguments); };
 function get_connections(){
+    var load = ++_data_load;
     var index=parms.net; var etype= parms.event; var sum_etype=""; var sum_index="";
     if ( ! jQuery.isEmptyObject(event_index)) { index = event_index[parms.event]; sum_etype = event_sum_type[parms.event]; }
     else { index = index + "_" + etype; console.log("Warning: No index specified. Missing config file? Applying '", + index + "'"); }
@@ -4358,7 +4570,10 @@ function get_connections(){
 	dstart= new Date( msstart + hour * 3600*1000 ); start = dstart.toISOString(); end = new Date(dstart.getTime() + 3600*1000).toISOString(); tloss=0;
     } else {
 	var msperiod=period * 3600*1000; var msend= msstart + msperiod;
-	if ( (msend - now) > (msperiod/2) ){ if ( period > 24 ){ dstart=new Date(msstart); var cd = dstart.getDate() - dstart.getDay(); var sow = new Date(dstart.setDate(cd + 1)); msstart=sow.getTime(); $("#datepicker").datepicker('setDate', new Date(msstart)); } }
+	if ( (msend - now) > (msperiod/2) ){ if ( period > 24 ){
+	    // Back to Monday of the date's week (the date is UTC midnight); the end moves with it
+	    msstart -= ((new Date(msstart).getUTCDay() + 6) % 7) * 24*3600*1000; msend = msstart + msperiod;
+	    $("#datepicker").datepicker('setDate', new Date(msstart).toISOString().substr(0,10)); } }
 	if ( etype === "gapsum" ) msend += 5 * 60 * 1000;
 	start= new Date(msstart).toISOString(); end= new Date(msend).toISOString();
 	if ( period < 2*24 ){ tloss=1000; } else if ( period <= 7*24 ){ tloss=5000; } else { tloss=60000; }
@@ -4378,25 +4593,26 @@ function get_connections(){
 	if ( tloss > 0 && etype === "gap" ) url += "&tloss=" + tloss;
 	if (parms.debug) console.log(url);
 	$.getJSON( url, function(resp){
+	    if (load !== _data_load) return;
 	    if (jQuery.isEmptyObject(resp.hits)) {
 		console.log("Warning: Failed to fetch data from archive. Check archive url in mapconfig.yml.");
 		if (!jQuery.isEmptyObject(resp.error)) { console.log("        (\"" + resp.error.msg  + "\")"); }
-		// No topology data returned. Try sqlite-db instead.
-		get_topology("sqlite-db"); return;
 	    }
 	    if (resp.hits && resp.hits.total.value > 0){
 		var nrecs=resp.hits.total.value.toString();
 		if ( etype === "gapsum" || etype === "routesum" ){ summary=coalesce_pairs(resp.hits.hits, etype); }
 		else if ( resp.aggregations){ aggregates=resp.aggregations; summary=digest_aggregates(aggregates, $("#stats_type").val()); nrecs = count_aggregates( aggregates ); }
-		else { if (! sum_etype || start.substr(0,10) === now.toISOString().substr(0,10)) { summary=digest_es_data(etype, resp.hits.hits); } last_hits=resp.hits.hits; }
+		// (An hour is summed from its events on any day: there is no summary
+		// record for an hour, and an hour of an earlier day used to be drawn empty.)
+		else { if (! sum_etype || start.substr(0,10) === now.toISOString().substr(0,10) || period < 24) { summary=digest_es_data(etype, resp.hits.hits); } last_hits=resp.hits.hits; }
 		harvest_ip_name(summary);
 		var msg = hhmmss(new Date()) + " Found " + nrecs + " " + etype + " records for " + $("#datepicker").val() + " " + $("#period_input").val() + " ;;";
-		$("#status").html( msg );
+		$("#status").text( msg );
 		if (! jQuery.isEmptyObject(conffile) && conffile[parms.net].event_type[parms.event].asn_source ) {
 		    for (const h in last_hits) { var ab = last_hits[h]._source.from + ',' + last_hits[h]._source.to; if (linkByName[ab] && last_hits[h]._source.routechange_asn ) { linkByName[ab].asn_search += last_hits[h]._source[conffile[parms.net].event_type[parms.event].asn_source] + " "; } }
 		}
 		_paint_with_compare(summary, etype, $("#prop_select").val(), start, end);
-	    } else { taint_links([], "empty"); $("#error").html(hhmmss(new Date()) + " : No " + $("#event_type").val() + " data for " + $("#datepicker").val() + " " + $("#period_input").val() + ";;"); }
+	    } else { taint_links([], "empty"); $("#error").text(hhmmss(new Date()) + " : No " + $("#event_type").val() + " data for " + $("#datepicker").val() + " " + $("#period_input").val() + ";;"); }
 	}).fail( function(e, textStatus, error ) { console.log("### Failed to get data from server :" + textStatus + ", " + error + " url: " + url); });
     } else if ( sum_etype) {
 
@@ -4406,12 +4622,13 @@ function get_connections(){
 	if (net_ip_version[parms.net]) { sum_url += "&ip_version=" + net_ip_version[parms.net]; }
 	if (parms.debug) console.log(sum_url);
 	$.getJSON( sum_url, function(resp){
+	    if (load !== _data_load) return;
 	    if (resp.hits && resp.hits.total.value > 0){
 		var nrecs=resp.hits.total.value.toString(); summary=coalesce_pairs(resp.hits.hits, sum_etype); harvest_ip_name(summary);
 		var msg = hhmmss(new Date()) + " Got " + nrecs + " " + sum_etype + " records for " + $("#datepicker").val() + " " + $("#period_input").val() + " ;;";
-		$("#status").html( msg );
+		$("#status").text( msg );
 		_paint_with_compare(summary, etype, $("#prop_select").val(), start, end);
-	    } else { taint_links([], "empty"); $("#error").html(hhmmss(new Date()) + " : No " + sum_etype + " data for " + $("#datepicker").val() + " " + $("#period_input").val() + ";;"); }
+	    } else { taint_links([], "empty"); $("#error").text(hhmmss(new Date()) + " : No " + sum_etype + " data for " + $("#datepicker").val() + " " + $("#period_input").val() + ";;"); }
 	}).fail( function(e, textStatus, error ) { console.log("failed to get data from server :" + textStatus + ", " + error); });
     }
     if (parms.report) { $("#check").val(parms.report).trigger('change'); delete parms.report; }
@@ -4431,7 +4648,9 @@ function title_state(){
 }
 
 function init_map(){
-    if ( parms.net){ $("#network").val(parms.net); } else { parms.net = $("#network").val(); }
+    // A network the configuration does not have (an old bookmark, a mistyped
+    // address) counts as not given: the map opens on the default network.
+    if ( parms.net && net_names.indexOf(parms.net) > -1 ){ $("#network").val(parms.net); } else { parms.net = $("#network").val(); }
     update_props();
     // Colour-blind-safe palette (#5): persisted across sessions in localStorage.
     var _cbfOn = false;
@@ -4451,7 +4670,7 @@ function init_map(){
 	// today and an earlier day leaves the previous day's properties on
 	// screen, offering fields the fetched records do not carry.
 	update_props();
-	$("#next").prop('dsabled', selected_hour_is_future() ); update_url(); show_network(parms.net);
+	$("#next").prop('disabled', selected_hour_is_future() ); update_url(); show_network(parms.net);
     });
     $("#period").change( function(){ parms.period = $("#period").val(); update_props(); update_url(); get_topology(); $("#period_input").val('00:00'); });
     $("#period_input").change( function(){ parms.period_input = $("#period").val(); $("#period").val(1); parms.period = $("#period").val(); update_url(); get_topology(); });
@@ -4486,13 +4705,15 @@ function init_map(){
         make_palette(on ? 'cbf' : (parms.palette || ''));
         _paint_with_compare(summary, parms.event, $("#prop_select").val(), start, end);
         update_url();
+        // The traceroute views that are open draw with the same palette
+        document.dispatchEvent(new CustomEvent('microdep-palette-changed'));
     });
     fill_select( "stats_type", stats_types );
     $("#stats_type").change( function(){ endInitialising(); summary=digest_aggregates(aggregates, $("#stats_type").val()); _paint_with_compare(summary, parms.event, $("#prop_select").val(), start, end); update_url(); if (!initialising) $("#tabs").tabs("option", "active", 0); });
     if ( parms.node){ focus_node=parms.node; get_topology(); links_on=true; }
     $("#check").change( function(){
 	var report_type = $("#check").val(); var title = $("#check").find(":selected").text();
-	let num_tabs = $("main#tabs > ul > li").length ; let tab_id = 'tab' + num_tabs;
+	let num_tabs = new_tab_number(); let tab_id = 'tab' + num_tabs;
 	switch(report_type ){
 	case 'missing': add_tab( 'div', title, num_tabs, check_asymmetry(report_type, tab_id) ); break;
 	case 'asymmetry': add_tab( 'div', title, num_tabs, check_asymmetry(report_type, tab_id) ); break;
@@ -4503,12 +4724,11 @@ function init_map(){
 	    // (issue #124). Same archive/options as the link popup's Routes button.
 	    add_tab( 'div', title, num_tabs,
 		     '<div class="center-text" style="padding:40px"><div class="spinner"></div><p>Loading traceroute peers\u2026</p></div>' );
-	    var routes_start = new Date($("#datepicker").val()).getTime() / 1000;
+	    var routes_start = shown_start_epoch($("#datepicker").val());
 	    var routes_end   = routes_start + parms.period * 3600;
 	    var menuRoutesOpts = {
 		net: parms.net,
 		mahost: 'https://localhost:9200/',
-		verify_SSL: 0,
 		api: 'opensearch',
 		ip_version: net_ip_version[parms.net]
 	    };
@@ -4519,7 +4739,8 @@ function init_map(){
 	    break;
 	}
 	case 'heatmap':
-	    let template_url='curve-chart.html?net=' + parms.net + '&index=' + event_index[parms.event] + '&from={0}&to={1}&event=' + parms.event + '&property=h_ddelay&start=' + start + '&end=' + end + "&title=\"From {2} to {3}\"";
+	    // {0}..{3} are the cell's hosts; heatmap() encodes them as it fills them in
+	    let template_url='curve-chart.html?net=' + encodeURIComponent(parms.net) + '&index=' + encodeURIComponent(event_index[parms.event]) + '&from={0}&to={1}&event=' + encodeURIComponent(parms.event) + '&property=h_ddelay&start=' + encodeURIComponent(start) + '&end=' + encodeURIComponent(end) + '&title=%22From%20{2}%20to%20{3}%22';
 	    add_tab( 'div', title, num_tabs, 'This will be graph soon'); heatmap(tab_id, summary, $("#prop_select").val(), get_color, threshes, title_state(), template_url, open_heatmap_cell ); break;
 	case 'curve': {
 	    // Chart.js scatter of the current property across all measurements over

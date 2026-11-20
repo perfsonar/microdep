@@ -23,9 +23,6 @@ case "$1" in
 	groupadd -r perfsonar 2> /dev/null || true
 	useradd -g perfsonar -r -s /sbin/nologin -c "perfSONAR User" -d /tmp perfsonar 2> /dev/null || true
 
-	# Fix permissions 
-	chown perfsonar:perfsonar /usr/lib/perfsonar/logstash/pipeline/*raw*.conf
-
 	# Add raw data templates and policies to Opensearch setup
 	/usr/lib/perfsonar/archive/bin/commands/opensearch_config_raw_data.sh || true
 	

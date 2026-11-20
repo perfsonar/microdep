@@ -47,13 +47,14 @@ my ($opt_h, $opt_help, $opt_id, $opt_slep,
     $opt_max_small_graphs,
     $opt_head, $opt_rhead, $opt_graph, $opt_outdir,
     $opt_title, $opt_addresses, $opt_names, $opt_json,
-    $opt_jitter, $opt_threshold, $opt_owamp,
+    $opt_jitter, $opt_owamp,
     $opt_rtp,  $opt_ddelay_low, $opt_ddelay_high,
     $opt_debug, $opt_batchsize,
-    $opt_change_factor, $opt_v, $opt_version,
+    $opt_v, $opt_version,
     $opt_topoevents, $opt_topointerval,
     $opt_pslookup, $opt_pslookup_wait, $opt_ipv6,
-    $opt_follow, $opt_followinterval, $opt_config_file );
+    $opt_follow, $opt_followinterval, $opt_config_file,
+    $opt_sumperiod, $opt_memorymax );
 
 # Fetch options (if any) from commandline
 GetOptions( 'h' => \$opt_h, 'help' => \$opt_help, 'id=s' => \$opt_id, 'slep=s' => \$opt_slep, 
@@ -61,33 +62,36 @@ GetOptions( 'h' => \$opt_h, 'help' => \$opt_help, 'id=s' => \$opt_id, 'slep=s' =
 	    'max-small-graphs=s' => \$opt_max_small_graphs, 
 	    'head' => \$opt_head, 'rhead=s' => \$opt_rhead, 'graph=s' => \$opt_graph, 'outdir=s' => \$opt_outdir, 
 	    'title=s' => \$opt_title, 'addresses=s'=> \$opt_addresses, 'names=s' => \$opt_names, 'json=s' => \$opt_json,  
-	    'jitter=s' => \$opt_jitter, 'threshold' => \$opt_threshold, 'owamp=s' => \$opt_owamp,
+	    'jitter=s' => \$opt_jitter, 'owamp=s' => \$opt_owamp,
 	    'rtp=s' => \$opt_rtp, 'ddelay_low=s' => \$opt_ddelay_low, 'ddelay_high=s' => \$opt_ddelay_high,
 	    'debug=s' => \$opt_debug, 'batchsize=s' => \$opt_batchsize,
-	    'change_factor=s' => \$opt_change_factor, 'v' => \$opt_v, 'version' => \$opt_version,
+	    'v' => \$opt_v, 'version' => \$opt_version,
 	    'topoevents' => \$opt_topoevents, 'topointerval=s' => \$opt_topointerval,
 	    'pslookup=s' => \$opt_pslookup, 'wait=s' => \$opt_pslookup_wait, 'ipv6' =>\$opt_ipv6,
-	    'follow' => \$opt_follow, 'followinterval=s' => \$opt_followinterval, 'conf=s' =>\$opt_config_file
+	    'follow' => \$opt_follow, 'followinterval=s' => \$opt_followinterval, 'conf=s' =>\$opt_config_file,
+	    'sumperiod=s' => \$opt_sumperiod, 'memorymax=s' => \$opt_memorymax
     ) or $opt_h = 1;   # (Output help text on failure)
 
 if ( ! $opt_h && ! $opt_help && -e $opt_config_file ) {
     # A config file is available. Parse it and set option values.
     use YAML;
+    $YAML::LoadBlessed = 0;   # Plain data only, no objects of a class named in the file (the default since YAML 1.25)
     $config = YAML::LoadFile($opt_config_file);
     # Prepare list of supported options ( Copied for GetOptions() above!)
     my %supported_options = (
 	'h' => \$opt_h, 'help' => \$opt_help, 'id=s' => \$opt_id, 'slep=s' => \$opt_slep, 
 	    'minloss=s' => \$opt_minloss, 'win=s' => \$opt_win, 'recover=s' => \$opt_recover,
 	    'max-small-graphs=s' => \$opt_max_small_graphs, 
-	    'head' => \$opt_head, 'rhead' => \$opt_rhead, 'graph=s' => \$opt_graph, 'outdir=s' => \$opt_outdir, 
+	    'head' => \$opt_head, 'rhead=s' => \$opt_rhead, 'graph=s' => \$opt_graph, 'outdir=s' => \$opt_outdir, 
 	    'title=s' => \$opt_title, 'addresses=s'=> \$opt_addresses, 'names=s' => \$opt_names, 'json=s' => \$opt_json,  
-	    'jitter=s' => \$opt_jitter, 'threshold' => \$opt_threshold, 'owamp=s' => \$opt_owamp,
-	    'rtp=s' => \$opt_rtp, 'ddelay_low=s' => $opt_ddelay_low, 'ddelay_high=s' => \$opt_ddelay_high,
-	    'debug=s' => \$opt_debug, 'batchsize=s' => $opt_batchsize,
-	    'change_factor=s' => \$opt_change_factor, 'v' => \$opt_v, 'version' => \$opt_version,
+	    'jitter=s' => \$opt_jitter, 'owamp=s' => \$opt_owamp,
+	    'rtp=s' => \$opt_rtp, 'ddelay_low=s' => \$opt_ddelay_low, 'ddelay_high=s' => \$opt_ddelay_high,
+	    'debug=s' => \$opt_debug, 'batchsize=s' => \$opt_batchsize,
+	    'v' => \$opt_v, 'version' => \$opt_version,
 	    'topoevents' => \$opt_topoevents, 'topointerval=s' => \$opt_topointerval,
 	    'pslookup=s' => \$opt_pslookup, 'wait=s' => \$opt_pslookup_wait, 'ipv6' =>\$opt_ipv6,
-	    'follow' => \$opt_follow, 'followinterval=s' => \$opt_followinterval, 'conf=s' =>\$opt_config_file
+	    'follow' => \$opt_follow, 'followinterval=s' => \$opt_followinterval, 'conf=s' =>\$opt_config_file,
+	    'sumperiod=s' => \$opt_sumperiod, 'memorymax=s' => \$opt_memorymax
 	); 
     foreach my $opt (keys %{$config}) {
 	# Set option based on value from config file
@@ -97,13 +101,15 @@ if ( ! $opt_h && ! $opt_help && -e $opt_config_file ) {
 		${$supported_options{$opt}} = ( $config->{$opt} eq 'true' );
 	    }
 	} elsif (exists $supported_options{$opt . '=s'}) {
-	    if (! ${$supported_options{$opt . '=s'}} ) {
-		# A key-value option not yet set. Apply value from config file.
+	    if ( ! defined ${$supported_options{$opt . '=s'}} ) {
+		# A key-value option not given on the command line. Apply value from config file.
+		# (A value given there counts also when it is 0: "-memorymax 0" or "-sumperiod 0"
+		# are not to be replaced by the config file.)
 		${$supported_options{$opt . '=s'}} = $config->{$opt};
 	    }
 	} else {
 	    # Unsupported config option
-	    warn "Unsupported option '$opt' in config file '$configfile'. Ignoring."
+	    warn "Unsupported option '$opt' in config file '$opt_config_file'. Ignoring.\n"
 	}
     }
 }
@@ -126,28 +132,44 @@ $opt_addresses ||= ''; # Set source of ip-to-name mappings.
 $opt_names ||= '';     # Set source of ip-to-name mappings. 
 $opt_json ||= '';      # Enable events output in JSON format to given file ro to destination specified in file via perfsonar's JSON achive spec format. 
 $opt_jitter ||= 600;   # Emit jitter statistics at intervals.
-$opt_threshold |= '10,10,0.5';  # Threshold values for reporting, in form of a vector.
 $opt_owamp ||= '';     # Get json owamp data from url
 $opt_rtp ||= 5;        # Number of ddelays to average before test
 $opt_ddelay_low ||=  2;  # End of burst limit
 $opt_ddelay_high ||= 10; # Start of burst limit
 $opt_debug ||= 0;      # Debug level     
 $opt_batchsize ||= 0;  # Override batch size (packet count) of measurement result set produced by owamp source. 
-$opt_change_factor ||= 0.3;  # (Obsolete)
 $opt_v ||= 0;          # Flag: Be verbose
 $opt_version ||= 0;    # Flag: Show version
 $opt_topoevents ||= 0;       # Flag: Enable toplogy events
 $opt_topointerval ||= 3600;  # Min interval between topology events
-$opt_pslookup ||= "http://35.223.142.206/lookup/_search";  # API of perfSONAR Lookup Service;
+$opt_pslookup ||= "http://35.223.142.206/lookup/_search";  # API of perfSONAR Lookup Service. "off" means no lookup.
+                             # (The service answers over plain http only, and every address seen is sent to it.)
+$opt_pslookup = "" if ( lc($opt_pslookup) eq "off" );
 $opt_pslookup_wait ||= 3600; # Min interval between attempts to fetch info from ps-lookup service
 $opt_ipv6 ||= 0;             # Flag to turn on ipv6 packet analysis
 $opt_follow ||= 0;           # Flag to turn on rereading of owamp input source 
 $opt_followinterval ||= 10;  # Reread interval of owamp input source
+$opt_sumperiod = 86400 if ( ! defined $opt_sumperiod || $opt_sumperiod eq '' );  # Interval of summary records while following an input source
+$opt_sumperiod = 0 if ( lc($opt_sumperiod) eq "off" );  # 0 or "off": summary records only when the analysis is terminated
+if ( $opt_sumperiod !~ /^\d+$/ || $opt_sumperiod > 86400 ) {
+    warn "Summary period '$opt_sumperiod' is not a number of seconds up to 86400. Applying 86400.\n";
+    $opt_sumperiod = 86400;
+}
+$opt_memorymax = '1G' if ( ! defined $opt_memorymax || $opt_memorymax eq '' );  # Most memory the analysis may hold while it reads owamp data
+my $memorymax = memory_size($opt_memorymax);   # The limit in bytes. 0: no limit
+if ( ! defined $memorymax ) {
+    warn "Memory limit '$opt_memorymax' is not a number of bytes, with K, M or G if wanted, or 'off'. Applying 1G.\n";
+    $opt_memorymax = '1G';
+    $memorymax = memory_size($opt_memorymax);
+}
 $opt_config_file ||= '';     # Filename of configfile
 
 # Misc global variables
+# A send time outside these two is not a time in seconds (e.g. one in milliseconds),
+# and the packet is left out. (The upper one used to be 2030-01-01: from that day
+# on every packet would have been left out.)
 my $min_tx=946681200;
-my $max_tx=1893452400; # 2030-01-01
+my $max_tx=4102444800; # 2100-01-01
 my $maxseqreorder=1000; # 
 my $max_small_gap=10; # the max size of a small graph
 my $max_small_graphs= $opt_max_small_graphs;
@@ -172,7 +194,6 @@ my $rmq_cv;  # Conditional variable applied when reading from Rabbit message que
 my %n_normal=();  # count of normal packets for modulo
 my $jitter_period= $opt_jitter; # seconds between jitter reports
 my %jitter_last=(); # last time jitter reported
-my %jitter_values=(); # last jitter values reported
 
 my %mindelay; # minimum delay last slep
 my %minseq; # minimum delay last slep
@@ -181,6 +202,12 @@ my $packet_interval=(); # packet interval guestimate per id
 my %owamp_batch;      # Memory for sequence numbers data for owamp sessions. Applied to handle seq num wrap-arround cases.
 
 my $last_topoevent = time(); # Epoch time when last topology event was output
+
+# Summary records
+my %sum_flows=();    # Flows heard from in the current summary period
+my %sum_packets=();  # Count of packets analysed per flow in the current summary period
+my %sum_t0=();       # Start of the current summary of a flow, once the flow has had a summary record
+my $sum_next=0;      # End of the current summary period (epoch). 0 when summaries are output at termination only.
 
 my $pslookuphost;               # Ref to hash of perfSONAR Lookup Service hosts;
 my $config={};           # Config loaded from file
@@ -193,7 +220,7 @@ Analyses for gaps in packet logs (crude logs or owamp data from pscheduler).
 When gaps are found a list of statistical qos parameters is output as text or json.
 Linear regression statistics are also output to indicate the delay trend around a gap. 
 Curves visualizing the delay change before and after a gap may also be generated.
-Summary statistics are ouput when analysis is terminated.
+Summary statistics are ouput when analysis is terminated, and at intervals while an input source is followed (see -sumperiod).
 
 Options
   -h -help             Help message
@@ -210,10 +237,16 @@ Options
   -title string	       Set title for graphs. Default is '$opt_title'.
   -addresses file      Set source of ip-to-name mappings. Both '<hostname> <address>' format and perfsonar psConfig json is accepted.
   -names file	       Set source of ip-to-name mappings. '<name> <user> <dns> <ip>' format acccepted.
-  -threshold vector    Threshold values for reporting, in form of a vector '<min-jitter>,<min-ddelay>,<min-slope>'. Default is $min_jit,$min_ddelay,$min_slope .
   -owamp url           Get json owamp data from pscheduler (http://) og from rabbit message queue (ampq://)
   -follow	       Reread input source at intervals and analyse newly arrived packets. Applys only for http* owamp url. (To follow files apply '| tail -f'.)   	       
   -followinterval n    Interval for rereading input source. Default is $opt_followinterval sec.       	       
+  -sumperiod secs      Interval for summary statistics while an input source is followed (-follow, or a message queue).
+                       Each summary covers its own interval, and the analysis carries on. The intervals follow the clock
+                       in local time: with 3600 they end on the hour, with 86400 at midnight. 0 or 'off' gives summary
+                       statistics at termination only. Default is $opt_sumperiod sec.
+  -memorymax size      Most memory the analysis may hold while it reads owamp data. Above it the analysis writes its
+                       summary statistics and ends (under systemd its unit then starts it again). A number of bytes,
+                       or with K, M or G. 0 or 'off' gives no limit. Default is $opt_memorymax.
   -json file           Enable events output in JSON format to given file or to destination specified in file via perfsonar's JSON achive spec format. 
   -jitter secs         Emit jitter statistics at intervals. Default is $opt_jitter sec.
   -v		       Be verbose.
@@ -224,12 +257,11 @@ Options
   -batchsize n         Override batch size (packet count) expected when reading owamp subsession data sets
   -topoevents	       Enable output of topology events whenever a topology change is detected. Requires -json. 
   -topointerval n      Min interval (sec) between topology events. Default is $opt_topointerval
-  -pslookup url        Source url for perfSONAR lookup service hosts. Default is $opt_pslookup
+  -pslookup url        Source url for perfSONAR lookup service hosts, or 'off' for no lookup. Default is $opt_pslookup
   -wait seconds        Min no of seconds to wait between refreshing info fetched from pslookup-service. Default is $opt_pslookup_wait
   -ipv6                Analyse ipv6 packets (and ignore ipv4). Default is the opposite.
-  -conf filename       Filename to config file. Note that config file overrides CLI options.
+  -conf filename       Filename to config file. Note that CLI options override options from the config file.
     ";
-#  -change_factor f     Fraction change to cause threshold jitter report. Default is 0.3.
 
 
 if ( $opt_h || $opt_help) {
@@ -261,12 +293,6 @@ if ($opt_owamp){
     # Prepare conditional event-variable applied when reading from rabbit message queue
     $rmq_cv = AnyEvent->condvar;
 }
-
-my ( $min_jit, $min_dddelay, $min_slope) = split(',', $opt_threshold);
-my $jitter_delta={'jit'=> $min_jit/2, 'ddelay'=> $min_ddelay/2, 'slope'=>$min_slope/2};
-
-#my $change_factor= $opt_change_factor;
-#my $jitter_factor={'jit'=> $change_factor, 'ddelay'=> $change_factor, 'slope'=>$change_factor};
 
 my @heads= qw/id date time tunix x1 nloss tloss seqloss x2 seqtail overlap x3 h_n h_jit h_ddelay h_delay h_min_d h_slope_10 h_slope_20 h_slope_30 h_slope_40 h_slope_50 x4 t_n t_jit t_ddelay t_delay t_min_d t_slope_10 t_slope_20 t_slope_30 t_slope_40 t_slope_50 dTTL/;
 
@@ -304,20 +330,24 @@ if ( $opt_json){
 	if ($@) {
 	    # No valid json (or spec) found.
 	    undef $archive_spec;
-	} elsif ( ! $archive_spec->{'archiver'} eq "http" ) {
-	    print "No HTTP archiver archiver specified in JSON object:", Dumper($archive_spec) if $opt_debug > 3;
-	    # No valid spec found.
+	} elsif ( ref $archive_spec ne 'HASH' || ! defined $archive_spec->{'archiver'} ) {
+	    print "No archiver specified in JSON object:", Dumper($archive_spec) if $opt_debug > 3;
+	    # Json, but no spec (an output file that holds a single record, for one).
 	    undef $archive_spec;
-	} elsif ( ! $archive_spec->{'data'}->{'_url'} =~ /logstash-ana/ ) {
-	    print "No valid archiver url found in JSON object:", Dumper($archive_spec) if $opt_debug > 3;
-	    # No valid spec found.
-	    undef $archive_spec;
+	} elsif ( $archive_spec->{'archiver'} ne "http" ) {
+	    # A spec, but for an archiver this script cannot deliver to. It is
+	    # not a file to append the events to either.
+	    die "The archive spec in $json is for the archiver '" . $archive_spec->{'archiver'} . "', only 'http' can be used\n";
+	} elsif ( $archive_spec->{'data'}->{'_url'} !~ /logstash-ana/ ) {
+	    # A spec for another destination has always been used as it is (this
+	    # test never applied), and still is. It is likely a mistake, so say so.
+	    warn "The archive spec in $json does not deliver to logstash-ana\n";
 	}
 	close SPECFILE;
     }
     if (! defined $archive_spec) {
 	# Open file as destination for output (append mode).
-	open JSON, ">>$json" || die  "Could not open $json ; $!";
+	open(JSON, '>>', $json) or die "Could not open $json : $!\n";
 	JSON->autoflush(1);
     }
     # $coder = JSON::XS->new->ascii->pretty->allow_nonref;
@@ -374,7 +404,7 @@ if ($opt_owamp){
 	    # Inititate rereading logic for perfsonar input
 	    read_owamp_follow($opt_owamp, $opt_followinterval);
 	} else {
-	    read_owamp_curl($opt_owamp);
+	    read_owamp_url($opt_owamp);
 	}
     } elsif ($opt_owamp =~ /^amqp.*:\/\//) {
 	read_owamp_rabbitmq($opt_owamp);
@@ -385,9 +415,7 @@ if ($opt_owamp){
     read_crude();
 }
 
-foreach $id ( keys %t0 ) {
-    $duration{$id}=$last_tx{$id}-$t0{$id};
-}
+update_durations();
 
 
 if ( $opt_v ){
@@ -434,10 +462,12 @@ exit(0);
 
 ################################################################################
 sub handle_signals(){
+    # The summary is written once. When its unit is stopped the script gets the
+    # signal twice: systemd repeats it for what is still running once the shell
+    # that started the script is gone. A second one must not start all over.
+    $SIG{$_} = 'IGNORE' foreach qw(HUP INT PIPE TERM);
     # Update duration of each flow
-    foreach $id ( keys %t0 ) {
-	$duration{$id}=$last_tx{$id}-$t0{$id};
-    }
+    update_durations();
     # Make and output summary
     make_summary();
     # while ( $#ARGV >= 0) { printf "Got signal %s\n", shift @ARGV }
@@ -455,6 +485,88 @@ sub make_summary(){
 	emit_summary_json();
 	close JSON;
     }
+}
+
+sub update_durations {
+    # How long each flow has lasted: since its previous summary record, or else since its first packet
+    foreach $id ( keys %t0 ) {
+	$duration{$id}=$last_tx{$id}-( defined $sum_t0{$id} ? $sum_t0{$id} : $t0{$id} );
+    }
+}
+
+sub next_sum_time {
+    # End of the summary period that $now lies in. The periods follow the clock in
+    # local time: each day is divided into periods from midnight on, so with 3600
+    # they end on the hour and with 86400 at midnight.
+    my ($now, $period) = @_;
+    my ($mday, $mon, $year) = (localtime($now))[3,4,5];
+    my $midnight = POSIX::mktime(0, 0, 0, $mday, $mon, $year, 0, 0, -1);
+    my $next_midnight = POSIX::mktime(0, 0, 0, $mday + 1, $mon, $year, 0, 0, -1);
+    return $next_midnight if ( $period >= 86400 );
+    my $end = $midnight + ( int( ($now - $midnight) / $period ) + 1 ) * $period;
+    return $end < $next_midnight ? $end : $next_midnight;
+}
+
+sub check_sumperiod {
+    # When the current summary period has ended: output the summary records and start a new period.
+    # (Called before a batch of results is analysed, and at intervals while none arrive.)
+    return if ( ! $sum_next || time() < $sum_next );
+    update_durations();
+    if ($opt_json){
+	emit_summary_json($sum_next);
+    } else {
+	reset_summary($_) foreach ( keys %sum_flows );
+    }
+    $sum_next = next_sum_time(time(), $opt_sumperiod);
+}
+
+sub memory_size {
+    # A memory size as a number of bytes: a whole number, with K, M, G or T (steps of 1024) if wanted.
+    # 0, 'off' and 'infinity' stand for no limit and give 0. Anything else gives undef.
+    my $size = lc(shift);
+    return 0 if ( $size eq 'off' || $size eq 'infinity' );
+    return undef if ( $size !~ /^(\d+)([kmgt]?)$/ );
+    return $1 * 1024 ** { '' => 0, 'k' => 1, 'm' => 2, 'g' => 3, 't' => 4 }->{$2};
+}
+
+sub memory_in_use {
+    # The memory this process holds, in bytes: what is in RAM and what has been swapped out.
+    # Not known (undef) where /proc does not tell.
+    open(my $status, '<', '/proc/self/status') or return undef;
+    my ($bytes, $known);
+    while ( my $line = <$status> ) {
+	if ( $line =~ /^Vm(?:RSS|Swap):\s+(\d+)\s+kB/ ) {
+	    $bytes += $1 * 1024;
+	    $known = 1;
+	}
+    }
+    close $status;
+    return $known ? $bytes : undef;
+}
+
+sub check_memory {
+    # End the analysis when it holds more memory than it may (option memorymax). The summary is
+    # written first, as when the analysis is stopped. Under systemd the unit then starts it again.
+    # (Called before a batch of results is analysed.)
+    return if ! $memorymax;
+    my $in_use = memory_in_use();
+    return if ( ! defined $in_use || $in_use <= $memorymax );
+    warn sprintf("The analysis holds %d MB of memory, more than the %d MB it may (option memorymax). Writing the summary and ending.\n",
+		 POSIX::ceil($in_use / 2**20), $memorymax / 2**20);
+    handle_signals();
+}
+
+sub reset_summary {
+    # Start the summary of a flow anew: its counters, its limits on the number of events, and its
+    # place among the flows heard from (so a topology event is output when it is next heard from).
+    # This is what the analysis used to be restarted for every night. What the analysis has learned
+    # of the flow (packet window, sequence numbers, addresses) is kept.
+    my $id = shift;
+    delete $$_{$id} foreach ( \%nsmall_gaps, \%nbig_gaps, \%small_gaps, \%small_time, \%big_time, \%resets,
+			      \%late_n, \%late_sum, \%late_ss, \%dupl, \%reorder, \%dttl_count, \%least_delay,
+			      \%jitter_obs, \%dropped_gaps, \%n_gaps, \%n_small_graphs, \%n_big_graphs,
+			      \%sum_packets, \%sum_flows );
+    $sum_t0{$id} = $last_tx{$id} if defined $last_tx{$id};
 }
 
 
@@ -509,12 +621,15 @@ sub GetOwampDataFromEsmond($$$$$) {
 #name           id              dns                             ip
 
 sub emit_summary_json{
-    
+    # Output a summary record for each flow heard from in the current summary period.
+    # When called with the end of a summary period, the summary of each flow also starts anew.
+    my $period_end = shift;
+
 #    foreach $id ( sort keys %npackets){
-    foreach $id ( sort keys %src_adr){
+    foreach $id ( sort keys %sum_flows){
 	my $latems=0;
 	$latems=$late_sum{$id}/$late_n{$id} if $late_n{$id} > 0;
-	my $down_pmm=0;
+	my $down_ppm=0;
 	if ( $duration{$id} > 0 ){
 	    $down_ppm = 10**6 * ($small_time{$id} + $big_time{$id}) / $duration{$id};
 	}
@@ -564,9 +679,19 @@ sub emit_summary_json{
 	    $json{"dropped_$gap_type"}=$dropped_gaps{$id}{$gap_type};
 	}
 
-	my $sum_time = $ptx{$id} || time();  # Ensure valid timestamp for summary records  
+	if ( defined $last_tx{$id} ){
+	    # The time span the record covers
+	    $$json{"t_first"} = int( defined $sum_t0{$id} ? $sum_t0{$id} : $t0{$id} );
+	    $$json{"t_last"} = int( $last_tx{$id} );
+	}
+
+	my $sum_time = ( $sum_packets{$id} && $ptx{$id} ) || time();  # Ensure valid timestamp for summary records
+	# A record for a summary period is not to be dated after the end of that period
+	$sum_time = $period_end - 0.001 if ( $period_end && $sum_time >= $period_end );
 #	emit_json( $json, $id, $ptx{$id} );
-	emit_json( $json, $id, $sum_time );
+	my $delivered = emit_json( $json, $id, $sum_time );
+	# Start anew, unless the record could not be delivered: the next one then covers this period as well
+	reset_summary($id) if ( $period_end && $delivered );
     } 
 }
 
@@ -608,7 +733,12 @@ sub emit_json{
 	my $archive_resp;
 	# Prepare header (incl. auth type and content type)
 	$deliver_agent->default_header( %{$archive_spec->{'data'}->{'_headers'}} );
-	if ( ! $archive_spec->{'data'}->{'verfify-ssl'}) {
+	# The certificate of the archive is checked unless the spec says not to
+	# ("verify-ssl": false, as the specs perfSONAR generates do). The key was
+	# misspelled here, so the setting was never read and no certificate was
+	# ever checked.
+	my $verify_ssl = $archive_spec->{'data'}->{'verify-ssl'};
+	if ( defined $verify_ssl && ! $verify_ssl ) {
 	     # Accept any SSl cert
 	    $deliver_agent->ssl_opts( verify_hostname => 0, SSL_verify_mode => IO::Socket::SSL::SSL_VERIFY_NONE); 
 	}
@@ -619,7 +749,8 @@ sub emit_json{
 	    $archive_resp = $deliver_agent->post($archive_spec->{'data'}->{'_url'}, Content => $json_data );
 	}
 	if (defined $archive_resp) {
-	    print "Response when sending JSON: ", Dumper($archive_resp) if $opt_debug > 3;
+	    # Status and content only: the response object also holds the request, with its Authorization header.
+	    print "Response when sending JSON: ", $archive_resp->status_line, "\n", $archive_resp->decoded_content, "\n" if $opt_debug > 3;
 	    if ($archive_resp->{'_rc'} != 200) {
 		warn "Failed to send JSON document to ", $archive_spec->{'data'}->{'_url'},  " with return code ", $archive_resp->{'_rc'}; 
 	    } else {
@@ -629,19 +760,24 @@ sub emit_json{
 		    warn "Failed to send JSON document to" . $archive_spec->{'data'}->{'_url'}; 
 		}
 		# Success!
+		return 1;
 	    }
 	}
     } else {
-	# Output to filehandle
-	print JSON $coder->encode($new ) ."\n" || warn "JSON print failed : $!";
+	# Output to filehandle. A record that could not be written counts as not
+	# delivered, like one the receiver did not take.
+	return 1 if print JSON $coder->encode($new ) ."\n";
+	warn "JSON print failed : $!\n";
+	JSON->clearerr;   # (the file handle keeps its error otherwise, and every later print would count as failed)
     }
+    return 0;   # Not delivered
 }
 
 ################################################################################
 
 sub get_addresses {
     $file=shift;
-    if ( open ADRS, "<$file" ){
+    if ( open ADRS, '<', $file ){
 	# Read the whole file and check if it contains perfsonar psconfig json data
 	read ADRS, my $psconfig_content_str, -s ADRS;
 	my $psconfig_content;
@@ -670,7 +806,7 @@ sub get_addresses {
 
 sub get_names {
     $file=shift;
-    if ( open NAMES, "<$file" ){
+    if ( open NAMES, '<', $file ){
 	while(<NAMES>){
 	    next if /^\s*#/;
 	    my ($name, $user, $dns, $ip)=split;
@@ -726,6 +862,18 @@ sub store_geopos{
     $geopos{$ip}{'ip'} = $ip;
 }
 
+sub pslookup_query {
+    # Post a query to the lookup service. Returns the decoded answer, or undef
+    # when there is none that can be read: no connection, an error status, or
+    # something that is not json. The analysis then goes on without a position.
+    my ($agent, $url, $query_data, $ip) = @_;
+    my $resp = $agent->post($url, 'Content-Type' => 'application/json', Content => $query_data );
+    print "pslookup for ", $ip, ":\n", Dumper($resp) if $opt_debug > 3;
+    return undef unless ( defined $resp && $resp->is_success );
+    my $answer = eval { decode_json( $resp->content ) };
+    return ( ref $answer eq 'HASH' ) ? $answer : undef;
+}
+
 sub validate_ip{
     # Check validity of ip-address (ipv4 and ipv6), and attempt to fix if possible
     # Attempt to find geo-position also
@@ -776,57 +924,47 @@ sub validate_ip{
 	    }
 	}
     }
-    if (! exists($geopos{$ip}) || $geopos{$ip}{'refresh'} < time() ) {
+    if ( $opt_pslookup && ( ! exists($geopos{$ip}) || $geopos{$ip}{'refresh'} < time() ) ) {
 	# Attempt to fetch geo coordinates from perfSONAR's Lookup Service
 	my $opensearch_api = $opt_pslookup;
-	# Prepare to post json query to fetch host or interface record/document matching current ip
-	my $query_data = '{ "query": { "bool": { "filter": [
-  	     { "bool": { "should": [
-       	       { "bool": { "must" : [
-	         {"term": {"type": "host" }},
-	         {"term": {"host-name": "' . $ip . '"}}
-       	       ]}},
-       	       { "bool": { "must" : [
-                 {"term": {"type": "interface"}},
-	         {"term": {"interface-addresses": "' . $ip . '"}}
-               ]}}
-  	     ]}},
-  	     {"range": {"expires": {"gt": "now" }}}
-	   ]}}, "sort": [ {"type": "asc"} ], "size": 1 }';
-#	my $query_data = '{ "query": { "bool": { "should": [
-#{ "bool": { "must": [ {"term": {"type": "host"}}, {"term": {"host-name": "' . $ip . '"}}]}},
-#{ "bool": { "must": [ {"term": {"type": "interface"}}, {"term": {"interface-addresses": "' . $ip . '"}}]}} 
-#        ], "filter": [{"range": {"expires": {"gt": "now"}}}]}}, "size": 1}';
-	# Run query
-	my $query_req = LWP::UserAgent->new;
-	my $pslookup_resp = $query_req->post($opensearch_api, 'Content-Type' => 'application/json', Content => $query_data );
-	if (defined $pslookup_resp) {
-	    print "pslookup for ", $ip, ":\n", Dumper($pslookup_resp) if $opt_debug > 3;
-	    $pslookup = decode_json $pslookup_resp->{'_content'};
-	    if (%{$pslookup} && $pslookup->{'hits'} && $pslookup->{'hits'}->{'total'}{'value'} > 0) {
-		# Valied respons. Check type.
-		if ($pslookup->{'hits'}->{'hits'}[0]->{'_source'}->{'type'}[0] eq "host") {
-		    # Host record/document found. Store geopos from document.
+	# Prepare to post json query to fetch host or interface record/document matching current ip.
+	# The query is built as a structure and then encoded, so the address is
+	# data in it whatever the address holds.
+	my $query_data = encode_json( { "query" => { "bool" => { "filter" => [
+	     { "bool" => { "should" => [
+	       { "bool" => { "must" => [
+	         { "term" => { "type" => "host" } },
+	         { "term" => { "host-name" => "$ip" } }
+	       ] } },
+	       { "bool" => { "must" => [
+	         { "term" => { "type" => "interface" } },
+	         { "term" => { "interface-addresses" => "$ip" } }
+	       ] } }
+	     ] } },
+	     { "range" => { "expires" => { "gt" => "now" } } }
+	   ] } }, "sort" => [ { "type" => "asc" } ], "size" => 1 } );
+	# Run query. With a time limit: a service that does not answer must not hold up the analysis.
+	my $query_req = LWP::UserAgent->new( timeout => 10 );
+	my $pslookup = pslookup_query($query_req, $opensearch_api, $query_data, $ip);
+	if ($pslookup && $pslookup->{'hits'} && $pslookup->{'hits'}->{'total'}{'value'} > 0) {
+	    # Valied respons. Check type.
+	    if ($pslookup->{'hits'}->{'hits'}[0]->{'_source'}->{'type'}[0] eq "host") {
+		# Host record/document found. Store geopos from document.
+		store_geopos($ip, $pslookup->{'hits'}->{'hits'}[0]->{'_source'});
+	    } elsif ($pslookup->{'hits'}->{'hits'}[0]->{'_source'}->{'type'}[0] eq "interface" && $pslookup->{'hits'}->{'hits'}[0]->{'_source'}->{'uri'}) {
+		# Interface with ip found. Apply uri to find parent host for interface.
+		$query_data = encode_json( { "query" => { "bool" => { "filter" => [
+		    { "term" => { "type" => "host" } },
+		    { "term" => { "host-net-interfaces" => $pslookup->{'hits'}->{'hits'}[0]->{'_source'}->{'uri'} } },
+		    { "range" => { "expires" => { "gt" => "now" } } }
+		  ] } }, "size" => 1 } );
+		$pslookup = pslookup_query($query_req, $opensearch_api, $query_data, $ip);
+		if ($pslookup && $pslookup->{'hits'} && $pslookup->{'hits'}->{'total'}{'value'} > 0 && $pslookup->{'hits'}->{'hits'}[0]->{'_source'} ) {
+		    # Parent host found. Store position if available.
 		    store_geopos($ip, $pslookup->{'hits'}->{'hits'}[0]->{'_source'});
-		} elsif ($pslookup->{'hits'}->{'hits'}[0]->{'_source'}->{'type'}[0] eq "interface" && $pslookup->{'hits'}->{'hits'}[0]->{'_source'}->{'uri'}) {
-		    # Interface with ip found. Apply uri to find parent host for interface.
-		    $query_data = '{ "query": { "bool": { "filter": [
-		        {"term": {"type": "host"}},
-     		        {"term": {"host-net-interfaces": "' . $pslookup->{'hits'}->{'hits'}[0]->{'_source'}->{'uri'} . '"}},
-		        {"range": {"expires": {"gt": "now"}}}
- 		      ]}}, "size": 1}';
-		    $pslookup_resp = $query_req->post($opensearch_api, 'Content-Type' => 'application/json', Content => $query_data );
-		    if (defined $pslookup_resp) {
-			print "pslookup for ", $ip, ":\n", Dumper($pslookup_resp) if $opt_debug > 3;
-			$pslookup = decode_json $pslookup_resp->{'_content'};
-			if (%{$pslookup} && $pslookup->{'hits'} && $pslookup->{'hits'}->{'total'}{'value'} > 0 && $pslookup->{'hits'}->{'hits'}[0]->{'_source'} ) {
-			    # Parent host found. Store position if available.
-			    store_geopos($ip, $pslookup->{'hits'}->{'hits'}[0]->{'_source'});
-			}
-		    }
 		}
 	    }
-	}	
+	}
 	# Set refresh interval for geopos info.
 	$geopos{$ip}{'refresh'} = time() + $opt_pslookup_wait;
     }
@@ -870,7 +1008,7 @@ sub read_owamp_json($){
 
 sub read_owamp_file{
     my $file=shift;
-    open OWAMP, "<$file" || die 'Could not open ' . $file . ' because ' . $!;
+    open(OWAMP, '<', $file) or die 'Could not open ' . $file . ' because ' . $! . "\n";
 
     while(<OWAMP>){
 	chomp();
@@ -880,43 +1018,39 @@ sub read_owamp_file{
 }
 
 
-sub read_owamp_curl{
+sub read_owamp_url{
+    # Read the results once from a url. The url comes from the command line
+    # or the config file: it is fetched by the script itself and does not
+    # pass through a shell.
     my $url=shift;
-    $data=`curl -k -s $url`;
-    read_owamp_json( $data);
-}
-
-sub read_owamp {
-    my $url=shift;
-    $ENV{'PERL_LWP_SSL_VERIFY_HOSTNAME'} = 0;
-    $ENV{PERL_NET_HTTPS_SSL_SOCKET_CLASS} = 'Net::SSL';
-    my $resp=get($url);
-    if ( $resp){
-	read_owamp_json($resp);
-    } else {
-	printf 'error getting url:' . $url . " code: " . $!; 
-    }
-}
-sub read_owamp_ua {
-    my $url=shift;
-    $ENV{'PERL_LWP_SSL_VERIFY_HOSTNAME'} = 0;
-    $ENV{PERL_NET_HTTPS_SSL_SOCKET_CLASS} = 'Net::SSL';
     my $ua = LWP::UserAgent->new;
-    $ua->ssl_opts( verify_hostname => 0); # certs don't verify in ps-land
-    My $resp = $ua->get($url);
+    $ua->ssl_opts( verify_hostname => 0, SSL_verify_mode => IO::Socket::SSL::SSL_VERIFY_NONE);  # Accept any SSl cert
+    my $resp = $ua->get($url);
     if ( $resp->is_success ){
 	read_owamp_json( $resp->content);
     } else {
-	print $resp->content;
+	( my $shown = $url ) =~ s{://[^/@\s]*@}{://...@};   # no credentials in the log
+	warn "Could not read " . $shown . " : " . $resp->status_line . "\n";
     }
 }
 
 
 sub owamp_ana($){
+    # Analyse one batch of results. A batch that cannot be read, or that does
+    # not have the expected shape, is reported and skipped: it must not stop
+    # the analysis of the batches that follow.
+    my $payload=shift;
+    check_memory();
+    eval { owamp_ana_batch($payload); 1 }
+	or warn "Skipping a batch of results that could not be analysed: " . ( ( split /\n/, "$@" )[0] || "unknown error" ) . "\n";
+}
+
+sub owamp_ana_batch {
     my $payload=shift;
 
     # Batch of json data ready for analysis
     my $data = decode_json($payload);
+    die "not a json object\n" unless ( ref $data eq 'HASH' );
     print Dumper($data) if $opt_debug > 3;
 
 
@@ -926,6 +1060,9 @@ sub owamp_ana($){
 
 #	(my $src, my $dst)=($data->{'test'}->{'spec'}->{'source-node'}, $data->{'test'}->{'spec'}->{'dest-node'} );
 	(my $src, my $dst)=($data->{'test'}->{'spec'}->{'source'}, $data->{'test'}->{'spec'}->{'dest'} );
+	# A flow is identified by its two ends: without both there is nothing to analyse
+	die "no source or destination in the test spec\n"
+	    if ( ! defined $src || ! defined $dst || ref $src || ref $dst || $src eq '' || $dst eq '' );
 
 	my $ip_version = $data->{'test'}->{'spec'}->{'ip-version'} || 4;
 
@@ -937,9 +1074,10 @@ sub owamp_ana($){
 	
 	# Record/update source and dest data 
 	$opt_id = $src . "_" . $dst;   # Set global id for flow since analyze_packet() also can rely on this
-	my $new_flow = ! $src_adr{$opt_id} || ! $dst_adr{$opt_id} ;
+	my $new_flow = ! $sum_flows{$opt_id};   # Not yet heard from in the current summary period
 	$src_adr{$opt_id}=validate_ip($src) if ! $src_adr{$opt_id} ;
 	$dst_adr{$opt_id}=validate_ip($dst) if ! $dst_adr{$opt_id} ;
+	$sum_flows{$opt_id}=1;
 	$src_name{$opt_id}=get_name($src_adr{$opt_id});
 	$dst_name{$opt_id}=get_name($dst_adr{$opt_id});
 
@@ -951,7 +1089,7 @@ sub owamp_ana($){
 	    }
 	    if (time() - $last_topoevent > $opt_topointerval) {
 		# Output topology events for all observed src + dst pair
-		foreach my $id_ (keys  %src_adr) {
+		foreach my $id_ (keys %sum_flows) {
 		    emit_topology_json($id_);
 		}
 		$last_topoevent = time();
@@ -984,14 +1122,16 @@ sub owamp_ana($){
 		my $seq=$probepacket->{'seq-num'};
 		my $uniq_seq;
 		# Adjust seq num attempting to make it unique across batches...
-		$owamp_batch{$opt_id} = { 'pre_tx' => 0, 'pre_seq' => 0, 'seq_base' => 0, 'pre_seq_base' => 0 } if ( ! exists($owamp_batch{$opt_id}) );
+		$owamp_batch{$opt_id} = { 'pre_tx' => 0, 'pre_seq' => 0, 'seq_base' => 0, 'pre_seq_base' => 0, 'size' => $batchsize } if ( ! exists($owamp_batch{$opt_id}) );
 		if ( $owamp_batch{$opt_id}->{'pre_tx'} > 0 && $tx < $owamp_batch{$opt_id}->{'pre_tx'} && $seq > $owamp_batch{$opt_id}->{'pre_seq'} ) {
 		    # Packet from previous batch
 		    $uniq_seq = $seq + $owamp_batch{$opt_id}->{'pre_seq_base'};
 		} elsif ($tx > $owamp_batch{$opt_id}->{'pre_tx'} && $seq < $owamp_batch{$opt_id}->{'pre_seq'} ) {
-		    # New batch / session. Increase base seq num to be added.
+		    # New batch / session. Increase base seq num by the size of the batch that
+		    # has ended: the batches of a flow are not always of the same size.
 		    $owamp_batch{$opt_id}->{'pre_seq_base'} = $owamp_batch{$opt_id}->{'seq_base'};
-		    $owamp_batch{$opt_id}->{'seq_base'} += $batchsize;
+		    $owamp_batch{$opt_id}->{'seq_base'} += $owamp_batch{$opt_id}->{'size'} || $batchsize;
+		    $owamp_batch{$opt_id}->{'size'} = $batchsize;
 		    $uniq_seq = $seq + $owamp_batch{$opt_id}->{'seq_base'};
 		} else {
 		    # Packet from current batch
@@ -1027,31 +1167,36 @@ sub read_owamp_follow{
     if ($url_str =~ /^http.*:\/\/\S*\/opensearch\/*$/ ){
 	# Url seems to be a ref to a perfsonar archive with opensearch.
 	$url_str .= "/pscheduler_raw_latencybg/_search";
+	( my $shown = $url_str ) =~ s{://[^/@\s]*@}{://...@};   # no credentials in the log
 	my $query_req = LWP::UserAgent->new;
 	$query_req->ssl_opts( verify_hostname => 0, SSL_verify_mode => IO::Socket::SSL::SSL_VERIFY_NONE);  # Accept any SSl cert
+	$sum_next = next_sum_time(time(), $opt_sumperiod) if $opt_sumperiod;
 	while( 1 ) {
 	    # Loop until interrupted
+	    check_sumperiod();
 	    my $search_query = owamp_search_query($date_last_read_rec); 
 	    my $owamp_resp = $query_req->post($url_str, 'Content-Type' => 'application/json', Content => $search_query );
 	    if (defined $owamp_resp) {
-		print "owamp data from ", $url_str, ":\n", Dumper($owamp_resp) if $opt_debug > 3;
+		print "owamp data from ", $shown, ":\n", $owamp_resp->status_line, "\n", $owamp_resp->decoded_content, "\n" if $opt_debug > 3;
 		if ($owamp_resp->{'_rc'} == 200) {
 		    # Successfull request. Decode response.
-		    $owamp_data = decode_json $owamp_resp->{'_content'};
-		    if (%{$owamp_data} && $owamp_data->{'hits'} && $owamp_data->{'hits'}->{'total'}{'value'} > 0 ) {
+		    # (An answer that is not json is taken as no records, and asked for again next round)
+		    $owamp_data = eval { decode_json $owamp_resp->{'_content'} };
+		    if (ref $owamp_data eq 'HASH' && $owamp_data->{'hits'} && $owamp_data->{'hits'}->{'total'}{'value'} > 0 ) {
 			# Record/docs found
 			foreach $result (@{$owamp_data->{'hits'}->{'hits'}}) {
 			    # Analyse each result-set found
+			    check_sumperiod();
 			    owamp_ana(encode_json($result->{'_source'}));
 			    # Ensure only new recordes are fetch in next loop
 			    $date_last_read_rec = $result->{'_source'}->{'@timestamp'};
 			}
 		    }
 		} else {
-		    print "Warning: Failed to access ", $url_str, " (http-rc: ", $owamp_resp->{'_rc'}, ")\n" if $opt_debug > 3;
+		    print "Warning: Failed to access ", $shown, " (http-rc: ", $owamp_resp->{'_rc'}, ")\n" if $opt_debug > 3;
 		}
 	    } else {
-		warn "Missing response from $url_str." if ($opt_v || $opt_debug > 1);
+		warn "Missing response from $shown." if ($opt_v || $opt_debug > 1);
 	    }
 	    # Wait and try again
 	    sleep $followinterval;
@@ -1144,6 +1289,7 @@ sub read_owamp_rabbitmq{
 					# Analyse message payload
 					$payload = $msg->{body}->payload;
 					print "Read data from rmq. Analysing...\n" if $opt_debug > 2;
+					check_sumperiod();
 					owamp_ana($payload);
 				    }
 				    # Tell "main loop" to stop waiting for more, i.e. consume only single message
@@ -1164,6 +1310,7 @@ sub read_owamp_rabbitmq{
 				# Analyse message payload
 				$payload = $msg->{body}->payload;
 				print "Read data from rmq. Analysing...\n" if $opt_debug > 2;
+				check_sumperiod();
 				owamp_ana($payload);
 			    }
 			    # Tell "main loop" to stop waiting for more, i.e. consume only single message
@@ -1209,11 +1356,21 @@ sub read_owamp_rabbitmq{
 		);
 	},
 	on_failure => $rmq_cv,
+	# A connection that is closed or lost later on ends the reading as well. (Without this
+	# the script stayed, waiting for messages that would never come.)
+	on_close => $rmq_cv,
+	on_read_failure => $rmq_cv,
 	);
     
+    # A summary period may end while no messages arrive, so the clock is looked at regularly as well
+    $sum_next = next_sum_time(time(), $opt_sumperiod) if $opt_sumperiod;
+    my $sum_timer;
+    $sum_timer = AnyEvent->timer( after => 10, interval => 10, cb => \&check_sumperiod ) if $opt_sumperiod;
+
     # Subroutine "main loop" - wait for consumption to complete 
     print "Waiting for rmq input...\n" if $opt_debug > 2;
     $rmq_cv->recv;
+    warn "Reading from Rabbit message queue has ended (the connection failed or was closed).\n";
 }
 
 
@@ -1281,9 +1438,10 @@ sub analyze_packet {
 	$id=get_name($src);
     }
 
-    my $new_flow = ! $src_adr{$id} || ! $dst_adr{$id} ;
+    my $new_flow = ! $sum_flows{$id};   # Not yet heard from in the current summary period
     $src_adr{$id}=$src if ! $src_adr{$id} ;
     $dst_adr{$id}=$dst if ! $dst_adr{$id} ;
+    $sum_flows{$id}=1;
     $src_name{$id}=get_name($src);
     $dst_name{$id}=get_name($dst);
 
@@ -1295,7 +1453,7 @@ sub analyze_packet {
 	}
 	if (time() - $last_topoevent > $opt_topointerval) {
 	    # Output topology events for all observed src + dst pair
-	    foreach my $id_ (keys  %src_adr) {
+	    foreach my $id_ (keys %sum_flows) {
 		emit_topology_json($id_);
 	    }
 	    $last_topoevent = time();
@@ -1313,6 +1471,7 @@ sub analyze_packet {
     $last_tx{$id}=$tx;
     
     $npackets{$id}++;
+    $sum_packets{$id}++;
     my $dt=0;
     my $bufferit=1;
     
@@ -1397,7 +1556,7 @@ sub analyze_packet {
 		$late_ss{$id}+=$dt*$dt;
 	    } elsif ( $dseq > (-$maxseqreorder) ){ # reordered
 		$reorder{$id}++;
-		undef $lost{$id}{$seq};
+		$lost{$id}=1;   # (an entry of the table as well, before)
 		$bufferit=0;
 	    } else { # reset
 		$resets{$id}++;
@@ -1434,10 +1593,11 @@ sub analyze_packet {
 		    $small_gaps{$id} += $dseq-1;
 		    $small_time{$id} += $tx - $ptx{$id} - &p_interval($id);
 		}
-		# note which packets are lost
-		foreach $lost ( $pseq{$id}+1 .. $seq-1 ){
-		    $lost{$id}{$lost}=1;
-		}
+		# note that packets are lost. (Every lost packet used to get an entry in a
+		# table here, of which only "is there any" was ever asked. For a long
+		# outage, or a record with an odd sequence number, that was millions of
+		# entries.)
+		$lost{$id}=1;
 		$gap_end{$id}=$_;
 		$gap_end_seq{$id}=$seq;
 	    }
@@ -1512,35 +1672,6 @@ sub get_min {
 }
 
 ################################################################################
-# keep track of last jitter reports
-
-sub jitter_change {
-    my ( $id, $jit, $ddelay, $slope)=@_;
-    if (! defined($jitter_values{$id})
-	|| val_change( $id, 'jit', $jit)
-	|| val_change( $id, 'ddelay', $ddelay)
-	|| val_change( $id, 'slope', $slope)
-	){
-	$jitter_values{$id}={'jit'=> $jit, 'ddelay'=> $ddelay, 'slope'=> $slope};
-	return 1;
-    }
-    return 0;  
-}
-
-sub val_change{
-    my ($id, $var, $val)=@_;
-    #    if ( abs (abs $val - $jitter_values{$id}->{$var} ) > $jitter_delta->{$var} ){
-    my $prev=$jitter_values{$id}->{$var};
-    my $delta = $val - $prev;
-    
-#    if ( abs ( $delta ) > $jitter_factor->{$var} * $prev ){
-    if ( abs ( $delta ) > $jitter_delta->{$var} ){
-	return 1; # true
-    }
-    return 0; # false
-}
-
-################################################################################
 sub check_jitter{
     my $id = shift;
     my $end=$#{$slep_data{$id}};
@@ -1597,7 +1728,7 @@ sub check_jitter{
 	if ( ! $jitter_data{$id}{start} ){
 	    $jitter_data{$id}{start} = $tstart;
 	}
-	if ( ! $jitter_data{$id}{high_ddlay} && $indicator > $opt_ddelay_high ){
+	if ( ! $jitter_data{$id}{high_ddelay} && $indicator > $opt_ddelay_high ){
 	    $jitter_data{$id}{high_ddelay} = $indicator;
 	    $jitter_data{$id}{ddelay_acc} = $ddelay;
 	}
@@ -1611,25 +1742,25 @@ sub report_summary_jitter{
 	"event_type" => "jitter",
 	"report_type" => "interval",
 	"tloss" => ( $jitter_data{$id}{end} - $jitter_data{$id}{start} - &p_interval( $id ) ) * 1000,  # in ms
-	"h_n" => sum( \@{$jitter_data{$id}{n}} ),
-	"h_jit" => median( $jitter_data{$id}{jit} )->query,
-	"h_ddelay" => median( $jitter_data{$id}{ddelay} )->query,
-	"h_delay" => median( $jitter_data{$id}{delay} )->query,
-	"h_min_d" => median( $jitter_data{$id}{min_d} )->query,
+	"h_n" => sum( \@{$jitter_data{$id}{n}} ) * 1,
+	"h_jit" => median( $jitter_data{$id}{jit} )->query * 1.0, 
+	"h_ddelay" => median( $jitter_data{$id}{ddelay} )->query * 1.0,
+	"h_delay" => median( $jitter_data{$id}{delay} )->query * 1.0,
+	"h_min_d" => median( $jitter_data{$id}{min_d} )->query * 1.0,
 	# "rtx" => median( $jitter_date{$id}{rtx} )->query,
 	# "rdelay" => $jitter_data{$id}{rdelay},
 	# slopes not computed for jitter
 	# "slopes" => median( $jitter_data{$id}{slopes} ),
-	"h_slope_10" => median( $jitter_data{$id}{slope_10} )->query,
+	"h_slope_10" => median( $jitter_data{$id}{slope_10} )->query * 1.0,
 	# "h_slope_20" => median( $jitter_data{$id}{slope_20} )->query,
 	# "h_slope_30" => median( $jitter_data{$id}{slope_30} )->query,
 	# "h_slope_40" => median( $jitter_data{$id}{slope_40} )->query,
 	# "h_slope_50" => median( $jitter_data{$id}{slope_50} )->query,
 	    
-	"h_jit_sdv" => stddev( $jitter_data{$id}{jit} )->query,
-	"h_ddelay_sdv" => stddev( $jitter_data{$id}{ddelay} )->query,
-	"h_delay_sdv" => stddev( $jitter_data{$id}{delay} )->query,
-	"h_slope_10_sdv" => stddev( $jitter_data{$id}{slope_10} )->query
+	"h_jit_sdv" => stddev( $jitter_data{$id}{jit} )->query * 1.0,
+	"h_ddelay_sdv" => stddev( $jitter_data{$id}{ddelay} )->query * 1.0,
+	"h_delay_sdv" => stddev( $jitter_data{$id}{delay} )->query * 1.0,
+	"h_slope_10_sdv" => stddev( $jitter_data{$id}{slope_10} )->query * 1.0
     };
     if ( $jitter_data{$id}{high_ddelay} ){
 	$$json{report_type} = "threshold" ;
@@ -1788,13 +1919,10 @@ sub rx{
 sub emit_stats{
     my $id=shift;
 
-    my @lostseq= ();
-    @lostseq= keys %{$lost{$id}}; #  if %lost{$id};
-
 #    print "head###########\n",@{$head{$id}}, "tail ####\n",@{$tail{$id}};
 #    printf "head %3d %s  tail  %3d %s\n", $#{$head{$id}}+1, &report_delay($head{$id}),   
 
-    if ( $#lostseq >= 0 ){ # still lost packets later (reorder)
+    if ( $lost{$id} ){ # still lost packets later (reorder)
 	my $h=shift(@{$head{$id}});
 	my $t=shift(@{$tail{$id}});
 	$print_line .= sprintf "head %s  tail  %s %5d\n", $$h{line}, $$t{line}, shift(@{$dttl{$id}});
@@ -1808,7 +1936,7 @@ sub emit_stats{
 #    $get_tail{$id}=0;
 #    $ntail{$id}=0;
     $tail{$id}=();
-    $lost{$id}=();
+    $lost{$id}=0;
 
 }
 
@@ -2041,9 +2169,9 @@ sub emit_event_json{
     if ( $$line =~ /\d\d\d\d-\d\d-\d\d\s+\d\d:/){ #looks like report line : yyy-mm-dd hh:
 	my @f=split(/\s+/, $$line);
 	my $from=$f[$hix{id}];
-	my $o;
+	my $to;
 	if ( $dst_name{$id}){
-	    $to = $dst_name{$id};x
+	    $to = $dst_name{$id};
 	} else {
 	    $to=`hostname`; chomp($to);
 	}

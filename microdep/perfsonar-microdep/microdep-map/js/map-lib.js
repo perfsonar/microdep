@@ -120,6 +120,7 @@ export function get_thresholds( hits, prop){
 	    var interval=max-min;
 	    var logint=0;
 	    var length= colors.length;
+	    var i;
 	    if ( interval > 100 && min > 0 && max / min > 100 ){ // go logarithmic
 		logint = Math.log10(interval);
 		var incr = logint / length;
@@ -128,10 +129,24 @@ export function get_thresholds( hits, prop){
 		}
 	    } else { // linear scale
 		var incr = (max - min) / length;
-		var i;
 		for (i=1; i< length; i++){
 		    thresh.push( round_number( min + (incr * i) ) );
 		}
+	    }
+	    // A scale needs thresholds strictly above the minimum and strictly
+	    // increasing. With every link at the same value - say 0 failed routes -
+	    // the interval is 0, every threshold equals the minimum (and rounding 0
+	    // even gives NaN), and the strict "value < threshold" test put every
+	    // link, the zeros included, in the worst colour (issue #163). Rounding
+	    // can collapse a tiny interval the same way. Then grade from the
+	    // minimum upwards in steps of its own size, so the value seen is the
+	    // best colour and anything larger climbs the scale.
+	    var usable = thresh.length > 0 && thresh[0] > min &&
+		thresh.every(function (t, k) { return typeof t === 'number' && !isNaN(t) && (k === 0 || t > thresh[k - 1]); });
+	    if ( ! usable ){
+		var step = min > 0 ? min : 1;
+		thresh = [];
+		for (i=1; i< length; i++){ thresh.push( min + step * i ); }
 	    }
 	}
     }
@@ -186,7 +201,7 @@ export function  make_prop_select(id, names, desc, long_desc = {}){
 */
 
 export function sort_hits(a ,b){
-    if ( a._source.from === b._sorce.from){
+    if ( a._source.from === b._source.from){
 	return a._source.to.localeCompare( b._source.to );
     } else {
 	return a._source.from.localeCompare( b._source.from );
@@ -200,10 +215,16 @@ export function max( max, val){
 	return Math.max(max, val);
 }
 
-export function round_number(num){
-    var digits=Math.floor(Math.log10(num));
-    var round=Math.round( num / 10**digits) * 10**digits;
-    return round;
+// Round to a number of significant digits: one unless more are asked for (the
+// steps of a scale take one, a value that is shown takes two). Zero stays zero
+// and a negative number keeps its sign - both used to come out as NaN - and
+// what is not a number is handed back as it is.
+export function round_number(num, digits){
+    if ( typeof num !== 'number' && ( typeof num !== 'string' || num.trim() === '' ) ) return num;
+    var n = Number(num);
+    if ( ! isFinite(n) ) return num;
+    digits = Math.min(100, Math.max(1, Math.floor(digits) || 1));
+    return Number( n.toPrecision(digits) );
 }
 
 export function zero_fill(n){
@@ -224,16 +245,28 @@ export function sort_diff(a , b){
 
 
 
+// The number for a new tab: the count of the items in the tab bar, as it always
+// was, unless a tab with that number is open - then the next number that is free.
+// (After an earlier tab is closed the count points at a number still in use: the
+// new tab then got the id of an open one, and its content went into that one.)
+export function new_tab_number(){
+    let n = $("main#tabs > ul > li").length;
+    while ( document.getElementById('tab' + n) ) n++;
+    return n;
+}
+
 export function add_tab(type, title, num_tabs, html){
 
     let divid='tab' + num_tabs;
 
+    // The title is text - host names and URL parameters end up in it - so it
+    // is escaped; `html` is the panel's markup and goes in as it is.
     // IMPORTANT: use a direct-child selector (`> ul`) so we only target the
     // top-level tab-nav. Without it, jQuery would append the new <li> to
     // every nested <ul> inside main#tabs (the LS-tab nav, the tracetree-tab
     // nav etc.), producing phantom duplicates of the new tab.
     let new_tab=$("main#tabs > ul").append(
-        "<li><a href='#" + divid + "' title='" + title + "'>#" + num_tabs + ' ' + title + "</a>"
+        "<li><a href='#" + divid + "' title='" + escapeHtml(title) + "'>#" + num_tabs + ' ' + escapeHtml(title) + "</a>"
 	    + '<span class="ui-icon ui-icon-close" role="presentation">Remove Tab</span>'
 	    +"</li>"
     );
@@ -351,7 +384,14 @@ export function get_parms() {
         .split("&")
         .forEach(function (item) {
 	    tmp = item.split("=");
-	    parms[tmp[0]] = decodeURIComponent( tmp[1] );
+	    // decodeURIComponent throws on a value that is not valid percent-encoding
+	    // (a stray "%"). Such a parameter counts as not given, so that the page
+	    // still opens.
+	    try {
+		parms[tmp[0]] = decodeURIComponent( tmp[1] );
+	    } catch (e) {
+		console.log("Parameter '" + tmp[0] + "' of the page address cannot be decoded and is ignored");
+	    }
         });
     // return new_parms;
 }
@@ -397,19 +437,19 @@ export function update_url(parameter, value){
 
     var net = $("network").val() ? $("network").val() : parms.net;
     var etype= $("#event_type").val() ? $("#event_type").val() : parms.event;
-    pars=["net=" + net,
-	  "event=" + etype,
-	  "property=" + $("#prop_select").val(),
-	  "date=" + $("#datepicker").val(),
-	  "period=" + $("#period").val() ];
+    pars=["net=" + encodeURIComponent(net),
+	  "event=" + encodeURIComponent(etype),
+	  "property=" + encodeURIComponent($("#prop_select").val()),
+	  "date=" + encodeURIComponent($("#datepicker").val()),
+	  "period=" + encodeURIComponent($("#period").val()) ];
     if  ( etype === "jitter" && $("#stats_type").val() )
-	pars.push( "stats=" + $("#stats_type").val() );
-    if (parms.conffile) pars.push( "conffile=" + parms.conffile);   // Add configfile to url if relevant
-    if (parms.report) pars.push( "report=" + parms.report);         // Add report to url if relevant
+	pars.push( "stats=" + encodeURIComponent($("#stats_type").val()) );
+    if (parms.conffile) pars.push( "conffile=" + encodeURIComponent(parms.conffile));   // Add configfile to url if relevant
+    if (parms.report) pars.push( "report=" + encodeURIComponent(parms.report));         // Add report to url if relevant
     var cmpVal = ($("#compare_select").val && $("#compare_select").val()) || parms.compare;   // Snapshot compare mode
-    if (cmpVal && cmpVal !== 'off') pars.push( "compare=" + cmpVal );
+    if (cmpVal && cmpVal !== 'off') pars.push( "compare=" + encodeURIComponent(cmpVal) );
     if ( parameter )
-	pars.push( parameter + "=" + value );
+	pars.push( parameter + "=" + encodeURIComponent(value) );
     url = urlBase+'?'+pars.join('&');
     window.history.pushState('',document.title,url); // added this line to push the new url directly to url bar .
 

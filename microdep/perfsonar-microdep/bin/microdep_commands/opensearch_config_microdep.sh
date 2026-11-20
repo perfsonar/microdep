@@ -11,6 +11,19 @@ OPENSEARCH_SECURITY_CONFIG=${OPENSEARCH_CONFIG_DIR}/opensearch-security
 PASSWORD_FILE=/etc/perfsonar/opensearch/auth_setup.out
 LEGACY_INDICES="dragonlab dragonlab_jitter dragonlab_routemon dragonlab_correvents"
 MICRODEP_INDICES="microdep_gap_ana microdep_trace_ana microdep_corr_ana"
+ROLES_YML=/usr/lib/perfsonar/archive/config/roles.yml
+ROLES_PATCH=/usr/lib/perfsonar/archive/config/microdep_roles_yml_patch
+PIPELINES_YML=/etc/logstash/pipelines.yml
+PIPELINES_PATCH=/etc/perfsonar/microdep/logstash/microdep-pipelines.yml
+# The index policy, where the packages install it. It is read from here both when
+# the policy is created and when it is updated. (The update used to read
+# /etc/perfsonar/microdep/microdep_default_policy.json, where no package puts it:
+# a change of the policy never arrived, and on a host that still had a file there
+# from an earlier version, that old policy was put back at every run.)
+POLICY_FILE=/usr/lib/perfsonar/archive/config/ilm/install/microdep_default_policy.json
+# The roles that get access to the Microdep indices: the one Logstash writes with,
+# and the one for reading (which is also the one of users that have not logged in)
+MICRODEP_ROLES="pscheduler_logstash pscheduler_reader"
 
 usage () {
     echo "Usage: `basename $0` [options] [opensearch-host-url]"
@@ -65,10 +78,64 @@ wait_opensearch () {
     msg "Opensearch started!"
 }
 
+os_curl () {
+    # Run curl against OpenSearch as admin (certificate not checked, as before).
+    # The credentials go to curl on standard input, as a config line, and not
+    # as arguments: the arguments of a running command can be read by every
+    # user on the host.
+    local pass=${ADMIN_PASS//\\/\\\\}
+    pass=${pass//\"/\\\"}
+    printf 'user = "admin:%s"\n' "$pass" | curl -K - -k "$@"
+}
+
+roles_with_microdep () {
+    # Output the roles file read from standard input, with the lines of the patch file
+    # (the pattern of the Microdep indices) in the roles named in $1 and in no other
+    # role. In those roles they go after the pattern of the prometheus indices.
+    awk -v wanted=" $1 " -v patchfile="$ROLES_PATCH" '
+        BEGIN { while ((getline line < patchfile) > 0) if (line != "") { patch[++n] = line; ispatch[line] = 1 } }
+        /^[^ \t#]/ { role = $0; sub(/:.*/, "", role) }
+        ($0 in ispatch) { next }
+        { print }
+        /prometheus_?\*/ && index(wanted, " " role " ") { for (i = 1; i <= n; i++) print patch[i] }
+    '
+}
+
+# The Microdep pipeline is handled as the entry it is: the list item that names
+# pipeline.id "microdep", with the lines indented under it. (It used to be added
+# and removed by comparing single lines, and a line such as
+# "pipeline.ecs_compatibility: disabled" stands in the entries of other pipelines
+# too. That only went well because the Microdep line has a space at its end.)
+microdep_pipeline_in () {
+    # Output the Microdep entry of the pipelines file $1 (nothing when it has none)
+    awk '
+        function flush(   i) { if (microdep) for (i = 1; i <= n; i++) print item[i]; n = 0; microdep = 0 }
+        /^- / { flush(); initem = 1 }
+        initem && !/^- / && !/^[ \t]/ { flush(); initem = 0 }
+        initem { item[++n] = $0; if ($0 ~ /^(- |[ \t]+)pipeline\.id:[ \t]*"?microdep"?[ \t]*$/) microdep = 1 }
+        END { flush() }
+    ' "$1"
+}
+
+pipelines_without_microdep () {
+    # Output the pipelines file read from standard input without the Microdep entry
+    # and without the comment lines of the Microdep file
+    awk -v patchfile="$PIPELINES_PATCH" '
+        BEGIN { while ((getline line < patchfile) > 0) if (line ~ /^#/) comment[line] = 1 }
+        function flush(   i) { if (!microdep) for (i = 1; i <= n; i++) print item[i]; n = 0; microdep = 0 }
+        /^- / { flush(); initem = 1 }
+        initem && !/^- / && !/^[ \t]/ { flush(); initem = 0 }
+        initem { item[++n] = $0; if ($0 ~ /^(- |[ \t]+)pipeline\.id:[ \t]*"?microdep"?[ \t]*$/) microdep = 1; next }
+        ($0 in comment) { next }
+        { print }
+        END { flush() }
+    '
+}
+
 wait_opensearch_api () {
     # Wait for Opensearch API to start
     msg "Waiting for opensearch API to start..."
-    api_status=$(curl -s -o /dev/null -w "%{http_code}" -u admin:${ADMIN_PASS} -k https://localhost:9200/_cluster/health)
+    api_status=$(os_curl -s -o /dev/null -w "%{http_code}" $OPENSEARCH_URL/_cluster/health)
     i=0
     while [[ $api_status -ne 200 ]]
     do
@@ -79,7 +146,7 @@ wait_opensearch_api () {
             msg "[Warning] API start timeout"
             exit 0
 	fi
-	api_status=$(curl -s -o /dev/null -w "%{http_code}" -u admin:${ADMIN_PASS} -k https://localhost:9200/_cluster/health)
+	api_status=$(os_curl -s -o /dev/null -w "%{http_code}" $OPENSEARCH_URL/_cluster/health)
     done
     
     msg "API started!"
@@ -125,6 +192,16 @@ shift $(($OPTIND - 1))  # (Shift away parsed arguments)
 if [ "$1" ]; then
     OPENSEARCH_URL="$1"
 fi
+OPENSEARCH_SECURITY_CONFIG=${OPENSEARCH_CONFIG_DIR}/opensearch-security   # (again: -c may have changed the config dir)
+
+# One run at a time: the guard timer and a package upgrade may start it together,
+# and both would edit roles.yml and pipelines.yml and run securityadmin.
+# (In a directory of root's own: in /run/lock any user could hold the lock.)
+LOCKDIR=/run/perfsonar-microdep
+mkdir -p -m 0700 $LOCKDIR
+LOCKFILE=$LOCKDIR/opensearch_config_microdep.lock
+exec 9> $LOCKFILE
+flock -w 600 9 || { echo "Error: another run of `basename $0` has not finished." >&2; exit 1; }
 
 ADMIN_PASS=$(grep -w "admin" $PASSWORD_FILE | head -n 1 | awk '{print $2}')
 if [ -z "$ADMIN_PASS" ]; then
@@ -135,21 +212,24 @@ fi
 if [ "$REMOVE" ]; then
     if [ "$REMOVE" = "config" -o "$REMOVE" = "all" ]; then
 	# Clean up pipeline for logstash
-	if [ -e /etc/logstash/pipelines.yml -a -e /etc/perfsonar/microdep/logstash/microdep-pipelines.yml ]; then
+	if [ -e $PIPELINES_YML -a -e $PIPELINES_PATCH ]; then
 	    msg "Removing Microdep pipeline from Logstash..."
 	    TMPPIPELINE=$(mktemp)
-	    cp /etc/logstash/pipelines.yml $TMPPIPELINE
-	    grep -v -x -F -f /etc/perfsonar/microdep/logstash/microdep-pipelines.yml $TMPPIPELINE > /etc/logstash/pipelines.yml 
+	    # (The file is written in place, so it keeps its owner and mode)
+	    pipelines_without_microdep < $PIPELINES_YML > $TMPPIPELINE && cat $TMPPIPELINE > $PIPELINES_YML
+	    rm -f $TMPPIPELINE
 	    systemctl restart logstash.service || true
 	fi
 	# Remove read/write access to Microdep opensearch indices
-	if [ -e /usr/lib/perfsonar/archive/config/roles.yml -a -e /etc/perfsonar/microdep/roles_yml_patch ]; then
+	if [ -e $ROLES_YML -a -e $ROLES_PATCH ]; then
 	    msg "Removing read/write access to Microdep indices in Opensearch..."
 	    TMPROLESYML=$(mktemp)
-	    grep -v -x -F -f /etc/perfsonar/microdep/roles_yml_patch /usr/lib/perfsonar/archive/config/roles.yml > $TMPROLESYML && mv $TMPROLESYML /usr/lib/perfsonar/archive/config/roles.yml
+	    # (The file is written in place, so it keeps its owner and mode)
+	    roles_with_microdep "" < $ROLES_YML > $TMPROLESYML && [ -s $TMPROLESYML ] && cat $TMPROLESYML > $ROLES_YML
+	    rm -f $TMPROLESYML
 	    # Refresh config of opensearch security
 	    if [ -e $OPENSEARCH_SECURITY_CONFIG/roles.yml ]; then
-		cp -f /usr/lib/perfsonar/archive/config/roles.yml $OPENSEARCH_SECURITY_CONFIG/roles.yml
+		cp -f $ROLES_YML $OPENSEARCH_SECURITY_CONFIG/roles.yml
 		OPENSEARCH_JAVA_HOME=/usr/share/opensearch/jdk bash ${OPENSEARCH_SECURITY_PLUGIN}/tools/securityadmin.sh -cd ${OPENSEARCH_SECURITY_CONFIG} -icl -nhnv -cacert ${OPENSEARCH_CONFIG_DIR}/root-ca.pem -cert ${OPENSEARCH_CONFIG_DIR}/admin.pem -key ${OPENSEARCH_CONFIG_DIR}/admin-key.pem
 	    fi
 	fi
@@ -168,39 +248,48 @@ if [ "$REMOVE" ]; then
 	# Remove all
 	msg "Removing Opensearch templates, policies and datastreams/indices for Microdep ..."
 	for i in $MICRODEP_INDICES $LEGACY_INDICES; do
-	    curl -k -u admin:${ADMIN_PASS} -s -XDELETE "$OPENSEARCH_URL/_data_stream/$i" 2>/dev/null ; echo
+	    os_curl -s -XDELETE "$OPENSEARCH_URL/_data_stream/$i" 2>/dev/null ; echo
 	done
-	curl -k -u admin:${ADMIN_PASS} -s -XDELETE "$OPENSEARCH_URL/_plugins/_ism/policies/microdep_default_policy" 2>/dev/null ; echo
-	curl -k -u admin:${ADMIN_PASS} -s -XDELETE "$OPENSEARCH_URL/_index_template/microdep_gap_ana" 2>/dev/null ; echo
-	curl -k -u admin:${ADMIN_PASS} -s -XDELETE "$OPENSEARCH_URL/_index_template/microdep_trace_ana" 2>/dev/null ; echo
+	os_curl -s -XDELETE "$OPENSEARCH_URL/_plugins/_ism/policies/microdep_default_policy" 2>/dev/null ; echo
+	os_curl -s -XDELETE "$OPENSEARCH_URL/_index_template/microdep_gap_ana" 2>/dev/null ; echo
+	os_curl -s -XDELETE "$OPENSEARCH_URL/_index_template/microdep_trace_ana" 2>/dev/null ; echo
     fi
     msg "Removal completed."
     exit 0
 fi
 
 # Enable Microdep pipeline for logstash (by adding content of /etc/perfsonar/microdep/microdep-pipelines.yml if not already present)
-if [ -e /etc/logstash/pipelines.yml -a -e /etc/perfsonar/microdep/logstash/microdep-pipelines.yml ]; then
+if [ -e $PIPELINES_YML -a -e $PIPELINES_PATCH ]; then
     msg "Adding Microdep pipeline to Logstash..."
-    grep -q -x -F -f /etc/perfsonar/microdep/logstash/microdep-pipelines.yml /etc/logstash/pipelines.yml || ( cat /etc/perfsonar/microdep/logstash/microdep-pipelines.yml >> /etc/logstash/pipelines.yml )
+    # An entry that is there as the Microdep file has it is left where it is. One
+    # that is missing, or differs, is taken out and put at the end anew.
+    if [ "$(microdep_pipeline_in $PIPELINES_YML)" != "$(microdep_pipeline_in $PIPELINES_PATCH)" ]; then
+	TMPPIPELINE=$(mktemp)
+	pipelines_without_microdep < $PIPELINES_YML > $TMPPIPELINE && cat $PIPELINES_PATCH >> $TMPPIPELINE && cat $TMPPIPELINE > $PIPELINES_YML
+	rm -f $TMPPIPELINE
+    fi
     systemctl restart logstash.service || true
 fi
 
-# Add read and write accesses to Microdep opensearch indices
-if [ -e /usr/lib/perfsonar/archive/config/roles.yml -a -e /etc/perfsonar/microdep/roles_yml_patch ]; then
-    if ! grep -q -x -F -f /etc/perfsonar/microdep/roles_yml_patch /usr/lib/perfsonar/archive/config/roles.yml; then
-	# Microdep index missing. Add.
+# Add read and write accesses to Microdep opensearch indices: to the roles that need
+# them, and to no other. (They used to be added to every role with access to the
+# prometheus indices, so a file left by an earlier version is put right as well.)
+if [ -e $ROLES_YML -a -e $ROLES_PATCH ]; then
+    TMPROLESYML=$(mktemp)
+    if roles_with_microdep "$MICRODEP_ROLES" < $ROLES_YML > $TMPROLESYML && [ -s $TMPROLESYML ] && ! cmp -s $TMPROLESYML $ROLES_YML; then
+	# Access to the Microdep indices is missing, or is not where it should be. Fix.
 	wait_opensearch
 	msg "Adding read and write access to Micordep indices..."
-	sed -i '/prometheus\*/r /etc/perfsonar/microdep/roles_yml_patch' /usr/lib/perfsonar/archive/config/roles.yml
-	sed -i '/prometheus_\*/r /etc/perfsonar/microdep/roles_yml_patch' /usr/lib/perfsonar/archive/config/roles.yml
+	cat $TMPROLESYML > $ROLES_YML   # (written in place, so the file keeps its owner and mode)
 	# Refresh config of opensearch security
 	if [ -e $OPENSEARCH_SECURITY_CONFIG/roles.yml ]; then
-	    cp -f /usr/lib/perfsonar/archive/config/roles.yml $OPENSEARCH_SECURITY_CONFIG/roles.yml
+	    cp -f $ROLES_YML $OPENSEARCH_SECURITY_CONFIG/roles.yml
 	    OPENSEARCH_JAVA_HOME=/usr/share/opensearch/jdk bash ${OPENSEARCH_SECURITY_PLUGIN}/tools/securityadmin.sh -cd ${OPENSEARCH_SECURITY_CONFIG} -icl -nhnv -cacert ${OPENSEARCH_CONFIG_DIR}/root-ca.pem -cert ${OPENSEARCH_CONFIG_DIR}/admin.pem -key ${OPENSEARCH_CONFIG_DIR}/admin-key.pem
 	else
 	    msg "Warning: Missing file $OPENSEARCH_SECURITY_CONFIG/roles.yml. Is Opensearch installed?"
 	fi
     fi
+    rm -f $TMPROLESYML
 fi
 
 
@@ -211,27 +300,27 @@ wait_opensearch_api
 
 # Add templates
 msg "Adding Microdep index templates..."
-curl -k -u admin:${ADMIN_PASS} -s -H 'Content-Type: application/json' -XPUT "$OPENSEARCH_URL/_index_template/microdep_gap_ana" -d @/etc/perfsonar/microdep/os-template-gap-ana.json 2>/dev/null ; echo
-curl -k -u admin:${ADMIN_PASS} -s -H 'Content-Type: application/json' -XPUT "$OPENSEARCH_URL/_index_template/microdep_trace_ana" -d @/etc/perfsonar/microdep/os-template-trace-ana.json 2>/dev/null ; echo
+os_curl -s -H 'Content-Type: application/json' -XPUT "$OPENSEARCH_URL/_index_template/microdep_gap_ana" -d @/usr/lib/perfsonar/archive/config/os-template-gap-ana.json 2>/dev/null ; echo
+os_curl -s -H 'Content-Type: application/json' -XPUT "$OPENSEARCH_URL/_index_template/microdep_trace_ana" -d @/usr/lib/perfsonar/archive/config/os-template-trace-ana.json 2>/dev/null ; echo
 
-if [ $(curl -s -o /dev/null -w "%{http_code}" -u admin:${ADMIN_PASS} -k "$OPENSEARCH_URL/_plugins/_ism/policies/microdep_default_policy") -ne 200 ]; then
+if [ $(os_curl -s -o /dev/null -w "%{http_code}" "$OPENSEARCH_URL/_plugins/_ism/policies/microdep_default_policy") -ne 200 ]; then
     # No policy found.  Create new.
     msg "Creating default Microdep index policy..."
-    curl -k -u admin:${ADMIN_PASS} -H 'Content-Type: application/json' -X PUT "$OPENSEARCH_URL/_plugins/_ism/policies/microdep_default_policy" -d "@/etc/perfsonar/microdep/microdep_default_policy.json" 2>/dev/null ; echo
+    os_curl -H 'Content-Type: application/json' -X PUT "$OPENSEARCH_URL/_plugins/_ism/policies/microdep_default_policy" -d "@$POLICY_FILE" 2>/dev/null ; echo
     # Apply policy to index
     msg "Applying Microdep index policy to indices..."
-    curl -k -u admin:${ADMIN_PASS} -H 'Content-Type: application/json' -X POST "$OPENSEARCH_URL/_plugins/_ism/add/microdep*" -d '{ "policy_id": "microdep_default_policy" }' 2>/dev/null ; echo
+    os_curl -H 'Content-Type: application/json' -X POST "$OPENSEARCH_URL/_plugins/_ism/add/microdep*" -d '{ "policy_id": "microdep_default_policy" }' 2>/dev/null ; echo
 else
     # Get policy identifiers
-    P_SEQ_NO=$(curl -s -u admin:${ADMIN_PASS} -k $OPENSEARCH_URL/_plugins/_ism/policies/microdep_default_policy | jq ._seq_no)
-    P_PRIM_TERM=$(curl -s -u admin:${ADMIN_PASS} -k $OPENSEARCH_URL/_plugins/_ism/policies/microdep_default_policy | jq ._primary_term)
+    P_SEQ_NO=$(os_curl -s $OPENSEARCH_URL/_plugins/_ism/policies/microdep_default_policy | jq ._seq_no)
+    P_PRIM_TERM=$(os_curl -s $OPENSEARCH_URL/_plugins/_ism/policies/microdep_default_policy | jq ._primary_term)
     # Update policy
     msg "Updating default Microdep index policy..."
-    curl -k -u admin:${ADMIN_PASS} -H 'Content-Type: application/json' -X PUT "$OPENSEARCH_URL/_plugins/_ism/policies/microdep_default_policy?if_seq_no=$P_SEQ_NO&if_primary_term=$P_PRIM_TERM" -d "@/etc/perfsonar/microdep/microdep_default_policy.json" 2>/dev/null ; echo
+    os_curl -H 'Content-Type: application/json' -X PUT "$OPENSEARCH_URL/_plugins/_ism/policies/microdep_default_policy?if_seq_no=$P_SEQ_NO&if_primary_term=$P_PRIM_TERM" -d "@$POLICY_FILE" 2>/dev/null ; echo
     # Roll over indices to activate new policy version
     msg "Rolling over indices to ensure new policy is applied..."
     for i in $MICRODEP_INDICES; do
-	curl -k -u admin:${ADMIN_PASS} -X POST "$OPENSEARCH_URL/$i/_rollover"  2>/dev/null ; echo
+	os_curl -X POST "$OPENSEARCH_URL/$i/_rollover"  2>/dev/null ; echo
     done
 fi
 msg "Configuration completed."

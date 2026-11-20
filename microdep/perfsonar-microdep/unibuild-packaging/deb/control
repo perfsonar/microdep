@@ -8,8 +8,8 @@ Build-Depends: debhelper (>= 10),
  perl,
  libwww-perl,
  libjson-perl,
- libdbi-perl,
- libdbd-sqlite3-perl,
+# libdbi-perl,
+# libdbd-sqlite3-perl,
  postgresql,
  curl
 Standards-Version: 4.7.0.0
@@ -30,6 +30,9 @@ Depends: ${misc:Depends}, ${perl:Depends},
  liburi-perl,
  libjson-perl,
  libchart-clicker-perl,
+## hourly aggregator
+ libyaml-perl,
+ libio-socket-ssl-perl,
 ## trace-ana 
  postgresql,
  python3-geoip2,
@@ -65,7 +68,9 @@ Description: Enrichment databases for Microdep (geoip etc.)
 Package: perfsonar-microdep-logstash
 Architecture: all
 Depends: ${misc:Depends},
+ apache2,
  curl,
+ jq,
  logrotate
 #Recommends: perfsonar-archive
 Description: Logstash pipeline for archiving Microdep analytic events
@@ -78,14 +83,16 @@ Depends: ${misc:Depends}, ${perl:Depends},
 # libperl, perl-base, perl-modules, Getopt::Long, POSIX, Time::Local, Data:dumper 
  perl,
  libcgi-pm-perl, 
- libdbi-perl,
- libdbd-sqlite3-perl,
+# libdbi-perl,
+# libdbd-sqlite3-perl,
  libjson-perl,
  libwww-perl,
+ libio-socket-ssl-perl,
  libsocket-perl,
  liburi-perl,
  libyaml-perl,
  libhash-merge-simple-perl,
+ libmaxmind-db-reader-perl,
  libjs-jquery,
  libjs-jquery-ui,
  libjs-jquery-datatables,
@@ -104,7 +111,9 @@ Depends: ${misc:Depends}, ${perl:Depends},
  libjs-select2.js,
  libjs-sorttable,
  libjs-vis,
+ jq,
  perfsonar-microdep-enrichdbs
+Conflicts: perfsonar-tracetree
 Description: Microdep map web GUI presenting analytic results
  Web GUI presenting Microdep analytic results in a map view
 

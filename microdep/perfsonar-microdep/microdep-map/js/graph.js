@@ -56,9 +56,11 @@ export function heatmap(div, hits, property, get_color, threshes, title, templat
         lookup[rec.from + "\u0000" + rec.to] = rec[property];
     }
 
+    // The template is a URL, and the arguments are host names from the
+    // archive: encoded, so that none of them can add or change a parameter.
     function expand_template(s, args) {
         if (!s) return null;
-        return s.replace(/\{(\d+)\}/g, (m, n) => args[n] !== undefined ? args[n] : m);
+        return s.replace(/\{(\d+)\}/g, (m, n) => args[n] !== undefined ? encodeURIComponent(args[n]) : m);
     }
 
     function fmt_val(v) {
@@ -184,7 +186,8 @@ function _hm_uniq(arr) {
 // Heatmap cells carry data-driven backgrounds that run from bright yellow to
 // dark - a single text colour cannot sit on all of them (light-on-yellow measured
 // at contrast 1.2). Pick black or white per cell from the background's luminance.
-function _hm_ink(color) {
+// Relative luminance (WCAG) of a CSS colour, or null when it cannot be read.
+export function luminance_of(color) {
     let r, g, b;
     const s = String(color).trim();
     let m = s.match(/^#([0-9a-f]{3})$/i);
@@ -200,11 +203,25 @@ function _hm_ink(color) {
         const p = m[1].split(',').map(Number);
         r = p[0]; g = p[1]; b = p[2];
     } else {
-        return '';                     // unknown format: leave the CSS default
+        return null;                   // unknown format
     }
     const f = function (v) { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
-    const L = 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+    return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+}
+
+function _hm_ink(color) {
+    const L = luminance_of(color);
+    if (L === null) return '';         // unknown format: leave the CSS default
     return L > 0.45 ? '#111111' : '#ffffff';
+}
+
+// Black or white, whichever the eye separates better from `color`: the one
+// with the higher WCAG contrast ratio. The heatmap above keeps its own,
+// gentler rule so its cells look as they always have.
+export function ink_on(color) {
+    const L = luminance_of(color);
+    if (L === null) return '';
+    return ((L + 0.05) / 0.05) >= (1.05 / (L + 0.05)) ? '#111111' : '#ffffff';
 }
 
 function _hm_esc(s) {
@@ -309,6 +326,9 @@ export function chart_curve( div, hits, property, title, unit ){
 	let rec= hit._source;
 	data.push( {"x": rec.timestamp * 1000, "y": rec[property] });
     }
+    // Summary-only fields have their texts under the summary type
+    const sum_type = event_sum_type[parms.event];
+    const text_of = function(d){ let t = d[parms.event] && d[parms.event][property]; if (t === undefined && d[sum_type]) t = d[sum_type][property]; return t === undefined ? property : t; };
 
     // Resolve theme tokens from :root (works for both light and dark themes
     // via curve-chart.html's localStorage-driven data-theme on <html>).
@@ -330,7 +350,7 @@ export function chart_curve( div, hits, property, title, unit ){
 
     const data_desc = {
         datasets: [{
-            label: prop_long_desc[parms.event][property],
+            label: text_of(prop_long_desc),
             data: data,
             backgroundColor: _alpha(accent, 0.55),
             borderColor: accent,
@@ -381,7 +401,7 @@ export function chart_curve( div, hits, property, title, unit ){
                     grid:   { color: _alpha(border, 0.5), drawTicks: true, tickColor: borderH, drawBorder: false },
                     border: { display: false },
                     ticks:  { color: text3, font: { size: 11 }, padding: 6 },
-                    title:  { display: true, text: prop_desc[parms.event][property], color: text3,
+                    title:  { display: true, text: text_of(prop_desc), color: text3,
                               font: { size: 11, weight: '600' } }
                 }
             },

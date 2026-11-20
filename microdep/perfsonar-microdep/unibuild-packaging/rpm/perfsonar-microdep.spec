@@ -3,7 +3,6 @@
 %define command_base        %{microdep_bin_base}/microdep_commands
 %define config_base         /etc/perfsonar
 %define microdep_config_base         %{config_base}/microdep
-%define microdep_runtime_base        /var/lib/perfsonar/microdep
 %define microdep_share_base          /usr/share/perfsonar/microdep
 %define doc_base            /usr/share/doc/perfsonar/microdep
 %define microdep_web_dir    %{install_base}/microdep-map
@@ -34,8 +33,8 @@ Summary:		Microdep analytic toolset to analize perfSONAR datasets
 Group:			Applications/Communications
 BuildRequires:          curl
 BuildRequires:          perl >= 5.32
-BuildRequires:          perl(DBI)
-BuildRequires:          perl(DBD::SQLite)
+#BuildRequires:          perl(DBI)
+#BuildRequires:          perl(DBD::SQLite)
 BuildRequires:          perl(JSON)
 Requires:		perl >= 5.32
 # qstream_gap_ana
@@ -94,7 +93,9 @@ container for any future enrichment data sources.
 %package logstash
 Summary:		Logstash pipeline for archiving Microdep analytic events
 Group:			Applications/Communications
+Requires:               httpd
 Requires:               curl,
+Requires:               jq
 Requires:               logrotate
 
 %description logstash
@@ -106,21 +107,22 @@ Group:			Applications/Communications
 BuildRequires:          perl >= 5.32
 BuildRequires:          perl(LWP::Simple)
 BuildRequires:          perl(JSON)
-BuildRequires:          perl(DBI)
-BuildRequires:          perl(DBD::SQLite)
+#BuildRequires:          perl(DBI)
+#BuildRequires:          perl(DBD::SQLite)
 #Requires:               perfsonar-toolkit >= 5.0.7
 Requires:		httpd
 Requires:               mod_ssl
 Requires:		perl >= 5.32
 Requires:               perl(CGI) 
 Requires:		perl(Data::Dumper)
-Requires:               perl(DBI) 
-Requires:               perl(DBD::SQLite)
+#Requires:               perl(DBI) 
+#Requires:               perl(DBD::SQLite)
 Requires:		perl(Getopt::Long)
 Requires:		perl(JSON)
 Requires:		perl(LWP::Simple)
 Requires:               perl(LWP::UserAgent)
 Requires:               perl(LWP::Protocol::https)
+Recommends:             perl(MaxMind::DB::Reader)
 Requires:               perl(IO::Socket::SSL)
 Requires:		perl(Socket)
 Requires:		perl(strict)
@@ -146,7 +148,9 @@ Requires:               momentjs = 2.30.1
 Requires:               select2js = 4.0.13
 Requires:               sorttablejs = 2.0
 Requires:               visjs
+Requires:               jq
 Requires:               perfsonar-microdep-enrichdbs
+Obsoletes:              perfsonar-tracetree
 BuildRequires:          systemd
 BuildRequires:          systemd-rpm-macros
 # ... but macros are not yet utilized below
@@ -182,8 +186,11 @@ A collection of handy utilities to apply when working with Microdep analytic dat
 # Stop services (ignore failures)
 systemctl stop perfsonar-microdep-gap-ana.service || true
 systemctl stop perfsonar-microdep-trace-ana.service || true
-systemctl stop perfsonar-microdep-restart.timer || true
 systemctl stop perfsonar-microdep-hourly-aggregator.timer || true
+# The nightly restart of the analysis is gone: summary records are now output at
+# intervals by the analysis itself. Clear away the timer of an earlier version.
+systemctl stop perfsonar-microdep-restart.timer 2> /dev/null || true
+systemctl disable perfsonar-microdep-restart.timer 2> /dev/null || true
 
 %pre enrichdbs
 /usr/sbin/groupadd -r perfsonar 2> /dev/null || :
@@ -205,22 +212,20 @@ systemctl stop perfsonar-microdep-hourly-aggregator.timer || true
 %install
 rm -rf %{buildroot}
 pwd & ls -l
-make ROOTPATH=%{buildroot}/%{install_base} CONFIGPATH=%{buildroot}/%{microdep_config_base} install
+make -e ROOTPATH=%{buildroot}/%{install_base} \
+     -e CONFIGPATH=%{buildroot}/%{microdep_config_base} \
+     -e SHAREPATH=%{buildroot}/%{microdep_share_base} \
+     install
 
 # Install systemd services
 mkdir -p %{buildroot}/%{_unitdir}
 install -D -m 0644 -t %{buildroot}/%{_unitdir} %{buildroot}/%{install_base}/scripts/*.service
 install -D -m 0644 -t %{buildroot}/%{_unitdir} %{buildroot}/%{install_base}/scripts/*.timer
 systemctl daemon-reload || true
-# Copy microdep map, httpd and logstash configs into correct folders
-install -D -m 0644 %{buildroot}/%{microdep_config_base}/microdep_ipv4.db %{buildroot}/%{microdep_runtime_base}/microdep_ipv4.db
-install -D -m 0644 %{buildroot}/%{microdep_config_base}/microdep_ipv6.db %{buildroot}/%{microdep_runtime_base}/microdep_ipv6.db
+# Copy selected files into correct folders
 install -D -m 0644 -t %{buildroot}/etc/httpd/conf.d/ %{buildroot}/%{microdep_config_base}/apache-microdep-map.conf
 install -D -m 0644 -t %{buildroot}/etc/httpd/conf.d/ %{buildroot}/%{microdep_config_base}/apache-microdep-ana.conf
-install -D -m 0644 -t %{buildroot}/%{install_base}/logstash/microdep_pipeline/ %{buildroot}/%{microdep_config_base}/logstash/microdep/*
 install -D -m 0644 -t %{buildroot}/etc/logrotate.d/ %{buildroot}/%{microdep_config_base}/logrotate.d/microdep
-# Copy Geodb to correct folder
-install -D -m 0644 -t %{buildroot}/%{microdep_share_base}/GeoLite2/ %{buildroot}/%{microdep_config_base}/GeoLite2/*
 
 # Copy license file
 mkdir -p %{buildroot}/%{doc_base}
@@ -251,12 +256,8 @@ rm -f %{buildroot}/%{install_base}/Makefile
 rm -f %{buildroot}/%{install_base}/LICENSE
 rm -rf %{buildroot}/%{microdep_config_base}/apache-microdep-map.conf
 rm -rf %{buildroot}/%{microdep_config_base}/apache-microdep-ana.conf
-rm -rf %{buildroot}/%{microdep_config_base}/logstash/microdep
 rm -rf %{buildroot}/%{microdep_config_base}/psconfig
 rm -rf %{buildroot}/%{microdep_config_base}/logrotate.d
-rm -rf %{buildroot}/%{microdep_config_base}/GeoLite2/*
-rm -rf %{buildroot}/%{microdep_config_base}/microdep_ipv4.db
-rm -rf %{buildroot}/%{microdep_config_base}/microdep_ipv6.db
 
 # Make js and css libs available in web folder (-r for relative paths ... to make rpmbuild happy)
 ln -sr /usr/share/javascript/chartjs/4.4.2/chart.umd.js %{buildroot}/%{microdep_web_dir}/js
@@ -326,8 +327,17 @@ rm -rf %{buildroot}
 ###   P o s t  i n s t a l l   a c t i o n s 
 
 %post ana
-# Create db
-%{command_base}/create_new_db.sh -s -t postgres -d routingmonitor
+# Create db. The db of an earlier version is kept, with what the analysis has
+# learned: only a first installation starts from an empty one.
+if [ "$1" -gt 1 ]; then
+    %{command_base}/create_new_db.sh -s -t postgres routingmonitor
+else
+    %{command_base}/create_new_db.sh -s -t postgres -d routingmonitor
+fi
+# Readable by root and the analysers (they run as perfsonar) only: a password may be put in them.
+for CONF in %{microdep_config_base}/microdep-gap-ana.yml %{microdep_config_base}/microdep-trace-ana.yml; do
+    if [ -f "$CONF" ]; then chown root:perfsonar "$CONF"; chmod 0640 "$CONF"; fi
+done
 # Fix access to db
 if [ -f /var/lib/pgsql/data/pg_hba.conf ]; then
     %{command_base}/fix-pgsql-access.sh -i /var/lib/pgsql/data/pg_hba.conf
@@ -345,11 +355,9 @@ fi
 systemctl daemon-reload || true
 systemctl enable perfsonar-microdep-gap-ana.service || true
 systemctl enable perfsonar-microdep-trace-ana.service || true
-systemctl enable perfsonar-microdep-restart.timer || true
 systemctl enable perfsonar-microdep-hourly-aggregator.timer || true
 systemctl start perfsonar-microdep-gap-ana.service || true
 systemctl start perfsonar-microdep-trace-ana.service || true
-systemctl start perfsonar-microdep-restart.timer || true
 systemctl start perfsonar-microdep-hourly-aggregator.timer || true
 
 %post logstash
@@ -362,9 +370,17 @@ systemctl start perfsonar-microdep-hourly-aggregator.timer || true
 #   systemctl enable --now perfsonar-microdep-opensearch-guard.timer
 systemctl daemon-reload || true
 
-if [ ! -f /etc/perfsonar/microdep/microdep-ana-archive.json ]; then
-    # Prepare default logstash archive config for analytic results
-    /usr/lib/perfsonar/bin/microdep_commands/psconfig_archive_ana.sh > /etc/perfsonar/microdep/microdep-ana-archive.json || true
+if [ ! -s /etc/perfsonar/microdep/microdep-ana-archive.json ]; then
+    # Prepare default logstash archive config for analytic results.
+    # It holds the credentials for the archive, so it is never created
+    # readable by others.
+    ( umask 077; /usr/lib/perfsonar/bin/microdep_commands/psconfig_archive_ana.sh > /etc/perfsonar/microdep/microdep-ana-archive.json ) || true
+fi
+if [ -f /etc/perfsonar/microdep/microdep-ana-archive.json ]; then
+    # Readable by root and by the analysers (they run as perfsonar), and by
+    # nobody else. Also corrects a file left world-readable by an earlier version.
+    chown root:perfsonar /etc/perfsonar/microdep/microdep-ana-archive.json
+    chmod 0640 /etc/perfsonar/microdep/microdep-ana-archive.json
 fi
 
 # Reload web server config
@@ -382,8 +398,9 @@ if [ -e /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json-tempor
 	jq --argjson nextid "$NEXTID" '.id = $nextid' %{microdep_config_base}/grafana_dashboard_patch > $PATCHFILE
 	# Add new panel to main dashboard
 	DASHBOARDFILE=$(mktemp)
-	jq '.panels += [input]' /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json  $PATCHFILE > $DASHBOARDFILE
-	mv $DASHBOARDFILE /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json
+	# Only if jq worked, and into the same file, so that owner and mode stay
+	if jq '.panels += [input]' /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json  $PATCHFILE > $DASHBOARDFILE; then cat $DASHBOARDFILE > /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json; fi
+	rm -f $DASHBOARDFILE
     fi
 fi
 
@@ -401,13 +418,14 @@ fi
 # Stop services (ignore failures)
 systemctl stop perfsonar-microdep-gap-ana.service || true
 systemctl stop perfsonar-microdep-trace-ana.service || true
-systemctl stop perfsonar-microdep-restart.timer || true
 systemctl stop perfsonar-microdep-hourly-aggregator.timer || true
 
 %preun logstash
-# Stop the OpenSearch read-grant self-heal timer
-systemctl stop perfsonar-microdep-opensearch-guard.timer || true
-systemctl disable perfsonar-microdep-opensearch-guard.timer || true
+# Stop the OpenSearch read-grant self-heal timer (on removal, not on upgrade)
+if [ $1 -eq 0 ]; then
+    systemctl stop perfsonar-microdep-opensearch-guard.timer || true
+    systemctl disable perfsonar-microdep-opensearch-guard.timer || true
+fi
 # Remove Microdep from Opensearch setup (including Logstash)
 /usr/lib/perfsonar/bin/microdep_commands/opensearch_config_microdep.sh -r config || true
 
@@ -415,8 +433,9 @@ systemctl disable perfsonar-microdep-opensearch-guard.timer || true
 # Remove Microdep button from Grafana main dashboard (if present)
 if grep -q  "Microdep map" /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json; then
     DASHBOARDFILE=$(mktemp)
-    jq  'del( .panels[] | select(.options.content != null ) | select (.options.content | contains("Microdep map")))' /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json > $DASHBOARDFILE
-    mv $DASHBOARDFILE /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json
+    # Only if jq worked, and into the same file, so that owner and mode stay
+    if jq  'del( .panels[] | select(.options.content != null ) | select (.options.content | contains("Microdep map")))' /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json > $DASHBOARDFILE; then cat $DASHBOARDFILE > /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json; fi
+    rm -f $DASHBOARDFILE
 fi
 
 ###   P o s t   u n i n s t a l l   a c t i o n s 
@@ -435,24 +454,26 @@ systemctl reload httpd.service || true
 
 ###  F i l e s
 
+# Everything the packages install belongs to root, as packaged files normally
+# do. The perfsonar user, which the analysers run as, owns only the folder they
+# write their output to (/var/lib/logstash/microdep).
+
 #%files 
-#%defattr(0644,perfsonar,perfsonar,0755)
+#%defattr(0644,root,root,0755)
 #%license %{doc_base}/LICENSE
 
 %files ana
-%defattr(0644,perfsonar,perfsonar,0755)
+%defattr(0644,root,root,0755)
 %license %{doc_base}/LICENSE-ana
 %{_unitdir}/perfsonar-microdep-gap-ana.service
 %{_unitdir}/perfsonar-microdep-trace-ana.service
-%{_unitdir}/perfsonar-microdep-restart.service
-%{_unitdir}/perfsonar-microdep-restart.timer
 %{_unitdir}/perfsonar-microdep-hourly-aggregator.service
 %{_unitdir}/perfsonar-microdep-hourly-aggregator.timer
-%attr(0755,perfsonar,perfsonar) %{command_base}/qstream-gap-ana
-%attr(0755,perfsonar,perfsonar) %{command_base}/trace_event_reader.py
-%attr(0755,perfsonar,perfsonar) %{command_base}/create_new_db.sh
-%attr(0755,perfsonar,perfsonar) %{command_base}/fix-pgsql-access.sh
-%attr(0755,perfsonar,perfsonar) %{command_base}/microdep-hourly-aggregator.pl
+%attr(0755,root,root) %{command_base}/qstream-gap-ana
+%attr(0755,root,root) %{command_base}/trace_event_reader.py
+%attr(0755,root,root) %{command_base}/create_new_db.sh
+%attr(0755,root,root) %{command_base}/fix-pgsql-access.sh
+%attr(0755,root,root) %{command_base}/microdep-hourly-aggregator.pl
 %{microdep_config_base}/microdep-tests.json.example
 %{microdep_config_base}/microdep-tests-packet-subcount.json.example
 %config %{microdep_config_base}/microdep-gap-ana.yml
@@ -462,53 +483,33 @@ systemctl reload httpd.service || true
 %license %{doc_base}/LICENSE-archive
 
 %files enrichdbs
-%defattr(0644,perfsonar,perfsonar,0755)
+%defattr(0644,root,root,0755)
 %license %{microdep_share_base}/GeoLite2/LICENSE.txt
 %{microdep_share_base}/GeoLite2/COPYRIGHT.txt
 %{microdep_share_base}/GeoLite2/*.mmdb
 
 %files logstash
-%defattr(0644,perfsonar,perfsonar,0755)
+%defattr(0644,root,root,0755)
 %license %{doc_base}/LICENSE-logstash
-%attr(0755,perfsonar,perfsonar) %{command_base}/opensearch_config_microdep.sh
-%attr(0755,perfsonar,perfsonar) %{command_base}/microdep-opensearch-guard.sh
+%attr(0755,root,root) %{command_base}/opensearch_config_microdep.sh
+%attr(0755,root,root) %{command_base}/microdep-opensearch-guard.sh
 %{_unitdir}/perfsonar-microdep-opensearch-guard.service
 %{_unitdir}/perfsonar-microdep-opensearch-guard.timer
-%attr(0755,perfsonar,perfsonar) %{command_base}/psconfig_archive_ana.sh
+%attr(0755,root,root) %{command_base}/psconfig_archive_ana.sh
 /usr/local/bin/psconfig_archive_ana.sh
 /usr/local/bin/opensearch_config_microdep.sh
 /etc/httpd/conf.d/apache-microdep-ana.conf
 %{install_base}/logstash/microdep_pipeline/*.conf
 %{microdep_config_base}/logstash/microdep-pipelines.yml
-%{microdep_config_base}/microdep_default_policy.json
-%config /var/lib/logstash/microdep 
-%{microdep_config_base}/os-template-gap-ana.json
-%{microdep_config_base}/os-template-trace-ana.json
-%{microdep_config_base}/roles_yml_patch
-%config /etc/logrotate.d/microdep
-
-%files logstash
-%defattr(0644,perfsonar,perfsonar,0755)
-%license %{doc_base}/LICENSE-logstash
-%attr(0755,perfsonar,perfsonar) %{command_base}/opensearch_config_microdep.sh
-%attr(0755,perfsonar,perfsonar) %{command_base}/microdep-opensearch-guard.sh
-%{_unitdir}/perfsonar-microdep-opensearch-guard.service
-%{_unitdir}/perfsonar-microdep-opensearch-guard.timer
-%attr(0755,perfsonar,perfsonar) %{command_base}/psconfig_archive_ana.sh
-/usr/local/bin/psconfig_archive_ana.sh
-/usr/local/bin/opensearch_config_microdep.sh
-/etc/httpd/conf.d/apache-microdep-ana.conf
-%{install_base}/logstash/microdep_pipeline/*.conf
-%{microdep_config_base}/logstash/microdep-pipelines.yml
-%{microdep_config_base}/microdep_default_policy.json
-%config /var/lib/logstash/microdep 
-%{microdep_config_base}/os-template-gap-ana.json
-%{microdep_config_base}/os-template-trace-ana.json
-%{microdep_config_base}/roles_yml_patch
+%attr(0755,perfsonar,perfsonar) %dir /var/lib/logstash/microdep
+/usr/lib/perfsonar/archive/config/ilm/install/microdep_default_policy.json
+/usr/lib/perfsonar/archive/config/os-template-gap-ana.json
+/usr/lib/perfsonar/archive/config/os-template-trace-ana.json
+/usr/lib/perfsonar/archive/config/microdep_roles_yml_patch
 %config /etc/logrotate.d/microdep
 
 %files map
-%defattr(0644,perfsonar,perfsonar,0755)
+%defattr(0644,root,root,0755)
 %license %{doc_base}/LICENSE-map
 %{microdep_web_dir}/*.html
 %{microdep_web_dir}/img
@@ -516,17 +517,13 @@ systemctl reload httpd.service || true
 %{microdep_web_dir}/css
 %{microdep_web_dir}/fonts
 %{microdep_web_dir}/geo
-%attr(0755,perfsonar,perfsonar) %{command_base}/elastic-get-date-type.pl
-%attr(0755,perfsonar,perfsonar) %{command_base}/yaml-to-json.cgi
-%attr(0755,perfsonar,perfsonar) %{command_base}/get-mapconfig.cgi
-%attr(0755,perfsonar,perfsonar) %{command_base}/get-tracetests.pl
-%attr(0755,perfsonar,perfsonar) %{command_base}/hopgeo.pl
-%attr(0755,perfsonar,perfsonar) %{command_base}/microdep-config.cgi
+%attr(0755,root,root) %{command_base}/elastic-get-date-type.pl
+%attr(0755,root,root) %{command_base}/get-mapconfig.cgi
+%attr(0755,root,root) %{command_base}/get-tracetests.pl
+%attr(0755,root,root) %{command_base}/hopgeo.pl
 %config %{microdep_config_base}/mapconfig.yml
 %config %{microdep_config_base}/mapconfig.d/
 %{microdep_config_base}/microdep_ipv4-base-geo.json.example
-%config %{microdep_runtime_base}/microdep_ipv4.db
-%config %{microdep_runtime_base}/microdep_ipv6.db
 %{microdep_config_base}/grafana_dashboard_patch
 /etc/httpd/conf.d/apache-microdep-map.conf
 
@@ -535,9 +532,9 @@ systemctl reload httpd.service || true
 
 %files utils
 %license %{doc_base}/LICENSE-utils
-%defattr(0644,perfsonar,perfsonar,0755)
-%attr(0755,perfsonar,perfsonar) %{command_base}/json2table.pl
-%attr(0755,perfsonar,perfsonar) %{command_base}/rabbitmq-consume.py
+%defattr(0644,root,root,0755)
+%attr(0755,root,root) %{command_base}/json2table.pl
+%attr(0755,root,root) %{command_base}/rabbitmq-consume.py
 /usr/local/bin/rabbitmq-consume.py
 /usr/local/bin/json2table.pl
 

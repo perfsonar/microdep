@@ -3,4 +3,5 @@
 /etc/perfsonar/microdep
 /etc/perfsonar/microdep/logstash
 /var/lib/logstash/microdep
-
+/usr/lib/perfsonar/archive/config
+/usr/lib/perfsonar/archive/config/ilm/install/

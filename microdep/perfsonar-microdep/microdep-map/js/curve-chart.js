@@ -1,14 +1,13 @@
 // prepare charts
-import { parms, conffile, 
-	 get_parms, get_config, update_props, add_tab, update_url,
+import { parms, conffile, net_names,
+	 get_parms, get_config, update_props, add_tab, update_url, escapeHtml,
 	 colors, make_palette,
 	 prop_desc, prop_names, make_prop_select,
 	 periods, get_period, period_units, anhour, aday, aweek,
-	 selected_date_is_today_or_future, adjust_to_timezone }
+	 selected_date_is_today_or_future, adjust_to_timezone, event_sum_type }
 from "./map-lib.js" ;
 import {chart_curve, chart} from "./graph.js";
 
-var current_tab_id;
 var current_title;
 
 // variables to be in configfile
@@ -58,14 +57,12 @@ export function scroll_change(type, delta){
 	    new_end = new_start + per;
 	}
     }
-    let num_tabs = $("main#tabs ul li").length ;
-    let tab_id = 'tab' + num_tabs;
     parms.start=new Date(new_start).toISOString();
     parms.end=new Date( new_end).toISOString();
-    make_curve( tab_id, current_title, parms.start, parms.end);
+    make_curve( current_title, parms.start, parms.end);
 }
 
-function make_curve(tab_id, property, start, end){
+function make_curve(property, start, end){
     // $("#range").html( start.substring(0,19) );
     // $("#range").html( parms.title );
     $("#datepicker").datepicker('setDate', parms.start.substring(0,10) );
@@ -73,51 +70,73 @@ function make_curve(tab_id, property, start, end){
     var xunit= get_period(parms.start, parms.end);
     $("#period").val(xunit);
 
-    var url="elastic-get-date-type.pl?net=" + parms.net + "&index=" + parms.index + "&event_type=" + parms.event
-	+ "&start=" + adjust_to_timezone(start) + "&end=" + adjust_to_timezone(end)
-	+ "&from=" + parms.from + "&to=" + parms.to;
+    var url="elastic-get-date-type.pl?net=" + encodeURIComponent(parms.net) + "&index=" + encodeURIComponent(parms.index) + "&event_type=" + encodeURIComponent(parms.event)
+	+ "&start=" + start + "&end=" + end   // the window the map gave (no time zone shift)
+	+ "&from=" + encodeURIComponent(parms.from) + "&to=" + encodeURIComponent(parms.to);
 
-    let title = parms.title.length !== 0 ? parms.title : "From " + parms.from + " to " + parms.to;
+    let title = parms.title ? parms.title : "From " + parms.from + " to " + parms.to;
     if (parms.debug) console.log(url);
 
     $.getJSON( url,
 	       function(resp){
-
-		   var label = (prop_desc[parms.event] && prop_desc[parms.event][property]) || property;
-
-		   if (resp.hits && resp.hits.total.value > 0){
-		       var nrecs=resp.hits.total.value.toString();
-		       add_tab( "canvas", label, $("main#tabs ul li").length , '');
-		       chart_curve( tab_id, resp.hits.hits, property, title, xunit);
+		   var hits = (resp.hits && resp.hits.hits) || [];
+		   var sum_type = event_sum_type[parms.event];
+		   // Fields kept only in the summary records (down_ppm, big_gaps, ...): plot those records
+		   if ( ! carries(hits, property) && sum_type ) {
+		       $.getJSON( url.replace("&event_type=" + encodeURIComponent(parms.event) + "&", "&event_type=" + encodeURIComponent(sum_type) + "&"), function(sresp){
+			   show_curve( property, (sresp.hits && sresp.hits.hits) || [], title, xunit);
+		       }).fail( function(e, textStatus, error ) { show_curve( property, [], title, xunit); });
 		   } else {
-		       // Empty result — still open a placeholder tab so the user
-		       // sees the action took effect and gets a clear "no data"
-		       // explanation, instead of just a tiny error in the status bar.
-		       const empty_html =
-			   '<div class="cc-empty-graph">' +
-			     '<h3>No ' + parms.event + ' data</h3>' +
-			     '<p>No measurements were found for this peer pair in the selected time range.</p>' +
-			     '<p class="cc-empty-period"><strong>From:</strong> ' + parms.start + '<br>' +
-			       '<strong>To:</strong> ' + parms.end + '</p>' +
-			   '</div>';
-		       add_tab('div', label, $("main#tabs ul li").length, empty_html);
-		       $("#error").html(hhmmss(new Date()) + " : No " + parms.event
-					+ " data for " + parms.start + " "
-					+ parms.end + ";;");
+		       show_curve( property, hits, title, xunit);
 		   }
-
-		   // Activate the just-added tab in either branch (the modernized
-		   // curve-chart.html no longer has the placeholder #check li
-		   // inside main#tabs that the original add_tab indexing assumed).
-		   const _count = $("main#tabs > ul > li > a").length;
-		   if (_count > 0) $("#tabs").tabs("option", "active", _count - 1);
 	       })
 	.fail( function(e, textStatus, error ) {
 	    console.log("failed to get data from server :" + textStatus + ", " + error);
-	    $("#error").html(hhmmss(new Date()) + " : Request failed: " + textStatus + ", " + error + ";;");
+	    $("#error").text(hhmmss(new Date()) + " : Request failed: " + textStatus + ", " + error + ";;");
 	});
 
 };
+
+// Whether any record has a value for the property
+function carries(hits, property){
+    return hits.some( function(h){ return ! isNaN( parseFloat(h._source[property]) ); });
+}
+
+function show_curve(property, hits, title, xunit){
+    var sum_type = event_sum_type[parms.event];
+    var label = (prop_desc[parms.event] && prop_desc[parms.event][property])
+	|| (prop_desc[sum_type] && prop_desc[sum_type][property]) || property;
+
+    if ( carries(hits, property) ){
+	// The tab is numbered when the answer is in, so a curve asked for before it cannot land in this tab
+	const num_tabs = $("main#tabs ul li").length;
+	add_tab( "canvas", label, num_tabs, '');
+	chart_curve( 'tab' + num_tabs, hits, property, title, xunit);
+    } else {
+	// Empty result — still open a placeholder tab so the user
+	// sees the action took effect and gets a clear "no data"
+	// explanation, instead of just a tiny error in the status bar.
+	// The parameters come from the page's URL, so they are
+	// escaped on their way into the HTML.
+	const empty_html =
+	    '<div class="cc-empty-graph">' +
+	      '<h3>No ' + escapeHtml(label) + ' data</h3>' +
+	      '<p>No measurements with this value were found for this peer pair in the selected time range.</p>' +
+	      '<p class="cc-empty-period"><strong>From:</strong> ' + escapeHtml(parms.start) + '<br>' +
+		'<strong>To:</strong> ' + escapeHtml(parms.end) + '</p>' +
+	    '</div>';
+	add_tab('div', label, $("main#tabs ul li").length, empty_html);
+	$("#error").text(hhmmss(new Date()) + " : No " + label
+			 + " data for " + parms.start + " "
+			 + parms.end + ";;");
+    }
+
+    // Activate the just-added tab in either branch (the modernized
+    // curve-chart.html no longer has the placeholder #check li
+    // inside main#tabs that the original add_tab indexing assumed).
+    const _count = $("main#tabs > ul > li > a").length;
+    if (_count > 0) $("#tabs").tabs("option", "active", _count - 1);
+}
 
 function pad(d){
     return ("0"+d).slice(-2) ;
@@ -134,11 +153,32 @@ function title_state(){
 
 
 
+// What a curve cannot be drawn without. Returns what the page address lacks,
+// or an empty string.
+function address_problem(){
+    if ( net_names.indexOf(parms.net) < 0 )
+	return "names no measurement network of this map";
+    const events = conffile[parms.net].event_type || {};
+    if ( ! Object.prototype.hasOwnProperty.call(events, parms.event) || events[parms.event].enable == "false" )
+	return "names no event type of this network";
+    if ( isNaN( new Date(parms.start) ) || isNaN( new Date(parms.end) ) )
+	return "gives no period (start and end)";
+    return "";
+}
+
 // initialization
 function init_module(){
     $("#tabs").tabs();
-    let title = 'title' in  parms ? parms.title : "From " + parms.from + " to " + parms.to;
-    $("#tittel").html(title);
+    let title = parms.title ? parms.title : "From " + parms.from + " to " + parms.to;
+    $("#tittel").text(title);   // from the URL: shown as text, never as markup
+
+    // Say what is wrong in the status line, instead of stopping at the first
+    // value that is not there and leaving the page empty.
+    const problem = address_problem();
+    if ( problem ) {
+	$("#error").text("No curve can be drawn: the address of this page " + problem + ".");
+	return;
+    }
 
     // prop_names = conffile.prop_names_list[ parms.event ];
     //prop_names = prop_names_list[ parms.event ];
@@ -193,9 +233,8 @@ function init_module(){
 	let prop=$("#check").val();
 	current_title = prop ? prop : parms.property;
 	let num_tabs = $("main#tabs ul li").length ;
-	current_tab_id = 'tab' + num_tabs;
 
-	make_curve( current_tab_id, current_title, parms.start, parms.end);
+	make_curve( current_title, parms.start, parms.end);
 
 	$("#check").val('choose');
 	$("#tabs").tabs("option", "active", num_tabs);
