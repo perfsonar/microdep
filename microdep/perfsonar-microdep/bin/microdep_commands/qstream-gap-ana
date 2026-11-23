@@ -1742,25 +1742,25 @@ sub report_summary_jitter{
 	"event_type" => "jitter",
 	"report_type" => "interval",
 	"tloss" => ( $jitter_data{$id}{end} - $jitter_data{$id}{start} - &p_interval( $id ) ) * 1000,  # in ms
-	"h_n" => sum( \@{$jitter_data{$id}{n}} ),
-	"h_jit" => median( $jitter_data{$id}{jit} )->query,
-	"h_ddelay" => median( $jitter_data{$id}{ddelay} )->query,
-	"h_delay" => median( $jitter_data{$id}{delay} )->query,
-	"h_min_d" => median( $jitter_data{$id}{min_d} )->query,
+	"h_n" => sum( \@{$jitter_data{$id}{n}} ) * 1,
+	"h_jit" => median( $jitter_data{$id}{jit} )->query * 1.0, 
+	"h_ddelay" => median( $jitter_data{$id}{ddelay} )->query * 1.0,
+	"h_delay" => median( $jitter_data{$id}{delay} )->query * 1.0,
+	"h_min_d" => median( $jitter_data{$id}{min_d} )->query * 1.0,
 	# "rtx" => median( $jitter_date{$id}{rtx} )->query,
 	# "rdelay" => $jitter_data{$id}{rdelay},
 	# slopes not computed for jitter
 	# "slopes" => median( $jitter_data{$id}{slopes} ),
-	"h_slope_10" => median( $jitter_data{$id}{slope_10} )->query,
+	"h_slope_10" => median( $jitter_data{$id}{slope_10} )->query * 1.0,
 	# "h_slope_20" => median( $jitter_data{$id}{slope_20} )->query,
 	# "h_slope_30" => median( $jitter_data{$id}{slope_30} )->query,
 	# "h_slope_40" => median( $jitter_data{$id}{slope_40} )->query,
 	# "h_slope_50" => median( $jitter_data{$id}{slope_50} )->query,
 	    
-	"h_jit_sdv" => stddev( $jitter_data{$id}{jit} )->query,
-	"h_ddelay_sdv" => stddev( $jitter_data{$id}{ddelay} )->query,
-	"h_delay_sdv" => stddev( $jitter_data{$id}{delay} )->query,
-	"h_slope_10_sdv" => stddev( $jitter_data{$id}{slope_10} )->query
+	"h_jit_sdv" => stddev( $jitter_data{$id}{jit} )->query * 1.0,
+	"h_ddelay_sdv" => stddev( $jitter_data{$id}{ddelay} )->query * 1.0,
+	"h_delay_sdv" => stddev( $jitter_data{$id}{delay} )->query * 1.0,
+	"h_slope_10_sdv" => stddev( $jitter_data{$id}{slope_10} )->query * 1.0
     };
     if ( $jitter_data{$id}{high_ddelay} ){
 	$$json{report_type} = "threshold" ;
@@ -2169,9 +2169,9 @@ sub emit_event_json{
     if ( $$line =~ /\d\d\d\d-\d\d-\d\d\s+\d\d:/){ #looks like report line : yyy-mm-dd hh:
 	my @f=split(/\s+/, $$line);
 	my $from=$f[$hix{id}];
-	my $o;
+	my $to;
 	if ( $dst_name{$id}){
-	    $to = $dst_name{$id};x
+	    $to = $dst_name{$id};
 	} else {
 	    $to=`hostname`; chomp($to);
 	}
