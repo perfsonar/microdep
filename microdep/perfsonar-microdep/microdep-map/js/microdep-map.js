@@ -3,7 +3,7 @@
 import LatLon from "./latlon-spherical.js";
 import {parms, conffile, prop_sum, update_url, stats_on, net_names, net_desc, net_long_desc, net_ip_version,
 	event_names, event_desc, event_long_desc, event_index, event_sum_type,
-	prop_names, prop_desc, prop_long_desc, prop_aggr,
+	prop_names, prop_desc, prop_long_desc, prop_aggr, prop_derive, derive_funcs,
 	colors, get_color, make_palette, threshes, get_thresholds, escapeHtml,
 	get_parms,removeParam, parse_hhmm, hhmm , adjust_to_timezone,
 	get_config, update_props, make_prop_select, add_tab, new_tab_number,
@@ -1922,30 +1922,21 @@ function make_tooltip_v2(fromHost, toHost, link){
 	}
 	tip += '</div>';
 	tip += "<table width=100%>";
-	if ( selected_date_is_today_or_future() ) {
-	    for (const sum_var in conffile[parms.net].event_type[parms.event].field) {
-		if ( typeof link[sum_var] != 'undefined' ) {
-		    var prop_value = Math.round((link[sum_var] + Number.EPSILON) * 100) / 100;
-		    // Config `descr` as a mouse-over help text on the row (issue #108).
-		    var help1 = (prop_long_desc[parms.event] && prop_long_desc[parms.event][sum_var])
-			? ' title="' + escapeHtml(prop_long_desc[parms.event][sum_var]) + '"' : '';
-		    tip+= '<tr' + help1 + '><td>' + escapeHtml(prop_desc[parms.event][sum_var]) + '<td align=right>' + prop_value;
-		    nrows++;
-		}
-	    }
-	} else {
-	    for (const sum_var of conffile[parms.net].event_type[parms.event].popup.summary) {
-		if ( typeof link[sum_var] != 'undefined' ) {
-		    var prop_value = Math.round((link[sum_var] + Number.EPSILON) * 100) / 100;
-		    // Config `descr` as a mouse-over help text on the row (issue #108).
-		    var sum_key = conffile[parms.net].event_type[parms.event].summary_event_type;
-		    var help2 = (prop_long_desc[sum_key] && prop_long_desc[sum_key][sum_var])
-			? ' title="' + escapeHtml(prop_long_desc[sum_key][sum_var]) + '"' : '';
-		    tip+= '<tr' + help2 + '><td>' + escapeHtml(prop_desc[sum_key][sum_var]) + '<td align=right>' + prop_value;
-		    nrows++;
-		}
-	    }
+	// Every summary field in every view, "n/a" where the period gives it no value
+	var rows = '';
+	var sum_key = conffile[parms.net].event_type[parms.event].summary_event_type;
+	for (const sum_var of conffile[parms.net].event_type[parms.event].popup.summary) {
+	    var raw = link[sum_var], prop_value = 'n/a';
+	    if ( typeof raw === 'string' && /^\s*-?[\d.]+(e[-+]?\d+)?\s*$/i.test(raw) ) raw = parseFloat(raw);   // stored as text
+	    if ( typeof raw === 'number' && isFinite(raw) ) prop_value = Math.round((raw + Number.EPSILON) * 100) / 100;
+	    else if ( typeof raw === 'string' && raw.trim() !== '' ) prop_value = raw;   // e.g. a vector
+	    if ( prop_value !== 'n/a' ) nrows++;
+	    // Config `descr` as a mouse-over help text on the row (issue #108).
+	    var help = (prop_long_desc[sum_key] && prop_long_desc[sum_key][sum_var])
+		? ' title="' + escapeHtml(prop_long_desc[sum_key][sum_var]) + '"' : '';
+	    rows += '<tr' + help + '><td>' + escapeHtml((prop_desc[sum_key] && prop_desc[sum_key][sum_var]) || sum_var) + '<td align=right>' + escapeHtml(String(prop_value));
 	}
+	if (nrows > 0) tip += rows;
 	tip+="</table>";
 	if (nrows === 0) {
 	    // Topology-only link (grey): no event data for this period. Surface it
@@ -1982,11 +1973,12 @@ function gap_list( from, to, hits, lines, sort_type){
     var n=0;
     if ( sort_type){
 	let sort_col = conffile[parms.net].event_type[parms.event].default_field;
+	let val = function(h){ let x = parseFloat(h._source[sort_col]); return isNaN(x) ? -Infinity : x; };   // some values are stored as text
 	hits.sort( function(a,b){
 	    if ( sort_type === 'num_desc')
-		return b._source[sort_col] - a._source[sort_col];
+		return val(b) - val(a) || 0;
 	    else
-		return a._source[sort_col] - a._source[sort_col];
+		return val(a) - val(b) || 0;
 	} );
     }
     for ( var hit of hits){
@@ -2046,8 +2038,8 @@ function gap_list( from, to, hits, lines, sort_type){
 	    } else {
 		html += "<tr><td>" + tid +  "<td align=right>" + escapeHtml(sec) + "<td align=right>" + escapeHtml(amount) + "<td>" + tail + "\n";
 	    }
-	    if ( lines &&  n >= lines) break;
 	    n++;
+	    if ( lines &&  n >= lines) break;
 	}
     }
     html += "</table>";
@@ -2063,11 +2055,12 @@ function gap_list( from, to, hits, lines, sort_type){
 	if ( event.event_type === etype){
 	    var ab = event.from + "," + event.to;
 	    if ( ! (ab in stat) ){
-		stat[ab]=[]; stat[ab].from = event.from; stat[ab].to = event.to;
+		stat[ab]=[]; stat[ab].from = event.from; stat[ab].to = event.to; stat[ab].events = 0;
 		for ( const prop of prop_names[etype]){ stat[ab][prop]=new stats(); }
 		msg[ab]=[]; msg[ab].from = event.from; msg[ab].to = event.to;
 		for ( const prop of prop_names[etype]){ msg[ab][prop]=[]; }
 	    }
+	    stat[ab].events++;
 	    for ( const prop of prop_names[etype] ){
 		let value=event[prop];
 		if ( typeof(value) === "undefined" ) value="";
@@ -2096,7 +2089,7 @@ function gap_list( from, to, hits, lines, sort_type){
 		rec[prop + "_sum"] = stat[ab][prop].sum;
 	    } else { rec[prop] = msg[ab][prop].join(); }
 	}
-	if ( stat[ab].tloss ){ rec.down_ppm = ( stat[ab].tloss.sum * 1000000 / 1000 / period_length ); }
+	for ( const f in prop_derive[etype] ){ rec[f] = derive_funcs[prop_derive[etype][f]](stat[ab], period_length); }
 	digest.push( {_source: rec} );
     }
     return digest;
