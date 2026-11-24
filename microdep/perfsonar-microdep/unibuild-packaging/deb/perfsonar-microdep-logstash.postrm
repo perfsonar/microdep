@@ -23,6 +23,10 @@ ADMIN_PASS=$(grep -w "admin" $PASSWORD_FILE | head -n 1 | awk '{print $2}')
 
 case "$1" in
     purge)
+	SPEC=/etc/perfsonar/microdep/microdep-ana-archive.json
+	rm -f $SPEC $SPEC.ucf-dist $SPEC.ucf-old $SPEC.ucf-new
+	if command -v ucf > /dev/null; then ucf --purge $SPEC; fi
+	if command -v ucfr > /dev/null; then ucfr --purge perfsonar-microdep-logstash $SPEC; fi
 	# SKIP THIS SINCE "PURGE" IS NOT REALLY SUPPORTED IN RPM PACKAGES
 	## Remove Microdep totally from Opensearch (shell code copied from opensearch_config_microdep.sh)
         #echo "Removing Opensearch templates, policies and datastreams/indices for Microdep ..."

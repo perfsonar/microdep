@@ -10,6 +10,7 @@
 
 LOGSTASH_PATH="logstash-ana"
 PS_ARCH_CONF_SCRIPT="/usr/lib/perfsonar/archive/perfsonar-scripts/psconfig_archive.sh"
+PROXY_AUTH="/etc/perfsonar/logstash/proxy_auth.json"
 ARCHIVE_HOSTNAME=$(hostname -f)
 AUTH="basic"
 
@@ -54,6 +55,11 @@ done
 shift $(($OPTIND - 1))  # (Shift away parsed arguments)
 
 if [ -e $PS_ARCH_CONF_SCRIPT ]; then
+    if [ "$AUTH" = "basic" ] && [ ! -s $PROXY_AUTH ]; then
+        # without the key the spec would be invalid JSON
+        echo "`basename $0`: no archive key in $PROXY_AUTH (is perfsonar-archive configured?)" >&2
+        exit 1
+    fi
     # Run "mother" script and fix'n'filter output
     $PS_ARCH_CONF_SCRIPT -n "$ARCHIVE_HOSTNAME" -a "$AUTH" |
 	sed -e "s|/logstash\"|/$LOGSTASH_PATH\"|g" \
