@@ -370,33 +370,18 @@ systemctl start perfsonar-microdep-hourly-aggregator.timer || true
 #   systemctl enable --now perfsonar-microdep-opensearch-guard.timer
 systemctl daemon-reload || true
 
-# Archive spec for the analysers' results. It holds the archive's key, so it is made
-# again each time; rpm cannot ask, so a changed one is saved beside it as .rpmnew (#320).
-SPEC=/etc/perfsonar/microdep/microdep-ana-archive.json
-if [ -f $SPEC ] && [ ! -s $SPEC ]; then
-    rm -f $SPEC    # an empty spec left by an earlier version
+if [ ! -s /etc/perfsonar/microdep/microdep-ana-archive.json ]; then
+    # Prepare default logstash archive config for analytic results.
+    # It holds the credentials for the archive, so it is never created
+    # readable by others.
+    ( umask 077; /usr/lib/perfsonar/bin/microdep_commands/psconfig_archive_ana.sh > /etc/perfsonar/microdep/microdep-ana-archive.json ) || true
 fi
-if [ ! -e $SPEC ] || [ -e /etc/perfsonar/logstash/proxy_auth.json ]; then
-    NEW=$(mktemp -t microdep-ana-archive.json.XXXXXX)
-    if /usr/lib/perfsonar/bin/microdep_commands/psconfig_archive_ana.sh > $NEW; then
-        if [ ! -e $SPEC ]; then
-            cp $NEW $SPEC
-            # the analysers read the spec when they start
-            systemctl try-restart perfsonar-microdep-gap-ana.service perfsonar-microdep-trace-ana.service || true
-        elif [ "$(cksum < $NEW)" != "$(cksum < $SPEC)" ]; then
-            cp $NEW $SPEC.rpmnew
-            echo "warning: $SPEC differs from a newly made archive spec, saved as $SPEC.rpmnew" >&2
-        fi
-    fi
-    rm -f $NEW
+if [ -f /etc/perfsonar/microdep/microdep-ana-archive.json ]; then
+    # Readable by root and by the analysers (they run as perfsonar), and by
+    # nobody else. Also corrects a file left world-readable by an earlier version.
+    chown root:perfsonar /etc/perfsonar/microdep/microdep-ana-archive.json
+    chmod 0640 /etc/perfsonar/microdep/microdep-ana-archive.json
 fi
-# Readable by root and by the analysers (they run as perfsonar), and by nobody else
-for f in $SPEC $SPEC.rpmnew; do
-    if [ -f $f ]; then
-        chown root:perfsonar $f
-        chmod 0640 $f
-    fi
-done
 
 # Reload web server config
 systemctl reload httpd.service || true
