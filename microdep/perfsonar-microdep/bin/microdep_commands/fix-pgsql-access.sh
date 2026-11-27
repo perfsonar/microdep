@@ -72,7 +72,7 @@ fi
 sed $INFILE "/^# TYPE  DATABASE.*/a\\
 #BEGIN-$TAG\\
 #\\
-# Perfsonar Micordep analytics\\
+# Perfsonar Microdep analytics\\
 #\\
 # This user should never need to access the database from anywhere\\
 # other than locally.\\
