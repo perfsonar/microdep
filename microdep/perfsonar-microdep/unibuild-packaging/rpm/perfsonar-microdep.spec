@@ -370,18 +370,33 @@ systemctl start perfsonar-microdep-hourly-aggregator.timer || true
 #   systemctl enable --now perfsonar-microdep-opensearch-guard.timer
 systemctl daemon-reload || true
 
-if [ ! -s /etc/perfsonar/microdep/microdep-ana-archive.json ]; then
-    # Prepare default logstash archive config for analytic results.
-    # It holds the credentials for the archive, so it is never created
-    # readable by others.
-    ( umask 077; /usr/lib/perfsonar/bin/microdep_commands/psconfig_archive_ana.sh > /etc/perfsonar/microdep/microdep-ana-archive.json ) || true
+# Archive spec for the analysers' results. It holds the archive's key, so it is made
+# again each time; rpm cannot ask, so a changed one is saved beside it as .rpmnew (#320).
+SPEC=/etc/perfsonar/microdep/microdep-ana-archive.json
+if [ -f $SPEC ] && [ ! -s $SPEC ]; then
+    rm -f $SPEC    # an empty spec left by an earlier version
 fi
-if [ -f /etc/perfsonar/microdep/microdep-ana-archive.json ]; then
-    # Readable by root and by the analysers (they run as perfsonar), and by
-    # nobody else. Also corrects a file left world-readable by an earlier version.
-    chown root:perfsonar /etc/perfsonar/microdep/microdep-ana-archive.json
-    chmod 0640 /etc/perfsonar/microdep/microdep-ana-archive.json
+if [ ! -e $SPEC ] || [ -e /etc/perfsonar/logstash/proxy_auth.json ]; then
+    NEW=$(mktemp -t microdep-ana-archive.json.XXXXXX)
+    if /usr/lib/perfsonar/bin/microdep_commands/psconfig_archive_ana.sh > $NEW; then
+        if [ ! -e $SPEC ]; then
+            cp $NEW $SPEC
+            # the analysers read the spec when they start
+            systemctl try-restart perfsonar-microdep-gap-ana.service perfsonar-microdep-trace-ana.service || true
+        elif [ "$(cksum < $NEW)" != "$(cksum < $SPEC)" ]; then
+            cp $NEW $SPEC.rpmnew
+            echo "warning: $SPEC differs from a newly made archive spec, saved as $SPEC.rpmnew" >&2
+        fi
+    fi
+    rm -f $NEW
 fi
+# Readable by root and by the analysers (they run as perfsonar), and by nobody else
+for f in $SPEC $SPEC.rpmnew; do
+    if [ -f $f ]; then
+        chown root:perfsonar $f
+        chmod 0640 $f
+    fi
+done
 
 # Reload web server config
 systemctl reload httpd.service || true
@@ -410,32 +425,55 @@ systemctl reload httpd.service || true
 ###   P r e   u n i n s t a l l   a c t i o n s 
 
 %preun ana
-# Clean up db access
-if [ -f /var/lib/pgsql/data/pg_hba.conf ]; then
-    %{command_base}/fix-pgsql-access.sh -ri /var/lib/pgsql/data/pg_hba.conf
-fi
+if [  "$1" -eq 0 ]; then
+    # Package is being erased ...
 
-# Stop services (ignore failures)
-systemctl stop perfsonar-microdep-gap-ana.service || true
-systemctl stop perfsonar-microdep-trace-ana.service || true
-systemctl stop perfsonar-microdep-hourly-aggregator.timer || true
+    # Clean up db access
+    if [ -f /var/lib/pgsql/data/pg_hba.conf ]; then
+	%{command_base}/fix-pgsql-access.sh -ri /var/lib/pgsql/data/pg_hba.conf
+    fi
+
+    # Stop services (ignore failures)
+    systemctl stop perfsonar-microdep-gap-ana.service || true
+    systemctl stop perfsonar-microdep-trace-ana.service || true
+    systemctl stop perfsonar-microdep-hourly-aggregator.timer || true
+
+elif [ "$1" -eq 1 ]; then
+    # Package is being upgraded ...
+    true; # Do nothing
+fi
 
 %preun logstash
-# Stop the OpenSearch read-grant self-heal timer (on removal, not on upgrade)
-if [ $1 -eq 0 ]; then
-    systemctl stop perfsonar-microdep-opensearch-guard.timer || true
-    systemctl disable perfsonar-microdep-opensearch-guard.timer || true
+if [  "$1" -eq 0 ]; then
+    # Package is being erased ...
+
+    # Stop the OpenSearch read-grant self-heal timer (on removal, not on upgrade)
+    if [ $1 -eq 0 ]; then
+	systemctl stop perfsonar-microdep-opensearch-guard.timer || true
+	systemctl disable perfsonar-microdep-opensearch-guard.timer || true
+    fi
+    # Remove Microdep from Opensearch setup (including Logstash)
+    /usr/lib/perfsonar/bin/microdep_commands/opensearch_config_microdep.sh -r config || true
+
+elif [ "$1" -eq 1 ]; then
+    # Package is being upgraded ...
+    true; # Do nothing
 fi
-# Remove Microdep from Opensearch setup (including Logstash)
-/usr/lib/perfsonar/bin/microdep_commands/opensearch_config_microdep.sh -r config || true
 
 %preun map
-# Remove Microdep button from Grafana main dashboard (if present)
-if grep -q  "Microdep map" /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json; then
-    DASHBOARDFILE=$(mktemp)
-    # Only if jq worked, and into the same file, so that owner and mode stay
-    if jq  'del( .panels[] | select(.options.content != null ) | select (.options.content | contains("Microdep map")))' /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json > $DASHBOARDFILE; then cat $DASHBOARDFILE > /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json; fi
-    rm -f $DASHBOARDFILE
+if [  "$1" -eq 0 ]; then
+    # Package is being erased ...
+
+    # Remove Microdep button from Grafana main dashboard (if present)
+    if grep -q  "Microdep map" /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json; then
+	DASHBOARDFILE=$(mktemp)
+	# Only if jq worked, and into the same file, so that owner and mode stay
+	if jq  'del( .panels[] | select(.options.content != null ) | select (.options.content | contains("Microdep map")))' /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json > $DASHBOARDFILE; then cat $DASHBOARDFILE > /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json; fi
+	rm -f $DASHBOARDFILE
+    fi
+elif [ "$1" -eq 1 ]; then
+    # Package is being upgraded ...
+    true; # Do nothing
 fi
 
 ###   P o s t   u n i n s t a l l   a c t i o n s 
