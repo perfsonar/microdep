@@ -425,32 +425,55 @@ systemctl reload httpd.service || true
 ###   P r e   u n i n s t a l l   a c t i o n s 
 
 %preun ana
-# Clean up db access
-if [ -f /var/lib/pgsql/data/pg_hba.conf ]; then
-    %{command_base}/fix-pgsql-access.sh -ri /var/lib/pgsql/data/pg_hba.conf
-fi
+if [  "$1" -eq 0 ]; then
+    # Package is being erased ...
 
-# Stop services (ignore failures)
-systemctl stop perfsonar-microdep-gap-ana.service || true
-systemctl stop perfsonar-microdep-trace-ana.service || true
-systemctl stop perfsonar-microdep-hourly-aggregator.timer || true
+    # Clean up db access
+    if [ -f /var/lib/pgsql/data/pg_hba.conf ]; then
+	%{command_base}/fix-pgsql-access.sh -ri /var/lib/pgsql/data/pg_hba.conf
+    fi
+
+    # Stop services (ignore failures)
+    systemctl stop perfsonar-microdep-gap-ana.service || true
+    systemctl stop perfsonar-microdep-trace-ana.service || true
+    systemctl stop perfsonar-microdep-hourly-aggregator.timer || true
+
+elif [ "$1" -eq 1 ]; then
+    # Package is being upgraded ...
+    true; # Do nothing
+fi
 
 %preun logstash
-# Stop the OpenSearch read-grant self-heal timer (on removal, not on upgrade)
-if [ $1 -eq 0 ]; then
-    systemctl stop perfsonar-microdep-opensearch-guard.timer || true
-    systemctl disable perfsonar-microdep-opensearch-guard.timer || true
+if [  "$1" -eq 0 ]; then
+    # Package is being erased ...
+
+    # Stop the OpenSearch read-grant self-heal timer (on removal, not on upgrade)
+    if [ $1 -eq 0 ]; then
+	systemctl stop perfsonar-microdep-opensearch-guard.timer || true
+	systemctl disable perfsonar-microdep-opensearch-guard.timer || true
+    fi
+    # Remove Microdep from Opensearch setup (including Logstash)
+    /usr/lib/perfsonar/bin/microdep_commands/opensearch_config_microdep.sh -r config || true
+
+elif [ "$1" -eq 1 ]; then
+    # Package is being upgraded ...
+    true; # Do nothing
 fi
-# Remove Microdep from Opensearch setup (including Logstash)
-/usr/lib/perfsonar/bin/microdep_commands/opensearch_config_microdep.sh -r config || true
 
 %preun map
-# Remove Microdep button from Grafana main dashboard (if present)
-if grep -q  "Microdep map" /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json; then
-    DASHBOARDFILE=$(mktemp)
-    # Only if jq worked, and into the same file, so that owner and mode stay
-    if jq  'del( .panels[] | select(.options.content != null ) | select (.options.content | contains("Microdep map")))' /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json > $DASHBOARDFILE; then cat $DASHBOARDFILE > /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json; fi
-    rm -f $DASHBOARDFILE
+if [  "$1" -eq 0 ]; then
+    # Package is being erased ...
+
+    # Remove Microdep button from Grafana main dashboard (if present)
+    if grep -q  "Microdep map" /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json; then
+	DASHBOARDFILE=$(mktemp)
+	# Only if jq worked, and into the same file, so that owner and mode stay
+	if jq  'del( .panels[] | select(.options.content != null ) | select (.options.content | contains("Microdep map")))' /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json > $DASHBOARDFILE; then cat $DASHBOARDFILE > /usr/lib/perfsonar/grafana/dashboards/toolkit/perfsonar-main.json; fi
+	rm -f $DASHBOARDFILE
+    fi
+elif [ "$1" -eq 1 ]; then
+    # Package is being upgraded ...
+    true; # Do nothing
 fi
 
 ###   P o s t   u n i n s t a l l   a c t i o n s 
